@@ -194,8 +194,11 @@ func ListenWS() {
 	logger.LogDebug("WS listener started.")
 	defer listener.Close()
 
-	s := &http.Server{}
-	http.HandleFunc("/", HandleWS)
+	mux := http.NewServeMux()
+	mux.HandleFunc("/", HandleWS)
+	s := &http.Server{
+		Handler: mux,
+	}
 	err = s.Serve(listener)
 	if err != http.ErrServerClosed {
 		FatalError <- err
@@ -212,8 +215,10 @@ func ListenWSS() {
 	logger.LogDebug("WSS listener started.")
 	defer listener.Close()
 
+	mux := http.NewServeMux()
+	mux.HandleFunc("/", HandleWS)
 	s := &http.Server{
-		Handler: http.HandlerFunc(HandleWS),
+		Handler: mux,
 	}
 	err = s.ServeTLS(listener, config.TLSCertPath, config.TLSKeyPath)
 	if err != http.ErrServerClosed {
