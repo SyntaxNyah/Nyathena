@@ -106,13 +106,6 @@ func InitServer(conf *settings.Config) error {
 		return fmt.Errorf("failed to parse default_ban_duration: %v", err.Error())
 	}
 
-	// Validate WSS configuration.
-	if config.EnableWSS {
-		if config.TLSCertPath == "" || config.TLSKeyPath == "" {
-			return fmt.Errorf("enable_webao_secure is true but tls_cert_path or tls_key_path is not set")
-		}
-	}
-
 	// Discord webhook.
 	if config.WebhookURL != "" {
 		enableDiscord = true
@@ -206,6 +199,8 @@ func ListenWS() {
 }
 
 // ListenWSS starts the server's secure websocket listener.
+// If TLS certificate and key paths are provided, it serves with TLS (direct HTTPS).
+// If not provided, it serves plain HTTP (useful when behind a reverse proxy like Cloudflare).
 func ListenWSS() {
 	listener, err := net.Listen("tcp", config.Addr+":"+strconv.Itoa(config.WSSPort))
 	if err != nil {
@@ -220,7 +215,17 @@ func ListenWSS() {
 	s := &http.Server{
 		Handler: mux,
 	}
-	err = s.ServeTLS(listener, config.TLSCertPath, config.TLSKeyPath)
+	
+	// Use TLS if certificate and key paths are provided, otherwise serve plain HTTP
+	// (useful when behind a reverse proxy that handles TLS termination)
+	if config.TLSCertPath != "" && config.TLSKeyPath != "" {
+		logger.LogDebugf("WSS using TLS with cert: %s", config.TLSCertPath)
+		err = s.ServeTLS(listener, config.TLSCertPath, config.TLSKeyPath)
+	} else {
+		logger.LogDebug("WSS using plain HTTP (expecting reverse proxy for TLS)")
+		err = s.Serve(listener)
+	}
+	
 	if err != http.ErrServerClosed {
 		FatalError <- err
 	}

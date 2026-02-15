@@ -28,9 +28,20 @@ If you'd like to store your configuration files elsewhere, you can pass the `-c`
 CLI input can be disabled with `-nocli`
 
 ### WebSocket Secure (WSS) Configuration
-To enable secure WebSocket connections (required for Cloudflare and other proxies):
+To enable secure WebSocket connections for Cloudflare and other proxies:
 
-1. Obtain TLS certificates (e.g., from Let's Encrypt or Cloudflare)
+**Option 1: Using a Reverse Proxy (Recommended for Cloudflare)**
+1. In `config.toml`, set:
+   ```toml
+   enable_webao_secure = true
+   webao_secure_port = 443  # or your preferred port
+   ```
+2. Leave `tls_cert_path` and `tls_key_path` empty
+3. Configure your reverse proxy (Cloudflare, nginx, etc.) to handle TLS termination
+4. The proxy forwards to your server via regular HTTP/WebSocket
+
+**Option 2: Direct TLS (Server Handles Encryption)**
+1. Obtain TLS certificates (e.g., from Let's Encrypt)
 2. In `config.toml`, set:
    ```toml
    enable_webao_secure = true
@@ -38,5 +49,6 @@ To enable secure WebSocket connections (required for Cloudflare and other proxie
    tls_cert_path = "/path/to/your/certificate.crt"
    tls_key_path = "/path/to/your/private.key"
    ```
-3. When advertising to the master server, your server will be listed with `wss://` support
-4. Cloudflare users can now connect through port 443 with encrypted connections
+3. Server handles TLS encryption directly
+
+When advertising to the master server, your server will be listed with `wss://` support regardless of which option you choose.

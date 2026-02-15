@@ -15,13 +15,15 @@ webao_port = 27017
 enable_webao_secure = false
 
 # The port to listen for secure websocket (WebAO over WSS) connections on.
-# Typically port 443 when using Cloudflare.
+# Typically port 443 when using Cloudflare or other reverse proxies.
 webao_secure_port = 443
 
-# Path to TLS certificate file (required if enable_webao_secure is true).
+# Path to TLS certificate file (optional - leave empty if using a reverse proxy like Cloudflare).
+# When both tls_cert_path and tls_key_path are provided, the server will handle TLS directly.
+# When empty, the server listens on plain HTTP and expects a reverse proxy to handle TLS termination.
 tls_cert_path = ""
 
-# Path to TLS private key file (required if enable_webao_secure is true).
+# Path to TLS private key file (optional - leave empty if using a reverse proxy like Cloudflare).
 tls_key_path = ""
 
 # The name of your server. This is used both on the server list, and within the server.
