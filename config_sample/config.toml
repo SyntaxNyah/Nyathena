@@ -11,6 +11,19 @@ enable_webao = false
 # The port to listen for websocket (WebAO) connections on.
 webao_port = 27017
 
+# Whether to listen for secure websocket (WebAO over WSS) connections.
+enable_webao_secure = false
+
+# The port to listen for secure websocket (WebAO over WSS) connections on.
+# Typically port 443 when using Cloudflare.
+webao_secure_port = 443
+
+# Path to TLS certificate file (required if enable_webao_secure is true).
+tls_cert_path = ""
+
+# Path to TLS private key file (required if enable_webao_secure is true).
+tls_key_path = ""
+
 # The name of your server. This is used both on the server list, and within the server.
 name = "Unnamed Server"
 

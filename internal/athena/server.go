@@ -144,6 +144,9 @@ func InitServer(conf *settings.Config) error {
 		if config.EnableWS {
 			advert.WSPort = config.WSPort
 		}
+		if config.EnableWSS {
+			advert.WSSPort = config.WSSPort
+		}
 		go ms.Advertise(config.MSAddr, advert, updatePlayers, advertDone)
 	}
 	initCommands()
@@ -187,6 +190,24 @@ func ListenWS() {
 	s := &http.Server{}
 	http.HandleFunc("/", HandleWS)
 	err = s.Serve(listener)
+	if err != http.ErrServerClosed {
+		FatalError <- err
+	}
+}
+
+// ListenWSS starts the server's secure websocket listener.
+func ListenWSS() {
+	listener, err := net.Listen("tcp", config.Addr+":"+strconv.Itoa(config.WSSPort))
+	if err != nil {
+		FatalError <- err
+		return
+	}
+	logger.LogDebug("WSS listener started.")
+	defer listener.Close()
+
+	s := &http.Server{}
+	http.HandleFunc("/wss", HandleWS)
+	err = s.ServeTLS(listener, config.TLSCertPath, config.TLSKeyPath)
 	if err != http.ErrServerClosed {
 		FatalError <- err
 	}

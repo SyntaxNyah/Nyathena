@@ -28,6 +28,7 @@ import (
 type Advertisement struct {
 	Port    int    `json:"port"`
 	WSPort  int    `json:"ws_port,omitempty"`
+	WSSPort int    `json:"wss_port,omitempty"`
 	Players int    `json:"players"`
 	Name    string `json:"name"`
 	Desc    string `json:"description"`

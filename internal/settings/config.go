@@ -47,6 +47,10 @@ type ServerConfig struct {
 	BanLen       string `toml:"default_ban_duration"`
 	EnableWS     bool   `toml:"enable_webao"`
 	WSPort       int    `toml:"webao_port"`
+	EnableWSS    bool   `toml:"enable_webao_secure"`
+	WSSPort      int    `toml:"webao_secure_port"`
+	TLSCertPath  string `toml:"tls_cert_path"`
+	TLSKeyPath   string `toml:"tls_key_path"`
 	MCLimit      int    `toml:"multiclient_limit"`
 	AssetURL     string `toml:"asset_url"`
 	WebhookURL   string `toml:"webhook_url"`
@@ -81,6 +85,10 @@ func defaultConfig() *Config {
 			BanLen:       "3d",
 			EnableWS:     false,
 			WSPort:       27017,
+			EnableWSS:    false,
+			WSSPort:      443,
+			TLSCertPath:  "",
+			TLSKeyPath:   "",
 			MCLimit:      16,
 			MaxDice:      100,
 			MaxSide:      100,

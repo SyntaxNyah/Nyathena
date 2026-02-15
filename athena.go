@@ -81,6 +81,9 @@ func main() {
 	if config.EnableWS {
 		go athena.ListenWS()
 	}
+	if config.EnableWSS {
+		go athena.ListenWSS()
+	}
 	if !*cliFlag {
 		go athena.ListenInput()
 	}
