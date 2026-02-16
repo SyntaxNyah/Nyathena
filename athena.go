@@ -78,11 +78,19 @@ func main() {
 	}
 	logger.LogInfo("Started server.")
 	go athena.ListenTCP()
-	if config.EnableWS {
+	
+	// When both WS and WSS are enabled with the same port (common in reverse proxy setups),
+	// only start one listener to avoid "address already in use" error
+	if config.EnableWS && config.EnableWSS && config.WSPort == config.WSSPort {
+		logger.LogDebugf("WS and WSS using same port %d, starting single listener", config.WSPort)
 		go athena.ListenWS()
-	}
-	if config.EnableWSS {
-		go athena.ListenWSS()
+	} else {
+		if config.EnableWS {
+			go athena.ListenWS()
+		}
+		if config.EnableWSS {
+			go athena.ListenWSS()
+		}
 	}
 	if !*cliFlag {
 		go athena.ListenInput()
