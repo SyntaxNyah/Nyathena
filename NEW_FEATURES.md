@@ -100,3 +100,89 @@ All features include comprehensive tests:
 - Type conversion tests
 - Sequential punishment application tests
 - Tournament participant creation tests
+
+---
+
+## Feature 3: Coinflip Challenge System
+
+### Overview
+A player-vs-player coinflip challenge system that allows any user to challenge another player to a coinflip battle. This replaces the removed `/copycats` and `/randomname` punishment commands with a more interactive social feature.
+
+### Command
+```
+/coinflip <heads|tails>
+```
+
+### How It Works
+
+**Starting a Challenge:**
+1. Player1 types `/coinflip heads` or `/coinflip tails`
+2. System announces: "Player1 has chosen heads and is ready to coinflip! Type /coinflip tails to battle them!"
+3. Challenge remains active for 30 seconds
+
+**Accepting a Challenge:**
+1. Player2 types `/coinflip` with the opposite choice (if Player1 chose heads, Player2 must choose tails)
+2. System randomly flips a virtual coin (50/50 chance)
+3. Winner is announced to the area: "⚔️ COINFLIP BATTLE! Player1 (heads) vs Player2 (tails) - The coin landed on heads! 🎉 Player1 WINS! 🎉"
+4. Challenge is cleared
+
+### Examples
+
+**Basic Usage:**
+```
+Player1: /coinflip heads
+Server: Player1 has chosen heads and is ready to coinflip! Type /coinflip tails to battle them!
+Player2: /coinflip tails
+Server: ⚔️ COINFLIP BATTLE! Player1 (heads) vs Player2 (tails) - The coin landed on tails! 🎉 Player2 WINS! 🎉
+```
+
+**Invalid Choice:**
+```
+Player1: /coinflip coin
+Server: Invalid choice. Use: heads or tails.
+```
+
+**Same Player Attempting to Accept Own Challenge:**
+```
+Player1: /coinflip heads
+Server: Player1 has chosen heads and is ready to coinflip! Type /coinflip tails to battle them!
+Player1: /coinflip tails
+Server: You cannot accept your own coinflip challenge!
+```
+
+**Wrong Choice (Must Pick Opposite):**
+```
+Player1: /coinflip heads
+Server: Player1 has chosen heads and is ready to coinflip! Type /coinflip tails to battle them!
+Player2: /coinflip heads
+Server: You must pick the opposite choice! The challenger picked heads, so you must pick tails.
+```
+
+**Challenge Expiration:**
+```
+Player1: /coinflip heads
+Server: Player1 has chosen heads and is ready to coinflip! Type /coinflip tails to battle them!
+[... 31 seconds pass ...]
+Player2: /coinflip tails
+Server: Previous coinflip expired. Player2 has chosen tails and is ready to coinflip! Type /coinflip heads to battle them!
+```
+
+### Notes
+- Available to all users (no special permissions required)
+- Challenges are area-specific (one active challenge per area)
+- Challenges expire after 30 seconds if not accepted
+- Players cannot accept their own challenges
+- Must choose the opposite side from the challenger
+- Results are logged in the game buffer for both players
+
+### Removed Commands
+This feature replaces:
+- `/copycats` - Moderator-only punishment command that modified messages
+- `/randomname` - Moderator-only punishment command that changed names
+
+### Testing
+Comprehensive tests include:
+- `oppositeChoice` helper function validation
+- Winner determination logic (4 scenarios)
+- Choice validation tests
+- Edge case handling
