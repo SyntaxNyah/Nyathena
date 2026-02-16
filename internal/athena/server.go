@@ -65,10 +65,6 @@ var (
 	tournamentMutex      sync.Mutex
 	tournamentStartTime  time.Time
 	tournamentParticipants map[int]*TournamentParticipant // uid -> participant data
-	
-	// Live area logger state
-	livelogMutex   sync.Mutex
-	livelogState   map[int]int // admin uid -> area id they're logging
 )
 
 // TournamentParticipant tracks a user's tournament performance
@@ -86,9 +82,6 @@ func InitServer(conf *settings.Config) error {
 	
 	// Initialize tournament state
 	tournamentParticipants = make(map[int]*TournamentParticipant)
-	
-	// Initialize livelog state
-	livelogState = make(map[int]int)
 
 	// Load server data.
 	var err error
@@ -293,46 +286,6 @@ func writeToAll(header string, contents ...string) {
 
 // writeToArea sends a message to all clients in a given area.
 func writeToArea(area *area.Area, header string, contents ...string) {
-	// If this is an IC message (MS packet), send to admins logging this area FIRST
-	// so they get it even if not in the area
-	if header == "MS" && len(contents) > 4 {
-		// Find the area ID
-		areaID := -1
-		for i, a := range areas {
-			if a == area {
-				areaID = i
-				break
-			}
-		}
-		
-		if areaID >= 0 {
-			// Extract character name and message from MS packet
-			// contents[2] is the character name, contents[4] is the encoded message
-			characterName := contents[2]
-			if len(contents) > 15 && contents[15] != "" {
-				// Use showname if present (contents[15])
-				characterName = contents[15]
-			}
-			encodedMsg := contents[4]
-			
-			livelogMutex.Lock()
-			// Send to all admins logging this area
-			for adminUID, loggedAreaID := range livelogState {
-				if loggedAreaID == areaID {
-					if adminClient := clients.GetClientByUID(adminUID); adminClient != nil {
-						// Only send if admin is NOT in the area (to avoid duplicates)
-						if adminClient.Area() != area {
-							livelogMsg := fmt.Sprintf("[LIVELOG Area %d] %s: %s", areaID, characterName, decode(encodedMsg))
-							adminClient.SendPacket("CT", "OOC", encode(livelogMsg))
-						}
-					}
-				}
-			}
-			livelogMutex.Unlock()
-		}
-	}
-	
-	// Then, send to clients in the area
 	for client := range clients.GetAllClients() {
 		if client.Area() == area {
 			client.SendPacket(header, contents...)

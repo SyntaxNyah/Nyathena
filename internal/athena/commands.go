@@ -727,13 +727,6 @@ func initCommands() {
 			desc:     "Join the active punishment tournament.",
 			reqPerms: permissions.PermissionField["NONE"],
 		},
-		"livelog": {
-			handler:  cmdLivelog,
-			minArgs:  1,
-			usage:    "Usage: /livelog <area_id|off|status>",
-			desc:     "Stream area chat messages to your OOC (admin only).",
-			reqPerms: permissions.PermissionField["BAN"],
-		},
 	}
 }
 
@@ -2881,62 +2874,4 @@ func cmdJoinTournament(client *Client, args []string, usage string) {
 	client.SendServerMessage(fmt.Sprintf("🏆 Joined tournament! You've been given: %s", strings.Join(punishmentNames, ", ")))
 	writeToAllClients("CT", "OOC", fmt.Sprintf("🏆 UID %d joined the tournament!", uid))
 	addToBuffer(client, "TOURNAMENT", "Joined tournament", false)
-}
-
-// cmdLivelog manages live area logging for admins
-func cmdLivelog(client *Client, args []string, usage string) {
-	if len(args) < 1 {
-		client.SendServerMessage("Not enough arguments:\n" + usage)
-		return
-	}
-
-	action := strings.ToLower(args[0])
-
-	switch action {
-	case "off":
-		livelogMutex.Lock()
-		defer livelogMutex.Unlock()
-
-		uid := client.Uid()
-		if _, exists := livelogState[uid]; !exists {
-			client.SendServerMessage("You are not currently logging any area.")
-			return
-		}
-
-		delete(livelogState, uid)
-		client.SendServerMessage("Live area logging stopped.")
-		addToBuffer(client, "CMD", "Stopped livelog", false)
-
-	case "status":
-		livelogMutex.Lock()
-		defer livelogMutex.Unlock()
-
-		uid := client.Uid()
-		if areaID, exists := livelogState[uid]; exists {
-			if areaID >= 0 && areaID < len(areas) {
-				client.SendServerMessage(fmt.Sprintf("Currently logging: Area %d - %s", areaID, areas[areaID].Name()))
-			} else {
-				client.SendServerMessage(fmt.Sprintf("Currently logging: Area %d", areaID))
-			}
-		} else {
-			client.SendServerMessage("You are not currently logging any area.")
-		}
-
-	default:
-		// Try to parse as area ID
-		areaID, err := strconv.Atoi(action)
-		if err != nil || areaID < 0 || areaID >= len(areas) {
-			client.SendServerMessage(fmt.Sprintf("Invalid area ID. Use a number between 0 and %d, 'off', or 'status'.", len(areas)-1))
-			return
-		}
-
-		livelogMutex.Lock()
-		defer livelogMutex.Unlock()
-
-		uid := client.Uid()
-		livelogState[uid] = areaID
-
-		client.SendServerMessage(fmt.Sprintf("Now logging Area %d - %s. Messages will appear in your OOC.", areaID, areas[areaID].Name()))
-		addToBuffer(client, "CMD", fmt.Sprintf("Started livelog for area %d", areaID), false)
-	}
 }

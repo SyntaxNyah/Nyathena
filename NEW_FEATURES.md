@@ -80,66 +80,18 @@ Shows:
 
 ---
 
-## Feature 3: Live Area Logger
-
-### Overview
-Admin-only feature that streams area chat messages in real-time to an admin's OOC chat. Useful for monitoring areas without being physically present.
-
-### Usage
-
-**Start Logging an Area** (Requires BAN permission):
-```
-/livelog <area_id>
-```
-
-**Stop Logging**:
-```
-/livelog off
-```
-
-**Check Status**:
-```
-/livelog status
-```
-
-### Examples
-```
-/livelog 5          # Start logging Area 5
-/livelog status     # Check what you're logging
-/livelog off        # Stop logging
-```
-
-### Message Format
-Logged messages appear in the admin's OOC chat:
-```
-[LIVELOG Area 5] Phoenix Wright: I object to this statement!
-[LIVELOG Area 5] Miles Edgeworth: Your objection is noted.
-```
-
-### Notes
-- Admin-only command (requires BAN permission)
-- Admins not in the logged area receive messages in OOC
-- Admins in the logged area see normal IC messages (no duplicates)
-- Messages include character names (or shownames if set)
-- Multiple admins can log the same area independently
-- Each admin can only log one area at a time
-
----
-
 ## Technical Implementation Details
 
 ### Thread Safety
-- All global state (tournament, livelog) uses mutex locks
+- Tournament state uses mutex locks for thread safety
 - Safe for concurrent access by multiple clients
 
 ### State Management
 - Tournament state stored in `tournamentParticipants` map
-- Livelog state stored in `livelogState` map
-- Both initialized in `InitServer()`
+- Initialized in `InitServer()`
 
 ### Message Processing
 - Tournament message counting happens in `pktIC` during IC message processing
-- Livelog interception happens in `writeToArea` before broadcasting
 
 ### Testing
 All features include comprehensive tests:
