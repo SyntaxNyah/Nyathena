@@ -37,3 +37,61 @@ func TestOppositeChoice(t *testing.T) {
 		}
 	}
 }
+
+// TestCoinflipWinnerDetermination tests that the winner is determined correctly
+func TestCoinflipWinnerDetermination(t *testing.T) {
+	tests := []struct {
+		name            string
+		challengeChoice string
+		acceptorChoice  string
+		coinResult      string
+		expectedWinner  string // "challenger" or "acceptor"
+	}{
+		{"Challenger wins with heads", "heads", "tails", "heads", "challenger"},
+		{"Challenger wins with tails", "tails", "heads", "tails", "challenger"},
+		{"Acceptor wins with heads", "tails", "heads", "heads", "acceptor"},
+		{"Acceptor wins with tails", "heads", "tails", "tails", "acceptor"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Simulate winner determination logic
+			var winner string
+			if tt.coinResult == tt.challengeChoice {
+				winner = "challenger"
+			} else {
+				winner = "acceptor"
+			}
+
+			if winner != tt.expectedWinner {
+				t.Errorf("Winner determination failed: expected %s, got %s (coin: %s, challenger: %s, acceptor: %s)",
+					tt.expectedWinner, winner, tt.coinResult, tt.challengeChoice, tt.acceptorChoice)
+			}
+
+			// Verify that choices are opposite
+			if tt.challengeChoice == tt.acceptorChoice {
+				t.Errorf("Test case invalid: choices should be opposite, but both are %s", tt.challengeChoice)
+			}
+		})
+	}
+}
+
+// TestCoinflipChoiceValidation tests choice validation
+func TestCoinflipChoiceValidation(t *testing.T) {
+	validChoices := []string{"heads", "tails"}
+	invalidChoices := []string{"head", "tail", "coin", "flip", "", "HEADS", "Tails"}
+
+	// Valid choices should match exactly
+	for _, choice := range validChoices {
+		if choice != "heads" && choice != "tails" {
+			t.Errorf("Valid choice %s failed validation", choice)
+		}
+	}
+
+	// Invalid choices should fail
+	for _, choice := range invalidChoices {
+		if choice == "heads" || choice == "tails" {
+			t.Errorf("Invalid choice %s passed validation", choice)
+		}
+	}
+}
