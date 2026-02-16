@@ -1,6 +1,6 @@
 # Punishment Commands Documentation
 
-Athena now includes 37 fun, non-harmful punishment commands for moderators to use on players. These commands temporarily modify how player messages appear or behave, adding entertainment value while maintaining server control.
+Athena now includes 35 fun, non-harmful punishment commands for moderators to use on players. These commands temporarily modify how player messages appear or behave, adding entertainment value while maintaining server control.
 
 ## Overview
 
@@ -103,15 +103,11 @@ Converts to caveman grunts.
 - Input: "Hello world test"
 - Output: "UGH GRUNT"
 
-## Visibility/Cosmetic Commands (3)
+## Visibility/Cosmetic Commands (2)
 
 ### `/emoji`
 Replaces player's name with random emoji each message.
 - Effect: Name appears as 😀, 🎃, 🦄, etc.
-
-### `/randomname`
-Changes player's name randomly each message.
-- Effect: Name appears as "Silly Banana", "Wacky Noodle", "Goofy Pickle", etc.
 
 ### `/invisible`
 Prevents player from seeing other players' messages (isolation punishment).
@@ -130,15 +126,7 @@ Forces wait time between messages.
 ### `/lag`
 Batches and delays messages to simulate lag.
 
-## Social Chaos Commands (4)
-
-### `/copycats`
-Modifies messages with user-specific alterations by doubling certain letters.
-- Each user gets consistent but different modifications based on their user ID
-- Input: "I went to school."
-- Output (User 1): "I weent to schoool."
-- Output (User 2): "I went to sschool."
-- Note: This ensures different users can't send identical messages (which Discord prevents)
+## Social Chaos Commands (3)
 
 ### `/subtitles`
 Adds confusing subtitle annotations.
@@ -274,7 +262,6 @@ A player can have multiple different punishment types active simultaneously. Tex
 ### Creative Combinations
 ```
 /emoji -d 1h 123                    # Mystery player
-/randomname -d 30m 45               # Identity crisis
 /spaghetti -d 10m -r "chaos" 67    # Pure chaos
 ```
 

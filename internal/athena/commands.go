@@ -519,13 +519,6 @@ func initCommands() {
 			desc:     "Replaces name with random emojis.",
 			reqPerms: permissions.PermissionField["MUTE"],
 		},
-		"randomname": {
-			handler:  cmdRandomname,
-			minArgs:  1,
-			usage:    "Usage: /randomname [-d duration] [-r reason] <uid1>,<uid2>...",
-			desc:     "Changes name randomly each message.",
-			reqPerms: permissions.PermissionField["MUTE"],
-		},
 		"invisible": {
 			handler:  cmdInvisible,
 			minArgs:  1,
@@ -563,13 +556,6 @@ func initCommands() {
 			reqPerms: permissions.PermissionField["MUTE"],
 		},
 		// Punishment commands - Social Chaos
-		"copycats": {
-			handler:  cmdCopycats,
-			minArgs:  1,
-			usage:    "Usage: /copycats [-d duration] [-r reason] <uid1>,<uid2>...",
-			desc:     "Makes everyone repeat their messages.",
-			reqPerms: permissions.PermissionField["MUTE"],
-		},
 		"subtitles": {
 			handler:  cmdSubtitles,
 			minArgs:  1,
@@ -2418,10 +2404,6 @@ func cmdEmoji(client *Client, args []string, usage string) {
 	cmdPunishment(client, args, usage, PunishmentEmoji)
 }
 
-func cmdRandomname(client *Client, args []string, usage string) {
-	cmdPunishment(client, args, usage, PunishmentRandomname)
-}
-
 func cmdInvisible(client *Client, args []string, usage string) {
 	cmdPunishment(client, args, usage, PunishmentInvisible)
 }
@@ -2440,10 +2422,6 @@ func cmdPause(client *Client, args []string, usage string) {
 
 func cmdLag(client *Client, args []string, usage string) {
 	cmdPunishment(client, args, usage, PunishmentLag)
-}
-
-func cmdCopycats(client *Client, args []string, usage string) {
-	cmdPunishment(client, args, usage, PunishmentCopycats)
 }
 
 func cmdSubtitles(client *Client, args []string, usage string) {
@@ -2588,8 +2566,6 @@ func parsePunishmentType(s string) PunishmentType {
 		return PunishmentCaveman
 	case "emoji":
 		return PunishmentEmoji
-	case "randomname":
-		return PunishmentRandomname
 	case "invisible":
 		return PunishmentInvisible
 	case "slowpoke":
@@ -2600,8 +2576,6 @@ func parsePunishmentType(s string) PunishmentType {
 		return PunishmentPause
 	case "lag":
 		return PunishmentLag
-	case "copycats":
-		return PunishmentCopycats
 	case "subtitles":
 		return PunishmentSubtitles
 	case "roulette":

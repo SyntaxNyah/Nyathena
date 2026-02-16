@@ -65,17 +65,15 @@ const (
 	PunishmentPirate
 	PunishmentShakespearean
 	PunishmentCaveman
-	// Visibility/Cosmetic (3 types)
+	// Visibility/Cosmetic (2 types)
 	PunishmentEmoji
-	PunishmentRandomname
 	PunishmentInvisible
 	// Timing Effects (4 types)
 	PunishmentSlowpoke
 	PunishmentFastspammer
 	PunishmentPause
 	PunishmentLag
-	// Social Chaos (4 types)
-	PunishmentCopycats
+	// Social Chaos (3 types)
 	PunishmentSubtitles
 	PunishmentRoulette
 	PunishmentSpotlight
@@ -937,8 +935,6 @@ func (p PunishmentType) String() string {
 		return "caveman"
 	case PunishmentEmoji:
 		return "emoji"
-	case PunishmentRandomname:
-		return "randomname"
 	case PunishmentInvisible:
 		return "invisible"
 	case PunishmentSlowpoke:
@@ -949,8 +945,6 @@ func (p PunishmentType) String() string {
 		return "pause"
 	case PunishmentLag:
 		return "lag"
-	case PunishmentCopycats:
-		return "copycats"
 	case PunishmentSubtitles:
 		return "subtitles"
 	case PunishmentRoulette:
