@@ -56,28 +56,28 @@ type ClientPairInfo struct {
 }
 
 type Client struct {
-	pair          ClientPairInfo
-	mu            sync.Mutex
-	conn          net.Conn
-	joining       bool
-	hdid          string
-	uid           int
-	area          *area.Area
-	char          int
-	ipid          string
-	oocName       string
-	lastmsg       string
-	perms         uint64
+	pair         ClientPairInfo
+	mu           sync.Mutex
+	conn         net.Conn
+	joining      bool
+	hdid         string
+	uid          int
+	area         *area.Area
+	char         int
+	ipid         string
+	oocName      string
+	lastmsg      string
+	perms        uint64
 	authenticated bool
-	mod_name      string
-	pos           string
-	case_prefs    [5]bool
-	muted         MuteState
-	muteuntil     time.Time
-	showname      string
-	narrator      bool
-	jail_until    time.Time
-	last_rps_time time.Time
+	mod_name     string
+	pos          string
+	case_prefs   [5]bool
+	muted        MuteState
+	muteuntil    time.Time
+	showname     string
+	narrator     bool
+	jailUntil    time.Time
+	lastRPSTime  time.Time
 }
 
 // NewClient returns a new client.
@@ -677,13 +677,13 @@ func (client *Client) SetShowname(s string) {
 func (client *Client) JailUntil() time.Time {
 	client.mu.Lock()
 	defer client.mu.Unlock()
-	return client.jail_until
+	return client.jailUntil
 }
 
 // SetJailUntil sets the time when the client should be released from jail.
 func (client *Client) SetJailUntil(t time.Time) {
 	client.mu.Lock()
-	client.jail_until = t
+	client.jailUntil = t
 	client.mu.Unlock()
 }
 
@@ -691,7 +691,7 @@ func (client *Client) SetJailUntil(t time.Time) {
 func (client *Client) Jailed() bool {
 	client.mu.Lock()
 	defer client.mu.Unlock()
-	return !client.jail_until.IsZero()
+	return !client.jailUntil.IsZero()
 }
 
 // CheckJail checks the client's jail duration, releasing them if necessary.
@@ -708,13 +708,13 @@ func (client *Client) CheckJail() bool {
 func (client *Client) LastRPSTime() time.Time {
 	client.mu.Lock()
 	defer client.mu.Unlock()
-	return client.last_rps_time
+	return client.lastRPSTime
 }
 
 // SetLastRPSTime sets the time of the client's last RPS game.
 func (client *Client) SetLastRPSTime(t time.Time) {
 	client.mu.Lock()
-	client.last_rps_time = t
+	client.lastRPSTime = t
 	client.mu.Unlock()
 }
 

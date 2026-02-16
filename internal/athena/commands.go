@@ -1843,7 +1843,7 @@ func cmdVote(client *Client, args []string, usage string) {
 	}
 
 	client.SendServerMessage(fmt.Sprintf("You voted for: %v", poll.Options[option]))
-	
+
 	// Show current results to all players
 	results := make(map[int]int)
 	for _, vote := range poll.Votes {

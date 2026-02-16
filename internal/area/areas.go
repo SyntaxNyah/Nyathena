@@ -71,25 +71,25 @@ type Poll struct {
 }
 
 type Area struct {
-	data           AreaData
-	defaults       defaults
-	mu             sync.Mutex
-	taken          []bool
-	players        int
-	defhp          int
-	prohp          int
-	evidence       []string
-	buffer         []string
-	cms            []int
-	last_msg       int
-	evi_mode       EvidenceMode
-	status         Status
-	lock           Lock
-	invited        []int
-	doc            string
-	tr             TestimonyRecorder
-	active_poll    *Poll
-	last_poll_time time.Time
+	data         AreaData
+	defaults     defaults
+	mu           sync.Mutex
+	taken        []bool
+	players      int
+	defhp        int
+	prohp        int
+	evidence     []string
+	buffer       []string
+	cms          []int
+	last_msg     int
+	evi_mode     EvidenceMode
+	status       Status
+	lock         Lock
+	invited      []int
+	doc          string
+	tr           TestimonyRecorder
+	activePoll   *Poll
+	lastPollTime time.Time
 }
 
 type AreaData struct {
@@ -655,15 +655,15 @@ func (evimod EvidenceMode) String() string {
 func (a *Area) ActivePoll() *Poll {
 	a.mu.Lock()
 	defer a.mu.Unlock()
-	return a.active_poll
+	return a.activePoll
 }
 
 // SetActivePoll sets the area's active poll.
 func (a *Area) SetActivePoll(poll *Poll) {
 	a.mu.Lock()
-	a.active_poll = poll
+	a.activePoll = poll
 	if poll != nil {
-		a.last_poll_time = time.Now()
+		a.lastPollTime = time.Now().UTC()
 	}
 	a.mu.Unlock()
 }
@@ -672,22 +672,22 @@ func (a *Area) SetActivePoll(poll *Poll) {
 func (a *Area) LastPollTime() time.Time {
 	a.mu.Lock()
 	defer a.mu.Unlock()
-	return a.last_poll_time
+	return a.lastPollTime
 }
 
 // AddVote adds a vote to the active poll.
 func (a *Area) AddVote(uid int, option int) bool {
 	a.mu.Lock()
 	defer a.mu.Unlock()
-	if a.active_poll == nil {
+	if a.activePoll == nil {
 		return false
 	}
-	if _, exists := a.active_poll.Votes[uid]; exists {
+	if _, exists := a.activePoll.Votes[uid]; exists {
 		return false // Already voted
 	}
-	if option < 0 || option >= len(a.active_poll.Options) {
+	if option < 0 || option >= len(a.activePoll.Options) {
 		return false // Invalid option
 	}
-	a.active_poll.Votes[uid] = option
+	a.activePoll.Votes[uid] = option
 	return true
 }
