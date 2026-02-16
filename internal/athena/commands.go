@@ -153,6 +153,13 @@ func initCommands() {
 			desc:     "Invites user(s) to the current area.",
 			reqPerms: permissions.PermissionField["CM"],
 		},
+		"jail": {
+			handler:  cmdJail,
+			minArgs:  1,
+			usage:    "Usage: /jail <uid> [-d duration] [-r reason]",
+			desc:     "Jails a player in their current area.",
+			reqPerms: permissions.PermissionField["BAN"],
+		},
 		"kick": {
 			handler:  cmdKick,
 			minArgs:  3,
@@ -293,6 +300,13 @@ func initCommands() {
 			desc:     "Sends a private message.",
 			reqPerms: permissions.PermissionField["NONE"],
 		},
+		"poll": {
+			handler:  cmdPoll,
+			minArgs:  1,
+			usage:    "Usage: /poll [question]|[option1]|[option2]|[option3...]",
+			desc:     "Creates a poll in the current area.",
+			reqPerms: permissions.PermissionField["CM"],
+		},
 		"rmusr": {
 			handler:  cmdRemoveUser,
 			minArgs:  1,
@@ -305,6 +319,13 @@ func initCommands() {
 			minArgs:  1,
 			usage:    "Usage: /roll [-p] <dice>d<sides>\n-p: Sets the roll to be private.",
 			desc:     "Rolls dice.",
+			reqPerms: permissions.PermissionField["NONE"],
+		},
+		"rps": {
+			handler:  cmdRps,
+			minArgs:  1,
+			usage:    "Usage: /rps <rock|paper|scissors>",
+			desc:     "Play rock-paper-scissors.",
 			reqPerms: permissions.PermissionField["NONE"],
 		},
 		"setrole": {
@@ -356,6 +377,13 @@ func initCommands() {
 			desc:     "Uninvites user(s) from the current area.",
 			reqPerms: permissions.PermissionField["CM"],
 		},
+		"unjail": {
+			handler:  cmdUnjail,
+			minArgs:  1,
+			usage:    "Usage: /unjail <uid1>,<uid2>...",
+			desc:     "Releases user(s) from jail.",
+			reqPerms: permissions.PermissionField["BAN"],
+		},
 		"unlock": {
 			handler:  cmdUnlock,
 			minArgs:  0,
@@ -369,6 +397,13 @@ func initCommands() {
 			usage:    "Usage: /unmute <uid1>,<uid2>...",
 			desc:     "Unmutes user(s).",
 			reqPerms: permissions.PermissionField["MUTE"],
+		},
+		"vote": {
+			handler:  cmdVote,
+			minArgs:  1,
+			usage:    "Usage: /vote <option_number>",
+			desc:     "Vote on the active poll.",
+			reqPerms: permissions.PermissionField["NONE"],
 		},
 	}
 }
@@ -1593,4 +1628,251 @@ func cmdUnmute(client *Client, args []string, _ string) {
 	report = strings.TrimSuffix(report, ", ")
 	client.SendServerMessage(fmt.Sprintf("Unmuted %v clients.", count))
 	addToBuffer(client, "CMD", fmt.Sprintf("Unmuted %v.", report), false)
+}
+
+// Handles /jail
+func cmdJail(client *Client, args []string, usage string) {
+	flags := flag.NewFlagSet("", 0)
+	flags.SetOutput(io.Discard)
+	duration := flags.String("d", "perma", "")
+	reason := flags.String("r", "", "")
+	flags.Parse(args)
+
+	if len(flags.Args()) == 0 {
+		client.SendServerMessage("Not enough arguments:\n" + usage)
+		return
+	}
+
+	uid, err := strconv.Atoi(flags.Arg(0))
+	if err != nil {
+		client.SendServerMessage("Invalid UID.")
+		return
+	}
+
+	target, err := getClientByUid(uid)
+	if err != nil {
+		client.SendServerMessage("Client not found.")
+		return
+	}
+
+	var jailUntil time.Time
+	if strings.ToLower(*duration) == "perma" {
+		jailUntil = time.Date(2099, 12, 31, 23, 59, 59, 0, time.UTC)
+	} else {
+		parsedDur, err := str2duration.ParseDuration(*duration)
+		if err != nil {
+			client.SendServerMessage("Failed to jail: Cannot parse duration.")
+			return
+		}
+		jailUntil = time.Now().UTC().Add(parsedDur)
+	}
+
+	target.SetJailedUntil(jailUntil)
+	
+	msg := fmt.Sprintf("You have been jailed in %v.", target.Area().Name())
+	if strings.ToLower(*duration) != "perma" {
+		msg = fmt.Sprintf("You have been jailed in %v for %v.", target.Area().Name(), *duration)
+	}
+	if *reason != "" {
+		msg += " Reason: " + *reason
+	}
+	target.SendServerMessage(msg)
+	
+	client.SendServerMessage(fmt.Sprintf("Jailed [%v] %v in %v.", uid, target.OOCName(), target.Area().Name()))
+	
+	logMsg := fmt.Sprintf("Jailed [%v] %v", uid, target.OOCName())
+	if *reason != "" {
+		logMsg += " for reason: " + *reason
+	}
+	addToBuffer(client, "CMD", logMsg, false)
+}
+
+// Handles /unjail
+func cmdUnjail(client *Client, args []string, _ string) {
+	toUnjail := getUidList(strings.Split(args[0], ","))
+	var count int
+	var report string
+	for _, c := range toUnjail {
+		if c.JailedUntil().IsZero() || time.Now().UTC().After(c.JailedUntil()) {
+			continue
+		}
+		c.SetJailedUntil(time.Time{})
+		c.SendServerMessage("You have been released from jail.")
+		count++
+		report += fmt.Sprintf("%v, ", c.Uid())
+	}
+	report = strings.TrimSuffix(report, ", ")
+	client.SendServerMessage(fmt.Sprintf("Released %v clients from jail.", count))
+	addToBuffer(client, "CMD", fmt.Sprintf("Released %v from jail.", report), false)
+}
+
+// Handles /rps
+func cmdRps(client *Client, args []string, _ string) {
+	// Check cooldown (30 seconds)
+	if time.Now().UTC().Before(client.LastRpsTime().Add(30 * time.Second)) && !client.LastRpsTime().IsZero() {
+		remaining := time.Until(client.LastRpsTime().Add(30 * time.Second))
+		client.SendServerMessage(fmt.Sprintf("Please wait %v seconds before playing RPS again.", int(remaining.Seconds())+1))
+		return
+	}
+
+	choice := strings.ToLower(args[0])
+	if choice != "rock" && choice != "paper" && choice != "scissors" {
+		client.SendServerMessage("Invalid choice. Use: rock, paper, or scissors.")
+		return
+	}
+
+	// Update last RPS time
+	client.SetLastRpsTime(time.Now().UTC())
+
+	// Generate random server choice
+	choices := []string{"rock", "paper", "scissors"}
+	gen := rand.New(rand.NewSource(time.Now().UnixNano()))
+	serverChoice := choices[gen.Intn(3)]
+
+	// Determine winner
+	var result string
+	if choice == serverChoice {
+		result = "It's a tie!"
+	} else if (choice == "rock" && serverChoice == "scissors") ||
+		(choice == "paper" && serverChoice == "rock") ||
+		(choice == "scissors" && serverChoice == "paper") {
+		result = fmt.Sprintf("%v wins!", client.OOCName())
+	} else {
+		result = "Server wins!"
+	}
+
+	// Broadcast to area
+	message := fmt.Sprintf("%v played %v, Server played %v. %v", client.OOCName(), choice, serverChoice, result)
+	sendAreaServerMessage(client.Area(), message)
+	addToBuffer(client, "GAME", fmt.Sprintf("Played RPS: %v vs %v - %v", choice, serverChoice, result), false)
+}
+
+// Handles /poll
+func cmdPoll(client *Client, args []string, usage string) {
+	// Check if there's already an active poll
+	if client.Area().ActivePoll() != nil {
+		client.SendServerMessage("There is already an active poll in this area.")
+		return
+	}
+
+	// Check cooldown (5 minutes)
+	if time.Now().UTC().Before(client.Area().LastPollTime().Add(5 * time.Minute)) && !client.Area().LastPollTime().IsZero() {
+		remaining := time.Until(client.Area().LastPollTime().Add(5 * time.Minute))
+		client.SendServerMessage(fmt.Sprintf("Please wait %v before creating another poll in this area.", remaining.Round(time.Second)))
+		return
+	}
+
+	// Parse poll format: question|option1|option2|...
+	fullArg := strings.Join(args, " ")
+	parts := strings.Split(fullArg, "|")
+	
+	if len(parts) < 3 {
+		client.SendServerMessage("Not enough poll options. Format: " + usage)
+		return
+	}
+
+	question := strings.TrimSpace(parts[0])
+	options := make([]string, 0)
+	for i := 1; i < len(parts); i++ {
+		opt := strings.TrimSpace(parts[i])
+		if opt != "" {
+			options = append(options, opt)
+		}
+	}
+
+	if len(options) < 2 {
+		client.SendServerMessage("Poll must have at least 2 options.")
+		return
+	}
+
+	// Create poll
+	poll := &area.Poll{
+		ID:        time.Now().UnixNano(),
+		Question:  question,
+		Options:   options,
+		CreatedAt: time.Now().UTC(),
+		ClosesAt:  time.Now().UTC().Add(2 * time.Minute),
+		CreatedBy: client.OOCName(),
+	}
+
+	client.Area().SetActivePoll(poll)
+	client.Area().SetLastPollTime(time.Now().UTC())
+	client.Area().SetPollVotes(make(map[int]int))
+	client.Area().SetPlayerVotes(make(map[int]int))
+
+	// Broadcast poll to area
+	pollMsg := fmt.Sprintf("=== POLL ===\n%v\n", question)
+	for i, opt := range options {
+		pollMsg += fmt.Sprintf("%v. %v\n", i+1, opt)
+	}
+	pollMsg += fmt.Sprintf("\nUse /vote <number> to vote. Poll closes in 2 minutes.")
+	sendAreaServerMessage(client.Area(), pollMsg)
+	addToBuffer(client, "CMD", fmt.Sprintf("Created poll: %v", question), false)
+
+	// Schedule auto-close after 2 minutes
+	go func(a *area.Area, pollID int64) {
+		time.Sleep(2 * time.Minute)
+		currentPoll := a.ActivePoll()
+		if currentPoll != nil && currentPoll.ID == pollID {
+			// Close poll
+			resultMsg := fmt.Sprintf("=== POLL CLOSED ===\n%v\nResults:\n", currentPoll.Question)
+			votes := a.PollVotes()
+			for i, opt := range currentPoll.Options {
+				count := 0
+				if votes != nil {
+					count = votes[i+1]
+				}
+				resultMsg += fmt.Sprintf("%v. %v - %v votes\n", i+1, opt, count)
+			}
+			sendAreaServerMessage(a, resultMsg)
+			a.ClearPoll()
+		}
+	}(client.Area(), poll.ID)
+}
+
+// Handles /vote
+func cmdVote(client *Client, args []string, usage string) {
+	// Check if there's an active poll
+	poll := client.Area().ActivePoll()
+	if poll == nil {
+		client.SendServerMessage("There is no active poll in this area.")
+		return
+	}
+
+	// Check if poll has expired
+	if time.Now().UTC().After(poll.ClosesAt) {
+		client.SendServerMessage("This poll has expired.")
+		client.Area().ClearPoll()
+		return
+	}
+
+	// Check if player has already voted
+	if client.Area().HasPlayerVoted(client.Uid()) {
+		client.SendServerMessage("You have already voted in this poll.")
+		return
+	}
+
+	// Parse vote option
+	option, err := strconv.Atoi(args[0])
+	if err != nil || option < 1 || option > len(poll.Options) {
+		client.SendServerMessage(fmt.Sprintf("Invalid option. Choose a number between 1 and %v.", len(poll.Options)))
+		return
+	}
+
+	// Record vote
+	client.Area().AddPlayerVote(client.Uid(), option)
+	client.SendServerMessage(fmt.Sprintf("You voted for: %v", poll.Options[option-1]))
+
+	// Broadcast updated results to area
+	resultMsg := fmt.Sprintf("=== POLL UPDATE ===\n%v\nCurrent Results:\n", poll.Question)
+	votes := client.Area().PollVotes()
+	for i, opt := range poll.Options {
+		count := 0
+		if votes != nil {
+			count = votes[i+1]
+		}
+		resultMsg += fmt.Sprintf("%v. %v - %v votes\n", i+1, opt, count)
+	}
+	sendAreaServerMessage(client.Area(), resultMsg)
+	addToBuffer(client, "VOTE", fmt.Sprintf("Voted for option %v in poll", option), false)
 }

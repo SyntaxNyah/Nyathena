@@ -76,6 +76,8 @@ type Client struct {
 	muteuntil     time.Time
 	showname      string
 	narrator      bool
+	jailedUntil   time.Time
+	lastRpsTime   time.Time
 }
 
 // NewClient returns a new client.
@@ -469,6 +471,11 @@ func (client *Client) JoinArea(area *area.Area) {
 
 // ChangeArea changes the client's current area.
 func (client *Client) ChangeArea(a *area.Area) bool {
+	// Check if client is jailed
+	if time.Now().UTC().Before(client.JailedUntil()) && !client.JailedUntil().IsZero() {
+		client.SendServerMessage("You are jailed in this area")
+		return false
+	}
 	if a.Lock() == area.LockLocked &&
 		!sliceutil.ContainsInt(a.Invited(), client.Uid()) &&
 		!permissions.HasPermission(client.Perms(), permissions.PermissionField["BYPASS_LOCK"]) {
@@ -662,6 +669,34 @@ func (client *Client) Showname() string {
 func (client *Client) SetShowname(s string) {
 	client.mu.Lock()
 	client.showname = s
+	client.mu.Unlock()
+}
+
+// JailedUntil returns the time when the client's jail expires.
+func (client *Client) JailedUntil() time.Time {
+	client.mu.Lock()
+	defer client.mu.Unlock()
+	return client.jailedUntil
+}
+
+// SetJailedUntil sets the time when the client's jail expires.
+func (client *Client) SetJailedUntil(t time.Time) {
+	client.mu.Lock()
+	client.jailedUntil = t
+	client.mu.Unlock()
+}
+
+// LastRpsTime returns the last time the client played RPS.
+func (client *Client) LastRpsTime() time.Time {
+	client.mu.Lock()
+	defer client.mu.Unlock()
+	return client.lastRpsTime
+}
+
+// SetLastRpsTime sets the last time the client played RPS.
+func (client *Client) SetLastRpsTime(t time.Time) {
+	client.mu.Lock()
+	client.lastRpsTime = t
 	client.mu.Unlock()
 }
 
