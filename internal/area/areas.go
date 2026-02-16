@@ -71,6 +71,12 @@ type Poll struct {
 	CreatedBy string
 }
 
+type CoinflipChallenge struct {
+	PlayerName string
+	Choice     string
+	CreatedAt  time.Time
+}
+
 type Area struct {
 	data         AreaData
 	defaults     defaults
@@ -88,11 +94,13 @@ type Area struct {
 	lock         Lock
 	invited      []int
 	doc          string
-	tr           TestimonyRecorder
-	activePoll   *Poll
-	lastPollTime time.Time
-	pollVotes    map[int]int
-	playerVotes  map[int]int
+	tr                  TestimonyRecorder
+	activePoll          *Poll
+	lastPollTime        time.Time
+	pollVotes           map[int]int
+	playerVotes         map[int]int
+	activeCoinflip      *CoinflipChallenge
+	lastCoinflipTime    time.Time
 }
 
 type AreaData struct {
@@ -710,6 +718,34 @@ func (a *Area) PlayerVotes() map[int]int {
 func (a *Area) SetPlayerVotes(votes map[int]int) {
 	a.mu.Lock()
 	a.playerVotes = votes
+	a.mu.Unlock()
+}
+
+// ActiveCoinflip returns the area's active coinflip challenge.
+func (a *Area) ActiveCoinflip() *CoinflipChallenge {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return a.activeCoinflip
+}
+
+// SetActiveCoinflip sets the area's active coinflip challenge.
+func (a *Area) SetActiveCoinflip(c *CoinflipChallenge) {
+	a.mu.Lock()
+	a.activeCoinflip = c
+	a.mu.Unlock()
+}
+
+// LastCoinflipTime returns the time of the last coinflip in the area.
+func (a *Area) LastCoinflipTime() time.Time {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return a.lastCoinflipTime
+}
+
+// SetLastCoinflipTime sets the time of the last coinflip in the area.
+func (a *Area) SetLastCoinflipTime(t time.Time) {
+	a.mu.Lock()
+	a.lastCoinflipTime = t
 	a.mu.Unlock()
 }
 

@@ -335,6 +335,13 @@ func initCommands() {
 			desc:     "Play rock-paper-scissors.",
 			reqPerms: permissions.PermissionField["NONE"],
 		},
+		"coinflip": {
+			handler:  cmdCoinflip,
+			minArgs:  1,
+			usage:    "Usage: /coinflip <heads|tails>",
+			desc:     "Challenge another player to a coinflip.",
+			reqPerms: permissions.PermissionField["NONE"],
+		},
 		"setrole": {
 			handler:  cmdChangeRole,
 			minArgs:  2,
@@ -2164,6 +2171,106 @@ func cmdRps(client *Client, args []string, _ string) {
 	message := fmt.Sprintf("%v played %v, Server played %v. %v", client.OOCName(), choice, serverChoice, result)
 	sendAreaServerMessage(client.Area(), message)
 	addToBuffer(client, "GAME", fmt.Sprintf("Played RPS: %v vs %v - %v", choice, serverChoice, result), false)
+}
+
+// Handles /coinflip
+func cmdCoinflip(client *Client, args []string, _ string) {
+	choice := strings.ToLower(args[0])
+	if choice != "heads" && choice != "tails" {
+		client.SendServerMessage("Invalid choice. Use: heads or tails.")
+		return
+	}
+
+	// Check if there's an active coinflip challenge in the area
+	activeChallenge := client.Area().ActiveCoinflip()
+	
+	if activeChallenge == nil {
+		// No active challenge - create a new one
+		challenge := &area.CoinflipChallenge{
+			PlayerName: client.OOCName(),
+			Choice:     choice,
+			CreatedAt:  time.Now().UTC(),
+		}
+		client.Area().SetActiveCoinflip(challenge)
+		client.Area().SetLastCoinflipTime(time.Now().UTC())
+		
+		// Announce the challenge
+		message := fmt.Sprintf("%v has chosen %v and is ready to coinflip! Type /coinflip %v to battle them!", 
+			client.OOCName(), choice, oppositeChoice(choice))
+		sendAreaServerMessage(client.Area(), message)
+		addToBuffer(client, "GAME", fmt.Sprintf("Started coinflip challenge with %v", choice), false)
+		
+	} else {
+		// There's an active challenge
+		
+		// Check if challenge has expired (30 seconds)
+		if time.Now().UTC().After(activeChallenge.CreatedAt.Add(30 * time.Second)) {
+			// Challenge expired, create new one
+			challenge := &area.CoinflipChallenge{
+				PlayerName: client.OOCName(),
+				Choice:     choice,
+				CreatedAt:  time.Now().UTC(),
+			}
+			client.Area().SetActiveCoinflip(challenge)
+			client.Area().SetLastCoinflipTime(time.Now().UTC())
+			
+			message := fmt.Sprintf("Previous coinflip expired. %v has chosen %v and is ready to coinflip! Type /coinflip %v to battle them!", 
+				client.OOCName(), choice, oppositeChoice(choice))
+			sendAreaServerMessage(client.Area(), message)
+			addToBuffer(client, "GAME", fmt.Sprintf("Started coinflip challenge with %v", choice), false)
+			return
+		}
+		
+		// Check if same player is trying to accept their own challenge
+		if activeChallenge.PlayerName == client.OOCName() {
+			client.SendServerMessage("You cannot accept your own coinflip challenge!")
+			return
+		}
+		
+		// Check if the choice is different from the challenger's choice
+		if activeChallenge.Choice == choice {
+			client.SendServerMessage(fmt.Sprintf("You must pick the opposite choice! The challenger picked %v, so you must pick %v.", 
+				activeChallenge.Choice, oppositeChoice(activeChallenge.Choice)))
+			return
+		}
+		
+		// Battle time! Flip the coin
+		gen := rand.New(rand.NewSource(time.Now().UnixNano()))
+		coinResult := "heads"
+		if gen.Intn(2) == 1 {
+			coinResult = "tails"
+		}
+		
+		// Determine winner
+		var winner string
+		if coinResult == activeChallenge.Choice {
+			winner = activeChallenge.PlayerName
+		} else {
+			winner = client.OOCName()
+		}
+		
+		// Announce result
+		message := fmt.Sprintf("⚔️ COINFLIP BATTLE! %v (%v) vs %v (%v) - The coin landed on %v! 🎉 %v WINS! 🎉", 
+			activeChallenge.PlayerName, activeChallenge.Choice,
+			client.OOCName(), choice,
+			coinResult, winner)
+		sendAreaServerMessage(client.Area(), message)
+		
+		// Log for both players
+		addToBuffer(client, "GAME", fmt.Sprintf("Coinflip battle: %v vs %v - Result: %v - Winner: %v", 
+			activeChallenge.Choice, choice, coinResult, winner), false)
+		
+		// Clear the challenge
+		client.Area().SetActiveCoinflip(nil)
+	}
+}
+
+// oppositeChoice returns the opposite coinflip choice
+func oppositeChoice(choice string) string {
+	if choice == "heads" {
+		return "tails"
+	}
+	return "heads"
 }
 
 // Handles /poll
