@@ -1717,7 +1717,7 @@ func cmdPossess(client *Client, args []string, _ string) {
 	icArgs[0] = "chat"                        // desk_mod
 	icArgs[1] = ""                            // pre-anim
 	icArgs[2] = characters[target.CharID()]   // character name
-	icArgs[3] = ""                            // emote
+	icArgs[3] = "normal"                      // emote (default idle pose)
 	icArgs[4] = encodedMsg                    // message (encoded)
 	icArgs[5] = target.Pos()                  // position
 	icArgs[6] = ""                            // sfx-name
