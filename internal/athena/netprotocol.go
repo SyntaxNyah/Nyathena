@@ -171,6 +171,30 @@ func pktIC(client *Client, p *packet.Packet) {
 	args = append(args[:20], args[18:]...)
 
 	client.SetPos(args[5])
+	
+	// Check and clean up expired punishments
+	if client.CheckExpiredPunishments() {
+		client.SendServerMessage("One or more punishments have expired.")
+	}
+	
+	// Apply punishment text modifications
+	punishments := client.GetActivePunishments()
+	for _, p := range punishments {
+		// Apply text modifications
+		if args[4] != "" {
+			decodedMsg := decode(args[4])
+			modifiedMsg := ApplyPunishmentToText(decodedMsg, p.punishmentType)
+			args[4] = encode(modifiedMsg)
+		}
+		
+		// Handle name modifications
+		if p.punishmentType == PunishmentEmoji {
+			args[3] = GetRandomEmoji()
+		} else if p.punishmentType == PunishmentRandomname {
+			args[3] = GetRandomName()
+		}
+	}
+	
 	if client.IsParrot() { // Bring out the parrot please.
 		args[4] = getParrotMsg()
 	}
