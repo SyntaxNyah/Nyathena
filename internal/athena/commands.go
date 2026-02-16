@@ -1659,6 +1659,7 @@ func cmdJail(client *Client, args []string, usage string) {
 			continue
 		}
 		if *duration == -1 {
+			// Use a far-future time for permanent jail (following same pattern as permanent mute)
 			c.SetJailUntil(time.Date(9999, 12, 31, 23, 59, 59, 0, time.UTC))
 		} else {
 			c.SetJailUntil(time.Now().UTC().Add(time.Duration(*duration) * time.Second))
