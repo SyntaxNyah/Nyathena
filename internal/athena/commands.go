@@ -1638,30 +1638,30 @@ func cmdPossess(client *Client, args []string, _ string) {
 		client.SendServerMessage("Invalid UID.")
 		return
 	}
-	
+
 	// Get the target client
 	target, err := getClientByUid(uid)
 	if err != nil {
 		client.SendServerMessage("Client does not exist.")
 		return
 	}
-	
+
 	// Validate CharID is within bounds
 	if target.CharID() < 0 || target.CharID() >= len(characters) {
 		client.SendServerMessage("Target has an invalid character.")
 		return
 	}
-	
+
 	// Get the message to send
 	msg := strings.Join(args[1:], " ")
 	if msg == "" {
 		client.SendServerMessage("Message cannot be empty.")
 		return
 	}
-	
+
 	// Encode the message
 	encodedMsg := encode(msg)
-	
+
 	// Create the IC message packet args following the MS packet format
 	// Based on pktIC processing, the final MS packet has inserted pairing data
 	// We create a 29-element array to match the server's MS format
@@ -1695,13 +1695,13 @@ func cmdPossess(client *Client, args []string, _ string) {
 	icArgs[26] = ""                           // frames_realization
 	icArgs[27] = ""                           // frames_sfx
 	icArgs[28] = "0"                          // additive
-	
+
 	// Send the IC message to the target's area
 	writeToArea(target.Area(), "MS", icArgs...)
-	
+
 	// Log the possession (use original message for readability in logs)
 	addToBuffer(client, "CMD", fmt.Sprintf("Possessed UID %v to say: \"%v\"", uid, msg), true)
-	
+
 	// Notify the admin
 	client.SendServerMessage(fmt.Sprintf("Possessed UID %v.", uid))
 }
