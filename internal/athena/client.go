@@ -823,6 +823,13 @@ func (client *Client) RemovePunishment(pType PunishmentType) {
 	}
 }
 
+// RemoveAllPunishments removes all punishments from the client.
+func (client *Client) RemoveAllPunishments() {
+	client.mu.Lock()
+	defer client.mu.Unlock()
+	client.punishments = []PunishmentState{}
+}
+
 // HasPunishment checks if the client has a specific punishment type.
 func (client *Client) HasPunishment(pType PunishmentType) bool {
 	client.mu.Lock()
@@ -837,6 +844,8 @@ func (client *Client) HasPunishment(pType PunishmentType) bool {
 }
 
 // GetPunishment returns the punishment state for a specific type, or nil if not found.
+// WARNING: The returned pointer should not be modified directly. Use UpdatePunishmentState instead.
+// This method is provided for read-only access to punishment state.
 func (client *Client) GetPunishment(pType PunishmentType) *PunishmentState {
 	client.mu.Lock()
 	defer client.mu.Unlock()

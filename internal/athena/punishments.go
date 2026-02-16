@@ -456,7 +456,7 @@ func applyAutospell(text string) string {
 }
 
 // applyTorment cycles through different effects based on message count
-func applyTorment(text string, effectIndex int) string {
+func applyTorment(text string, cycleIndex int) string {
 	effects := []func(string) string{
 		applyUppercase,
 		applyBackward,
@@ -464,7 +464,7 @@ func applyTorment(text string, effectIndex int) string {
 		applyRobotic,
 		applyConfused,
 	}
-	effect := effects[effectIndex%len(effects)]
+	effect := effects[cycleIndex%len(effects)]
 	return effect(text)
 }
 

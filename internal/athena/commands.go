@@ -2406,9 +2406,7 @@ func cmdUnpunish(client *Client, args []string, usage string) {
 			if len(punishments) == 0 {
 				continue
 			}
-			c.mu.Lock()
-			c.punishments = []PunishmentState{}
-			c.mu.Unlock()
+			c.RemoveAllPunishments()
 			c.SendServerMessage("All punishments have been removed.")
 		} else {
 			// Remove specific punishment type

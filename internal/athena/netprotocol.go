@@ -178,6 +178,8 @@ func pktIC(client *Client, p *packet.Packet) {
 	}
 	
 	// Apply punishment text modifications
+	// Note: punishments is a copy of the active punishments
+	// State modifications must use UpdatePunishmentState to persist changes
 	punishments := client.GetActivePunishments()
 	for i := range punishments {
 		p := &punishments[i]

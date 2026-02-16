@@ -96,10 +96,10 @@ func TestApplyUwu(t *testing.T) {
 func TestApplyCensor(t *testing.T) {
 	input := "hello world test"
 	result := applyCensor(input)
-	// Should contain [CENSORED]
+	// Should contain [CENSORED] or be different from input (random behavior)
 	if !strings.Contains(result, "[CENSORED]") && result == input {
-		// It's random, so we just check it's different or has censored
-		t.Logf("applyCensor result: %q (random behavior)", result)
+		// It's random, so sometimes it might not censor anything, but that's okay
+		t.Logf("applyCensor result: %q (random behavior - no censoring this time)", result)
 	}
 }
 
