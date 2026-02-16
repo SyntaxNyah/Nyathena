@@ -19,6 +19,7 @@ package area
 import (
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/MangosArentLiterature/Athena/internal/sliceutil"
 )
@@ -61,24 +62,34 @@ type TestimonyRecorder struct {
 	State     TRState
 }
 
+type Poll struct {
+	Question  string
+	Options   []string
+	Votes     map[int]int // uid -> option index
+	CreatedAt time.Time
+	CreatorID int
+}
+
 type Area struct {
-	data     AreaData
-	defaults defaults
-	mu       sync.Mutex
-	taken    []bool
-	players  int
-	defhp    int
-	prohp    int
-	evidence []string
-	buffer   []string
-	cms      []int
-	last_msg int
-	evi_mode EvidenceMode
-	status   Status
-	lock     Lock
-	invited  []int
-	doc      string
-	tr       TestimonyRecorder
+	data           AreaData
+	defaults       defaults
+	mu             sync.Mutex
+	taken          []bool
+	players        int
+	defhp          int
+	prohp          int
+	evidence       []string
+	buffer         []string
+	cms            []int
+	last_msg       int
+	evi_mode       EvidenceMode
+	status         Status
+	lock           Lock
+	invited        []int
+	doc            string
+	tr             TestimonyRecorder
+	active_poll    *Poll
+	last_poll_time time.Time
 }
 
 type AreaData struct {
@@ -638,4 +649,45 @@ func (evimod EvidenceMode) String() string {
 		return "mods"
 	}
 	return ""
+}
+
+// ActivePoll returns the area's active poll.
+func (a *Area) ActivePoll() *Poll {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return a.active_poll
+}
+
+// SetActivePoll sets the area's active poll.
+func (a *Area) SetActivePoll(poll *Poll) {
+	a.mu.Lock()
+	a.active_poll = poll
+	if poll != nil {
+		a.last_poll_time = time.Now()
+	}
+	a.mu.Unlock()
+}
+
+// LastPollTime returns the time of the last poll in the area.
+func (a *Area) LastPollTime() time.Time {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return a.last_poll_time
+}
+
+// AddVote adds a vote to the active poll.
+func (a *Area) AddVote(uid int, option int) bool {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if a.active_poll == nil {
+		return false
+	}
+	if _, exists := a.active_poll.Votes[uid]; exists {
+		return false // Already voted
+	}
+	if option < 0 || option >= len(a.active_poll.Options) {
+		return false // Invalid option
+	}
+	a.active_poll.Votes[uid] = option
+	return true
 }

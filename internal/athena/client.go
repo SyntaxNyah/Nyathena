@@ -76,6 +76,8 @@ type Client struct {
 	muteuntil     time.Time
 	showname      string
 	narrator      bool
+	jail_until    time.Time
+	last_rps_time time.Time
 }
 
 // NewClient returns a new client.
@@ -469,6 +471,11 @@ func (client *Client) JoinArea(area *area.Area) {
 
 // ChangeArea changes the client's current area.
 func (client *Client) ChangeArea(a *area.Area) bool {
+	// Check if client is jailed
+	if client.CheckJail() {
+		client.SendServerMessage("You are jailed in this area.")
+		return false
+	}
 	if a.Lock() == area.LockLocked &&
 		!sliceutil.ContainsInt(a.Invited(), client.Uid()) &&
 		!permissions.HasPermission(client.Perms(), permissions.PermissionField["BYPASS_LOCK"]) {
@@ -662,6 +669,52 @@ func (client *Client) Showname() string {
 func (client *Client) SetShowname(s string) {
 	client.mu.Lock()
 	client.showname = s
+	client.mu.Unlock()
+}
+
+// JailUntil returns the time when the client should be released from jail.
+// If this time is zero, the jail does not expire.
+func (client *Client) JailUntil() time.Time {
+	client.mu.Lock()
+	defer client.mu.Unlock()
+	return client.jail_until
+}
+
+// SetJailUntil sets the time when the client should be released from jail.
+func (client *Client) SetJailUntil(t time.Time) {
+	client.mu.Lock()
+	client.jail_until = t
+	client.mu.Unlock()
+}
+
+// Jailed returns whether the client is jailed.
+func (client *Client) Jailed() bool {
+	client.mu.Lock()
+	defer client.mu.Unlock()
+	return !client.jail_until.IsZero()
+}
+
+// CheckJail checks the client's jail duration, releasing them if necessary.
+func (client *Client) CheckJail() bool {
+	if time.Now().UTC().After(client.JailUntil()) && !client.JailUntil().IsZero() {
+		client.SendServerMessage("You have been released from jail.")
+		client.SetJailUntil(time.Time{})
+		return false
+	}
+	return client.Jailed()
+}
+
+// LastRPSTime returns the time of the client's last RPS game.
+func (client *Client) LastRPSTime() time.Time {
+	client.mu.Lock()
+	defer client.mu.Unlock()
+	return client.last_rps_time
+}
+
+// SetLastRPSTime sets the time of the client's last RPS game.
+func (client *Client) SetLastRPSTime(t time.Time) {
+	client.mu.Lock()
+	client.last_rps_time = t
 	client.mu.Unlock()
 }
 
