@@ -692,6 +692,13 @@ func initCommands() {
 			desc:     "Visual wheel picks random effect.",
 			reqPerms: permissions.PermissionField["MUTE"],
 		},
+		"unpunish": {
+			handler:  cmdUnpunish,
+			minArgs:  1,
+			usage:    "Usage: /unpunish [-t punishment_type] <uid1>,<uid2>...\n-t: Specific punishment type to remove (omit to remove all).",
+			desc:     "Removes punishment(s) from user(s).",
+			reqPerms: permissions.PermissionField["MUTE"],
+		},
 	}
 }
 
@@ -2374,4 +2381,141 @@ func cmdAutospell(client *Client, args []string, usage string) {
 
 func cmdSpinToWin(client *Client, args []string, usage string) {
 	cmdPunishment(client, args, usage, PunishmentSpinToWin)
+}
+
+// cmdUnpunish removes all or specific punishments from users
+func cmdUnpunish(client *Client, args []string, usage string) {
+	flags := flag.NewFlagSet("", 0)
+	flags.SetOutput(io.Discard)
+	punishmentType := flags.String("t", "", "")
+	flags.Parse(args)
+
+	if len(flags.Args()) == 0 {
+		client.SendServerMessage("Not enough arguments:\n" + usage)
+		return
+	}
+
+	toUnpunish := getUidList(strings.Split(flags.Arg(0), ","))
+	var count int
+	var report string
+
+	for _, c := range toUnpunish {
+		if *punishmentType == "" {
+			// Remove all punishments
+			punishments := c.GetActivePunishments()
+			if len(punishments) == 0 {
+				continue
+			}
+			c.mu.Lock()
+			c.punishments = []PunishmentState{}
+			c.mu.Unlock()
+			c.SendServerMessage("All punishments have been removed.")
+		} else {
+			// Remove specific punishment type
+			pType := parsePunishmentType(*punishmentType)
+			if pType == PunishmentNone {
+				client.SendServerMessage(fmt.Sprintf("Unknown punishment type: %v", *punishmentType))
+				continue
+			}
+			if !c.HasPunishment(pType) {
+				continue
+			}
+			c.RemovePunishment(pType)
+			c.SendServerMessage(fmt.Sprintf("Punishment '%v' has been removed.", pType.String()))
+		}
+		count++
+		report += fmt.Sprintf("%v, ", c.Uid())
+	}
+
+	report = strings.TrimSuffix(report, ", ")
+	client.SendServerMessage(fmt.Sprintf("Removed punishments from %v clients.", count))
+	addToBuffer(client, "CMD", fmt.Sprintf("Removed punishments from %v.", report), false)
+}
+
+// parsePunishmentType converts a string to PunishmentType
+func parsePunishmentType(s string) PunishmentType {
+	switch strings.ToLower(s) {
+	case "whisper":
+		return PunishmentWhisper
+	case "backward":
+		return PunishmentBackward
+	case "stutterstep":
+		return PunishmentStutterstep
+	case "elongate":
+		return PunishmentElongate
+	case "uppercase":
+		return PunishmentUppercase
+	case "lowercase":
+		return PunishmentLowercase
+	case "robotic":
+		return PunishmentRobotic
+	case "alternating":
+		return PunishmentAlternating
+	case "fancy":
+		return PunishmentFancy
+	case "uwu":
+		return PunishmentUwu
+	case "pirate":
+		return PunishmentPirate
+	case "shakespearean":
+		return PunishmentShakespearean
+	case "caveman":
+		return PunishmentCaveman
+	case "emoji":
+		return PunishmentEmoji
+	case "randomname":
+		return PunishmentRandomname
+	case "invisible":
+		return PunishmentInvisible
+	case "slowpoke":
+		return PunishmentSlowpoke
+	case "fastspammer":
+		return PunishmentFastspammer
+	case "typewriter":
+		return PunishmentTypewriter
+	case "pause":
+		return PunishmentPause
+	case "lag":
+		return PunishmentLag
+	case "copycats":
+		return PunishmentCopycats
+	case "subtitles":
+		return PunishmentSubtitles
+	case "roulette":
+		return PunishmentRoulette
+	case "spotlight":
+		return PunishmentSpotlight
+	case "censor":
+		return PunishmentCensor
+	case "confused":
+		return PunishmentConfused
+	case "paranoid":
+		return PunishmentParanoid
+	case "drunk":
+		return PunishmentDrunk
+	case "hiccup":
+		return PunishmentHiccup
+	case "whistle":
+		return PunishmentWhistle
+	case "mumble":
+		return PunishmentMumble
+	case "spaghetti":
+		return PunishmentSpaghetti
+	case "torment":
+		return PunishmentTorment
+	case "rng":
+		return PunishmentRng
+	case "essay":
+		return PunishmentEssay
+	case "poetry":
+		return PunishmentPoetry
+	case "haiku":
+		return PunishmentHaiku
+	case "autospell":
+		return PunishmentAutospell
+	case "spin-to-win":
+		return PunishmentSpinToWin
+	default:
+		return PunishmentNone
+	}
 }

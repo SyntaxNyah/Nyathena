@@ -409,6 +409,88 @@ func applyRng(text string) string {
 	return effect(text)
 }
 
+// applyEssay ensures minimum character count
+func applyEssay(text string) string {
+	if len(text) < 50 {
+		return text + " [MESSAGE TOO SHORT - MINIMUM 50 CHARACTERS REQUIRED]"
+	}
+	return text
+}
+
+// applyPoetry adds a note about rhyming requirement
+func applyPoetry(text string) string {
+	// This is a validation, not a transformation
+	// The actual validation should happen in message handling
+	return text
+}
+
+// applyHaiku adds a note about haiku format
+func applyHaiku(text string) string {
+	// This is a validation, not a transformation
+	// The actual validation should happen in message handling
+	return text
+}
+
+// applyAutospell intentionally misspells words
+func applyAutospell(text string) string {
+	replacements := map[string]string{
+		"the":   "teh",
+		"you":   "u",
+		"your":  "ur",
+		"there": "their",
+		"their": "there",
+		"to":    "too",
+		"too":   "to",
+		"its":   "it's",
+		"it's":  "its",
+	}
+	
+	words := strings.Fields(text)
+	for i, word := range words {
+		lower := strings.ToLower(word)
+		if replacement, ok := replacements[lower]; ok {
+			words[i] = replacement
+		}
+	}
+	return strings.Join(words, " ")
+}
+
+// applyTorment cycles through different effects based on message count
+func applyTorment(text string, effectIndex int) string {
+	effects := []func(string) string{
+		applyUppercase,
+		applyBackward,
+		applyUwu,
+		applyRobotic,
+		applyConfused,
+	}
+	effect := effects[effectIndex%len(effects)]
+	return effect(text)
+}
+
+// applySpinToWin applies a random major effect
+func applySpinToWin(text string) string {
+	// Similar to RNG but with visual feedback in the future
+	return applyRng(text)
+}
+
+// applySubtitles adds confusing annotations
+func applySubtitles(text string) string {
+	subtitles := []string{
+		" [ominous music playing]",
+		" [confusing noises]",
+		" [awkward silence]",
+		" [dramatic pause]",
+		" [indistinct chatter]",
+	}
+	return text + subtitles[rand.Intn(len(subtitles))]
+}
+
+// applySpotlight adds an announcement prefix
+func applySpotlight(text string) string {
+	return "📣 EVERYONE LOOK: " + text
+}
+
 // ApplyPunishmentToText applies a punishment effect to text
 func ApplyPunishmentToText(text string, pType PunishmentType) string {
 	switch pType {
@@ -456,8 +538,35 @@ func ApplyPunishmentToText(text string, pType PunishmentType) string {
 		return applySpaghetti(text)
 	case PunishmentRng:
 		return applyRng(text)
+	case PunishmentEssay:
+		return applyEssay(text)
+	case PunishmentPoetry:
+		return applyPoetry(text)
+	case PunishmentHaiku:
+		return applyHaiku(text)
+	case PunishmentAutospell:
+		return applyAutospell(text)
+	case PunishmentSpinToWin:
+		return applySpinToWin(text)
+	case PunishmentSubtitles:
+		return applySubtitles(text)
+	case PunishmentSpotlight:
+		return applySpotlight(text)
 	default:
 		return text
+	}
+}
+
+// ApplyPunishmentToTextWithState applies a punishment effect with state tracking
+func ApplyPunishmentToTextWithState(text string, pType PunishmentType, state *PunishmentState) string {
+	switch pType {
+	case PunishmentTorment:
+		// Cycle through effects based on message count
+		result := applyTorment(text, state.lastEffect)
+		state.lastEffect++
+		return result
+	default:
+		return ApplyPunishmentToText(text, pType)
 	}
 }
 

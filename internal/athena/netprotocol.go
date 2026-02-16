@@ -179,11 +179,22 @@ func pktIC(client *Client, p *packet.Packet) {
 	
 	// Apply punishment text modifications
 	punishments := client.GetActivePunishments()
-	for _, p := range punishments {
+	for i := range punishments {
+		p := &punishments[i]
+		
 		// Apply text modifications
 		if args[4] != "" {
 			decodedMsg := decode(args[4])
-			modifiedMsg := ApplyPunishmentToText(decodedMsg, p.punishmentType)
+			var modifiedMsg string
+			
+			// Use state-aware version for punishments that need it
+			if p.punishmentType == PunishmentTorment {
+				client.UpdatePunishmentState(p.punishmentType, func(ps *PunishmentState) {
+					modifiedMsg = ApplyPunishmentToTextWithState(decodedMsg, p.punishmentType, ps)
+				})
+			} else {
+				modifiedMsg = ApplyPunishmentToText(decodedMsg, p.punishmentType)
+			}
 			args[4] = encode(modifiedMsg)
 		}
 		
