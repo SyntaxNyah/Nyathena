@@ -47,6 +47,69 @@ const (
 	ParrotMuted
 )
 
+type PunishmentType int
+
+const (
+	PunishmentNone PunishmentType = iota
+	// Text Modification (13 types)
+	PunishmentWhisper
+	PunishmentBackward
+	PunishmentStutterstep
+	PunishmentElongate
+	PunishmentUppercase
+	PunishmentLowercase
+	PunishmentRobotic
+	PunishmentAlternating
+	PunishmentFancy
+	PunishmentUwu
+	PunishmentPirate
+	PunishmentShakespearean
+	PunishmentCaveman
+	// Visibility/Cosmetic (3 types)
+	PunishmentEmoji
+	PunishmentRandomname
+	PunishmentInvisible
+	// Timing Effects (5 types)
+	PunishmentSlowpoke
+	PunishmentFastspammer
+	PunishmentTypewriter
+	PunishmentPause
+	PunishmentLag
+	// Social Chaos (4 types)
+	PunishmentCopycats
+	PunishmentSubtitles
+	PunishmentRoulette
+	PunishmentSpotlight
+	// Text Processing (7 types)
+	PunishmentCensor
+	PunishmentConfused
+	PunishmentParanoid
+	PunishmentDrunk
+	PunishmentHiccup
+	PunishmentWhistle
+	PunishmentMumble
+	// Complex Effects (5 types)
+	PunishmentSpaghetti
+	PunishmentTorment
+	PunishmentRng
+	PunishmentEssay
+	PunishmentPoetry
+	// Advanced (3 types)
+	PunishmentHaiku
+	PunishmentAutospell
+	PunishmentSpinToWin
+)
+
+type PunishmentState struct {
+	punishmentType PunishmentType
+	expiresAt      time.Time
+	reason         string
+	lastMsgTime    time.Time
+	msgDelay       time.Duration
+	msgCount       int
+	lastEffect     int
+}
+
 type ClientPairInfo struct {
 	name      string
 	emote     string
@@ -78,6 +141,7 @@ type Client struct {
 	narrator      bool
 	jailedUntil   time.Time
 	lastRpsTime   time.Time
+	punishments   []PunishmentState
 }
 
 // NewClient returns a new client.
@@ -715,4 +779,219 @@ func (m MuteState) String() string {
 		return "from judge controls"
 	}
 	return ""
+}
+
+// AddPunishment adds a punishment to the client.
+func (client *Client) AddPunishment(pType PunishmentType, duration time.Duration, reason string) {
+	client.mu.Lock()
+	defer client.mu.Unlock()
+	
+	// Remove existing punishment of the same type (prevent stacking)
+	for i := len(client.punishments) - 1; i >= 0; i-- {
+		if client.punishments[i].punishmentType == pType {
+			client.punishments = append(client.punishments[:i], client.punishments[i+1:]...)
+			break
+		}
+	}
+	
+	expiresAt := time.Time{}
+	if duration > 0 {
+		expiresAt = time.Now().UTC().Add(duration)
+	}
+	
+	client.punishments = append(client.punishments, PunishmentState{
+		punishmentType: pType,
+		expiresAt:      expiresAt,
+		reason:         reason,
+		lastMsgTime:    time.Time{},
+		msgDelay:       0,
+		msgCount:       0,
+		lastEffect:     0,
+	})
+}
+
+// RemovePunishment removes a punishment type from the client.
+func (client *Client) RemovePunishment(pType PunishmentType) {
+	client.mu.Lock()
+	defer client.mu.Unlock()
+	
+	for i := len(client.punishments) - 1; i >= 0; i-- {
+		if client.punishments[i].punishmentType == pType {
+			client.punishments = append(client.punishments[:i], client.punishments[i+1:]...)
+			return
+		}
+	}
+}
+
+// RemoveAllPunishments removes all punishments from the client.
+func (client *Client) RemoveAllPunishments() {
+	client.mu.Lock()
+	defer client.mu.Unlock()
+	client.punishments = []PunishmentState{}
+}
+
+// HasPunishment checks if the client has a specific punishment type.
+func (client *Client) HasPunishment(pType PunishmentType) bool {
+	client.mu.Lock()
+	defer client.mu.Unlock()
+	
+	for _, p := range client.punishments {
+		if p.punishmentType == pType {
+			return true
+		}
+	}
+	return false
+}
+
+// GetPunishment returns the punishment state for a specific type, or nil if not found.
+// WARNING: The returned pointer should not be modified directly. Use UpdatePunishmentState instead.
+// This method is provided for read-only access to punishment state.
+func (client *Client) GetPunishment(pType PunishmentType) *PunishmentState {
+	client.mu.Lock()
+	defer client.mu.Unlock()
+	
+	for i := range client.punishments {
+		if client.punishments[i].punishmentType == pType {
+			return &client.punishments[i]
+		}
+	}
+	return nil
+}
+
+// UpdatePunishmentState updates the state of a punishment (e.g., message counts).
+func (client *Client) UpdatePunishmentState(pType PunishmentType, updateFunc func(*PunishmentState)) {
+	client.mu.Lock()
+	defer client.mu.Unlock()
+	
+	for i := range client.punishments {
+		if client.punishments[i].punishmentType == pType {
+			updateFunc(&client.punishments[i])
+			return
+		}
+	}
+}
+
+// CheckExpiredPunishments removes all expired punishments and returns true if any were removed.
+func (client *Client) CheckExpiredPunishments() bool {
+	client.mu.Lock()
+	defer client.mu.Unlock()
+	
+	now := time.Now().UTC()
+	removed := false
+	
+	for i := len(client.punishments) - 1; i >= 0; i-- {
+		p := &client.punishments[i]
+		if !p.expiresAt.IsZero() && now.After(p.expiresAt) {
+			client.punishments = append(client.punishments[:i], client.punishments[i+1:]...)
+			removed = true
+		}
+	}
+	
+	return removed
+}
+
+// GetActivePunishments returns a copy of all active punishments.
+func (client *Client) GetActivePunishments() []PunishmentState {
+	client.mu.Lock()
+	defer client.mu.Unlock()
+	
+	// Clean up expired punishments first
+	now := time.Now().UTC()
+	active := make([]PunishmentState, 0, len(client.punishments))
+	
+	for _, p := range client.punishments {
+		if p.expiresAt.IsZero() || now.Before(p.expiresAt) {
+			active = append(active, p)
+		}
+	}
+	
+	return active
+}
+
+// String returns the string representation of a punishment type.
+func (p PunishmentType) String() string {
+	switch p {
+	case PunishmentWhisper:
+		return "whisper"
+	case PunishmentBackward:
+		return "backward"
+	case PunishmentStutterstep:
+		return "stutterstep"
+	case PunishmentElongate:
+		return "elongate"
+	case PunishmentUppercase:
+		return "uppercase"
+	case PunishmentLowercase:
+		return "lowercase"
+	case PunishmentRobotic:
+		return "robotic"
+	case PunishmentAlternating:
+		return "alternating"
+	case PunishmentFancy:
+		return "fancy"
+	case PunishmentUwu:
+		return "uwu"
+	case PunishmentPirate:
+		return "pirate"
+	case PunishmentShakespearean:
+		return "shakespearean"
+	case PunishmentCaveman:
+		return "caveman"
+	case PunishmentEmoji:
+		return "emoji"
+	case PunishmentRandomname:
+		return "randomname"
+	case PunishmentInvisible:
+		return "invisible"
+	case PunishmentSlowpoke:
+		return "slowpoke"
+	case PunishmentFastspammer:
+		return "fastspammer"
+	case PunishmentTypewriter:
+		return "typewriter"
+	case PunishmentPause:
+		return "pause"
+	case PunishmentLag:
+		return "lag"
+	case PunishmentCopycats:
+		return "copycats"
+	case PunishmentSubtitles:
+		return "subtitles"
+	case PunishmentRoulette:
+		return "roulette"
+	case PunishmentSpotlight:
+		return "spotlight"
+	case PunishmentCensor:
+		return "censor"
+	case PunishmentConfused:
+		return "confused"
+	case PunishmentParanoid:
+		return "paranoid"
+	case PunishmentDrunk:
+		return "drunk"
+	case PunishmentHiccup:
+		return "hiccup"
+	case PunishmentWhistle:
+		return "whistle"
+	case PunishmentMumble:
+		return "mumble"
+	case PunishmentSpaghetti:
+		return "spaghetti"
+	case PunishmentTorment:
+		return "torment"
+	case PunishmentRng:
+		return "rng"
+	case PunishmentEssay:
+		return "essay"
+	case PunishmentPoetry:
+		return "poetry"
+	case PunishmentHaiku:
+		return "haiku"
+	case PunishmentAutospell:
+		return "autospell"
+	case PunishmentSpinToWin:
+		return "spin-to-win"
+	default:
+		return "none"
+	}
 }

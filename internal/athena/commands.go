@@ -405,6 +405,300 @@ func initCommands() {
 			desc:     "Vote on the active poll.",
 			reqPerms: permissions.PermissionField["NONE"],
 		},
+		// Punishment commands - Text Modification
+		"whisper": {
+			handler:  cmdWhisper,
+			minArgs:  1,
+			usage:    "Usage: /whisper [-d duration] [-r reason] <uid1>,<uid2>...",
+			desc:     "Makes messages only visible to mods and CMs.",
+			reqPerms: permissions.PermissionField["MUTE"],
+		},
+		"backward": {
+			handler:  cmdBackward,
+			minArgs:  1,
+			usage:    "Usage: /backward [-d duration] [-r reason] <uid1>,<uid2>...",
+			desc:     "Reverses character order in messages.",
+			reqPerms: permissions.PermissionField["MUTE"],
+		},
+		"stutterstep": {
+			handler:  cmdStutterstep,
+			minArgs:  1,
+			usage:    "Usage: /stutterstep [-d duration] [-r reason] <uid1>,<uid2>...",
+			desc:     "Doubles every word in messages.",
+			reqPerms: permissions.PermissionField["MUTE"],
+		},
+		"elongate": {
+			handler:  cmdElongate,
+			minArgs:  1,
+			usage:    "Usage: /elongate [-d duration] [-r reason] <uid1>,<uid2>...",
+			desc:     "Repeats vowels in messages.",
+			reqPerms: permissions.PermissionField["MUTE"],
+		},
+		"uppercase": {
+			handler:  cmdUppercase,
+			minArgs:  1,
+			usage:    "Usage: /uppercase [-d duration] [-r reason] <uid1>,<uid2>...",
+			desc:     "Forces messages to UPPERCASE.",
+			reqPerms: permissions.PermissionField["MUTE"],
+		},
+		"lowercase": {
+			handler:  cmdLowercase,
+			minArgs:  1,
+			usage:    "Usage: /lowercase [-d duration] [-r reason] <uid1>,<uid2>...",
+			desc:     "Forces messages to lowercase.",
+			reqPerms: permissions.PermissionField["MUTE"],
+		},
+		"robotic": {
+			handler:  cmdRobotic,
+			minArgs:  1,
+			usage:    "Usage: /robotic [-d duration] [-r reason] <uid1>,<uid2>...",
+			desc:     "Replaces messages with [BEEP] [BOOP] robotic sounds.",
+			reqPerms: permissions.PermissionField["MUTE"],
+		},
+		"alternating": {
+			handler:  cmdAlternating,
+			minArgs:  1,
+			usage:    "Usage: /alternating [-d duration] [-r reason] <uid1>,<uid2>...",
+			desc:     "Makes messages AlTeRnAtInG cAsE.",
+			reqPerms: permissions.PermissionField["MUTE"],
+		},
+		"fancy": {
+			handler:  cmdFancy,
+			minArgs:  1,
+			usage:    "Usage: /fancy [-d duration] [-r reason] <uid1>,<uid2>...",
+			desc:     "Converts messages to Unicode fancy characters.",
+			reqPerms: permissions.PermissionField["MUTE"],
+		},
+		"uwu": {
+			handler:  cmdUwu,
+			minArgs:  1,
+			usage:    "Usage: /uwu [-d duration] [-r reason] <uid1>,<uid2>...",
+			desc:     "Converts messages to UwU speak.",
+			reqPerms: permissions.PermissionField["MUTE"],
+		},
+		"pirate": {
+			handler:  cmdPirate,
+			minArgs:  1,
+			usage:    "Usage: /pirate [-d duration] [-r reason] <uid1>,<uid2>...",
+			desc:     "Converts messages to pirate speech.",
+			reqPerms: permissions.PermissionField["MUTE"],
+		},
+		"shakespearean": {
+			handler:  cmdShakespearean,
+			minArgs:  1,
+			usage:    "Usage: /shakespearean [-d duration] [-r reason] <uid1>,<uid2>...",
+			desc:     "Converts messages to Shakespearean English.",
+			reqPerms: permissions.PermissionField["MUTE"],
+		},
+		"caveman": {
+			handler:  cmdCaveman,
+			minArgs:  1,
+			usage:    "Usage: /caveman [-d duration] [-r reason] <uid1>,<uid2>...",
+			desc:     "Converts messages to caveman grunts.",
+			reqPerms: permissions.PermissionField["MUTE"],
+		},
+		// Punishment commands - Visibility/Cosmetic
+		"emoji": {
+			handler:  cmdEmoji,
+			minArgs:  1,
+			usage:    "Usage: /emoji [-d duration] [-r reason] <uid1>,<uid2>...",
+			desc:     "Replaces name with random emojis.",
+			reqPerms: permissions.PermissionField["MUTE"],
+		},
+		"randomname": {
+			handler:  cmdRandomname,
+			minArgs:  1,
+			usage:    "Usage: /randomname [-d duration] [-r reason] <uid1>,<uid2>...",
+			desc:     "Changes name randomly each message.",
+			reqPerms: permissions.PermissionField["MUTE"],
+		},
+		"invisible": {
+			handler:  cmdInvisible,
+			minArgs:  1,
+			usage:    "Usage: /invisible [-d duration] [-r reason] <uid1>,<uid2>...",
+			desc:     "Prevents user from seeing other players' messages.",
+			reqPerms: permissions.PermissionField["MUTE"],
+		},
+		// Punishment commands - Timing Effects
+		"slowpoke": {
+			handler:  cmdSlowpoke,
+			minArgs:  1,
+			usage:    "Usage: /slowpoke [-d duration] [-r reason] <uid1>,<uid2>...",
+			desc:     "Delays messages before sending.",
+			reqPerms: permissions.PermissionField["MUTE"],
+		},
+		"fastspammer": {
+			handler:  cmdFastspammer,
+			minArgs:  1,
+			usage:    "Usage: /fastspammer [-d duration] [-r reason] <uid1>,<uid2>...",
+			desc:     "Rate limits messages heavily.",
+			reqPerms: permissions.PermissionField["MUTE"],
+		},
+		"typewriter": {
+			handler:  cmdTypewriter,
+			minArgs:  1,
+			usage:    "Usage: /typewriter [-d duration] [-r reason] <uid1>,<uid2>...",
+			desc:     "Makes letters appear one at a time.",
+			reqPerms: permissions.PermissionField["MUTE"],
+		},
+		"pause": {
+			handler:  cmdPause,
+			minArgs:  1,
+			usage:    "Usage: /pause [-d duration] [-r reason] <uid1>,<uid2>...",
+			desc:     "Forces wait between messages.",
+			reqPerms: permissions.PermissionField["MUTE"],
+		},
+		"lag": {
+			handler:  cmdLag,
+			minArgs:  1,
+			usage:    "Usage: /lag [-d duration] [-r reason] <uid1>,<uid2>...",
+			desc:     "Batches and delays messages.",
+			reqPerms: permissions.PermissionField["MUTE"],
+		},
+		// Punishment commands - Social Chaos
+		"copycats": {
+			handler:  cmdCopycats,
+			minArgs:  1,
+			usage:    "Usage: /copycats [-d duration] [-r reason] <uid1>,<uid2>...",
+			desc:     "Makes everyone repeat their messages.",
+			reqPerms: permissions.PermissionField["MUTE"],
+		},
+		"subtitles": {
+			handler:  cmdSubtitles,
+			minArgs:  1,
+			usage:    "Usage: /subtitles [-d duration] [-r reason] <uid1>,<uid2>...",
+			desc:     "Adds confusing subtitles to messages.",
+			reqPerms: permissions.PermissionField["MUTE"],
+		},
+		"roulette": {
+			handler:  cmdRoulette,
+			minArgs:  1,
+			usage:    "Usage: /roulette [-d duration] [-r reason] <uid1>,<uid2>...",
+			desc:     "Random chance message doesn't send.",
+			reqPerms: permissions.PermissionField["MUTE"],
+		},
+		"spotlight": {
+			handler:  cmdSpotlight,
+			minArgs:  1,
+			usage:    "Usage: /spotlight [-d duration] [-r reason] <uid1>,<uid2>...",
+			desc:     "Announces all actions publicly.",
+			reqPerms: permissions.PermissionField["MUTE"],
+		},
+		// Punishment commands - Text Processing
+		"censor": {
+			handler:  cmdCensor,
+			minArgs:  1,
+			usage:    "Usage: /censor [-d duration] [-r reason] <uid1>,<uid2>...",
+			desc:     "Replaces words with [CENSORED].",
+			reqPerms: permissions.PermissionField["MUTE"],
+		},
+		"confused": {
+			handler:  cmdConfused,
+			minArgs:  1,
+			usage:    "Usage: /confused [-d duration] [-r reason] <uid1>,<uid2>...",
+			desc:     "Randomly reorders words in messages.",
+			reqPerms: permissions.PermissionField["MUTE"],
+		},
+		"paranoid": {
+			handler:  cmdParanoid,
+			minArgs:  1,
+			usage:    "Usage: /paranoid [-d duration] [-r reason] <uid1>,<uid2>...",
+			desc:     "Adds paranoid text to messages.",
+			reqPerms: permissions.PermissionField["MUTE"],
+		},
+		"drunk": {
+			handler:  cmdDrunk,
+			minArgs:  1,
+			usage:    "Usage: /drunk [-d duration] [-r reason] <uid1>,<uid2>...",
+			desc:     "Slurs and repeats words in messages.",
+			reqPerms: permissions.PermissionField["MUTE"],
+		},
+		"hiccup": {
+			handler:  cmdHiccup,
+			minArgs:  1,
+			usage:    "Usage: /hiccup [-d duration] [-r reason] <uid1>,<uid2>...",
+			desc:     "Interrupts words with 'hic'.",
+			reqPerms: permissions.PermissionField["MUTE"],
+		},
+		"whistle": {
+			handler:  cmdWhistle,
+			minArgs:  1,
+			usage:    "Usage: /whistle [-d duration] [-r reason] <uid1>,<uid2>...",
+			desc:     "Replaces letters with whistles.",
+			reqPerms: permissions.PermissionField["MUTE"],
+		},
+		"mumble": {
+			handler:  cmdMumble,
+			minArgs:  1,
+			usage:    "Usage: /mumble [-d duration] [-r reason] <uid1>,<uid2>...",
+			desc:     "Obscures message text.",
+			reqPerms: permissions.PermissionField["MUTE"],
+		},
+		// Punishment commands - Complex Effects
+		"spaghetti": {
+			handler:  cmdSpaghetti,
+			minArgs:  1,
+			usage:    "Usage: /spaghetti [-d duration] [-r reason] <uid1>,<uid2>...",
+			desc:     "Combines multiple random effects.",
+			reqPerms: permissions.PermissionField["MUTE"],
+		},
+		"torment": {
+			handler:  cmdTorment,
+			minArgs:  1,
+			usage:    "Usage: /torment [-d duration] [-r reason] <uid1>,<uid2>...",
+			desc:     "Cycles through different effects.",
+			reqPerms: permissions.PermissionField["MUTE"],
+		},
+		"rng": {
+			handler:  cmdRng,
+			minArgs:  1,
+			usage:    "Usage: /rng [-d duration] [-r reason] <uid1>,<uid2>...",
+			desc:     "Applies random effect from pool each message.",
+			reqPerms: permissions.PermissionField["MUTE"],
+		},
+		"essay": {
+			handler:  cmdEssay,
+			minArgs:  1,
+			usage:    "Usage: /essay [-d duration] [-r reason] <uid1>,<uid2>...",
+			desc:     "Requires minimum 50 characters.",
+			reqPerms: permissions.PermissionField["MUTE"],
+		},
+		"poetry": {
+			handler:  cmdPoetry,
+			minArgs:  1,
+			usage:    "Usage: /poetry [-d duration] [-r reason] <uid1>,<uid2>...",
+			desc:     "Requires messages to rhyme.",
+			reqPerms: permissions.PermissionField["MUTE"],
+		},
+		// Punishment commands - Advanced
+		"haiku": {
+			handler:  cmdHaiku,
+			minArgs:  1,
+			usage:    "Usage: /haiku [-d duration] [-r reason] <uid1>,<uid2>...",
+			desc:     "Requires 5-7-5 syllable format.",
+			reqPerms: permissions.PermissionField["MUTE"],
+		},
+		"autospell": {
+			handler:  cmdAutospell,
+			minArgs:  1,
+			usage:    "Usage: /autospell [-d duration] [-r reason] <uid1>,<uid2>...",
+			desc:     "Autocorrects to wrong words.",
+			reqPerms: permissions.PermissionField["MUTE"],
+		},
+		"spin-to-win": {
+			handler:  cmdSpinToWin,
+			minArgs:  1,
+			usage:    "Usage: /spin-to-win [-d duration] [-r reason] <uid1>,<uid2>...",
+			desc:     "Visual wheel picks random effect.",
+			reqPerms: permissions.PermissionField["MUTE"],
+		},
+		"unpunish": {
+			handler:  cmdUnpunish,
+			minArgs:  1,
+			usage:    "Usage: /unpunish [-t punishment_type] <uid1>,<uid2>...\n-t: Specific punishment type to remove (omit to remove all).",
+			desc:     "Removes punishment(s) from user(s).",
+			reqPerms: permissions.PermissionField["MUTE"],
+		},
 	}
 }
 
@@ -1875,4 +2169,351 @@ func cmdVote(client *Client, args []string, usage string) {
 	}
 	sendAreaServerMessage(client.Area(), resultMsg)
 	addToBuffer(client, "VOTE", fmt.Sprintf("Voted for option %v in poll", option), false)
+}
+
+// cmdPunishment is a generic handler for punishment commands
+func cmdPunishment(client *Client, args []string, usage string, pType PunishmentType) {
+	flags := flag.NewFlagSet("", 0)
+	flags.SetOutput(io.Discard)
+	reason := flags.String("r", "", "")
+	durationStr := flags.String("d", "10m", "")
+	flags.Parse(args)
+
+	if len(flags.Args()) == 0 {
+		client.SendServerMessage("Not enough arguments:\n" + usage)
+		return
+	}
+
+	// Parse duration
+	duration, err := str2duration.ParseDuration(*durationStr)
+	if err != nil {
+		client.SendServerMessage("Invalid duration format. Use format like: 10m, 1h, 30s")
+		return
+	}
+
+	// Cap at 24 hours
+	maxDuration := 24 * time.Hour
+	if duration > maxDuration {
+		duration = maxDuration
+		client.SendServerMessage(fmt.Sprintf("Duration capped at 24 hours."))
+	}
+
+	toPunish := getUidList(strings.Split(flags.Arg(0), ","))
+	var count int
+	var report string
+
+	msg := fmt.Sprintf("You have been punished with '%v' effect", pType.String())
+	if duration > 0 {
+		msg += fmt.Sprintf(" for %v", duration)
+	}
+	if *reason != "" {
+		msg += " for reason: " + *reason
+	}
+
+	for _, c := range toPunish {
+		c.AddPunishment(pType, duration, *reason)
+		c.SendServerMessage(msg)
+		count++
+		report += fmt.Sprintf("%v, ", c.Uid())
+	}
+
+	report = strings.TrimSuffix(report, ", ")
+	client.SendServerMessage(fmt.Sprintf("Applied '%v' punishment to %v clients.", pType.String(), count))
+	addToBuffer(client, "CMD", fmt.Sprintf("Applied '%v' punishment to %v.", pType.String(), report), false)
+}
+
+// Handlers for all punishment commands
+func cmdWhisper(client *Client, args []string, usage string) {
+	cmdPunishment(client, args, usage, PunishmentWhisper)
+}
+
+func cmdBackward(client *Client, args []string, usage string) {
+	cmdPunishment(client, args, usage, PunishmentBackward)
+}
+
+func cmdStutterstep(client *Client, args []string, usage string) {
+	cmdPunishment(client, args, usage, PunishmentStutterstep)
+}
+
+func cmdElongate(client *Client, args []string, usage string) {
+	cmdPunishment(client, args, usage, PunishmentElongate)
+}
+
+func cmdUppercase(client *Client, args []string, usage string) {
+	cmdPunishment(client, args, usage, PunishmentUppercase)
+}
+
+func cmdLowercase(client *Client, args []string, usage string) {
+	cmdPunishment(client, args, usage, PunishmentLowercase)
+}
+
+func cmdRobotic(client *Client, args []string, usage string) {
+	cmdPunishment(client, args, usage, PunishmentRobotic)
+}
+
+func cmdAlternating(client *Client, args []string, usage string) {
+	cmdPunishment(client, args, usage, PunishmentAlternating)
+}
+
+func cmdFancy(client *Client, args []string, usage string) {
+	cmdPunishment(client, args, usage, PunishmentFancy)
+}
+
+func cmdUwu(client *Client, args []string, usage string) {
+	cmdPunishment(client, args, usage, PunishmentUwu)
+}
+
+func cmdPirate(client *Client, args []string, usage string) {
+	cmdPunishment(client, args, usage, PunishmentPirate)
+}
+
+func cmdShakespearean(client *Client, args []string, usage string) {
+	cmdPunishment(client, args, usage, PunishmentShakespearean)
+}
+
+func cmdCaveman(client *Client, args []string, usage string) {
+	cmdPunishment(client, args, usage, PunishmentCaveman)
+}
+
+func cmdEmoji(client *Client, args []string, usage string) {
+	cmdPunishment(client, args, usage, PunishmentEmoji)
+}
+
+func cmdRandomname(client *Client, args []string, usage string) {
+	cmdPunishment(client, args, usage, PunishmentRandomname)
+}
+
+func cmdInvisible(client *Client, args []string, usage string) {
+	cmdPunishment(client, args, usage, PunishmentInvisible)
+}
+
+func cmdSlowpoke(client *Client, args []string, usage string) {
+	cmdPunishment(client, args, usage, PunishmentSlowpoke)
+}
+
+func cmdFastspammer(client *Client, args []string, usage string) {
+	cmdPunishment(client, args, usage, PunishmentFastspammer)
+}
+
+func cmdTypewriter(client *Client, args []string, usage string) {
+	cmdPunishment(client, args, usage, PunishmentTypewriter)
+}
+
+func cmdPause(client *Client, args []string, usage string) {
+	cmdPunishment(client, args, usage, PunishmentPause)
+}
+
+func cmdLag(client *Client, args []string, usage string) {
+	cmdPunishment(client, args, usage, PunishmentLag)
+}
+
+func cmdCopycats(client *Client, args []string, usage string) {
+	cmdPunishment(client, args, usage, PunishmentCopycats)
+}
+
+func cmdSubtitles(client *Client, args []string, usage string) {
+	cmdPunishment(client, args, usage, PunishmentSubtitles)
+}
+
+func cmdRoulette(client *Client, args []string, usage string) {
+	cmdPunishment(client, args, usage, PunishmentRoulette)
+}
+
+func cmdSpotlight(client *Client, args []string, usage string) {
+	cmdPunishment(client, args, usage, PunishmentSpotlight)
+}
+
+func cmdCensor(client *Client, args []string, usage string) {
+	cmdPunishment(client, args, usage, PunishmentCensor)
+}
+
+func cmdConfused(client *Client, args []string, usage string) {
+	cmdPunishment(client, args, usage, PunishmentConfused)
+}
+
+func cmdParanoid(client *Client, args []string, usage string) {
+	cmdPunishment(client, args, usage, PunishmentParanoid)
+}
+
+func cmdDrunk(client *Client, args []string, usage string) {
+	cmdPunishment(client, args, usage, PunishmentDrunk)
+}
+
+func cmdHiccup(client *Client, args []string, usage string) {
+	cmdPunishment(client, args, usage, PunishmentHiccup)
+}
+
+func cmdWhistle(client *Client, args []string, usage string) {
+	cmdPunishment(client, args, usage, PunishmentWhistle)
+}
+
+func cmdMumble(client *Client, args []string, usage string) {
+	cmdPunishment(client, args, usage, PunishmentMumble)
+}
+
+func cmdSpaghetti(client *Client, args []string, usage string) {
+	cmdPunishment(client, args, usage, PunishmentSpaghetti)
+}
+
+func cmdTorment(client *Client, args []string, usage string) {
+	cmdPunishment(client, args, usage, PunishmentTorment)
+}
+
+func cmdRng(client *Client, args []string, usage string) {
+	cmdPunishment(client, args, usage, PunishmentRng)
+}
+
+func cmdEssay(client *Client, args []string, usage string) {
+	cmdPunishment(client, args, usage, PunishmentEssay)
+}
+
+func cmdPoetry(client *Client, args []string, usage string) {
+	cmdPunishment(client, args, usage, PunishmentPoetry)
+}
+
+func cmdHaiku(client *Client, args []string, usage string) {
+	cmdPunishment(client, args, usage, PunishmentHaiku)
+}
+
+func cmdAutospell(client *Client, args []string, usage string) {
+	cmdPunishment(client, args, usage, PunishmentAutospell)
+}
+
+func cmdSpinToWin(client *Client, args []string, usage string) {
+	cmdPunishment(client, args, usage, PunishmentSpinToWin)
+}
+
+// cmdUnpunish removes all or specific punishments from users
+func cmdUnpunish(client *Client, args []string, usage string) {
+	flags := flag.NewFlagSet("", 0)
+	flags.SetOutput(io.Discard)
+	punishmentType := flags.String("t", "", "")
+	flags.Parse(args)
+
+	if len(flags.Args()) == 0 {
+		client.SendServerMessage("Not enough arguments:\n" + usage)
+		return
+	}
+
+	toUnpunish := getUidList(strings.Split(flags.Arg(0), ","))
+	var count int
+	var report string
+
+	for _, c := range toUnpunish {
+		if *punishmentType == "" {
+			// Remove all punishments
+			punishments := c.GetActivePunishments()
+			if len(punishments) == 0 {
+				continue
+			}
+			c.RemoveAllPunishments()
+			c.SendServerMessage("All punishments have been removed.")
+		} else {
+			// Remove specific punishment type
+			pType := parsePunishmentType(*punishmentType)
+			if pType == PunishmentNone {
+				client.SendServerMessage(fmt.Sprintf("Unknown punishment type: %v", *punishmentType))
+				continue
+			}
+			if !c.HasPunishment(pType) {
+				continue
+			}
+			c.RemovePunishment(pType)
+			c.SendServerMessage(fmt.Sprintf("Punishment '%v' has been removed.", pType.String()))
+		}
+		count++
+		report += fmt.Sprintf("%v, ", c.Uid())
+	}
+
+	report = strings.TrimSuffix(report, ", ")
+	client.SendServerMessage(fmt.Sprintf("Removed punishments from %v clients.", count))
+	addToBuffer(client, "CMD", fmt.Sprintf("Removed punishments from %v.", report), false)
+}
+
+// parsePunishmentType converts a string to PunishmentType
+func parsePunishmentType(s string) PunishmentType {
+	switch strings.ToLower(s) {
+	case "whisper":
+		return PunishmentWhisper
+	case "backward":
+		return PunishmentBackward
+	case "stutterstep":
+		return PunishmentStutterstep
+	case "elongate":
+		return PunishmentElongate
+	case "uppercase":
+		return PunishmentUppercase
+	case "lowercase":
+		return PunishmentLowercase
+	case "robotic":
+		return PunishmentRobotic
+	case "alternating":
+		return PunishmentAlternating
+	case "fancy":
+		return PunishmentFancy
+	case "uwu":
+		return PunishmentUwu
+	case "pirate":
+		return PunishmentPirate
+	case "shakespearean":
+		return PunishmentShakespearean
+	case "caveman":
+		return PunishmentCaveman
+	case "emoji":
+		return PunishmentEmoji
+	case "randomname":
+		return PunishmentRandomname
+	case "invisible":
+		return PunishmentInvisible
+	case "slowpoke":
+		return PunishmentSlowpoke
+	case "fastspammer":
+		return PunishmentFastspammer
+	case "typewriter":
+		return PunishmentTypewriter
+	case "pause":
+		return PunishmentPause
+	case "lag":
+		return PunishmentLag
+	case "copycats":
+		return PunishmentCopycats
+	case "subtitles":
+		return PunishmentSubtitles
+	case "roulette":
+		return PunishmentRoulette
+	case "spotlight":
+		return PunishmentSpotlight
+	case "censor":
+		return PunishmentCensor
+	case "confused":
+		return PunishmentConfused
+	case "paranoid":
+		return PunishmentParanoid
+	case "drunk":
+		return PunishmentDrunk
+	case "hiccup":
+		return PunishmentHiccup
+	case "whistle":
+		return PunishmentWhistle
+	case "mumble":
+		return PunishmentMumble
+	case "spaghetti":
+		return PunishmentSpaghetti
+	case "torment":
+		return PunishmentTorment
+	case "rng":
+		return PunishmentRng
+	case "essay":
+		return PunishmentEssay
+	case "poetry":
+		return PunishmentPoetry
+	case "haiku":
+		return PunishmentHaiku
+	case "autospell":
+		return PunishmentAutospell
+	case "spin-to-win":
+		return PunishmentSpinToWin
+	default:
+		return PunishmentNone
+	}
 }
