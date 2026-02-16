@@ -125,6 +125,7 @@ type Client struct {
 	ipid          string
 	oocName       string
 	lastmsg       string
+	lastTextColor string
 	perms         uint64
 	authenticated bool
 	mod_name      string
@@ -367,6 +368,20 @@ func (client *Client) LastMsg() string {
 func (client *Client) SetLastMsg(msg string) {
 	client.mu.Lock()
 	client.lastmsg = msg
+	client.mu.Unlock()
+}
+
+// LastTextColor returns the client's last used text color.
+func (client *Client) LastTextColor() string {
+	client.mu.Lock()
+	defer client.mu.Unlock()
+	return client.lastTextColor
+}
+
+// SetLastTextColor sets the client's last used text color.
+func (client *Client) SetLastTextColor(color string) {
+	client.mu.Lock()
+	client.lastTextColor = color
 	client.mu.Unlock()
 }
 

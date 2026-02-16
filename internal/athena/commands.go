@@ -1734,7 +1734,12 @@ func cmdPossess(client *Client, args []string, _ string) {
 	icArgs[11] = "0"                          // evidence
 	icArgs[12] = "0"                          // flipping
 	icArgs[13] = "0"                          // realization
-	icArgs[14] = "0"                          // text color
+	// Use target's last text color, default to "0" (white) if none set
+	targetTextColor := target.LastTextColor()
+	if targetTextColor == "" {
+		targetTextColor = "0"
+	}
+	icArgs[14] = targetTextColor              // text color
 	// Use character name as showname if target's showname is empty
 	showname := target.Showname()
 	if strings.TrimSpace(showname) == "" {
