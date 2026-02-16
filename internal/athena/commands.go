@@ -349,6 +349,13 @@ func initCommands() {
 			desc:     "Sets the current area's status.",
 			reqPerms: permissions.PermissionField["CM"],
 		},
+		"summon": {
+			handler:  cmdSummon,
+			minArgs:  1,
+			usage:    "Usage: /summon <area>",
+			desc:     "Summons all users to the specified area.",
+			reqPerms: permissions.PermissionField["MOVE_USERS"],
+		},
 		"swapevi": {
 			handler:  cmdSwapEvi,
 			minArgs:  2,
@@ -1457,6 +1464,41 @@ func cmdMove(client *Client, args []string, usage string) {
 		}
 		client.SendServerMessage(fmt.Sprintf("Moved to %v.", wantedArea.Name()))
 	}
+}
+
+// Handles /summon
+func cmdSummon(client *Client, args []string, usage string) {
+	if len(args) < 1 {
+		client.SendServerMessage("Not enough arguments:\n" + usage)
+		return
+	}
+	
+	areaID, err := strconv.Atoi(args[0])
+	if err != nil || areaID < 0 || areaID > len(areas)-1 {
+		client.SendServerMessage("Invalid area.")
+		return
+	}
+	wantedArea := areas[areaID]
+	
+	// Get all connected clients
+	allClients := clients.GetAllClients()
+	
+	var count int
+	var report string
+	
+	// Move each client to the target area
+	for c := range allClients {
+		if !c.ChangeArea(wantedArea) {
+			continue
+		}
+		c.SendServerMessage(fmt.Sprintf("You were summoned to %v.", wantedArea.Name()))
+		count++
+		report += fmt.Sprintf("%v, ", c.Uid())
+	}
+	
+	report = strings.TrimSuffix(report, ", ")
+	client.SendServerMessage(fmt.Sprintf("Summoned %v users to %v.", count, wantedArea.Name()))
+	addToBuffer(client, "CMD", fmt.Sprintf("Summoned all users (%v) to %v.", report, wantedArea.Name()), false)
 }
 
 // Handles /mute
