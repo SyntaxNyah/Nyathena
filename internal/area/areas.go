@@ -63,6 +63,7 @@ type TestimonyRecorder struct {
 }
 
 type Poll struct {
+	ID        int64
 	Question  string
 	Options   []string
 	CreatedAt time.Time

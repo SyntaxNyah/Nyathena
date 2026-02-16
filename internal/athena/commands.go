@@ -1669,12 +1669,12 @@ func cmdJail(client *Client, args []string, usage string) {
 
 	target.SetJailedUntil(jailUntil)
 	
-	msg := fmt.Sprintf("You have been jailed in %v", target.Area().Name())
+	msg := fmt.Sprintf("You have been jailed in %v.", target.Area().Name())
 	if strings.ToLower(*duration) != "perma" {
-		msg += fmt.Sprintf(" for %v", *duration)
+		msg = fmt.Sprintf("You have been jailed in %v for %v.", target.Area().Name(), *duration)
 	}
 	if *reason != "" {
-		msg += " for reason: " + *reason
+		msg += " Reason: " + *reason
 	}
 	target.SendServerMessage(msg)
 	
@@ -1717,7 +1717,7 @@ func cmdRps(client *Client, args []string, _ string) {
 
 	choice := strings.ToLower(args[0])
 	if choice != "rock" && choice != "paper" && choice != "scissors" {
-		client.SendServerMessage("Invalid choice. Use: rock, paper, or scissors")
+		client.SendServerMessage("Invalid choice. Use: rock, paper, or scissors.")
 		return
 	}
 
@@ -1726,7 +1726,8 @@ func cmdRps(client *Client, args []string, _ string) {
 
 	// Generate random server choice
 	choices := []string{"rock", "paper", "scissors"}
-	serverChoice := choices[rand.Intn(3)]
+	gen := rand.New(rand.NewSource(time.Now().UnixNano()))
+	serverChoice := choices[gen.Intn(3)]
 
 	// Determine winner
 	var result string
@@ -1786,6 +1787,7 @@ func cmdPoll(client *Client, args []string, usage string) {
 
 	// Create poll
 	poll := &area.Poll{
+		ID:        time.Now().UnixNano(),
 		Question:  question,
 		Options:   options,
 		CreatedAt: time.Now().UTC(),
@@ -1808,13 +1810,14 @@ func cmdPoll(client *Client, args []string, usage string) {
 	addToBuffer(client, "CMD", fmt.Sprintf("Created poll: %v", question), false)
 
 	// Schedule auto-close after 2 minutes
-	go func(a *area.Area, p *area.Poll) {
+	go func(a *area.Area, pollID int64) {
 		time.Sleep(2 * time.Minute)
-		if a.ActivePoll() == p {
+		currentPoll := a.ActivePoll()
+		if currentPoll != nil && currentPoll.ID == pollID {
 			// Close poll
-			resultMsg := fmt.Sprintf("=== POLL CLOSED ===\n%v\nResults:\n", p.Question)
+			resultMsg := fmt.Sprintf("=== POLL CLOSED ===\n%v\nResults:\n", currentPoll.Question)
 			votes := a.PollVotes()
-			for i, opt := range p.Options {
+			for i, opt := range currentPoll.Options {
 				count := 0
 				if votes != nil {
 					count = votes[i+1]
@@ -1824,7 +1827,7 @@ func cmdPoll(client *Client, args []string, usage string) {
 			sendAreaServerMessage(a, resultMsg)
 			a.ClearPoll()
 		}
-	}(client.Area(), poll)
+	}(client.Area(), poll.ID)
 }
 
 // Handles /vote
