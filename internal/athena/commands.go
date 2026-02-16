@@ -1710,6 +1710,12 @@ func cmdPossess(client *Client, args []string, _ string) {
 	// Encode the message
 	encodedMsg := encode(msg)
 
+	// Get the target's current emote from their pair info, or use "normal" as fallback
+	targetEmote := target.PairInfo().emote
+	if targetEmote == "" {
+		targetEmote = "normal"
+	}
+
 	// Create the IC message packet args following the MS packet format
 	// Based on pktIC processing, the final MS packet has inserted pairing data
 	// We create a 30-element array to match the server's MS format
@@ -1717,7 +1723,7 @@ func cmdPossess(client *Client, args []string, _ string) {
 	icArgs[0] = "chat"                        // desk_mod
 	icArgs[1] = ""                            // pre-anim
 	icArgs[2] = characters[target.CharID()]   // character name
-	icArgs[3] = "normal"                      // emote (default idle pose)
+	icArgs[3] = targetEmote                   // emote (use target's current emote)
 	icArgs[4] = encodedMsg                    // message (encoded)
 	icArgs[5] = target.Pos()                  // position
 	icArgs[6] = ""                            // sfx-name
