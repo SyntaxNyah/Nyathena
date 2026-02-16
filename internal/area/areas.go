@@ -19,6 +19,7 @@ package area
 import (
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/MangosArentLiterature/Athena/internal/sliceutil"
 )
@@ -61,24 +62,36 @@ type TestimonyRecorder struct {
 	State     TRState
 }
 
+type Poll struct {
+	Question  string
+	Options   []string
+	CreatedAt time.Time
+	ClosesAt  time.Time
+	CreatedBy string
+}
+
 type Area struct {
-	data     AreaData
-	defaults defaults
-	mu       sync.Mutex
-	taken    []bool
-	players  int
-	defhp    int
-	prohp    int
-	evidence []string
-	buffer   []string
-	cms      []int
-	last_msg int
-	evi_mode EvidenceMode
-	status   Status
-	lock     Lock
-	invited  []int
-	doc      string
-	tr       TestimonyRecorder
+	data         AreaData
+	defaults     defaults
+	mu           sync.Mutex
+	taken        []bool
+	players      int
+	defhp        int
+	prohp        int
+	evidence     []string
+	buffer       []string
+	cms          []int
+	last_msg     int
+	evi_mode     EvidenceMode
+	status       Status
+	lock         Lock
+	invited      []int
+	doc          string
+	tr           TestimonyRecorder
+	activePoll   *Poll
+	lastPollTime time.Time
+	pollVotes    map[int]int
+	playerVotes  map[int]int
 }
 
 type AreaData struct {
@@ -515,6 +528,9 @@ func (a *Area) Reset() {
 	a.tr.Index = 0
 	a.tr.State = TRIdle
 	a.tr.Testimony = []string{}
+	a.activePoll = nil
+	a.pollVotes = nil
+	a.playerVotes = nil
 	a.mu.Unlock()
 }
 
@@ -638,4 +654,94 @@ func (evimod EvidenceMode) String() string {
 		return "mods"
 	}
 	return ""
+}
+
+// ActivePoll returns the area's active poll.
+func (a *Area) ActivePoll() *Poll {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return a.activePoll
+}
+
+// SetActivePoll sets the area's active poll.
+func (a *Area) SetActivePoll(p *Poll) {
+	a.mu.Lock()
+	a.activePoll = p
+	a.mu.Unlock()
+}
+
+// LastPollTime returns the time of the last poll in the area.
+func (a *Area) LastPollTime() time.Time {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return a.lastPollTime
+}
+
+// SetLastPollTime sets the time of the last poll in the area.
+func (a *Area) SetLastPollTime(t time.Time) {
+	a.mu.Lock()
+	a.lastPollTime = t
+	a.mu.Unlock()
+}
+
+// PollVotes returns the poll votes map.
+func (a *Area) PollVotes() map[int]int {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return a.pollVotes
+}
+
+// SetPollVotes sets the poll votes map.
+func (a *Area) SetPollVotes(votes map[int]int) {
+	a.mu.Lock()
+	a.pollVotes = votes
+	a.mu.Unlock()
+}
+
+// PlayerVotes returns the player votes map.
+func (a *Area) PlayerVotes() map[int]int {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return a.playerVotes
+}
+
+// SetPlayerVotes sets the player votes map.
+func (a *Area) SetPlayerVotes(votes map[int]int) {
+	a.mu.Lock()
+	a.playerVotes = votes
+	a.mu.Unlock()
+}
+
+// AddPlayerVote adds a player's vote to the poll.
+func (a *Area) AddPlayerVote(uid int, option int) {
+	a.mu.Lock()
+	if a.playerVotes == nil {
+		a.playerVotes = make(map[int]int)
+	}
+	if a.pollVotes == nil {
+		a.pollVotes = make(map[int]int)
+	}
+	a.playerVotes[uid] = option
+	a.pollVotes[option]++
+	a.mu.Unlock()
+}
+
+// HasPlayerVoted checks if a player has already voted.
+func (a *Area) HasPlayerVoted(uid int) bool {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if a.playerVotes == nil {
+		return false
+	}
+	_, voted := a.playerVotes[uid]
+	return voted
+}
+
+// ClearPoll clears the active poll and related data.
+func (a *Area) ClearPoll() {
+	a.mu.Lock()
+	a.activePoll = nil
+	a.pollVotes = nil
+	a.playerVotes = nil
+	a.mu.Unlock()
 }
