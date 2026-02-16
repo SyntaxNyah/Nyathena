@@ -169,3 +169,47 @@ func TestApplyPunishmentToText(t *testing.T) {
 		})
 	}
 }
+
+func TestApplyCopycats(t *testing.T) {
+	input := "I went to school."
+	
+	tests := []struct {
+		name   string
+		userID int
+	}{
+		{"User 1", 1},
+		{"User 2", 2},
+		{"User 5", 5},
+		{"User 10", 10},
+		{"User 100", 100},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := applyCopycats(input, tt.userID)
+			
+			// Verify the result is different from input
+			if result == input {
+				t.Errorf("%s: expected different output, got same: %q", tt.name, result)
+			}
+			
+			// Verify the result is longer (due to doubled letters)
+			if len(result) <= len(input) {
+				t.Errorf("%s: expected longer output, got: %q (input: %q)", tt.name, result, input)
+			}
+			
+			// Verify consistency - same user ID should give same result
+			result2 := applyCopycats(input, tt.userID)
+			if result != result2 {
+				t.Errorf("%s: inconsistent results for same user ID: %q vs %q", tt.name, result, result2)
+			}
+		})
+	}
+	
+	// Verify different users get different results
+	user1Result := applyCopycats(input, 1)
+	user2Result := applyCopycats(input, 2)
+	if user1Result == user2Result {
+		t.Errorf("Different users should get different results, but both got: %q", user1Result)
+	}
+}
