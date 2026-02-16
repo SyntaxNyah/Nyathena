@@ -417,13 +417,6 @@ func applyEssay(text string) string {
 	return text
 }
 
-// applyPoetry adds a note about rhyming requirement
-func applyPoetry(text string) string {
-	// This is a validation, not a transformation
-	// The actual validation should happen in message handling
-	return text
-}
-
 // applyHaiku adds a note about haiku format
 func applyHaiku(text string) string {
 	// This is a validation, not a transformation
@@ -468,10 +461,34 @@ func applyTorment(text string, cycleIndex int) string {
 	return effect(text)
 }
 
-// applySpinToWin applies a random major effect
-func applySpinToWin(text string) string {
-	// Similar to RNG but with visual feedback in the future
-	return applyRng(text)
+// applyCopycats applies user-specific alterations to text
+// The alterations should be consistent per user but different from the original
+func applyCopycats(text string, userID int) string {
+	if text == "" {
+		return text
+	}
+	
+	// Use user ID to seed which letters to double
+	// This ensures each user has consistent but different alterations
+	runes := []rune(text)
+	var result strings.Builder
+	
+	// Determine doubling pattern based on user ID
+	// Use modulo to create a pattern for which characters to double
+	doublePattern := (userID % 5) + 2 // Doubles characters at intervals of 2-6 positions
+	doubleOffset := userID % doublePattern // Offset within the pattern
+	
+	for i, r := range runes {
+		result.WriteRune(r)
+		// Double certain letters based on user ID pattern
+		// Check if this position matches the user's doubling offset
+		// Skip position 0 to avoid doubling the first character (often capitalized)
+		if i > 0 && i%doublePattern == doubleOffset && unicode.IsLetter(r) {
+			result.WriteRune(r)
+		}
+	}
+	
+	return truncateText(result.String())
 }
 
 // applySubtitles adds confusing annotations
@@ -540,14 +557,10 @@ func ApplyPunishmentToText(text string, pType PunishmentType) string {
 		return applyRng(text)
 	case PunishmentEssay:
 		return applyEssay(text)
-	case PunishmentPoetry:
-		return applyPoetry(text)
 	case PunishmentHaiku:
 		return applyHaiku(text)
 	case PunishmentAutospell:
 		return applyAutospell(text)
-	case PunishmentSpinToWin:
-		return applySpinToWin(text)
 	case PunishmentSubtitles:
 		return applySubtitles(text)
 	case PunishmentSpotlight:
@@ -565,6 +578,16 @@ func ApplyPunishmentToTextWithState(text string, pType PunishmentType, state *Pu
 		result := applyTorment(text, state.lastEffect)
 		state.lastEffect++
 		return result
+	default:
+		return ApplyPunishmentToText(text, pType)
+	}
+}
+
+// ApplyPunishmentToTextWithUserID applies a punishment effect that requires user ID
+func ApplyPunishmentToTextWithUserID(text string, pType PunishmentType, userID int) string {
+	switch pType {
+	case PunishmentCopycats:
+		return applyCopycats(text, userID)
 	default:
 		return ApplyPunishmentToText(text, pType)
 	}

@@ -548,13 +548,6 @@ func initCommands() {
 			desc:     "Rate limits messages heavily.",
 			reqPerms: permissions.PermissionField["MUTE"],
 		},
-		"typewriter": {
-			handler:  cmdTypewriter,
-			minArgs:  1,
-			usage:    "Usage: /typewriter [-d duration] [-r reason] <uid1>,<uid2>...",
-			desc:     "Makes letters appear one at a time.",
-			reqPerms: permissions.PermissionField["MUTE"],
-		},
 		"pause": {
 			handler:  cmdPause,
 			minArgs:  1,
@@ -677,13 +670,6 @@ func initCommands() {
 			desc:     "Requires minimum 50 characters.",
 			reqPerms: permissions.PermissionField["MUTE"],
 		},
-		"poetry": {
-			handler:  cmdPoetry,
-			minArgs:  1,
-			usage:    "Usage: /poetry [-d duration] [-r reason] <uid1>,<uid2>...",
-			desc:     "Requires messages to rhyme.",
-			reqPerms: permissions.PermissionField["MUTE"],
-		},
 		// Punishment commands - Advanced
 		"haiku": {
 			handler:  cmdHaiku,
@@ -697,13 +683,6 @@ func initCommands() {
 			minArgs:  1,
 			usage:    "Usage: /autospell [-d duration] [-r reason] <uid1>,<uid2>...",
 			desc:     "Autocorrects to wrong words.",
-			reqPerms: permissions.PermissionField["MUTE"],
-		},
-		"spin-to-win": {
-			handler:  cmdSpinToWin,
-			minArgs:  1,
-			usage:    "Usage: /spin-to-win [-d duration] [-r reason] <uid1>,<uid2>...",
-			desc:     "Visual wheel picks random effect.",
 			reqPerms: permissions.PermissionField["MUTE"],
 		},
 		"unpunish": {
@@ -2455,10 +2434,6 @@ func cmdFastspammer(client *Client, args []string, usage string) {
 	cmdPunishment(client, args, usage, PunishmentFastspammer)
 }
 
-func cmdTypewriter(client *Client, args []string, usage string) {
-	cmdPunishment(client, args, usage, PunishmentTypewriter)
-}
-
 func cmdPause(client *Client, args []string, usage string) {
 	cmdPunishment(client, args, usage, PunishmentPause)
 }
@@ -2527,20 +2502,12 @@ func cmdEssay(client *Client, args []string, usage string) {
 	cmdPunishment(client, args, usage, PunishmentEssay)
 }
 
-func cmdPoetry(client *Client, args []string, usage string) {
-	cmdPunishment(client, args, usage, PunishmentPoetry)
-}
-
 func cmdHaiku(client *Client, args []string, usage string) {
 	cmdPunishment(client, args, usage, PunishmentHaiku)
 }
 
 func cmdAutospell(client *Client, args []string, usage string) {
 	cmdPunishment(client, args, usage, PunishmentAutospell)
-}
-
-func cmdSpinToWin(client *Client, args []string, usage string) {
-	cmdPunishment(client, args, usage, PunishmentSpinToWin)
 }
 
 // cmdUnpunish removes all or specific punishments from users
@@ -2629,8 +2596,6 @@ func parsePunishmentType(s string) PunishmentType {
 		return PunishmentSlowpoke
 	case "fastspammer":
 		return PunishmentFastspammer
-	case "typewriter":
-		return PunishmentTypewriter
 	case "pause":
 		return PunishmentPause
 	case "lag":
@@ -2665,14 +2630,10 @@ func parsePunishmentType(s string) PunishmentType {
 		return PunishmentRng
 	case "essay":
 		return PunishmentEssay
-	case "poetry":
-		return PunishmentPoetry
 	case "haiku":
 		return PunishmentHaiku
 	case "autospell":
 		return PunishmentAutospell
-	case "spin-to-win":
-		return PunishmentSpinToWin
 	default:
 		return PunishmentNone
 	}

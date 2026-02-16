@@ -1,6 +1,6 @@
 # Punishment Commands Documentation
 
-Athena now includes 40+ fun, non-harmful punishment commands for moderators to use on players. These commands temporarily modify how player messages appear or behave, adding entertainment value while maintaining server control.
+Athena now includes 37 fun, non-harmful punishment commands for moderators to use on players. These commands temporarily modify how player messages appear or behave, adding entertainment value while maintaining server control.
 
 ## Overview
 
@@ -116,16 +116,13 @@ Changes player's name randomly each message.
 ### `/invisible`
 Prevents player from seeing other players' messages (isolation punishment).
 
-## Timing Effects Commands (5)
+## Timing Effects Commands (4)
 
 ### `/slowpoke`
 Delays messages before sending them.
 
 ### `/fastspammer`
 Heavily rate limits messages (anti-spam punishment).
-
-### `/typewriter`
-Makes letters appear one at a time (simulated slow typing).
 
 ### `/pause`
 Forces wait time between messages.
@@ -136,7 +133,12 @@ Batches and delays messages to simulate lag.
 ## Social Chaos Commands (4)
 
 ### `/copycats`
-Makes everyone in the area repeat the punished player's messages.
+Modifies messages with user-specific alterations by doubling certain letters.
+- Each user gets consistent but different modifications based on their user ID
+- Input: "I went to school."
+- Output (User 1): "I weent to schoool."
+- Output (User 2): "I went to sschool."
+- Note: This ensures different users can't send identical messages (which Discord prevents)
 
 ### `/subtitles`
 Adds confusing subtitle annotations.
@@ -188,7 +190,7 @@ Obscures message text (keeps first/last letters).
 - Input: "Hello world"
 - Output: "H***o w***d"
 
-## Complex Effects Commands (5)
+## Complex Effects Commands (3)
 
 ### `/spaghetti`
 Combines 2-3 random effects together for chaotic results.
@@ -203,10 +205,7 @@ Applies a random effect from a pool each message.
 Requires minimum 50 characters per message.
 - Shorter messages get a warning appended
 
-### `/poetry`
-Requires messages to rhyme (validation note added).
-
-## Advanced Commands (3)
+## Advanced Commands (2)
 
 ### `/haiku`
 Requires 5-7-5 syllable format (validation note added).
@@ -216,9 +215,6 @@ Intentionally "autocorrects" words incorrectly.
 - "the" → "teh"
 - "you" → "u"
 - "there" → "their"
-
-### `/spin-to-win`
-Applies a random major effect (visual wheel concept for future enhancement).
 
 ## Safety Features
 

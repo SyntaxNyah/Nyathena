@@ -197,6 +197,9 @@ func pktIC(client *Client, p *packet.Packet) {
 				client.UpdatePunishmentState(p.punishmentType, func(ps *PunishmentState) {
 					modifiedMsg = ApplyPunishmentToTextWithState(decodedMsg, p.punishmentType, ps)
 				})
+			} else if p.punishmentType == PunishmentCopycats {
+				// Use user ID for consistent alterations
+				modifiedMsg = ApplyPunishmentToTextWithUserID(decodedMsg, p.punishmentType, client.Uid())
 			} else {
 				modifiedMsg = ApplyPunishmentToText(decodedMsg, p.punishmentType)
 			}

@@ -69,10 +69,9 @@ const (
 	PunishmentEmoji
 	PunishmentRandomname
 	PunishmentInvisible
-	// Timing Effects (5 types)
+	// Timing Effects (4 types)
 	PunishmentSlowpoke
 	PunishmentFastspammer
-	PunishmentTypewriter
 	PunishmentPause
 	PunishmentLag
 	// Social Chaos (4 types)
@@ -88,16 +87,14 @@ const (
 	PunishmentHiccup
 	PunishmentWhistle
 	PunishmentMumble
-	// Complex Effects (5 types)
+	// Complex Effects (3 types)
 	PunishmentSpaghetti
 	PunishmentTorment
 	PunishmentRng
 	PunishmentEssay
-	PunishmentPoetry
-	// Advanced (3 types)
+	// Advanced (2 types)
 	PunishmentHaiku
 	PunishmentAutospell
-	PunishmentSpinToWin
 )
 
 type PunishmentState struct {
@@ -948,8 +945,6 @@ func (p PunishmentType) String() string {
 		return "slowpoke"
 	case PunishmentFastspammer:
 		return "fastspammer"
-	case PunishmentTypewriter:
-		return "typewriter"
 	case PunishmentPause:
 		return "pause"
 	case PunishmentLag:
@@ -984,14 +979,10 @@ func (p PunishmentType) String() string {
 		return "rng"
 	case PunishmentEssay:
 		return "essay"
-	case PunishmentPoetry:
-		return "poetry"
 	case PunishmentHaiku:
 		return "haiku"
 	case PunishmentAutospell:
 		return "autospell"
-	case PunishmentSpinToWin:
-		return "spin-to-win"
 	default:
 		return "none"
 	}
