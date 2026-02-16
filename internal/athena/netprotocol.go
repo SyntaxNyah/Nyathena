@@ -398,6 +398,7 @@ func pktIC(client *Client, p *packet.Packet) {
 
 	client.SetPairInfo(args[2], args[3], args[12], args[19])
 	client.SetLastMsg(args[4])
+	client.SetLastTextColor(args[14])
 	if strings.TrimSpace(args[15]) == "" {
 		client.SetShowname(characters[client.CharID()])
 	} else {
