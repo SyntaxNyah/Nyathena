@@ -1664,8 +1664,8 @@ func cmdPossess(client *Client, args []string, _ string) {
 
 	// Create the IC message packet args following the MS packet format
 	// Based on pktIC processing, the final MS packet has inserted pairing data
-	// We create a 29-element array to match the server's MS format
-	icArgs := make([]string, 29)
+	// We create a 30-element array to match the server's MS format
+	icArgs := make([]string, 30)
 	icArgs[0] = "chat"                        // desk_mod
 	icArgs[1] = ""                            // pre-anim
 	icArgs[2] = characters[target.CharID()]   // character name
@@ -1695,6 +1695,7 @@ func cmdPossess(client *Client, args []string, _ string) {
 	icArgs[26] = ""                           // frames_realization
 	icArgs[27] = ""                           // frames_sfx
 	icArgs[28] = "0"                          // additive
+	icArgs[29] = ""                           // blank (reserved)
 
 	// Send the IC message to the target's area
 	writeToArea(target.Area(), "MS", icArgs...)
