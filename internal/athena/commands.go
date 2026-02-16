@@ -1484,21 +1484,34 @@ func cmdSummon(client *Client, args []string, usage string) {
 	allClients := clients.GetAllClients()
 	
 	var count int
-	var report string
+	var reportBuilder strings.Builder
 	
 	// Move each client to the target area
 	for c := range allClients {
 		if !c.ChangeArea(wantedArea) {
 			continue
 		}
-		c.SendServerMessage(fmt.Sprintf("You were summoned to %v.", wantedArea.Name()))
+		
+		// Send appropriate message based on whether this is the admin
+		if c == client {
+			c.SendServerMessage(fmt.Sprintf("Summoned all users to %v.", wantedArea.Name()))
+		} else {
+			c.SendServerMessage(fmt.Sprintf("You were summoned to %v.", wantedArea.Name()))
+		}
+		
+		if reportBuilder.Len() > 0 {
+			reportBuilder.WriteString(", ")
+		}
+		reportBuilder.WriteString(fmt.Sprintf("%v", c.Uid()))
 		count++
-		report += fmt.Sprintf("%v, ", c.Uid())
 	}
 	
-	report = strings.TrimSuffix(report, ", ")
-	client.SendServerMessage(fmt.Sprintf("Summoned %v users to %v.", count, wantedArea.Name()))
-	addToBuffer(client, "CMD", fmt.Sprintf("Summoned all users (%v) to %v.", report, wantedArea.Name()), false)
+	report := reportBuilder.String()
+	if count > 0 {
+		addToBuffer(client, "CMD", fmt.Sprintf("Summoned %v user(s) (%v) to %v.", count, report, wantedArea.Name()), false)
+	} else {
+		client.SendServerMessage("No users were summoned.")
+	}
 }
 
 // Handles /mute
