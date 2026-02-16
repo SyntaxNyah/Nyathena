@@ -786,7 +786,8 @@ func (client *Client) AddPunishment(pType PunishmentType, duration time.Duration
 	client.mu.Lock()
 	defer client.mu.Unlock()
 	
-	// Remove existing punishment of the same type (prevent stacking)
+	// Remove existing punishment of the same type (prevent duplicate same-type punishments)
+	// Different punishment types can coexist and stack their effects
 	for i := len(client.punishments) - 1; i >= 0; i-- {
 		if client.punishments[i].punishmentType == pType {
 			client.punishments = append(client.punishments[:i], client.punishments[i+1:]...)

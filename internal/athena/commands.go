@@ -706,6 +706,13 @@ func initCommands() {
 			desc:     "Removes punishment(s) from user(s).",
 			reqPerms: permissions.PermissionField["MUTE"],
 		},
+		"stack": {
+			handler:  cmdStack,
+			minArgs:  2,
+			usage:    "Usage: /stack <punishment1> <punishment2> [<punishment3>...] [-d duration] [-r reason] <uid1>,<uid2>...",
+			desc:     "Applies multiple punishment effects to user(s) simultaneously.",
+			reqPerms: permissions.PermissionField["MUTE"],
+		},
 	}
 }
 
@@ -2600,4 +2607,88 @@ func parsePunishmentType(s string) PunishmentType {
 	default:
 		return PunishmentNone
 	}
+}
+
+// cmdStack applies multiple punishment effects to user(s) simultaneously
+func cmdStack(client *Client, args []string, usage string) {
+	flags := flag.NewFlagSet("", 0)
+	flags.SetOutput(io.Discard)
+	reason := flags.String("r", "", "")
+	durationStr := flags.String("d", "10m", "")
+	flags.Parse(args)
+
+	if len(flags.Args()) < 2 {
+		client.SendServerMessage("Not enough arguments:\n" + usage)
+		return
+	}
+
+	// Parse duration
+	duration, err := str2duration.ParseDuration(*durationStr)
+	if err != nil {
+		client.SendServerMessage("Invalid duration format. Use format like: 10m, 1h, 30s")
+		return
+	}
+
+	// Cap at 24 hours
+	maxDuration := 24 * time.Hour
+	if duration > maxDuration {
+		duration = maxDuration
+		client.SendServerMessage(fmt.Sprintf("Duration capped at 24 hours."))
+	}
+
+	// Parse punishment types (all args except the last one which is UIDs)
+	flagArgs := flags.Args()
+	if len(flagArgs) < 2 {
+		client.SendServerMessage("Not enough arguments:\n" + usage)
+		return
+	}
+
+	// Last argument is the UID list
+	uidStr := flagArgs[len(flagArgs)-1]
+	punishmentNames := flagArgs[:len(flagArgs)-1]
+
+	// Validate and parse all punishment types
+	var punishmentTypes []PunishmentType
+	for _, name := range punishmentNames {
+		pType := parsePunishmentType(name)
+		if pType == PunishmentNone {
+			client.SendServerMessage(fmt.Sprintf("Unknown punishment type: %v", name))
+			return
+		}
+		punishmentTypes = append(punishmentTypes, pType)
+	}
+
+	// Apply punishments to users
+	toPunish := getUidList(strings.Split(uidStr, ","))
+	var count int
+	var report string
+
+	msg := fmt.Sprintf("You have been punished with stacked effects: ")
+	punishmentNamesList := []string{}
+	for _, pType := range punishmentTypes {
+		punishmentNamesList = append(punishmentNamesList, "'"+pType.String()+"'")
+	}
+	msg += strings.Join(punishmentNamesList, ", ")
+
+	if duration > 0 {
+		msg += fmt.Sprintf(" for %v", duration)
+	}
+	if *reason != "" {
+		msg += " for reason: " + *reason
+	}
+
+	for _, c := range toPunish {
+		// Apply each punishment
+		for _, pType := range punishmentTypes {
+			c.AddPunishment(pType, duration, *reason)
+		}
+		c.SendServerMessage(msg)
+		count++
+		report += fmt.Sprintf("%v, ", c.Uid())
+	}
+
+	report = strings.TrimSuffix(report, ", ")
+	punishmentList := strings.Join(punishmentNamesList, ", ")
+	client.SendServerMessage(fmt.Sprintf("Applied stacked punishments [%v] to %v clients.", punishmentList, count))
+	addToBuffer(client, "CMD", fmt.Sprintf("Applied stacked punishments [%v] to %v.", punishmentList, report), false)
 }
