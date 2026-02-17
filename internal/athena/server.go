@@ -24,6 +24,7 @@ import (
 	"math/rand"
 	"net"
 	"net/http"
+	"os"
 	"strconv"
 	"strings"
 	"sync"
@@ -184,15 +185,26 @@ func InitServer(conf *settings.Config) error {
 // setupHTTPMux creates an HTTP mux with WebSocket handler and optional static asset serving
 func setupHTTPMux() *http.ServeMux {
 	mux := http.NewServeMux()
-	mux.HandleFunc("/", HandleWS)
-	
-	// Serve static assets from /base/ if asset_path is configured
+
+	// Register specific paths BEFORE the catch-all WebSocket handler
+	// This ensures /base/ is handled by the file server, not the WebSocket handler
 	if config.AssetPath != "" {
-		logger.LogDebugf("Serving static assets from %s at /base/", config.AssetPath)
-		fileServer := http.FileServer(http.Dir(config.AssetPath))
-		mux.Handle("/base/", http.StripPrefix("/base/", fileServer))
+		// Validate that the asset directory exists
+		if info, err := os.Stat(config.AssetPath); err != nil {
+			logger.LogErrorf("Asset path configured but directory does not exist: %s (%v)", config.AssetPath, err)
+		} else if !info.IsDir() {
+			logger.LogErrorf("Asset path configured but is not a directory: %s", config.AssetPath)
+		} else {
+			logger.LogDebugf("Serving static assets from %s at /base/", config.AssetPath)
+			fileServer := http.FileServer(http.Dir(config.AssetPath))
+			mux.Handle("/base/", http.StripPrefix("/base/", fileServer))
+		}
 	}
-	
+
+	// Register WebSocket handler as catch-all LAST
+	// This must be registered after specific paths like /base/
+	mux.HandleFunc("/", HandleWS)
+
 	return mux
 }
 

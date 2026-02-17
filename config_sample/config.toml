@@ -39,8 +39,13 @@ tls_key_path = ""
 #   ["https://web.aceattorneyonline.com"] - Only allow the official WebAO client
 #   ["https://*.example.com"] - Allow all subdomains of example.com
 #   ["https://hatsune.miku.pizza", "https://web.aceattorneyonline.com"] - Allow specific domains
-# If not specified, defaults to ["*"] (accepts all origins).
-# For production, it's recommended to specify explicit allowed origins for security.
+# 
+# DEFAULT: ["*"] accepts all origins - CHANGE THIS FOR PRODUCTION!
+# WARNING: The default wildcard setting is insecure for production use. 
+# For production deployments, explicitly specify the allowed origins to prevent unauthorized access.
+# 
+# Example production configuration:
+#   websocket_origins = ["https://web.aceattorneyonline.com"]
 websocket_origins = ["*"]
 
 # Set to true if running behind a reverse proxy (nginx, Apache, etc.)
