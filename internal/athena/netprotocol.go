@@ -120,7 +120,7 @@ func pktReqChar(client *Client, _ *packet.Packet) {
 
 // Handles RM#%
 func pktReqAM(client *Client, _ *packet.Packet) {
-	client.write(fmt.Sprintf("SM#%s#%s#%%", areaNames, strings.Join(music, "#")))
+	client.write(fmt.Sprintf("SM#%v#%v#%%", areaNames, strings.Join(music, "#")))
 }
 
 // Handles RD#%

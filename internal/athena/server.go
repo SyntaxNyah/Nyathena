@@ -59,7 +59,7 @@ var (
 	updatePlayers                                     = make(chan int)      // Updates the advertiser's player count.
 	advertDone                                        = make(chan struct{}) // Signals the advertiser to stop.
 	FatalError                                        = make(chan error)    // Signals that the server should stop after a fatal error.
-
+	
 	// Tournament mode state
 	tournamentActive     bool
 	tournamentMutex      sync.Mutex
@@ -79,7 +79,7 @@ func InitServer(conf *settings.Config) error {
 	db.Open()
 	uids.InitHeap(conf.MaxPlayers)
 	config = conf
-
+	
 	// Initialize tournament state
 	tournamentParticipants = make(map[int]*TournamentParticipant)
 
@@ -198,7 +198,7 @@ func ListenTCP() {
 		}
 		ipid := getIpid(conn.RemoteAddr().String())
 		if logger.DebugNetwork {
-			logger.LogDebugf("Connection received from %v", ipid)
+			logger.LogDebugf("Connection recieved from %v", ipid)
 		}
 		client := NewClient(conn, ipid)
 		go client.HandleClient()
@@ -243,7 +243,7 @@ func ListenWSS() {
 	s := &http.Server{
 		Handler: mux,
 	}
-
+	
 	// Use TLS if certificate and key paths are provided, otherwise serve plain HTTP
 	// (useful when behind a reverse proxy that handles TLS termination)
 	if config.TLSCertPath != "" && config.TLSKeyPath != "" {
@@ -253,7 +253,7 @@ func ListenWSS() {
 		logger.LogDebug("WSS using plain HTTP (expecting reverse proxy for TLS)")
 		err = s.Serve(listener)
 	}
-
+	
 	if err != http.ErrServerClosed {
 		FatalError <- err
 	}
@@ -266,17 +266,11 @@ func HandleWS(w http.ResponseWriter, r *http.Request) {
 		logger.LogError(err.Error())
 		return
 	}
-	
-	// Increase read limit to handle large incoming messages (e.g., character/music list requests)
-	// Default is 32KB which may be insufficient for some edge cases
-	c.SetReadLimit(1048576) // 1 MB
-	
 	ipid := getIpid(getRealIP(r))
 	if logger.DebugNetwork {
-		logger.LogDebugf("Connection received from %v", ipid)
+		logger.LogDebugf("Connection recieved from %v", ipid)
 	}
-	// Use context.Background() for proper lifecycle management of long-lived WebSocket connections
-	client := NewClient(websocket.NetConn(context.Background(), c, websocket.MessageText), ipid)
+	client := NewClient(websocket.NetConn(context.TODO(), c, websocket.MessageText), ipid)
 	go client.HandleClient()
 }
 
@@ -412,7 +406,7 @@ func CleanupServer() {
 }
 
 // getRealIP extracts the real client IP address from an HTTP request.
-// When reverse_proxy_mode is enabled in the config, it checks X-Forwarded-For
+// When reverse_proxy_mode is enabled in the config, it checks X-Forwarded-For 
 // and X-Real-IP headers (for reverse proxy setups like nginx or Cloudflare).
 // When reverse_proxy_mode is disabled, it always uses RemoteAddr directly.
 //
@@ -431,13 +425,13 @@ func getRealIP(r *http.Request) string {
 				return strings.TrimSpace(ips[0])
 			}
 		}
-
+		
 		// Check X-Real-IP header (single IP from reverse proxy)
 		if xri := r.Header.Get("X-Real-IP"); xri != "" {
 			return xri
 		}
 	}
-
+	
 	// Use RemoteAddr if reverse_proxy_mode is disabled or no proxy headers are present
 	return r.RemoteAddr
 }
@@ -446,7 +440,7 @@ func getRealIP(r *http.Request) string {
 func getIpid(s string) string {
 	// For privacy and ease of use, AO servers traditionally use a hashed version of a client's IP address to identify a client.
 	// Athena uses the MD5 hash of the IP address, encoded in base64.
-
+	
 	// Extract just the IP address, removing the port if present
 	// Use net.SplitHostPort which correctly handles both IPv4 and IPv6 addresses
 	ip, _, err := net.SplitHostPort(s)
@@ -454,7 +448,7 @@ func getIpid(s string) string {
 		// If there's an error, the input doesn't have a port, so use it as-is
 		ip = s
 	}
-
+	
 	hash := md5.Sum([]byte(ip))
 	ipid := base64.StdEncoding.EncodeToString(hash[:])
 	return ipid[:len(ipid)-2] // Removes the trailing padding.

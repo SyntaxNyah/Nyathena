@@ -125,7 +125,6 @@ func (conf *Config) Load() error {
 	if err != nil {
 		return err
 	}
-
 	return nil
 }
 

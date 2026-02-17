@@ -176,10 +176,6 @@ func (client *Client) HandleClient() {
 
 	client.SendPacket("decryptor", "NOENCRYPT") // Relic of FantaCrypt. AO2 requires a server to send this to proceed with the handshake.
 	input := bufio.NewScanner(client.conn)
-	
-	// Increase scanner buffer to handle large packets (default is 64KB max token size)
-	// This allows receiving large character/music lists from clients
-	input.Buffer(make([]byte, 0, 64*1024), 1024*1024) // 64KB initial, 1MB max token size
 
 	splitfn := func(data []byte, atEOF bool) (advance int, token []byte, err error) {
 		if atEOF && len(data) == 0 {
@@ -284,9 +280,7 @@ func (client *Client) CurrentCharacter() string {
 // timeout closes an unjoined client's connection after 1 minute.
 func timeout(client *Client) {
 	time.Sleep(1 * time.Minute)
-	client.mu.Lock()
-	defer client.mu.Unlock()
-	if client.uid == -1 {
+	if client.Uid() == -1 {
 		client.conn.Close()
 	}
 }
