@@ -179,8 +179,7 @@ func (client *Client) HandleClient() {
 	
 	// Increase scanner buffer to handle large packets (default is 64KB max token size)
 	// This allows receiving large character/music lists from clients
-	buf := make([]byte, 0, 64*1024)  // 64KB initial buffer
-	input.Buffer(buf, 1024*1024)      // Allow up to 1MB token size
+	input.Buffer(make([]byte, 0, 64*1024), 1024*1024) // 64KB initial, 1MB max token size
 
 	splitfn := func(data []byte, atEOF bool) (advance int, token []byte, err error) {
 		if atEOF && len(data) == 0 {
