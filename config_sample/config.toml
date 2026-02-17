@@ -32,6 +32,17 @@ tls_cert_path = ""
 # Path to TLS private key file (optional - leave empty if using a reverse proxy like Cloudflare).
 tls_key_path = ""
 
+# WebSocket origin patterns for CORS validation.
+# This controls which origins (domains) are allowed to establish WebSocket connections.
+# Supports wildcard patterns for flexibility:
+#   ["*"] - Accept any origin (useful for development, but insecure for production)
+#   ["https://web.aceattorneyonline.com"] - Only allow the official WebAO client
+#   ["https://*.example.com"] - Allow all subdomains of example.com
+#   ["https://hatsune.miku.pizza", "https://web.aceattorneyonline.com"] - Allow specific domains
+# If not specified, defaults to ["*"] (accepts all origins).
+# For production, it's recommended to specify explicit allowed origins for security.
+websocket_origins = ["*"]
+
 # Set to true if running behind a reverse proxy (nginx, Apache, etc.)
 # When enabled, the master server will advertise the external ports instead of internal listening ports
 reverse_proxy_mode = false

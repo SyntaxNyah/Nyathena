@@ -261,14 +261,33 @@ func ListenWSS() {
 
 // HandleWS handles a websocket connection.
 func HandleWS(w http.ResponseWriter, r *http.Request) {
-	c, err := websocket.Accept(w, r, &websocket.AcceptOptions{OriginPatterns: []string{"web.aceattorneyonline.com"}}) // WS connections not originating from webAO will be rejected.
+	// Get the origin from the request for logging
+	origin := r.Header.Get("Origin")
+	remoteAddr := getRealIP(r)
+	
+	// Log the incoming WebSocket connection attempt
+	if logger.DebugNetwork {
+		logger.LogDebugf("WebSocket connection attempt from %s (Origin: %s, Path: %s)", remoteAddr, origin, r.URL.Path)
+	}
+	
+	// Use configured origin patterns, defaulting to wildcard if not set
+	originPatterns := config.WebSocketOrigins
+	if len(originPatterns) == 0 {
+		originPatterns = []string{"*"}
+		logger.LogWarning("No WebSocket origins configured, accepting all origins (insecure)")
+	}
+	
+	c, err := websocket.Accept(w, r, &websocket.AcceptOptions{
+		OriginPatterns: originPatterns,
+	})
 	if err != nil {
-		logger.LogError(err.Error())
+		logger.LogErrorf("WebSocket connection failed from %s (Origin: %s): %v", remoteAddr, origin, err)
 		return
 	}
-	ipid := getIpid(getRealIP(r))
+	
+	ipid := getIpid(remoteAddr)
 	if logger.DebugNetwork {
-		logger.LogDebugf("Connection recieved from %v", ipid)
+		logger.LogDebugf("WebSocket connection accepted from %v (Origin: %s)", ipid, origin)
 	}
 	client := NewClient(websocket.NetConn(context.TODO(), c, websocket.MessageText), ipid)
 	go client.HandleClient()
