@@ -59,11 +59,11 @@ var (
 	updatePlayers                                     = make(chan int)      // Updates the advertiser's player count.
 	advertDone                                        = make(chan struct{}) // Signals the advertiser to stop.
 	FatalError                                        = make(chan error)    // Signals that the server should stop after a fatal error.
-	
+
 	// Tournament mode state
-	tournamentActive     bool
-	tournamentMutex      sync.Mutex
-	tournamentStartTime  time.Time
+	tournamentActive       bool
+	tournamentMutex        sync.Mutex
+	tournamentStartTime    time.Time
 	tournamentParticipants map[int]*TournamentParticipant // uid -> participant data
 )
 
@@ -79,7 +79,7 @@ func InitServer(conf *settings.Config) error {
 	db.Open()
 	uids.InitHeap(conf.MaxPlayers)
 	config = conf
-	
+
 	// Initialize tournament state
 	tournamentParticipants = make(map[int]*TournamentParticipant)
 
@@ -181,6 +181,21 @@ func InitServer(conf *settings.Config) error {
 	return nil
 }
 
+// setupHTTPMux creates an HTTP mux with WebSocket handler and optional static asset serving
+func setupHTTPMux() *http.ServeMux {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/", HandleWS)
+	
+	// Serve static assets from /base/ if asset_path is configured
+	if config.AssetPath != "" {
+		logger.LogDebugf("Serving static assets from %s at /base/", config.AssetPath)
+		fileServer := http.FileServer(http.Dir(config.AssetPath))
+		mux.Handle("/base/", http.StripPrefix("/base/", fileServer))
+	}
+	
+	return mux
+}
+
 // ListenTCP starts the server's TCP listener.
 func ListenTCP() {
 	listener, err := net.Listen("tcp", config.Addr+":"+strconv.Itoa(config.Port))
@@ -215,18 +230,8 @@ func ListenWS() {
 	logger.LogDebug("WS listener started.")
 	defer listener.Close()
 
-	mux := http.NewServeMux()
-	mux.HandleFunc("/", HandleWS)
-	
-	// Serve static assets from /base/ if asset_path is configured
-	if config.AssetPath != "" {
-		logger.LogDebugf("Serving static assets from %s at /base/", config.AssetPath)
-		fileServer := http.FileServer(http.Dir(config.AssetPath))
-		mux.Handle("/base/", http.StripPrefix("/base/", fileServer))
-	}
-	
 	s := &http.Server{
-		Handler: mux,
+		Handler: setupHTTPMux(),
 	}
 	err = s.Serve(listener)
 	if err != http.ErrServerClosed {
@@ -246,20 +251,10 @@ func ListenWSS() {
 	logger.LogDebug("WSS listener started.")
 	defer listener.Close()
 
-	mux := http.NewServeMux()
-	mux.HandleFunc("/", HandleWS)
-	
-	// Serve static assets from /base/ if asset_path is configured
-	if config.AssetPath != "" {
-		logger.LogDebugf("Serving static assets from %s at /base/", config.AssetPath)
-		fileServer := http.FileServer(http.Dir(config.AssetPath))
-		mux.Handle("/base/", http.StripPrefix("/base/", fileServer))
-	}
-	
 	s := &http.Server{
-		Handler: mux,
+		Handler: setupHTTPMux(),
 	}
-	
+
 	// Use TLS if certificate and key paths are provided, otherwise serve plain HTTP
 	// (useful when behind a reverse proxy that handles TLS termination)
 	if config.TLSCertPath != "" && config.TLSKeyPath != "" {
@@ -269,7 +264,7 @@ func ListenWSS() {
 		logger.LogDebug("WSS using plain HTTP (expecting reverse proxy for TLS)")
 		err = s.Serve(listener)
 	}
-	
+
 	if err != http.ErrServerClosed {
 		FatalError <- err
 	}
@@ -280,27 +275,20 @@ func HandleWS(w http.ResponseWriter, r *http.Request) {
 	// Get the origin from the request for logging
 	origin := r.Header.Get("Origin")
 	remoteAddr := getRealIP(r)
-	
+
 	// Log the incoming WebSocket connection attempt
 	if logger.DebugNetwork {
 		logger.LogDebugf("WebSocket connection attempt from %s (Origin: %s, Path: %s)", remoteAddr, origin, r.URL.Path)
 	}
-	
-	// Use configured origin patterns, defaulting to wildcard if not set
-	originPatterns := config.WebSocketOrigins
-	if len(originPatterns) == 0 {
-		originPatterns = []string{"*"}
-		logger.LogWarning("No WebSocket origins configured, accepting all origins (insecure)")
-	}
-	
+
 	c, err := websocket.Accept(w, r, &websocket.AcceptOptions{
-		OriginPatterns: originPatterns,
+		OriginPatterns: config.WebSocketOrigins,
 	})
 	if err != nil {
 		logger.LogErrorf("WebSocket connection failed from %s (Origin: %s): %v", remoteAddr, origin, err)
 		return
 	}
-	
+
 	ipid := getIpid(remoteAddr)
 	if logger.DebugNetwork {
 		logger.LogDebugf("WebSocket connection accepted from %v (Origin: %s)", ipid, origin)
@@ -441,7 +429,7 @@ func CleanupServer() {
 }
 
 // getRealIP extracts the real client IP address from an HTTP request.
-// When reverse_proxy_mode is enabled in the config, it checks X-Forwarded-For 
+// When reverse_proxy_mode is enabled in the config, it checks X-Forwarded-For
 // and X-Real-IP headers (for reverse proxy setups like nginx or Cloudflare).
 // When reverse_proxy_mode is disabled, it always uses RemoteAddr directly.
 //
@@ -460,13 +448,13 @@ func getRealIP(r *http.Request) string {
 				return strings.TrimSpace(ips[0])
 			}
 		}
-		
+
 		// Check X-Real-IP header (single IP from reverse proxy)
 		if xri := r.Header.Get("X-Real-IP"); xri != "" {
 			return xri
 		}
 	}
-	
+
 	// Use RemoteAddr if reverse_proxy_mode is disabled or no proxy headers are present
 	return r.RemoteAddr
 }
@@ -475,7 +463,7 @@ func getRealIP(r *http.Request) string {
 func getIpid(s string) string {
 	// For privacy and ease of use, AO servers traditionally use a hashed version of a client's IP address to identify a client.
 	// Athena uses the MD5 hash of the IP address, encoded in base64.
-	
+
 	// Extract just the IP address, removing the port if present
 	// Use net.SplitHostPort which correctly handles both IPv4 and IPv6 addresses
 	ip, _, err := net.SplitHostPort(s)
@@ -483,7 +471,7 @@ func getIpid(s string) string {
 		// If there's an error, the input doesn't have a port, so use it as-is
 		ip = s
 	}
-	
+
 	hash := md5.Sum([]byte(ip))
 	ipid := base64.StdEncoding.EncodeToString(hash[:])
 	return ipid[:len(ipid)-2] // Removes the trailing padding.
