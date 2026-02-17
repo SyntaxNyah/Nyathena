@@ -159,9 +159,7 @@ func pktIC(client *Client, p *packet.Packet) {
 
 	// Check rate limit first
 	if client.CheckRateLimit() {
-		client.SendServerMessage("You have been kicked for spamming.")
-		logger.LogInfof("Client (IPID:%v UID:%v) kicked for exceeding rate limit", client.Ipid(), client.Uid())
-		client.conn.Close()
+		client.KickForRateLimit()
 		return
 	}
 
@@ -433,9 +431,7 @@ func pktAM(client *Client, p *packet.Packet) {
 
 	// Check rate limit first
 	if client.CheckRateLimit() {
-		client.SendServerMessage("You have been kicked for spamming.")
-		logger.LogInfof("Client (IPID:%v UID:%v) kicked for exceeding rate limit", client.Ipid(), client.Uid())
-		client.conn.Close()
+		client.KickForRateLimit()
 		return
 	}
 
@@ -528,9 +524,7 @@ func pktWTCE(client *Client, p *packet.Packet) {
 func pktOOC(client *Client, p *packet.Packet) {
 	// Check rate limit first
 	if client.CheckRateLimit() {
-		client.SendServerMessage("You have been kicked for spamming.")
-		logger.LogInfof("Client (IPID:%v UID:%v) kicked for exceeding rate limit", client.Ipid(), client.Uid())
-		client.conn.Close()
+		client.KickForRateLimit()
 		return
 	}
 

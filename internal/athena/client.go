@@ -261,6 +261,13 @@ func (client *Client) SendServerMessage(message string) {
 	client.SendPacket("CT", encode(config.Name), encode(message), "1")
 }
 
+// KickForRateLimit kicks the client for exceeding the rate limit.
+func (client *Client) KickForRateLimit() {
+	client.SendServerMessage("You have been kicked for spamming.")
+	logger.LogInfof("Client (IPID:%v UID:%v) kicked for exceeding rate limit", client.Ipid(), client.Uid())
+	client.conn.Close()
+}
+
 // CurrentCharacter returns the client's current character name.
 func (client *Client) CurrentCharacter() string {
 	if client.CharID() == -1 {
@@ -1024,8 +1031,8 @@ func (client *Client) CheckRateLimit() bool {
 	
 	// Clean up old timestamps
 	if validIdx == -1 {
-		// All timestamps are expired, clear the slice
-		client.msgTimestamps = client.msgTimestamps[:0]
+		// All timestamps are expired, release the underlying array for GC
+		client.msgTimestamps = nil
 	} else if validIdx > 0 {
 		// Some timestamps are expired, remove them
 		client.msgTimestamps = client.msgTimestamps[validIdx:]
