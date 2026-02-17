@@ -266,7 +266,7 @@ func HandleWS(w http.ResponseWriter, r *http.Request) {
 		logger.LogError(err.Error())
 		return
 	}
-	ipid := getIpid(r.RemoteAddr)
+	ipid := getIpid(getRealIP(r))
 	if logger.DebugNetwork {
 		logger.LogDebugf("Connection recieved from %v", ipid)
 	}
@@ -403,6 +403,29 @@ func CleanupServer() {
 		client.conn.Close()
 	}
 	db.Close()
+}
+
+// getRealIP extracts the real client IP address from an HTTP request.
+// It checks X-Forwarded-For and X-Real-IP headers first (for reverse proxy setups),
+// then falls back to RemoteAddr if those headers are not present.
+func getRealIP(r *http.Request) string {
+	// Check X-Forwarded-For header first (may contain multiple IPs)
+	if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
+		// X-Forwarded-For can contain multiple IPs: "client, proxy1, proxy2"
+		// The first IP is the original client
+		ips := strings.Split(xff, ",")
+		if len(ips) > 0 {
+			return strings.TrimSpace(ips[0])
+		}
+	}
+	
+	// Check X-Real-IP header (single IP from reverse proxy)
+	if xri := r.Header.Get("X-Real-IP"); xri != "" {
+		return xri
+	}
+	
+	// Fallback to RemoteAddr if no proxy headers are present
+	return r.RemoteAddr
 }
 
 // Returns the IPID for a given IP address.
