@@ -64,7 +64,6 @@ type ServerConfig struct {
 	MaxStatement          int    `toml:"max_testimony"`
 	RateLimit             int    `toml:"message_rate_limit"`
 	RateLimitWindow       int    `toml:"message_rate_limit_window"`
-	WebSocketReadLimit    int64  `toml:"websocket_read_limit"`
 }
 
 type LogConfig struct {
@@ -106,7 +105,6 @@ func defaultConfig() *Config {
 			MaxStatement:          10,
 			RateLimit:             20,
 			RateLimitWindow:       10,
-			WebSocketReadLimit:    1048576, // 1MB default
 		},
 		LogConfig{
 			BufSize:    150,

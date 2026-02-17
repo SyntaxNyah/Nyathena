@@ -159,15 +159,6 @@ message_rate_limit = 20
 # Default: 10 seconds
 message_rate_limit_window = 10
 
-# WebSocket read limit: Maximum size in bytes for incoming WebSocket messages.
-# This limit controls how large a message the server can read from clients.
-# Increase this if you have large character lists (1000+ characters) or extensive music lists (100+ songs).
-# The default WebSocket library limit is 32KB (32768 bytes), which may cause connection
-# issues (error 1006) with large asset lists.
-# Default: 1048576 bytes (1MB)
-# Minimum recommended: 262144 bytes (256KB) for servers with 2000+ characters or 150+ music entries
-websocket_read_limit = 1048576
-
 [Logging]
 # Sets the number of actions (IC chat messages, OOC chat messages, judge actions, etc.) each area should store.
 # When a user calls a mod, this buffer will be flushed to a report file for review.
