@@ -159,6 +159,14 @@ message_rate_limit = 20
 # Default: 10 seconds
 message_rate_limit_window = 10
 
+# WebSocket message size limit in bytes.
+# This controls the maximum size of messages that can be sent/received over WebSocket connections.
+# If you have a large number of songs (150+) or characters (2600+), you may need to increase this.
+# Default: 1048576 (1 MB)
+# Minimum recommended: 524288 (512 KB) for standard setups
+# For large asset servers: 2097152 (2 MB) or higher
+websocket_message_size_limit = 1048576
+
 [Logging]
 # Sets the number of actions (IC chat messages, OOC chat messages, judge actions, etc.) each area should store.
 # When a user calls a mod, this buffer will be flushed to a report file for review.
