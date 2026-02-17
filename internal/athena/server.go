@@ -261,13 +261,7 @@ func ListenWSS() {
 
 // HandleWS handles a websocket connection.
 func HandleWS(w http.ResponseWriter, r *http.Request) {
-	// Accept WebSocket connections from any origin.
-	// This is safe for the AO2 protocol because:
-	// 1. AO2 doesn't use cookie-based web authentication
-	// 2. Client authentication happens at the protocol level after connection (via /login command)
-	// 3. WebAO clients may connect from various legitimate origins (HTTP/HTTPS, different domains, localhost)
-	// 4. All privileged operations require in-protocol authentication regardless of origin
-	c, err := websocket.Accept(w, r, &websocket.AcceptOptions{OriginPatterns: []string{"*"}})
+	c, err := websocket.Accept(w, r, &websocket.AcceptOptions{OriginPatterns: []string{"web.aceattorneyonline.com"}}) // WS connections not originating from webAO will be rejected.
 	if err != nil {
 		logger.LogError(err.Error())
 		return
