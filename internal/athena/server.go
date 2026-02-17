@@ -198,7 +198,7 @@ func ListenTCP() {
 		}
 		ipid := getIpid(conn.RemoteAddr().String())
 		if logger.DebugNetwork {
-			logger.LogDebugf("Connection received from %v", ipid)
+			logger.LogDebugf("Connection recieved from %v", ipid)
 		}
 		client := NewClient(conn, ipid)
 		go client.HandleClient()
@@ -266,16 +266,9 @@ func HandleWS(w http.ResponseWriter, r *http.Request) {
 		logger.LogError(err.Error())
 		return
 	}
-	
-	// Set read limit to accommodate large character and music lists
-	// Default is 32KB which may be too small for servers with extensive asset lists
-	if config.WebSocketReadLimit > 0 {
-		c.SetReadLimit(config.WebSocketReadLimit)
-	}
-	
 	ipid := getIpid(getRealIP(r))
 	if logger.DebugNetwork {
-		logger.LogDebugf("Connection received from %v", ipid)
+		logger.LogDebugf("Connection recieved from %v", ipid)
 	}
 	client := NewClient(websocket.NetConn(context.TODO(), c, websocket.MessageText), ipid)
 	go client.HandleClient()
