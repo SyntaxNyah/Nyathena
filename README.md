@@ -27,21 +27,6 @@ By default, athena looks for its configuration files in the `config` directory.<
 If you'd like to store your configuration files elsewhere, you can pass the `-c` flag on startup with the path to your configuration directory.<br>
 CLI input can be disabled with `-nocli`
 
-### Important Configuration Options
-
-#### WebSocket Message Size Limit
-If you're experiencing disconnection issues (error 1006) with large custom asset URLs containing many songs or characters, you may need to increase the `websocket_message_size_limit` in your `config.toml`:
-
-```toml
-[Server]
-# Default is 1048576 (1 MB)
-# For servers with 150+ songs or 2600+ characters, this should be sufficient
-# If you have even larger lists, increase as needed (e.g., 2097152 for 2 MB)
-websocket_message_size_limit = 1048576
-```
-
-The default limit of 1 MB should accommodate most custom asset servers. The original default (32 KB) was too small for servers with extensive music and character lists.
-
 ### WebSocket Secure (WSS) Configuration
 To enable secure WebSocket connections for Cloudflare and other proxies:
 
