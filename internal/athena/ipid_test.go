@@ -208,3 +208,77 @@ func TestSameIPProducesSameIPID(t *testing.T) {
 		t.Errorf("Same IP with different ports should produce same IPID. Got %v and %v", ipid1, ipid2)
 	}
 }
+
+func TestIPsWithoutPortsProduceUniqueIPIDs(t *testing.T) {
+	// Test that IPs without ports produce unique IPIDs
+	// This is critical for reverse proxy scenarios where getRealIP returns just the IP
+	ips := []string{
+		"192.168.1.1",
+		"192.168.1.2",
+		"10.0.0.1",
+		"172.16.0.1",
+		"203.0.113.45",
+	}
+
+	ipids := make(map[string]bool)
+	for _, ip := range ips {
+		ipid := getIpid(ip)
+		if ipid == "" {
+			t.Errorf("getIpid(%v) returned empty string", ip)
+		}
+		if ipids[ipid] {
+			t.Errorf("Duplicate IPID found for IP %v: %v", ip, ipid)
+		}
+		ipids[ipid] = true
+	}
+
+	if len(ipids) != len(ips) {
+		t.Errorf("Expected %d unique IPIDs, got %d", len(ips), len(ipids))
+	}
+}
+
+func TestIPWithAndWithoutPortProduceSameIPID(t *testing.T) {
+	// Test that IP with port and without port produce the same IPID
+	tests := []struct {
+		name       string
+		withPort   string
+		withoutPort string
+	}{
+		{
+			name:        "Standard IPv4",
+			withPort:    "192.168.1.100:12345",
+			withoutPort: "192.168.1.100",
+		},
+		{
+			name:        "Different IP",
+			withPort:    "10.0.0.50:8080",
+			withoutPort: "10.0.0.50",
+		},
+		{
+			name:        "Public IP",
+			withPort:    "203.0.113.45:54321",
+			withoutPort: "203.0.113.45",
+		},
+		{
+			name:        "IPv6 loopback",
+			withPort:    "[::1]:8080",
+			withoutPort: "::1",
+		},
+		{
+			name:        "IPv6 address",
+			withPort:    "[2001:db8::1]:8080",
+			withoutPort: "2001:db8::1",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ipidWithPort := getIpid(tt.withPort)
+			ipidWithoutPort := getIpid(tt.withoutPort)
+
+			if ipidWithPort != ipidWithoutPort {
+				t.Errorf("Same IP with and without port should produce same IPID. With port: %v, Without port: %v", ipidWithPort, ipidWithoutPort)
+			}
+		})
+	}
+}

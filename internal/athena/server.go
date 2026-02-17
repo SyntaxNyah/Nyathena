@@ -440,8 +440,16 @@ func getRealIP(r *http.Request) string {
 func getIpid(s string) string {
 	// For privacy and ease of use, AO servers traditionally use a hashed version of a client's IP address to identify a client.
 	// Athena uses the MD5 hash of the IP address, encoded in base64.
-	addr := strings.Split(s, ":")
-	hash := md5.Sum([]byte(strings.Join(addr[:len(addr)-1], ":")))
+	
+	// Extract just the IP address, removing the port if present
+	// Use net.SplitHostPort which correctly handles both IPv4 and IPv6 addresses
+	ip, _, err := net.SplitHostPort(s)
+	if err != nil {
+		// If there's an error, the input doesn't have a port, so use it as-is
+		ip = s
+	}
+	
+	hash := md5.Sum([]byte(ip))
 	ipid := base64.StdEncoding.EncodeToString(hash[:])
 	return ipid[:len(ipid)-2] // Removes the trailing padding.
 }
