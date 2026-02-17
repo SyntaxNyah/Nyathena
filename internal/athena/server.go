@@ -406,32 +406,33 @@ func CleanupServer() {
 }
 
 // getRealIP extracts the real client IP address from an HTTP request.
-// It checks X-Forwarded-For and X-Real-IP headers first (for reverse proxy setups),
-// then falls back to RemoteAddr if those headers are not present.
+// When reverse_proxy_mode is enabled in the config, it checks X-Forwarded-For 
+// and X-Real-IP headers (for reverse proxy setups like nginx or Cloudflare).
+// When reverse_proxy_mode is disabled, it always uses RemoteAddr directly.
 //
-// Security Note: This function trusts proxy headers (X-Forwarded-For, X-Real-IP)
-// without validation. It should only be used in environments where the server is
-// behind a trusted reverse proxy (e.g., nginx). If the server is directly exposed
-// to untrusted clients, they could spoof these headers. For production deployments,
-// consider implementing proxy IP validation or configuring the reverse proxy to
-// strip client-provided proxy headers.
+// Security Note: Proxy headers (X-Forwarded-For, X-Real-IP) are only trusted when
+// reverse_proxy_mode is explicitly enabled. This prevents IP spoofing when the server
+// is directly exposed to the internet without a reverse proxy.
 func getRealIP(r *http.Request) string {
-	// Check X-Forwarded-For header first (may contain multiple IPs)
-	if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
-		// X-Forwarded-For can contain multiple IPs: "client, proxy1, proxy2"
-		// The first IP is the original client
-		ips := strings.Split(xff, ",")
-		if len(ips) > 0 {
-			return strings.TrimSpace(ips[0])
+	// Only trust proxy headers if reverse_proxy_mode is enabled in config
+	if config.ReverseProxyMode {
+		// Check X-Forwarded-For header first (may contain multiple IPs)
+		if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
+			// X-Forwarded-For can contain multiple IPs: "client, proxy1, proxy2"
+			// The first IP is the original client
+			ips := strings.Split(xff, ",")
+			if len(ips) > 0 {
+				return strings.TrimSpace(ips[0])
+			}
+		}
+		
+		// Check X-Real-IP header (single IP from reverse proxy)
+		if xri := r.Header.Get("X-Real-IP"); xri != "" {
+			return xri
 		}
 	}
 	
-	// Check X-Real-IP header (single IP from reverse proxy)
-	if xri := r.Header.Get("X-Real-IP"); xri != "" {
-		return xri
-	}
-	
-	// Fallback to RemoteAddr if no proxy headers are present
+	// Use RemoteAddr if reverse_proxy_mode is disabled or no proxy headers are present
 	return r.RemoteAddr
 }
 

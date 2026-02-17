@@ -19,62 +19,106 @@ package athena
 import (
 	"net/http"
 	"testing"
+
+	"github.com/MangosArentLiterature/Athena/internal/settings"
 )
 
 func TestGetRealIP(t *testing.T) {
+	// Save original config and restore after tests
+	originalConfig := config
+	defer func() { config = originalConfig }()
+
 	tests := []struct {
-		name           string
-		remoteAddr     string
-		xForwardedFor  string
-		xRealIP        string
-		expectedResult string
+		name              string
+		reverseProxyMode  bool
+		remoteAddr        string
+		xForwardedFor     string
+		xRealIP           string
+		expectedResult    string
 	}{
 		{
-			name:           "No proxy headers - use RemoteAddr",
-			remoteAddr:     "192.168.1.100:12345",
-			xForwardedFor:  "",
-			xRealIP:        "",
-			expectedResult: "192.168.1.100:12345",
+			name:              "Reverse proxy disabled - ignore X-Forwarded-For",
+			reverseProxyMode:  false,
+			remoteAddr:        "10.0.0.1:8080",
+			xForwardedFor:     "203.0.113.45",
+			xRealIP:           "",
+			expectedResult:    "10.0.0.1:8080",
 		},
 		{
-			name:           "X-Forwarded-For with single IP",
-			remoteAddr:     "10.0.0.1:8080",
-			xForwardedFor:  "203.0.113.45",
-			xRealIP:        "",
-			expectedResult: "203.0.113.45",
+			name:              "Reverse proxy disabled - ignore X-Real-IP",
+			reverseProxyMode:  false,
+			remoteAddr:        "10.0.0.1:8080",
+			xForwardedFor:     "",
+			xRealIP:           "203.0.113.45",
+			expectedResult:    "10.0.0.1:8080",
 		},
 		{
-			name:           "X-Forwarded-For with multiple IPs",
-			remoteAddr:     "10.0.0.1:8080",
-			xForwardedFor:  "203.0.113.45, 198.51.100.20, 10.0.0.1",
-			xRealIP:        "",
-			expectedResult: "203.0.113.45",
+			name:              "Reverse proxy disabled - ignore both headers",
+			reverseProxyMode:  false,
+			remoteAddr:        "10.0.0.1:8080",
+			xForwardedFor:     "203.0.113.45",
+			xRealIP:           "198.51.100.20",
+			expectedResult:    "10.0.0.1:8080",
 		},
 		{
-			name:           "X-Real-IP header",
-			remoteAddr:     "10.0.0.1:8080",
-			xForwardedFor:  "",
-			xRealIP:        "203.0.113.45",
-			expectedResult: "203.0.113.45",
+			name:              "Reverse proxy enabled - no headers, use RemoteAddr",
+			reverseProxyMode:  true,
+			remoteAddr:        "192.168.1.100:12345",
+			xForwardedFor:     "",
+			xRealIP:           "",
+			expectedResult:    "192.168.1.100:12345",
 		},
 		{
-			name:           "Both headers present - X-Forwarded-For takes precedence",
-			remoteAddr:     "10.0.0.1:8080",
-			xForwardedFor:  "203.0.113.45",
-			xRealIP:        "198.51.100.20",
-			expectedResult: "203.0.113.45",
+			name:              "Reverse proxy enabled - X-Forwarded-For with single IP",
+			reverseProxyMode:  true,
+			remoteAddr:        "10.0.0.1:8080",
+			xForwardedFor:     "203.0.113.45",
+			xRealIP:           "",
+			expectedResult:    "203.0.113.45",
 		},
 		{
-			name:           "X-Forwarded-For with whitespace",
-			remoteAddr:     "10.0.0.1:8080",
-			xForwardedFor:  " 203.0.113.45 , 198.51.100.20",
-			xRealIP:        "",
-			expectedResult: "203.0.113.45",
+			name:              "Reverse proxy enabled - X-Forwarded-For with multiple IPs",
+			reverseProxyMode:  true,
+			remoteAddr:        "10.0.0.1:8080",
+			xForwardedFor:     "203.0.113.45, 198.51.100.20, 10.0.0.1",
+			xRealIP:           "",
+			expectedResult:    "203.0.113.45",
+		},
+		{
+			name:              "Reverse proxy enabled - X-Real-IP header",
+			reverseProxyMode:  true,
+			remoteAddr:        "10.0.0.1:8080",
+			xForwardedFor:     "",
+			xRealIP:           "203.0.113.45",
+			expectedResult:    "203.0.113.45",
+		},
+		{
+			name:              "Reverse proxy enabled - both headers, X-Forwarded-For takes precedence",
+			reverseProxyMode:  true,
+			remoteAddr:        "10.0.0.1:8080",
+			xForwardedFor:     "203.0.113.45",
+			xRealIP:           "198.51.100.20",
+			expectedResult:    "203.0.113.45",
+		},
+		{
+			name:              "Reverse proxy enabled - X-Forwarded-For with whitespace",
+			reverseProxyMode:  true,
+			remoteAddr:        "10.0.0.1:8080",
+			xForwardedFor:     " 203.0.113.45 , 198.51.100.20",
+			xRealIP:           "",
+			expectedResult:    "203.0.113.45",
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			// Set up test config
+			config = &settings.Config{
+				ServerConfig: settings.ServerConfig{
+					ReverseProxyMode: tt.reverseProxyMode,
+				},
+			}
+
 			req := &http.Request{
 				RemoteAddr: tt.remoteAddr,
 				Header:     make(http.Header),
