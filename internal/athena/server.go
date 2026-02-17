@@ -442,14 +442,11 @@ func getIpid(s string) string {
 	// Athena uses the MD5 hash of the IP address, encoded in base64.
 	
 	// Extract just the IP address, removing the port if present
-	// This handles both "IP:port" format and plain "IP" format
-	ip := s
-	if colonIndex := strings.LastIndex(s, ":"); colonIndex != -1 {
-		// Check if this is likely an IPv4 address with port
-		// (IPv6 addresses have multiple colons and should be handled differently)
-		if strings.Count(s, ":") == 1 {
-			ip = s[:colonIndex]
-		}
+	// Use net.SplitHostPort which correctly handles both IPv4 and IPv6 addresses
+	ip, _, err := net.SplitHostPort(s)
+	if err != nil {
+		// If there's an error, the input doesn't have a port, so use it as-is
+		ip = s
 	}
 	
 	hash := md5.Sum([]byte(ip))

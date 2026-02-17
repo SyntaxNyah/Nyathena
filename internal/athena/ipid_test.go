@@ -259,6 +259,16 @@ func TestIPWithAndWithoutPortProduceSameIPID(t *testing.T) {
 			withPort:    "203.0.113.45:54321",
 			withoutPort: "203.0.113.45",
 		},
+		{
+			name:        "IPv6 loopback",
+			withPort:    "[::1]:8080",
+			withoutPort: "::1",
+		},
+		{
+			name:        "IPv6 address",
+			withPort:    "[2001:db8::1]:8080",
+			withoutPort: "2001:db8::1",
+		},
 	}
 
 	for _, tt := range tests {
