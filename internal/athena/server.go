@@ -198,7 +198,7 @@ func ListenTCP() {
 		}
 		ipid := getIpid(conn.RemoteAddr().String())
 		if logger.DebugNetwork {
-			logger.LogDebugf("Connection recieved from %v", ipid)
+			logger.LogDebugf("Connection received from %v", ipid)
 		}
 		client := NewClient(conn, ipid)
 		go client.HandleClient()
@@ -268,7 +268,7 @@ func HandleWS(w http.ResponseWriter, r *http.Request) {
 	}
 	ipid := getIpid(getRealIP(r))
 	if logger.DebugNetwork {
-		logger.LogDebugf("Connection recieved from %v", ipid)
+		logger.LogDebugf("Connection received from %v", ipid)
 	}
 	client := NewClient(websocket.NetConn(context.Background(), c, websocket.MessageText), ipid)
 	go client.HandleClient()
