@@ -147,6 +147,18 @@ max_side = 100
 # Sets the maximum number of statements a recorded testimony can contain.
 max_testimony = 10
 
+# Rate limiting: Maximum number of messages (IC, OOC, music) a player can send within the time window.
+# Players who exceed this limit will be automatically kicked from the server.
+# This helps prevent spam and resource exhaustion. Set to 0 to disable rate limiting.
+# Default: 20 messages
+message_rate_limit = 20
+
+# Rate limiting: Time window in seconds for counting messages.
+# For example, with message_rate_limit=20 and message_rate_limit_window=10,
+# players can send up to 20 messages every 10 seconds.
+# Default: 10 seconds
+message_rate_limit_window = 10
+
 [Logging]
 # Sets the number of actions (IC chat messages, OOC chat messages, judge actions, etc.) each area should store.
 # When a user calls a mod, this buffer will be flushed to a report file for review.
