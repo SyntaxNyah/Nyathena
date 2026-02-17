@@ -270,7 +270,7 @@ func HandleWS(w http.ResponseWriter, r *http.Request) {
 	if logger.DebugNetwork {
 		logger.LogDebugf("Connection recieved from %v", ipid)
 	}
-	client := NewClient(websocket.NetConn(context.TODO(), c, websocket.MessageText), ipid)
+	client := NewClient(websocket.NetConn(context.Background(), c, websocket.MessageText), ipid)
 	go client.HandleClient()
 }
 
