@@ -120,7 +120,15 @@ func pktReqChar(client *Client, _ *packet.Packet) {
 
 // Handles RM#%
 func pktReqAM(client *Client, _ *packet.Packet) {
-	client.write(fmt.Sprintf("SM#%s#%s#%%", areaNames, strings.Join(music, "#")))
+	// Build the packet contents: areas first, then music
+	// Split areaNames (which is already #-delimited) into individual areas
+	areas := strings.Split(areaNames, "#")
+	
+	// Combine areas and music into a single slice
+	contents := append(areas, music...)
+	
+	// Use SendPacket for consistent packet handling
+	client.SendPacket("SM", contents...)
 }
 
 // Handles RD#%

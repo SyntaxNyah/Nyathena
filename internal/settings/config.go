@@ -64,6 +64,7 @@ type ServerConfig struct {
 	MaxStatement          int    `toml:"max_testimony"`
 	RateLimit             int    `toml:"message_rate_limit"`
 	RateLimitWindow       int    `toml:"message_rate_limit_window"`
+	WSMessageSizeLimit    int64  `toml:"websocket_message_size_limit"`
 }
 
 type LogConfig struct {
@@ -105,6 +106,7 @@ func defaultConfig() *Config {
 			MaxStatement:          10,
 			RateLimit:             20,
 			RateLimitWindow:       10,
+			WSMessageSizeLimit:    1048576, // 1 MB default to handle large character/music lists
 		},
 		LogConfig{
 			BufSize:    150,
@@ -124,6 +126,11 @@ func (conf *Config) Load() error {
 	_, err := toml.DecodeFile(ConfigPath+"/config.toml", conf)
 	if err != nil {
 		return err
+	}
+
+	// If websocket_message_size_limit is not set (0), use default (1 MB)
+	if conf.WSMessageSizeLimit == 0 {
+		conf.WSMessageSizeLimit = 1048576 // 1 MB default
 	}
 
 	return nil
