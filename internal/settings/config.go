@@ -62,6 +62,8 @@ type ServerConfig struct {
 	MaxSide               int    `toml:"max_sides"`
 	Motd                  string `toml:"motd"`
 	MaxStatement          int    `toml:"max_testimony"`
+	RateLimit             int    `toml:"message_rate_limit"`
+	RateLimitWindow       int    `toml:"message_rate_limit_window"`
 }
 
 type LogConfig struct {
@@ -101,6 +103,8 @@ func defaultConfig() *Config {
 			MaxDice:               100,
 			MaxSide:               100,
 			MaxStatement:          10,
+			RateLimit:             20,
+			RateLimitWindow:       10,
 		},
 		LogConfig{
 			BufSize:    150,

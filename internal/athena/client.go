@@ -32,7 +32,6 @@ import (
 	"github.com/MangosArentLiterature/Athena/internal/packet"
 	"github.com/MangosArentLiterature/Athena/internal/permissions"
 	"github.com/MangosArentLiterature/Athena/internal/sliceutil"
-	"go.uber.org/ratelimit"
 )
 
 type MuteState int
@@ -138,6 +137,7 @@ type Client struct {
 	jailedUntil   time.Time
 	lastRpsTime   time.Time
 	punishments   []PunishmentState
+	msgTimestamps []time.Time // Tracks message timestamps for rate limiting
 }
 
 // NewClient returns a new client.
@@ -191,9 +191,7 @@ func (client *Client) HandleClient() {
 	}
 	input.Split(splitfn) // Split input when a packet delimiter ('%') is found
 
-	rl := ratelimit.New(10, ratelimit.WithoutSlack)
 	for input.Scan() {
-		rl.Take()
 		if logger.DebugNetwork {
 			logger.LogDebugf("From %v: %v", client.ipid, strings.TrimSpace(input.Text()))
 		}
@@ -261,6 +259,13 @@ func (client *Client) clientCleanup() {
 // SendServerMessage sends a server OOC message to the client.
 func (client *Client) SendServerMessage(message string) {
 	client.SendPacket("CT", encode(config.Name), encode(message), "1")
+}
+
+// KickForRateLimit kicks the client for exceeding the rate limit.
+func (client *Client) KickForRateLimit() {
+	client.SendServerMessage("You have been kicked for spamming.")
+	logger.LogInfof("Client (IPID:%v UID:%v) kicked for exceeding rate limit", client.Ipid(), client.Uid())
+	client.conn.Close()
 }
 
 // CurrentCharacter returns the client's current character name.
@@ -995,4 +1000,50 @@ func (p PunishmentType) String() string {
 	default:
 		return "none"
 	}
+}
+
+// CheckRateLimit checks if the client has exceeded the message rate limit.
+// Returns true if the client should be kicked for spam, false otherwise.
+// This is a lightweight implementation using a sliding window approach.
+func (client *Client) CheckRateLimit() bool {
+	// If rate limiting is disabled, always allow
+	if config.RateLimit <= 0 {
+		return false
+	}
+
+	client.mu.Lock()
+	defer client.mu.Unlock()
+
+	now := time.Now()
+	window := time.Duration(config.RateLimitWindow) * time.Second
+
+	// Remove timestamps outside the current window (sliding window)
+	cutoff := now.Add(-window)
+	
+	// Find the first timestamp that is still within the window
+	validIdx := -1
+	for i, ts := range client.msgTimestamps {
+		if ts.After(cutoff) {
+			validIdx = i
+			break
+		}
+	}
+	
+	// Clean up old timestamps
+	if validIdx == -1 {
+		// All timestamps are expired, release the underlying array for GC
+		client.msgTimestamps = nil
+	} else if validIdx > 0 {
+		// Some timestamps are expired, remove them
+		client.msgTimestamps = client.msgTimestamps[validIdx:]
+	}
+
+	// Check if rate limit is exceeded
+	if len(client.msgTimestamps) >= config.RateLimit {
+		return true
+	}
+
+	// Add current timestamp
+	client.msgTimestamps = append(client.msgTimestamps, now)
+	return false
 }

@@ -157,6 +157,12 @@ func pktChangeChar(client *Client, p *packet.Packet) {
 func pktIC(client *Client, p *packet.Packet) {
 	// Welcome to the MS packet validation hell.
 
+	// Check rate limit first
+	if client.CheckRateLimit() {
+		client.KickForRateLimit()
+		return
+	}
+
 	if !client.CanSpeakIC() { // Literally 1984
 		client.SendServerMessage("You are not allowed to speak in this area.")
 		return
@@ -423,6 +429,12 @@ func pktIC(client *Client, p *packet.Packet) {
 func pktAM(client *Client, p *packet.Packet) {
 	// For reasons beyond mortal understanding, this packet serves two purposes: music changes, and area changes.
 
+	// Check rate limit first
+	if client.CheckRateLimit() {
+		client.KickForRateLimit()
+		return
+	}
+
 	if strconv.Itoa(client.CharID()) != p.Body[1] {
 		return
 	}
@@ -510,6 +522,12 @@ func pktWTCE(client *Client, p *packet.Packet) {
 
 // Handles CT#%
 func pktOOC(client *Client, p *packet.Packet) {
+	// Check rate limit first
+	if client.CheckRateLimit() {
+		client.KickForRateLimit()
+		return
+	}
+
 	username := decode(strings.TrimSpace(p.Body[0]))
 	if username == "" || username == config.Name || len(username) > 30 || strings.ContainsAny(username, "[]") {
 		client.SendServerMessage("Invalid username.")

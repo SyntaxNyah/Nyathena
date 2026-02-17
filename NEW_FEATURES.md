@@ -186,3 +186,112 @@ Comprehensive tests include:
 - Winner determination logic (4 scenarios)
 - Choice validation tests
 - Edge case handling
+
+---
+
+## Feature 4: Configurable Rate Limiting
+
+### Overview
+A lightweight, resource-efficient spam prevention system that automatically kicks users who exceed a configurable message rate limit. This prevents server abuse while allowing legitimate users to communicate normally.
+
+### Configuration
+Add these settings to your `config.toml` under the `[Server]` section:
+
+```toml
+# Rate limiting: Maximum number of messages (IC, OOC, music) a player can send within the time window.
+# Players who exceed this limit will be automatically kicked from the server.
+# This helps prevent spam and resource exhaustion. Set to 0 to disable rate limiting.
+# Default: 20 messages
+message_rate_limit = 20
+
+# Rate limiting: Time window in seconds for counting messages.
+# For example, with message_rate_limit=20 and message_rate_limit_window=10,
+# players can send up to 20 messages every 10 seconds.
+# Default: 10 seconds
+message_rate_limit_window = 10
+```
+
+### How It Works
+
+**Sliding Window Approach:**
+- Tracks timestamps of recent messages per client
+- Automatically cleans up old timestamps outside the window
+- Memory-efficient: releases unused memory through GC
+
+**Applies to:**
+- IC (In-Character) messages
+- OOC (Out-of-Character) messages
+- Music changes
+
+**When Triggered:**
+- User receives message: "You have been kicked for spamming."
+- Kick is logged: `Client (IPID:xxx UID:x) kicked for exceeding rate limit`
+- Connection is closed
+
+### Examples
+
+**Default Configuration (Recommended):**
+```toml
+message_rate_limit = 20
+message_rate_limit_window = 10
+```
+Allows 20 messages per 10 seconds (average 2 messages/second)
+
+**Strict Configuration:**
+```toml
+message_rate_limit = 10
+message_rate_limit_window = 5
+```
+Allows 10 messages per 5 seconds (average 2 messages/second)
+
+**Lenient Configuration:**
+```toml
+message_rate_limit = 50
+message_rate_limit_window = 30
+```
+Allows 50 messages per 30 seconds (average 1.67 messages/second)
+
+**Disabled:**
+```toml
+message_rate_limit = 0
+message_rate_limit_window = 10
+```
+Rate limiting completely disabled
+
+### Technical Details
+
+**Resource Efficiency:**
+- Uses simple slice of timestamps (not a complex data structure)
+- Automatic cleanup of expired timestamps
+- Thread-safe with mutex protection
+- Minimal CPU overhead per message
+
+**Memory Management:**
+- Expired timestamps are removed from memory
+- Empty slices release underlying arrays to GC
+- Memory usage scales with active users, not message volume
+
+**Previous Implementation:**
+- Removed hardcoded 10 requests/second global rate limiter
+- New implementation is per-client and configurable
+
+### Testing
+Comprehensive test coverage includes:
+- Disabled rate limiting functionality
+- Basic rate limiting enforcement
+- Sliding window behavior verification
+- Concurrent access safety (race condition free)
+- Memory efficiency and cleanup verification
+- All tests pass with race detector
+
+### Security
+- CodeQL scan: No vulnerabilities detected
+- No race conditions detected
+- Thread-safe implementation
+
+### Notes
+- Default values (20 messages per 10 seconds) are suitable for most servers
+- Legitimate rapid-fire conversations are still possible within limits
+- Spammers attempting flood attacks are automatically kicked
+- Setting to 0 disables rate limiting entirely (not recommended for public servers)
+- Changes require server restart to take effect
