@@ -56,10 +56,11 @@ func TestSendChunkedPacket(t *testing.T) {
 				t.Errorf("Expected single packet but got %d chunks", len(mockClient.packets))
 			}
 			
-			// Verify all packets are under 32KB
+			// Verify all packets are under the max chunk size
 			for i, packet := range mockClient.packets {
-				if len(packet) > 32*1024 {
-					t.Errorf("Chunk %d exceeds 32KB: %d bytes", i+1, len(packet))
+				if len(packet) > maxChunkedPacketSize {
+					t.Errorf("Chunk %d exceeds maxChunkedPacketSize (%d bytes): %d bytes", 
+						i+1, maxChunkedPacketSize, len(packet))
 				}
 			}
 			

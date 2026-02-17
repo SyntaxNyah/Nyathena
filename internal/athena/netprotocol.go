@@ -38,6 +38,12 @@ import (
 // commandRegex matches valid command names (e.g., /join, /join-tournament)
 var commandRegex = regexp.MustCompile(`^/[a-z]+(-[a-z]+)*`)
 
+// maxChunkedPacketSize is the maximum size in bytes for a single packet when chunking.
+// Set to 30KB to stay safely under the typical 32KB WebSocket message limit while
+// leaving room for protocol overhead. This prevents error 1006 (abnormal closure)
+// when sending large character lists (2600+) or music lists (165+).
+const maxChunkedPacketSize = 30 * 1024
+
 type pktMapValue struct {
 	Args     int
 	MustJoin bool
@@ -135,11 +141,9 @@ type packetWriter interface {
 // to avoid exceeding WebSocket message size limits (typically 32KB).
 // This prevents error 1006 (abnormal closure) when sending large character or music lists.
 func sendChunkedPacket(client packetWriter, header string, contents []string) {
-	const maxPacketSize = 30 * 1024 // 30KB threshold, leaving room for overhead
-	
 	// Fast path: if the whole packet fits, send it at once
 	fullPacket := header + "#" + strings.Join(contents, "#") + "#%"
-	if len(fullPacket) <= maxPacketSize {
+	if len(fullPacket) <= maxChunkedPacketSize {
 		client.write(fullPacket)
 		return
 	}
@@ -152,7 +156,7 @@ func sendChunkedPacket(client packetWriter, header string, contents []string) {
 		itemSize := len(item) + 1 // item plus "#" delimiter
 		
 		// If adding this item would exceed the limit, send the current chunk
-		if chunkSize + itemSize > maxPacketSize && len(chunk) > 0 {
+		if chunkSize+itemSize > maxChunkedPacketSize && len(chunk) > 0 {
 			client.SendPacket(header, chunk...)
 			chunk = nil
 			chunkSize = len(header) + 3
