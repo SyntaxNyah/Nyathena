@@ -127,6 +127,12 @@ func (conf *Config) Load() error {
 	if err != nil {
 		return err
 	}
+	
+	// If websocket_message_size_limit is not set (0), use default (1 MB)
+	if conf.WSMessageSizeLimit == 0 {
+		conf.WSMessageSizeLimit = 1048576 // 1 MB default
+	}
+	
 	return nil
 }
 
