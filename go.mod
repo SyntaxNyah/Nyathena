@@ -6,14 +6,12 @@ require (
 	github.com/BurntSushi/toml v1.2.0
 	github.com/ecnepsnai/discord v1.2.1
 	github.com/xhit/go-str2duration/v2 v2.0.0
-	go.uber.org/ratelimit v0.2.0
 	golang.org/x/crypto v0.0.0-20220722155217-630584e8d5aa
 	modernc.org/sqlite v1.18.0
 	nhooyr.io/websocket v1.8.7
 )
 
 require (
-	github.com/andres-erbsen/clock v0.0.0-20160526145045-9e14626cd129 // indirect
 	github.com/google/uuid v1.3.0 // indirect
 	github.com/kballard/go-shellquote v0.0.0-20180428030007-95032a82bc51 // indirect
 	github.com/klauspost/compress v1.10.3 // indirect

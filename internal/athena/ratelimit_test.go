@@ -106,7 +106,7 @@ func TestRateLimitWindowSliding(t *testing.T) {
 	}
 
 	// Wait for window to expire
-	time.Sleep(2100 * time.Millisecond)
+	time.Sleep(time.Duration(config.RateLimitWindow)*time.Second + 100*time.Millisecond)
 
 	// Should be able to send again after window expires
 	if client.CheckRateLimit() {
@@ -177,7 +177,7 @@ func TestRateLimitMemoryEfficiency(t *testing.T) {
 	initialLen := len(client.msgTimestamps)
 
 	// Wait for window to expire
-	time.Sleep(1100 * time.Millisecond)
+	time.Sleep(time.Duration(config.RateLimitWindow)*time.Second + 100*time.Millisecond)
 
 	// Add one more message - should clean up old timestamps
 	client.CheckRateLimit()
