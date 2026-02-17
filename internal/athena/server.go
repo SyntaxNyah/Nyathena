@@ -217,6 +217,14 @@ func ListenWS() {
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", HandleWS)
+	
+	// Serve static assets from /base/ if asset_path is configured
+	if config.AssetPath != "" {
+		logger.LogDebugf("Serving static assets from %s at /base/", config.AssetPath)
+		fileServer := http.FileServer(http.Dir(config.AssetPath))
+		mux.Handle("/base/", http.StripPrefix("/base/", fileServer))
+	}
+	
 	s := &http.Server{
 		Handler: mux,
 	}
@@ -240,6 +248,14 @@ func ListenWSS() {
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", HandleWS)
+	
+	// Serve static assets from /base/ if asset_path is configured
+	if config.AssetPath != "" {
+		logger.LogDebugf("Serving static assets from %s at /base/", config.AssetPath)
+		fileServer := http.FileServer(http.Dir(config.AssetPath))
+		mux.Handle("/base/", http.StripPrefix("/base/", fileServer))
+	}
+	
 	s := &http.Server{
 		Handler: mux,
 	}

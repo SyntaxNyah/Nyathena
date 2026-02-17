@@ -141,7 +141,15 @@ multiclient_limit = 16
 
 # Sets the URL for the server's WebAO assets.
 # If this is blank, vanilla assets will be used.
+# This tells clients where to download assets from (e.g., "https://example.com/assets").
 asset_url = ""
+
+# Sets the local filesystem path to serve assets from via HTTP/HTTPS on the /base/ endpoint.
+# This is optional and only needed if you want the server to serve static game assets
+# (characters, backgrounds, music, etc.) directly via HTTP/HTTPS on the /base/ path.
+# Leave blank if using a separate asset server, CDN, or reverse proxy for asset serving.
+# Example: "assets" would serve files from ./assets/ directory at http://yourserver/base/
+asset_path = ""
 
 # Sets the URL for the server's Discord webhook.
 # If this is blank, the discord webhook will be disabled.

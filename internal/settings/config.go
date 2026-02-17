@@ -65,6 +65,7 @@ type ServerConfig struct {
 	RateLimit             int      `toml:"message_rate_limit"`
 	RateLimitWindow       int      `toml:"message_rate_limit_window"`
 	WebSocketOrigins      []string `toml:"websocket_origins"`
+	AssetPath             string   `toml:"asset_path"`
 }
 
 type LogConfig struct {
@@ -107,6 +108,7 @@ func defaultConfig() *Config {
 			RateLimit:             20,
 			RateLimitWindow:       10,
 			WebSocketOrigins:      []string{"*"},
+			AssetPath:             "",
 		},
 		LogConfig{
 			BufSize:    150,
