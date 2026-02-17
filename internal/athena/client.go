@@ -282,7 +282,7 @@ func timeout(client *Client) {
 	time.Sleep(1 * time.Minute)
 	client.mu.Lock()
 	defer client.mu.Unlock()
-	if client.Uid() == -1 {
+	if client.uid == -1 {
 		client.conn.Close()
 	}
 }
