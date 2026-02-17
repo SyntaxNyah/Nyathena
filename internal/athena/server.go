@@ -408,6 +408,13 @@ func CleanupServer() {
 // getRealIP extracts the real client IP address from an HTTP request.
 // It checks X-Forwarded-For and X-Real-IP headers first (for reverse proxy setups),
 // then falls back to RemoteAddr if those headers are not present.
+//
+// Security Note: This function trusts proxy headers (X-Forwarded-For, X-Real-IP)
+// without validation. It should only be used in environments where the server is
+// behind a trusted reverse proxy (e.g., nginx). If the server is directly exposed
+// to untrusted clients, they could spoof these headers. For production deployments,
+// consider implementing proxy IP validation or configuring the reverse proxy to
+// strip client-provided proxy headers.
 func getRealIP(r *http.Request) string {
 	// Check X-Forwarded-For header first (may contain multiple IPs)
 	if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
