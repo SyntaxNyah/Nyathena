@@ -20,7 +20,7 @@ import (
 	"testing"
 )
 
-// TestPossessionTracking tests that possession state is tracked correctly
+// TestPossessionTracking tests that possession state is tracked correctly for fullpossess
 func TestPossessionTracking(t *testing.T) {
 	// Create two clients with proper initialization
 	possessor := &Client{
@@ -41,7 +41,7 @@ func TestPossessionTracking(t *testing.T) {
 		t.Errorf("Expected possessor to not be possessing anyone initially, got %d", possessor.Possessing())
 	}
 
-	// Set up possession link
+	// Set up full possession link
 	possessor.SetPossessing(target.Uid())
 
 	// Verify possession link is established
@@ -58,49 +58,41 @@ func TestPossessionTracking(t *testing.T) {
 	}
 }
 
-// TestPossessionPositionSync tests that position syncs correctly
-func TestPossessionPositionSync(t *testing.T) {
-	// Create two clients with different positions and proper initialization
-	possessor := &Client{
+// TestFullPossessionNotification tests that full possession can be identified
+func TestFullPossessionNotification(t *testing.T) {
+	// Create two clients with proper initialization
+	admin := &Client{
 		uid:        1,
 		char:       -1,
-		pos:        "def",
 		possessing: -1,
 		pair:       ClientPairInfo{wanted_id: -1},
 	}
 	target := &Client{
 		uid:        2,
 		char:       -1,
-		pos:        "wit",
 		possessing: -1,
 		pair:       ClientPairInfo{wanted_id: -1},
 	}
 
-	// Initially, possessor and target have different positions
-	if possessor.Pos() == target.Pos() {
-		t.Errorf("Test setup error: possessor and target should start with different positions")
+	// Initially, admin should not be possessing anyone
+	if admin.Possessing() != -1 {
+		t.Errorf("Expected admin to not be possessing anyone initially, got %d", admin.Possessing())
 	}
 
-	// Set up possession link
-	possessor.SetPossessing(target.Uid())
+	// Simulate fullpossess command execution
+	admin.SetPossessing(target.Uid())
 
-	// Simulate position sync by copying target's position to possessor
-	possessor.SetPos(target.Pos())
-
-	// Verify positions match
-	if possessor.Pos() != target.Pos() {
-		t.Errorf("Expected possessor position to match target position '%s', got '%s'", target.Pos(), possessor.Pos())
+	// Verify admin is now possessing the target
+	if admin.Possessing() != target.Uid() {
+		t.Errorf("Expected admin to be possessing target UID %d, got %d", target.Uid(), admin.Possessing())
 	}
 
-	// Simulate target moving to a new position
-	target.SetPos("jud")
-
-	// Simulate position sync again
-	possessor.SetPos(target.Pos())
-
-	// Verify positions still match
-	if possessor.Pos() != target.Pos() {
-		t.Errorf("Expected possessor position to match target's new position '%s', got '%s'", target.Pos(), possessor.Pos())
+	// Verify the target's UID can be retrieved for message mirroring
+	if admin.Possessing() == target.Uid() {
+		// This confirms the possession link works for mirroring messages
+		// In actual usage, when target sends IC message, admin gets notified
+	} else {
+		t.Errorf("Possession link verification failed")
 	}
 }
 

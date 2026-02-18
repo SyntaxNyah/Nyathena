@@ -181,18 +181,6 @@ func pktIC(client *Client, p *packet.Packet) {
 
 	client.SetPos(args[5])
 	
-	// Sync position for any clients possessing this client
-	// Note: This iterates through all clients to find possessors. In typical usage,
-	// the possess command is used infrequently and for short durations, so the
-	// performance impact is minimal. For high-scale deployments with many concurrent
-	// possessions, this could be optimized with a reverse mapping (target -> possessors).
-	for c := range clients.GetAllClients() {
-		if c.Possessing() == client.Uid() {
-			// Update the possessing client's position to match the target's position
-			c.SetPos(args[5])
-		}
-	}
-	
 	// Check and clean up expired punishments
 	if client.CheckExpiredPunishments() {
 		client.SendServerMessage("One or more punishments have expired.")
@@ -435,6 +423,14 @@ func pktIC(client *Client, p *packet.Packet) {
 	
 	writeToArea(client.Area(), "MS", args...)
 	addToBuffer(client, "IC", "\""+args[4]+"\"", false)
+	
+	// Full possession: Mirror this IC message to any admin fully possessing this client
+	for c := range clients.GetAllClients() {
+		if c.Possessing() == client.Uid() {
+			// Notify the possessing admin about the target's message
+			c.SendServerMessage(fmt.Sprintf("[POSSESS] UID %v said: %v", client.Uid(), decode(args[4])))
+		}
+	}
 }
 
 // Handles MC#%
