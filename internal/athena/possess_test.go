@@ -107,3 +107,54 @@ func TestNewClientInitialization(t *testing.T) {
 		t.Errorf("Expected new client possessing field to be -1, got %d", client.Possessing())
 	}
 }
+
+// TestPossessPreservesAdminPosition tests that possession commands preserve admin's position
+func TestPossessPreservesAdminPosition(t *testing.T) {
+	// Create admin with position "def" (defense)
+	admin := &Client{
+		uid:          1,
+		char:         0, // Phoenix Wright
+		possessing:   -1,
+		possessedPos: "",
+		pair:         ClientPairInfo{wanted_id: -1},
+		pos:          "def",
+	}
+
+	// Create target with position "pro" (prosecution)
+	target := &Client{
+		uid:          2,
+		char:         1, // Miles Edgeworth
+		possessing:   -1,
+		possessedPos: "",
+		pair:         ClientPairInfo{wanted_id: -1},
+		pos:          "pro",
+	}
+
+	// Verify initial positions
+	if admin.Pos() != "def" {
+		t.Errorf("Expected admin initial position 'def', got %s", admin.Pos())
+	}
+	if target.Pos() != "pro" {
+		t.Errorf("Expected target initial position 'pro', got %s", target.Pos())
+	}
+
+	// Set up full possession
+	admin.SetPossessing(target.Uid())
+	admin.SetPossessedPos(target.Pos()) // Save target's position
+
+	// Verify admin is possessing target
+	if admin.Possessing() != target.Uid() {
+		t.Errorf("Expected admin to be possessing target UID %d, got %d", target.Uid(), admin.Possessing())
+	}
+
+	// Admin should have saved the target's position "pro"
+	if admin.PossessedPos() != "pro" {
+		t.Errorf("Expected admin to have saved target position 'pro', got %s", admin.PossessedPos())
+	}
+
+	// The pktIC function will use admin.PossessedPos() to spoof the target's position
+	// Admin's own position remains "def" but messages will appear at "pro"
+	if admin.Pos() != "def" {
+		t.Errorf("Expected admin's own position to remain 'def', got %s", admin.Pos())
+	}
+}

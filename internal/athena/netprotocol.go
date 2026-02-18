@@ -179,36 +179,41 @@ func pktIC(client *Client, p *packet.Packet) {
 	args = append(args[:19], args[17:]...)
 	args = append(args[:20], args[18:]...)
 
+	// Track if we're in fullpossess mode for validation adjustments
+	isPossessing := false
+
 	// Full possession: Transform admin's IC messages to appear from target
 	if client.Possessing() != -1 {
 		target, err := getClientByUid(client.Possessing())
 		if err != nil {
 			// Target no longer exists, clear possession
 			client.SetPossessing(-1)
+			client.SetPossessedPos("")
 			client.SendServerMessage("Target disconnected. Possession ended.")
 		} else {
+			isPossessing = true
 			// Transform the message to use target's appearance
-			// Keep the admin's message content but use target's character/position/colors/etc
-			
+			// Use the saved target position (from when possession started) to fully spoof them
+
 			// Get target's emote, or use "normal" as fallback
 			targetEmote := target.PairInfo().emote
 			if targetEmote == "" {
 				targetEmote = "normal"
 			}
-			
-			// Replace character and appearance with target's
+
+			// Replace character and appearance with target's (including their saved position)
 			args[2] = characters[target.CharID()]   // character name
 			args[3] = targetEmote                    // emote
-			args[5] = target.Pos()                   // position
+			args[5] = client.PossessedPos()          // position (saved target position)
 			args[8] = strconv.Itoa(target.CharID()) // char_id
-			
+
 			// Use target's text color
 			targetTextColor := target.LastTextColor()
 			if targetTextColor == "" {
 				targetTextColor = "0"
 			}
 			args[14] = targetTextColor
-			
+
 			// Use target's showname
 			targetShowname := target.Showname()
 			if strings.TrimSpace(targetShowname) == "" {
@@ -219,24 +224,24 @@ func pktIC(client *Client, p *packet.Packet) {
 	}
 
 	client.SetPos(args[5])
-	
+
 	// Check and clean up expired punishments
 	if client.CheckExpiredPunishments() {
 		client.SendServerMessage("One or more punishments have expired.")
 	}
-	
+
 	// Apply punishment text modifications
 	// Note: punishments is a copy of the active punishments
 	// State modifications must use UpdatePunishmentState to persist changes
 	punishments := client.GetActivePunishments()
 	for i := range punishments {
 		p := &punishments[i]
-		
+
 		// Apply text modifications
 		if args[4] != "" {
 			decodedMsg := decode(args[4])
 			var modifiedMsg string
-			
+
 			// Use state-aware version for punishments that need it
 			if p.punishmentType == PunishmentTorment {
 				client.UpdatePunishmentState(p.punishmentType, func(ps *PunishmentState) {
@@ -247,18 +252,18 @@ func pktIC(client *Client, p *packet.Packet) {
 			}
 			args[4] = encode(modifiedMsg)
 		}
-		
+
 		// Handle name modifications
 		if p.punishmentType == PunishmentEmoji {
 			args[3] = GetRandomEmoji()
 		}
 	}
-	
+
 	if client.IsParrot() { // Bring out the parrot please.
 		args[4] = getParrotMsg()
 	}
 	if client.IsNarrator() {
-		args[3] = ""	
+		args[3] = ""
 	}
 	emote_mod, err := strconv.Atoi(args[7])
 	if err != nil {
@@ -303,7 +308,7 @@ func pktIC(client *Client, p *packet.Packet) {
 	switch {
 	case !sliceutil.ContainsString([]string{"chat", "0", "1", "2", "3", "4", "5"}, args[0]): // desk_mod
 		return
-	case !strings.EqualFold(characters[client.CharID()], args[2]) && !client.Area().IniswapAllowed(): // character name
+	case !isPossessing && !strings.EqualFold(characters[client.CharID()], args[2]) && !client.Area().IniswapAllowed(): // character name (skip check when possessing)
 		client.SendServerMessage("Iniswapping is not allowed in this area.")
 		return
 	case len(decode(args[4])) > config.MaxMsg: // message
@@ -313,7 +318,7 @@ func pktIC(client *Client, p *packet.Packet) {
 		return
 	case emote_mod < 0 || emote_mod > 6:
 		return
-	case args[8] != strconv.Itoa(client.CharID()): // char_id
+	case !isPossessing && args[8] != strconv.Itoa(client.CharID()): // char_id (skip check when possessing)
 		return
 	case objection < 0 || objection > 4: // objection_mod
 		return
@@ -450,7 +455,7 @@ func pktIC(client *Client, p *packet.Packet) {
 		client.SetShowname(args[15])
 	}
 	client.Area().SetLastSpeaker(client.CharID())
-	
+
 	// Track tournament message count
 	if tournamentActive {
 		tournamentMutex.Lock()
@@ -459,7 +464,7 @@ func pktIC(client *Client, p *packet.Packet) {
 		}
 		tournamentMutex.Unlock()
 	}
-	
+
 	writeToArea(client.Area(), "MS", args...)
 	addToBuffer(client, "IC", "\""+args[4]+"\"", false)
 }

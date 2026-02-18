@@ -136,9 +136,10 @@ type Client struct {
 	narrator      bool
 	jailedUntil   time.Time
 	lastRpsTime   time.Time
-	punishments   []PunishmentState
-	msgTimestamps []time.Time // Tracks message timestamps for rate limiting
-	possessing    int         // UID of the client being possessed (-1 if not possessing anyone)
+	punishments     []PunishmentState
+	msgTimestamps   []time.Time // Tracks message timestamps for rate limiting
+	possessing      int         // UID of the client being possessed (-1 if not possessing anyone)
+	possessedPos    string      // Position of the possessed target (saved at time of possession)
 }
 
 // NewClient returns a new client.
@@ -235,12 +236,14 @@ func (client *Client) clientCleanup() {
 		// Clear possession links if this client was possessing someone
 		if client.Possessing() != -1 {
 			client.SetPossessing(-1)
+			client.SetPossessedPos("")
 		}
 
 		// Clear possession links if anyone was possessing this client
 		for c := range clients.GetAllClients() {
 			if c.Possessing() == client.Uid() {
 				c.SetPossessing(-1)
+				c.SetPossessedPos("")
 			}
 		}
 
@@ -1074,4 +1077,18 @@ func (client *Client) SetPossessing(uid int) {
 	client.mu.Lock()
 	client.possessing = uid
 	client.mu.Unlock()
+}
+
+// PossessedPos returns the saved position of the possessed target.
+func (client *Client) PossessedPos() string {
+	client.mu.Lock()
+	defer client.mu.Unlock()
+	return client.possessedPos
+}
+
+// SetPossessedPos sets the saved position of the possessed target.
+func (client *Client) SetPossessedPos(pos string) {
+	client.mu.Lock()
+	defer client.mu.Unlock()
+	client.possessedPos = pos
 }
