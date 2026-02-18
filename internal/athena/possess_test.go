@@ -236,15 +236,13 @@ func TestPossessWithIniswap(t *testing.T) {
 	}
 
 	// Verify fallback to actual character works
-	fallbackCharName := target2.PairInfo().name
-	if fallbackCharName == "" {
-		// Bounds check before accessing characters array
-		if target2.CharID() >= 0 && target2.CharID() < len(characters) {
-			fallbackCharName = characters[target2.CharID()]
-		} else {
-			t.Errorf("target2.CharID() is out of bounds: %d", target2.CharID())
-			return
-		}
+	// Since PairInfo.name is empty, fallback should use target's actual character
+	var fallbackCharName string
+	if target2.CharID() >= 0 && target2.CharID() < len(characters) {
+		fallbackCharName = characters[target2.CharID()]
+	} else {
+		t.Errorf("target2.CharID() is out of bounds: %d", target2.CharID())
+		return
 	}
 	if fallbackCharName != "Maya Fey" {
 		t.Errorf("Expected fallback to actual character 'Maya Fey', got '%s'", fallbackCharName)

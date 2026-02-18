@@ -1780,7 +1780,7 @@ func cmdPossess(client *Client, args []string, _ string) {
 		targetTextColor = "0"
 	}
 	icArgs[14] = targetTextColor              // text color (target's color)
-	// Use target's showname or displayed character name
+	// Use target's showname, falling back to displayed character name
 	showname := target.Showname()
 	if strings.TrimSpace(showname) == "" {
 		showname = targetCharName

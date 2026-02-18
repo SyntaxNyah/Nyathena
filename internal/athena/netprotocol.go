@@ -247,7 +247,7 @@ func pktIC(client *Client, p *packet.Packet) {
 			}
 			args[14] = targetTextColor
 
-			// Use target's showname or displayed character name
+			// Use target's showname, falling back to displayed character name
 			targetShowname := target.Showname()
 			if strings.TrimSpace(targetShowname) == "" {
 				targetShowname = targetCharName
