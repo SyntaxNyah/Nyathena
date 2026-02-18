@@ -1823,7 +1823,7 @@ func cmdFullPossess(client *Client, args []string, _ string) {
 		return
 	}
 
-	// Establish the permanent possession link
+	// Establish the persistent possession link
 	client.SetPossessing(target.Uid())
 
 	// Log the action

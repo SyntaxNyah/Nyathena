@@ -58,7 +58,7 @@ func TestPossessionTracking(t *testing.T) {
 	}
 }
 
-// TestFullPossessionNotification tests that full possession transforms admin's messages
+// TestFullPossessionTransformation tests that full possession transforms admin's messages
 func TestFullPossessionTransformation(t *testing.T) {
 	// Create two clients with proper initialization
 	admin := &Client{
