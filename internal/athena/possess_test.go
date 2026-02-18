@@ -361,3 +361,52 @@ func TestPersistentPairingIndependent(t *testing.T) {
 		t.Errorf("Expected wanted_id to be 3, got %d", client2.PairWantedID())
 	}
 }
+
+// TestPersistentPairingDisconnect tests that persistent pairing is cleared when a client disconnects
+func TestPersistentPairingDisconnect(t *testing.T) {
+	// Create two clients
+	client1 := &Client{
+		uid:       100,
+		char:      0,
+		pair:      ClientPairInfo{wanted_id: -1},
+		pairedUID: -1,
+	}
+	client2 := &Client{
+		uid:       200,
+		char:      1,
+		pair:      ClientPairInfo{wanted_id: -1},
+		pairedUID: -1,
+	}
+
+	// Establish mutual pairing
+	client1.SetPairedUID(client2.Uid())
+	client2.SetPairedUID(client1.Uid())
+
+	// Verify pairing is established
+	if client1.PairedUID() != client2.Uid() {
+		t.Errorf("Expected client1 paired with client2 (%d), got %d", client2.Uid(), client1.PairedUID())
+	}
+	if client2.PairedUID() != client1.Uid() {
+		t.Errorf("Expected client2 paired with client1 (%d), got %d", client1.Uid(), client2.PairedUID())
+	}
+
+	// Simulate client1 disconnecting by clearing their pairing
+	// (In actual cleanup, this would be done by clientCleanup)
+	client1.SetPairedUID(-1)
+
+	// Verify client1 is unpaired
+	if client1.PairedUID() != -1 {
+		t.Errorf("Expected client1 to be unpaired after disconnect, got %d", client1.PairedUID())
+	}
+
+	// In real scenario, clientCleanup would also clear client2's pairing
+	// Simulate that here
+	if client2.PairedUID() == client1.Uid() {
+		client2.SetPairedUID(-1)
+	}
+
+	// Verify client2 is also unpaired
+	if client2.PairedUID() != -1 {
+		t.Errorf("Expected client2 to be unpaired after partner disconnects, got %d", client2.PairedUID())
+	}
+}

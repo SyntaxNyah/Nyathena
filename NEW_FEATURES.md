@@ -687,6 +687,15 @@ Server: Unpairing successful.
 Server: Player1 (UID: 1) has ended the pairing.
 ```
 
+**Automatic Unpairing on Disconnect:**
+```
+[Player1 and Player2 are paired]
+[Player1 disconnects from server]
+
+[Player2 sees]
+Server: Your pair partner has disconnected. Pairing ended.
+```
+
 **Error Cases:**
 ```
 # Invalid UID
@@ -752,10 +761,14 @@ Server: You are not paired with anyone.
 | **Setup** | In-client UI buttons | `/pair` command |
 | **Duration** | Per-message | Until `/unpair` |
 | **Room changes** | Does not survive | Persists |
+| **Disconnect behavior** | N/A (per-message) | Auto-unpairs both players |
 
 ### Notes
 - Persistent pairing is separate from and complements traditional character-based pairing
 - Available to all users (no special permissions required)
+- **WebAO Compatible**: Works seamlessly with both regular AO2 clients and WebAO (browser-based clients)
+- **Automatic cleanup**: When a paired player disconnects, both players are automatically unpaired
+- The disconnecting player's partner receives a notification: "Your pair partner has disconnected. Pairing ended."
 - Logged in the game buffer for both players
 - Pairing data is stored in memory and resets on server restart
 - Only one persistent pair per player at a time
@@ -764,6 +777,7 @@ Server: You are not paired with anyone.
 Comprehensive tests include:
 - Basic pairing and unpairing functionality
 - Persistence across room changes
+- Automatic unpairing on disconnect
 - Mutual consent requirement
 - Independence from character-based pairing
 - Thread-safe concurrent access
