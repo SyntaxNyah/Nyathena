@@ -253,11 +253,13 @@ func (client *Client) clientCleanup() {
 		for c := range clients.GetAllClients() {
 			if c.PairedUID() == client.Uid() {
 				c.SetPairedUID(-1)
+				c.SetPairInfo("", "", "", "") // Clear visual pair info
 				c.SendServerMessage("Your pair partner has disconnected. Pairing ended.")
 			}
 		}
 		// Clear this client's pairing reference
 		client.SetPairedUID(-1)
+		client.SetPairInfo("", "", "", "") // Clear visual pair info
 
 		if client.Area().PlayerCount() <= 1 {
 			client.Area().Reset()
@@ -746,6 +748,7 @@ func (client *Client) ChangeCharacter(id int) {
 	if client.Area().SwitchChar(client.CharID(), id) {
 		client.SetCharID(id)
 		client.SetShowname(client.CurrentCharacter())
+		client.SetPairInfo("", "", "", "") // Clear visual pair info when changing character
 		client.SendPacket("PV", "0", "CID", strconv.Itoa(id))
 		writeToArea(client.Area(), "CharsCheck", client.Area().Taken()...)
 	}

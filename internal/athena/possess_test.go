@@ -482,3 +482,87 @@ func TestPersistentPairingWithOffsets(t *testing.T) {
 		t.Errorf("Expected client2 name to be 'Miles Edgeworth', got '%s'", pairInfo2.name)
 	}
 }
+
+// TestPairInfoClearedOnUnpair tests that PairInfo is cleared when unpairing
+func TestPairInfoClearedOnUnpair(t *testing.T) {
+	// Create two clients with PairInfo set
+	client1 := &Client{
+		uid:       70,
+		char:      0,
+		pair:      ClientPairInfo{wanted_id: -1, name: "Phoenix Wright", emote: "normal", offset: "10&20", flip: "0"},
+		pairedUID: -1,
+	}
+	client2 := &Client{
+		uid:       80,
+		char:      1,
+		pair:      ClientPairInfo{wanted_id: -1, name: "Miles Edgeworth", emote: "confident", offset: "30&40", flip: "1"},
+		pairedUID: -1,
+	}
+
+	// Establish mutual pairing
+	client1.SetPairedUID(client2.Uid())
+	client2.SetPairedUID(client1.Uid())
+
+	// Verify both have PairInfo
+	pairInfo1 := client1.PairInfo()
+	if pairInfo1.name == "" {
+		t.Error("Expected client1 to have PairInfo name set")
+	}
+	pairInfo2 := client2.PairInfo()
+	if pairInfo2.name == "" {
+		t.Error("Expected client2 to have PairInfo name set")
+	}
+
+	// Simulate unpairing by clearing PairInfo and pairedUID
+	client1.SetPairedUID(-1)
+	client1.SetPairInfo("", "", "", "")
+	client2.SetPairedUID(-1)
+	client2.SetPairInfo("", "", "", "")
+
+	// Verify PairInfo is cleared
+	pairInfo1 = client1.PairInfo()
+	if pairInfo1.name != "" || pairInfo1.emote != "" || pairInfo1.offset != "" || pairInfo1.flip != "" {
+		t.Errorf("Expected client1 PairInfo to be cleared, got name='%s' emote='%s' offset='%s' flip='%s'",
+			pairInfo1.name, pairInfo1.emote, pairInfo1.offset, pairInfo1.flip)
+	}
+	pairInfo2 = client2.PairInfo()
+	if pairInfo2.name != "" || pairInfo2.emote != "" || pairInfo2.offset != "" || pairInfo2.flip != "" {
+		t.Errorf("Expected client2 PairInfo to be cleared, got name='%s' emote='%s' offset='%s' flip='%s'",
+			pairInfo2.name, pairInfo2.emote, pairInfo2.offset, pairInfo2.flip)
+	}
+
+	// Verify pairedUID is cleared
+	if client1.PairedUID() != -1 {
+		t.Errorf("Expected client1 pairedUID to be -1, got %d", client1.PairedUID())
+	}
+	if client2.PairedUID() != -1 {
+		t.Errorf("Expected client2 pairedUID to be -1, got %d", client2.PairedUID())
+	}
+}
+
+// TestPairInfoClearedOnCharacterChange tests that PairInfo is cleared when changing character
+func TestPairInfoClearedOnCharacterChange(t *testing.T) {
+	// Create a client with PairInfo set
+	client := &Client{
+		uid:       90,
+		char:      0,
+		pair:      ClientPairInfo{wanted_id: -1, name: "Phoenix Wright", emote: "normal", offset: "10&20", flip: "0"},
+		pairedUID: 5, // Paired with someone
+	}
+
+	// Verify PairInfo is set
+	pairInfo := client.PairInfo()
+	if pairInfo.name == "" {
+		t.Error("Expected client to have PairInfo name set initially")
+	}
+
+	// Simulate character change by clearing PairInfo
+	client.SetPairInfo("", "", "", "")
+
+	// Verify PairInfo is cleared after character change
+	pairInfo = client.PairInfo()
+	if pairInfo.name != "" || pairInfo.emote != "" || pairInfo.offset != "" || pairInfo.flip != "" {
+		t.Errorf("Expected PairInfo to be cleared after character change, got name='%s' emote='%s' offset='%s' flip='%s'",
+			pairInfo.name, pairInfo.emote, pairInfo.offset, pairInfo.flip)
+	}
+}
