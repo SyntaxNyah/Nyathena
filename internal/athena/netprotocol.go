@@ -361,7 +361,7 @@ func pktIC(client *Client, p *packet.Packet) {
 		return
 	case args[13] != "0" && args[13] != "1": // realization
 		return
-	case text < 0 || text > 6: // text color
+	case text < 0 || text > 8: // text color
 		return
 	case len(args[15]) > 30: // showname
 		client.SendServerMessage("Your showname is too long!")
