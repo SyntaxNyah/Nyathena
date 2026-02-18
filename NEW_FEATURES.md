@@ -602,3 +602,175 @@ A: **Minimal - extensively benchmarked and tested.**
 - HDD: Limited to ~200 writes/second (seek time)
 
 **Bottom line:** Performance impact is negligible for any realistic game server workload.
+
+---
+
+## Feature 6: Persistent Pairing Commands
+
+### Overview
+A new pairing system that allows users to create persistent pairings with other players. Unlike the traditional character-based pairing that requires both users to be in the same position and resets with each message, this persistent pairing survives room changes and keeps players paired until they explicitly unpair.
+
+### Commands
+
+**Pair with Another Player:**
+```
+/pair <uid>
+```
+- Sends a pairing request to the specified user
+- Both players must use the command with each other's UID to establish pairing
+- The pairing persists across room changes
+- No position requirement - paired players can be in any position
+
+**Unpair from Current Partner:**
+```
+/unpair
+```
+- Ends the current persistent pairing
+- Notifies both players that the pairing has ended
+
+### How It Works
+
+**Establishing a Pairing:**
+1. Player1 types `/pair 2` (where 2 is Player2's UID)
+2. System notifies Player2: "Player1 (UID: 1) wants to pair with you. Type /pair 1 to accept."
+3. Player2 types `/pair 1`
+4. System confirms: "Successfully paired with Player1 (UID: 1)"
+5. Both players are now persistently paired
+
+**Persistent Behavior:**
+- When both paired players are in the same area, their IC messages will display as paired
+- When paired players are in different areas, they message independently
+- When they reunite in the same area, the pairing automatically syncs
+- Pairing survives character changes, position changes, and area changes
+
+**Visual Display:**
+- When both paired users are in the same area and send IC messages, they appear as a pair
+- Uses the partner's current character, emote, and position for display
+- If the partner hasn't sent an IC message yet, defaults to their selected character
+
+### Examples
+
+**Basic Pairing:**
+```
+[Player1 in Lobby]
+Player1: /pair 5
+Server: Pairing request sent to Player2 (UID: 5). Waiting for them to type /pair 1.
+
+[Player2 in Lobby]
+Player2: /pair 1
+Server: Successfully paired with Player1 (UID: 1).
+
+[Player1 sees]
+Server: Successfully paired with Player2 (UID: 5).
+```
+
+**Pairing Survives Room Changes:**
+```
+[Player1 and Player2 are paired in Courtroom]
+Player1: /move Lobby
+[Player1 is now in Lobby, Player2 in Courtroom]
+[Player1 sends IC message - appears alone]
+[Player2 sends IC message - appears alone]
+
+Player2: /move Lobby
+[Both now in Lobby]
+[Player1 sends IC message - appears paired with Player2]
+[Player2 sends IC message - appears paired with Player1]
+```
+
+**Unpairing:**
+```
+Player1: /unpair
+Server: Unpairing successful.
+
+[Player2 sees]
+Server: Player1 (UID: 1) has ended the pairing.
+```
+
+**Error Cases:**
+```
+# Invalid UID
+Player1: /pair abc
+Server: Invalid UID format. Please provide a valid number.
+
+# Negative UID
+Player1: /pair -5
+Server: Invalid UID. Please provide a positive number.
+
+# Pairing with yourself
+Player1: /pair 1
+Server: You cannot pair with yourself.
+
+# Player not found
+Player1: /pair 999
+Server: Player not found.
+
+# Unpairing when not paired
+Player1: /unpair
+Server: You are not paired with anyone.
+```
+
+### Use Cases
+
+**Roleplay Partners:**
+- Create persistent partnerships for long-term roleplay
+- No need to re-pair after moving between areas
+- Ideal for characters with ongoing storylines
+
+**Quick Coordination:**
+- Faster than using the traditional button-based pairing system
+- Simply type one command instead of multiple UI interactions
+
+**Flexible Positioning:**
+- Partners can be in any position, not just the same one
+- Allows for more dynamic courtroom positioning strategies
+
+### Technical Details
+
+**Mutual Consent Required:**
+- Both players must explicitly request to pair with each other
+- One-sided requests are stored but not activated until mutual
+- Either player can unpair at any time
+
+**Room Independence:**
+- Pairing status is tracked per-player, not per-area
+- Players can be paired even when in different areas
+- Visual pairing only appears when both are in the same area
+
+**Character Independence:**
+- Persistent pairing is UID-based, not character-based
+- Works regardless of which characters players select
+- Survives character changes and iniswapping
+
+### Differences from Traditional Pairing
+
+| Feature | Traditional Pairing | Persistent Pairing |
+|---------|-------------------|-------------------|
+| **Based on** | Character ID | User UID |
+| **Position requirement** | Must be same position | Any position |
+| **Persistence** | Resets each message | Survives room changes |
+| **Setup** | In-client UI buttons | `/pair` command |
+| **Duration** | Per-message | Until `/unpair` |
+| **Room changes** | Does not survive | Persists |
+
+### Notes
+- Persistent pairing is separate from and complements traditional character-based pairing
+- Available to all users (no special permissions required)
+- Logged in the game buffer for both players
+- Pairing data is stored in memory and resets on server restart
+- Only one persistent pair per player at a time
+
+### Testing
+Comprehensive tests include:
+- Basic pairing and unpairing functionality
+- Persistence across room changes
+- Mutual consent requirement
+- Independence from character-based pairing
+- Thread-safe concurrent access
+- Error handling for invalid UIDs
+
+### Security
+- CodeQL scan: No vulnerabilities detected
+- Thread-safe with mutex protection
+- No race conditions in pairing/unpairing logic
+- Safe handling of disconnected players
