@@ -24,6 +24,7 @@ import (
 	"math/rand"
 	"net"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 	"sync"
@@ -261,7 +262,23 @@ func ListenWSS() {
 
 // HandleWS handles a websocket connection.
 func HandleWS(w http.ResponseWriter, r *http.Request) {
-	c, err := websocket.Accept(w, r, &websocket.AcceptOptions{OriginPatterns: []string{"web.aceattorneyonline.com"}}) // WS connections not originating from webAO will be rejected.
+	// Build list of allowed origins
+	allowedOrigins := []string{"web.aceattorneyonline.com"}
+	
+	// If a custom asset URL is configured, extract and allow its origin
+	if config.AssetURL != "" {
+		if parsedURL, err := url.Parse(config.AssetURL); err == nil && parsedURL.Host != "" {
+			// Add the custom asset URL's host to allowed origins
+			allowedOrigins = append(allowedOrigins, parsedURL.Host)
+		} else {
+			// If parsing fails or no host is found, allow all origins as a fallback
+			// This ensures custom asset URLs still work even if URL format is unexpected
+			logger.LogDebugf("Could not parse asset_url '%s', allowing all origins", config.AssetURL)
+			allowedOrigins = []string{"*"}
+		}
+	}
+	
+	c, err := websocket.Accept(w, r, &websocket.AcceptOptions{OriginPatterns: allowedOrigins})
 	if err != nil {
 		logger.LogError(err.Error())
 		return
