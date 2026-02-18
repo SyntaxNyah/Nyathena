@@ -1682,61 +1682,6 @@ func cmdPair(client *Client, args []string, usage string) {
 	}
 }
 
-// sendPairVisualRefresh sends a minimal IC message to the client's area to clear pairing visuals.
-// The client parameter represents the character whose pairing visual needs to be cleared.
-// This function broadcasts a blank IC message to the entire area with no pairing info (args[16] = "-1"),
-// forcing all clients in the area to refresh and remove any ghost partner visuals for this character.
-// The message contains no text, animation, or sound effects to avoid visual disruption.
-func sendPairVisualRefresh(client *Client) {
-	// Construct a minimal IC (MS) packet with essential character info but no pairing
-	const (
-		msgType           = "chat"
-		preAnim           = "0"
-		emptyStr          = ""
-		emoteModifier     = "0"
-		evidence          = "0"
-		flip              = "0"
-		realization       = "0"
-		textColor         = "0"
-		noPairing         = "-1^"  // Critical: indicates no pairing partner (^ is required by protocol)
-		selfOffset        = "0"
-		nonInterruptPre   = "0"
-		sfxLooping        = "0"
-		additive          = "0"
-	)
-
-	writeToArea(client.Area(), "MS", msgType,
-		preAnim,                       // pre-animation
-		characters[client.CharID()],   // character name/folder
-		emptyStr,                      // emote (no animation)
-		emptyStr,                      // message text (no speech bubble)
-		client.Pos(),                  // position
-		emptyStr,                      // sfx-name
-		emoteModifier,                 // emote_modifier
-		strconv.Itoa(client.CharID()), // cid
-		emptyStr,                      // sfx-delay
-		emptyStr,                      // objection_modifier
-		evidence,                      // evidence
-		flip,                          // flip
-		realization,                   // realization
-		textColor,                     // text_color
-		client.Showname(),             // showname
-		noPairing,                     // other_charid (no pairing - clears ghost)
-		emptyStr,                      // other_name
-		emptyStr,                      // other_emote
-		selfOffset,                    // self_offset
-		emptyStr,                      // other_offset
-		emptyStr,                      // other_flip
-		nonInterruptPre,               // noninterrupting_preanim
-		sfxLooping,                    // sfx_looping
-		emptyStr,                      // screenshake
-		emptyStr,                      // frames_shake
-		emptyStr,                      // frames_realization
-		emptyStr,                      // frames_sfx
-		additive,                      // additive
-		emptyStr)                      // effect
-}
-
 // Handles /unpair
 func cmdUnpair(client *Client, _ []string, _ string) {
 	pairedUID := client.PairedUID()
@@ -1749,20 +1694,12 @@ func cmdUnpair(client *Client, _ []string, _ string) {
 	paired := clients.GetClientByUID(pairedUID)
 	if paired != nil {
 		paired.SetPairedUID(-1)
-		paired.SetPairWantedID(-1) // Clear transient pairing wanted ID
-		paired.SetPairInfo("", "", "", "") // Clear visual pair info
 		paired.SendServerMessage(fmt.Sprintf("%s (UID: %d) has ended the pairing.", client.OOCName(), client.Uid()))
-		// Send a blank IC message to force visual refresh and clear ghost partner
-		sendPairVisualRefresh(paired)
 	}
 
 	client.SetPairedUID(-1)
-	client.SetPairWantedID(-1) // Clear transient pairing wanted ID
-	client.SetPairInfo("", "", "", "") // Clear visual pair info
 	client.SendServerMessage("Unpairing successful.")
 	addToBuffer(client, "CMD", "Unpaired.", false)
-	// Send a blank IC message to force visual refresh and clear ghost partner
-	sendPairVisualRefresh(client)
 }
 
 // Handles /play
