@@ -410,10 +410,19 @@ func pktIC(client *Client, p *packet.Packet) {
 			// Persistent pair is in the same area and pairing is mutual
 			pairinfo := paired.PairInfo()
 			args[16] = strconv.Itoa(paired.CharID()) + "^"
-			args[17] = pairinfo.name
-			args[18] = pairinfo.emote
-			args[20] = pairinfo.offset
-			args[21] = pairinfo.flip
+			// Use PairInfo if available (from previous IC messages), otherwise use their actual character
+			if pairinfo.name != "" {
+				args[17] = pairinfo.name
+				args[18] = pairinfo.emote
+				args[20] = pairinfo.offset
+				args[21] = pairinfo.flip
+			} else {
+				// Fallback to their actual character if they haven't sent an IC message yet
+				args[17] = characters[paired.CharID()]
+				args[18] = "normal" // Default emote
+				args[20] = ""       // No offset
+				args[21] = "0"      // No flip
+			}
 		}
 	}
 

@@ -1645,8 +1645,12 @@ func cmdPair(client *Client, args []string, usage string) {
 	}
 
 	targetUID, err := strconv.Atoi(args[0])
-	if err != nil || targetUID < 0 {
-		client.SendServerMessage("Invalid UID specified.")
+	if err != nil {
+		client.SendServerMessage("Invalid UID format. Please provide a valid number.")
+		return
+	}
+	if targetUID < 0 {
+		client.SendServerMessage("Invalid UID. Please provide a positive number.")
 		return
 	}
 

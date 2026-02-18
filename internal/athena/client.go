@@ -510,8 +510,8 @@ func (client *Client) PairWantedID() int {
 // SetPairWantedID sets the character the client wishes to pair with.
 func (client *Client) SetPairWantedID(id int) {
 	client.mu.Lock()
+	defer client.mu.Unlock()
 	client.pair.wanted_id = id
-	client.mu.Unlock()
 }
 
 // PairedUID returns the UID of the client's persistent pair partner.
@@ -524,8 +524,8 @@ func (client *Client) PairedUID() int {
 // SetPairedUID sets the UID of the client's persistent pair partner.
 func (client *Client) SetPairedUID(uid int) {
 	client.mu.Lock()
+	defer client.mu.Unlock()
 	client.pairedUID = uid
-	client.mu.Unlock()
 }
 
 // RemoveAuth logs a client out as moderator.
