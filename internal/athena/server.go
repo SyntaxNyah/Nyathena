@@ -260,23 +260,29 @@ func ListenWSS() {
 	}
 }
 
-// HandleWS handles a websocket connection.
-func HandleWS(w http.ResponseWriter, r *http.Request) {
-	// Build list of allowed origins
+// getAllowedOrigins returns the list of allowed WebSocket origins based on the server configuration.
+func getAllowedOrigins(assetURL string) []string {
 	allowedOrigins := []string{"web.aceattorneyonline.com"}
 	
 	// If a custom asset URL is configured, extract and allow its origin
-	if config.AssetURL != "" {
-		if parsedURL, err := url.Parse(config.AssetURL); err == nil && parsedURL.Host != "" {
+	if assetURL != "" {
+		if parsedURL, err := url.Parse(assetURL); err == nil && parsedURL.Host != "" {
 			// Add the custom asset URL's host to allowed origins
 			allowedOrigins = append(allowedOrigins, parsedURL.Host)
 		} else {
 			// If parsing fails or no host is found, allow all origins as a fallback
 			// This ensures custom asset URLs still work even if URL format is unexpected
-			logger.LogDebugf("Could not parse asset_url '%s', allowing all origins", config.AssetURL)
+			logger.LogDebugf("Could not parse asset_url '%s', allowing all origins", assetURL)
 			allowedOrigins = []string{"*"}
 		}
 	}
+	
+	return allowedOrigins
+}
+
+// HandleWS handles a websocket connection.
+func HandleWS(w http.ResponseWriter, r *http.Request) {
+	allowedOrigins := getAllowedOrigins(config.AssetURL)
 	
 	c, err := websocket.Accept(w, r, &websocket.AcceptOptions{OriginPatterns: allowedOrigins})
 	if err != nil {
