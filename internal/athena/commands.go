@@ -1426,6 +1426,44 @@ func cmdMakeover(client *Client, args []string, _ string) {
 		// Set emote, flip, and offset to empty so everyone has the same default appearance
 		c.SetPairInfo(charName, "", "", "")
 		
+		// Force a visual update by sending an MS packet for this client
+		// This makes the iniswap change visible to all clients in the area immediately
+		// Use blank message to update appearance without showing text
+		icArgs := make([]string, 30)
+		icArgs[0] = "chat"                     // desk_mod
+		icArgs[1] = ""                         // pre-anim
+		icArgs[2] = charName                   // character name (iniswapped character)
+		icArgs[3] = "normal"                   // emote (default)
+		icArgs[4] = ""                         // message (blank for visual update only)
+		icArgs[5] = c.Pos()                    // position
+		icArgs[6] = ""                         // sfx-name
+		icArgs[7] = "0"                        // emote_mod
+		icArgs[8] = strconv.Itoa(charID)       // char_id
+		icArgs[9] = "0"                        // sfx-delay
+		icArgs[10] = "0"                       // objection_mod
+		icArgs[11] = "0"                       // evidence
+		icArgs[12] = "0"                       // flipping
+		icArgs[13] = "0"                       // realization
+		icArgs[14] = "0"                       // text color (default white)
+		icArgs[15] = charName                  // showname (use character name)
+		icArgs[16] = "-1"                      // pair_id
+		icArgs[17] = ""                        // pair_charid
+		icArgs[18] = ""                        // pair_emote
+		icArgs[19] = ""                        // offset
+		icArgs[20] = ""                        // pair_offset
+		icArgs[21] = ""                        // pair_flip
+		icArgs[22] = "0"                       // non-interrupting pre
+		icArgs[23] = "0"                       // sfx-looping
+		icArgs[24] = "0"                       // screenshake
+		icArgs[25] = ""                        // frames_shake
+		icArgs[26] = ""                        // frames_realization
+		icArgs[27] = ""                        // frames_sfx
+		icArgs[28] = "0"                       // additive
+		icArgs[29] = ""                        // blank (reserved)
+		
+		// Send the visual update to the client's area
+		writeToArea(c.Area(), "MS", icArgs...)
+		
 		count++
 	}
 	
