@@ -256,22 +256,6 @@ func pktIC(client *Client, p *packet.Packet) {
 		}
 	}
 
-	// Apply client's own iniswap if they have one set (e.g., from /makeover command)
-	// This must be done BEFORE validation and AFTER possession handling
-	// Only apply if not already possessing someone (possession takes priority)
-	if !isPossessing {
-		clientPairInfo := client.PairInfo()
-		if clientPairInfo.name != "" {
-			// Client has an iniswap set - override their character appearance
-			// Get the character ID for the iniswapped character
-			iniswapCharID := getCharacterID(clientPairInfo.name)
-			if iniswapCharID != -1 {
-				args[2] = clientPairInfo.name              // character name (iniswapped)
-				args[8] = strconv.Itoa(iniswapCharID)      // char_id (iniswapped)
-			}
-		}
-	}
-
 	client.SetPos(args[5])
 
 	// Check and clean up expired punishments
@@ -357,7 +341,7 @@ func pktIC(client *Client, p *packet.Packet) {
 	switch {
 	case !sliceutil.ContainsString([]string{"chat", "0", "1", "2", "3", "4", "5"}, args[0]): // desk_mod
 		return
-	case !isPossessing && !strings.EqualFold(characters[client.CharID()], args[2]) && !client.Area().IniswapAllowed() && client.PairInfo().name == "": // character name (skip check when possessing or when client has admin-set iniswap)
+	case !isPossessing && !strings.EqualFold(characters[client.CharID()], args[2]) && !client.Area().IniswapAllowed(): // character name (skip check when possessing)
 		client.SendServerMessage("Iniswapping is not allowed in this area.")
 		return
 	case len(decode(args[4])) > config.MaxMsg: // message
@@ -367,7 +351,7 @@ func pktIC(client *Client, p *packet.Packet) {
 		return
 	case emote_mod < 0 || emote_mod > 6:
 		return
-	case !isPossessing && args[8] != strconv.Itoa(client.CharID()) && client.PairInfo().name == "": // char_id (skip check when possessing or when client has admin-set iniswap)
+	case !isPossessing && args[8] != strconv.Itoa(client.CharID()): // char_id (skip check when possessing)
 		return
 	case objection < 0 || objection > 4: // objection_mod
 		return
