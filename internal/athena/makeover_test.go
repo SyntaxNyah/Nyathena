@@ -22,7 +22,7 @@ import (
 	"github.com/MangosArentLiterature/Athena/internal/area"
 )
 
-// TestMakeoverValidCharacter tests that makeover command fully changes all clients to target character
+// TestMakeoverValidCharacter tests that makeover command uses iniswap to bypass slot limits
 func TestMakeoverValidCharacter(t *testing.T) {
 	// Save original characters array and restore after test
 	originalCharacters := characters
@@ -85,7 +85,7 @@ func TestMakeoverValidCharacter(t *testing.T) {
 	clients.list[client2] = struct{}{}
 	clients.list[client3] = struct{}{}
 
-	// Test: Force all clients to fully change into "Miles Edgeworth"
+	// Test: Force all clients to iniswap into "Miles Edgeworth"
 	targetChar := "Miles Edgeworth"
 	targetCharID := getCharacterID(targetChar)
 
@@ -94,37 +94,58 @@ func TestMakeoverValidCharacter(t *testing.T) {
 		t.Fatalf("Test setup failed: character '%s' not found", targetChar)
 	}
 
-	// Simulate what cmdMakeover does
+	// Simulate what cmdMakeover does - use iniswap to bypass slot limit
 	for c := range clients.GetAllClients() {
 		if c.Uid() == -1 || c.CharID() == -1 {
 			continue
 		}
 
-		// Remove old character
-		c.Area().RemoveChar(c.CharID())
-
-		// Set new character
-		c.SetCharID(targetCharID)
-
-		// Clear PairInfo
-		c.SetPairInfo("", "", "", "")
-
-		// Add new character to area
-		c.Area().AddChar(targetCharID)
+		// Force iniswap with empty emote/flip/offset for consistent appearance
+		c.SetPairInfo(targetChar, "", "", "")
 	}
 
-	// Verify all clients now have the target character as their actual character
+	// Verify all clients now have the target character in their PairInfo (iniswap)
 	for c := range clients.GetAllClients() {
-		if c.CharID() != targetCharID {
-			t.Errorf("Expected client UID %d to have CharID %d (%s), got %d",
-				c.Uid(), targetCharID, targetChar, c.CharID())
+		if c.PairInfo().name != targetChar {
+			t.Errorf("Expected client UID %d to have PairInfo name '%s' (iniswapped), got '%s'",
+				c.Uid(), targetChar, c.PairInfo().name)
 		}
 
-		// Verify PairInfo is cleared (no iniswap)
-		if c.PairInfo().name != "" {
-			t.Errorf("Expected client UID %d to have empty PairInfo name, got '%s'",
-				c.Uid(), c.PairInfo().name)
+		// Verify emote, flip, and offset are empty (reset for consistent appearance)
+		if c.PairInfo().emote != "" {
+			t.Errorf("Expected client UID %d to have empty emote, got '%s'",
+				c.Uid(), c.PairInfo().emote)
 		}
+		if c.PairInfo().flip != "" {
+			t.Errorf("Expected client UID %d to have empty flip, got '%s'",
+				c.Uid(), c.PairInfo().flip)
+		}
+		if c.PairInfo().offset != "" {
+			t.Errorf("Expected client UID %d to have empty offset, got '%s'",
+				c.Uid(), c.PairInfo().offset)
+		}
+	}
+
+	// Verify original CharIDs are preserved (not changed, since we use iniswap)
+	if client1.CharID() != 0 {
+		t.Errorf("Expected client1 to still have original CharID 0, got %d", client1.CharID())
+	}
+	if client2.CharID() != 1 {
+		t.Errorf("Expected client2 to still have original CharID 1, got %d", client2.CharID())
+	}
+	if client3.CharID() != 2 {
+		t.Errorf("Expected client3 to still have original CharID 2, got %d", client3.CharID())
+	}
+
+	// Verify area's taken slots are unchanged (iniswap doesn't affect them)
+	if !testArea.IsTaken(0) {
+		t.Errorf("Expected area to still have character 0 (Phoenix Wright) taken")
+	}
+	if !testArea.IsTaken(1) {
+		t.Errorf("Expected area to still have character 1 (Miles Edgeworth) taken")
+	}
+	if !testArea.IsTaken(2) {
+		t.Errorf("Expected area to still have character 2 (Maya Fey) taken")
 	}
 }
 
@@ -214,7 +235,6 @@ func TestMakeoverSkipsUnjoined(t *testing.T) {
 	clients.list[charSelectClient] = struct{}{}
 
 	targetChar := "Miles Edgeworth"
-	targetCharID := getCharacterID(targetChar)
 
 	// Simulate what cmdMakeover does
 	var count int
@@ -223,10 +243,7 @@ func TestMakeoverSkipsUnjoined(t *testing.T) {
 			continue
 		}
 
-		c.Area().RemoveChar(c.CharID())
-		c.SetCharID(targetCharID)
-		c.SetPairInfo("", "", "", "")
-		c.Area().AddChar(targetCharID)
+		c.SetPairInfo(targetChar, "", "", "")
 		count++
 	}
 
@@ -235,28 +252,29 @@ func TestMakeoverSkipsUnjoined(t *testing.T) {
 		t.Errorf("Expected 1 client to be affected, got %d", count)
 	}
 
-	// Verify joined client was updated
-	if joinedClient.CharID() != targetCharID {
-		t.Errorf("Expected joined client to have CharID %d, got %d",
-			targetCharID, joinedClient.CharID())
+	// Verify joined client was iniswapped
+	if joinedClient.PairInfo().name != targetChar {
+		t.Errorf("Expected joined client to have PairInfo name '%s', got '%s'",
+			targetChar, joinedClient.PairInfo().name)
 	}
 
-	// Verify PairInfo was cleared
-	if joinedClient.PairInfo().name != "" {
-		t.Errorf("Expected joined client to have empty PairInfo name, got '%s'",
-			joinedClient.PairInfo().name)
+	// Verify original CharID preserved
+	if joinedClient.CharID() != 0 {
+		t.Errorf("Expected joined client to still have original CharID 0, got %d",
+			joinedClient.CharID())
 	}
 
 	// Verify unjoined client was NOT updated
-	if unjoinedClient.CharID() != -1 {
-		t.Errorf("Expected unjoined client to still have CharID -1, got %d",
-			unjoinedClient.CharID())
+	if unjoinedClient.PairInfo().name != "" {
+		t.Errorf("Expected unjoined client to have empty PairInfo name, got '%s'",
+			unjoinedClient.PairInfo().name)
 	}
 
 	// Verify char select client was NOT updated
-	if charSelectClient.CharID() != -1 {
-		t.Errorf("Expected char select client to still have CharID -1, got %d",
-			charSelectClient.CharID())
+	if charSelectClient.PairInfo().name != "" {
+		t.Errorf("Expected char select client to have empty PairInfo name, got '%s'",
+			charSelectClient.PairInfo().name)
 	}
 }
+
 
