@@ -1694,12 +1694,10 @@ func cmdUnpair(client *Client, _ []string, _ string) {
 	paired := clients.GetClientByUID(pairedUID)
 	if paired != nil {
 		paired.SetPairedUID(-1)
-		paired.SetPairInfo("", "", "", "") // Clear visual pair info
 		paired.SendServerMessage(fmt.Sprintf("%s (UID: %d) has ended the pairing.", client.OOCName(), client.Uid()))
 	}
 
 	client.SetPairedUID(-1)
-	client.SetPairInfo("", "", "", "") // Clear visual pair info
 	client.SendServerMessage("Unpairing successful.")
 	addToBuffer(client, "CMD", "Unpaired.", false)
 }
