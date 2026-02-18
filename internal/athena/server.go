@@ -305,7 +305,12 @@ func HandleWS(w http.ResponseWriter, r *http.Request) {
 	if logger.DebugNetwork {
 		logger.LogDebugf("WebSocket connection accepted from %v (Origin: %s)", ipid, origin)
 	}
-	client := NewClient(websocket.NetConn(context.TODO(), c, websocket.MessageText), ipid)
+	// Use MessageBinary instead of MessageText to avoid UTF-8 validation errors
+	// The Attorney Online protocol may contain non-UTF-8 data, and strict UTF-8
+	// validation in MessageText mode causes browsers to close connections with
+	// code 1002 (Protocol Error). Binary mode allows the protocol to work with
+	// any byte sequence while still transmitting text data.
+	client := NewClient(websocket.NetConn(context.TODO(), c, websocket.MessageBinary), ipid)
 	go client.HandleClient()
 }
 
