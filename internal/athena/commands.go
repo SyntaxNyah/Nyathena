@@ -1738,16 +1738,21 @@ func cmdPossess(client *Client, args []string, _ string) {
 	// Create the IC message packet args following the MS packet format
 	// Based on pktIC processing, the final MS packet has inserted pairing data
 	// We create a 30-element array to match the server's MS format
+	// 
+	// Design decision: The "possessed character" refers to the admin's character (the one doing
+	// the possessing), not the target's character. The admin's character will speak at the
+	// target's position and continue to follow the target's movements. This allows the admin
+	// to visually follow the target while speaking as their own character.
 	icArgs := make([]string, 30)
 	icArgs[0] = "chat"                        // desk_mod
 	icArgs[1] = ""                            // pre-anim
-	icArgs[2] = characters[client.CharID()]   // character name (use possessor's character)
+	icArgs[2] = characters[client.CharID()]   // character name (possessor's character)
 	icArgs[3] = targetEmote                   // emote (use target's current emote)
 	icArgs[4] = encodedMsg                    // message (encoded)
-	icArgs[5] = target.Pos()                  // position (use target's position)
+	icArgs[5] = target.Pos()                  // position (target's position)
 	icArgs[6] = ""                            // sfx-name
 	icArgs[7] = "0"                           // emote_mod
-	icArgs[8] = strconv.Itoa(client.CharID()) // char_id (use possessor's character)
+	icArgs[8] = strconv.Itoa(client.CharID()) // char_id (possessor's character)
 	icArgs[9] = "0"                           // sfx-delay
 	icArgs[10] = "0"                          // objection_mod
 	icArgs[11] = "0"                          // evidence

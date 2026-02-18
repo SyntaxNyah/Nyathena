@@ -182,6 +182,10 @@ func pktIC(client *Client, p *packet.Packet) {
 	client.SetPos(args[5])
 	
 	// Sync position for any clients possessing this client
+	// Note: This iterates through all clients to find possessors. In typical usage,
+	// the possess command is used infrequently and for short durations, so the
+	// performance impact is minimal. For high-scale deployments with many concurrent
+	// possessions, this could be optimized with a reverse mapping (target -> possessors).
 	for c := range clients.GetAllClients() {
 		if c.Possessing() == client.Uid() {
 			// Update the possessing client's position to match the target's position

@@ -22,14 +22,18 @@ import (
 
 // TestPossessionTracking tests that possession state is tracked correctly
 func TestPossessionTracking(t *testing.T) {
-	// Create two clients
+	// Create two clients with proper initialization
 	possessor := &Client{
 		uid:        1,
+		char:       -1,
 		possessing: -1,
+		pair:       ClientPairInfo{wanted_id: -1},
 	}
 	target := &Client{
 		uid:        2,
+		char:       -1,
 		possessing: -1,
+		pair:       ClientPairInfo{wanted_id: -1},
 	}
 
 	// Initially, possessor should not be possessing anyone
@@ -56,16 +60,20 @@ func TestPossessionTracking(t *testing.T) {
 
 // TestPossessionPositionSync tests that position syncs correctly
 func TestPossessionPositionSync(t *testing.T) {
-	// Create two clients with different positions
+	// Create two clients with different positions and proper initialization
 	possessor := &Client{
 		uid:        1,
+		char:       -1,
 		pos:        "def",
 		possessing: -1,
+		pair:       ClientPairInfo{wanted_id: -1},
 	}
 	target := &Client{
 		uid:        2,
+		char:       -1,
 		pos:        "wit",
 		possessing: -1,
+		pair:       ClientPairInfo{wanted_id: -1},
 	}
 
 	// Initially, possessor and target have different positions
@@ -102,6 +110,7 @@ func TestNewClientInitialization(t *testing.T) {
 		uid:        -1,
 		char:       -1,
 		possessing: -1,
+		pair:       ClientPairInfo{wanted_id: -1},
 	}
 
 	if client.Possessing() != -1 {
