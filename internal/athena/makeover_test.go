@@ -18,9 +18,11 @@ package athena
 
 import (
 	"testing"
+
+	"github.com/MangosArentLiterature/Athena/internal/area"
 )
 
-// TestMakeoverValidCharacter tests that makeover command works with a valid character
+// TestMakeoverValidCharacter tests that makeover command fully changes all clients to target character
 func TestMakeoverValidCharacter(t *testing.T) {
 	// Save original characters array and restore after test
 	originalCharacters := characters
@@ -35,13 +37,17 @@ func TestMakeoverValidCharacter(t *testing.T) {
 		"Maya Fey",
 	}
 
-	// Create mock clients
+	// Create mock area for testing
+	testArea := area.NewArea(area.AreaData{}, 50, 100, area.EviAny)
+
+	// Create mock clients with different initial characters
 	client1 := &Client{
 		uid:        1,
 		char:       0, // Phoenix Wright
 		possessing: -1,
 		pair:       ClientPairInfo{wanted_id: -1, emote: "normal", flip: "0", offset: ""},
 		pairedUID:  -1,
+		area:       testArea,
 	}
 
 	client2 := &Client{
@@ -50,6 +56,7 @@ func TestMakeoverValidCharacter(t *testing.T) {
 		possessing: -1,
 		pair:       ClientPairInfo{wanted_id: -1, emote: "thinking", flip: "0", offset: ""},
 		pairedUID:  -1,
+		area:       testArea,
 	}
 
 	client3 := &Client{
@@ -58,7 +65,13 @@ func TestMakeoverValidCharacter(t *testing.T) {
 		possessing: -1,
 		pair:       ClientPairInfo{wanted_id: -1, emote: "happy", flip: "1", offset: "50&60"},
 		pairedUID:  -1,
+		area:       testArea,
 	}
+
+	// Add characters to area's taken list
+	testArea.AddChar(client1.CharID())
+	testArea.AddChar(client2.CharID())
+	testArea.AddChar(client3.CharID())
 
 	// Save original clients list and restore after test
 	originalClients := clients
@@ -72,50 +85,45 @@ func TestMakeoverValidCharacter(t *testing.T) {
 	clients.list[client2] = struct{}{}
 	clients.list[client3] = struct{}{}
 
-	// Test: Force all clients to iniswap into "Miles Edgeworth"
+	// Test: Force all clients to fully change into "Miles Edgeworth"
 	targetChar := "Miles Edgeworth"
+	targetCharID := getCharacterID(targetChar)
 
 	// Verify character exists
-	charID := getCharacterID(targetChar)
-	if charID == -1 {
+	if targetCharID == -1 {
 		t.Fatalf("Test setup failed: character '%s' not found", targetChar)
 	}
 
 	// Simulate what cmdMakeover does
 	for c := range clients.GetAllClients() {
-		if c.Uid() == -1 {
+		if c.Uid() == -1 || c.CharID() == -1 {
 			continue
 		}
-		currentPair := c.PairInfo()
-		c.SetPairInfo(targetChar, currentPair.emote, currentPair.flip, currentPair.offset)
+
+		// Remove old character
+		c.Area().RemoveChar(c.CharID())
+
+		// Set new character
+		c.SetCharID(targetCharID)
+
+		// Clear PairInfo
+		c.SetPairInfo("", "", "", "")
+
+		// Add new character to area
+		c.Area().AddChar(targetCharID)
 	}
 
-	// Verify all clients now have the target character in their PairInfo
+	// Verify all clients now have the target character as their actual character
 	for c := range clients.GetAllClients() {
-		if c.PairInfo().name != targetChar {
-			t.Errorf("Expected client UID %d to have PairInfo name '%s', got '%s'", 
-				c.Uid(), targetChar, c.PairInfo().name)
+		if c.CharID() != targetCharID {
+			t.Errorf("Expected client UID %d to have CharID %d (%s), got %d",
+				c.Uid(), targetCharID, targetChar, c.CharID())
 		}
 
-		// Verify that emote, flip, and offset were preserved
-		if c.Uid() == 1 {
-			if c.PairInfo().emote != "normal" {
-				t.Errorf("Client 1 emote should be preserved as 'normal', got '%s'", c.PairInfo().emote)
-			}
-		} else if c.Uid() == 2 {
-			if c.PairInfo().emote != "thinking" {
-				t.Errorf("Client 2 emote should be preserved as 'thinking', got '%s'", c.PairInfo().emote)
-			}
-		} else if c.Uid() == 3 {
-			if c.PairInfo().emote != "happy" {
-				t.Errorf("Client 3 emote should be preserved as 'happy', got '%s'", c.PairInfo().emote)
-			}
-			if c.PairInfo().flip != "1" {
-				t.Errorf("Client 3 flip should be preserved as '1', got '%s'", c.PairInfo().flip)
-			}
-			if c.PairInfo().offset != "50&60" {
-				t.Errorf("Client 3 offset should be preserved as '50&60', got '%s'", c.PairInfo().offset)
-			}
+		// Verify PairInfo is cleared (no iniswap)
+		if c.PairInfo().name != "" {
+			t.Errorf("Expected client UID %d to have empty PairInfo name, got '%s'",
+				c.Uid(), c.PairInfo().name)
 		}
 	}
 }
@@ -138,14 +146,14 @@ func TestMakeoverInvalidCharacter(t *testing.T) {
 	// Test with a character that doesn't exist
 	invalidChar := "NonExistent Character"
 	charID := getCharacterID(invalidChar)
-	
+
 	if charID != -1 {
-		t.Errorf("Expected getCharacterID to return -1 for invalid character '%s', got %d", 
+		t.Errorf("Expected getCharacterID to return -1 for invalid character '%s', got %d",
 			invalidChar, charID)
 	}
 }
 
-// TestMakeoverSkipsUnjoined tests that makeover skips clients with UID -1
+// TestMakeoverSkipsUnjoined tests that makeover skips clients with UID -1 or CharID -1
 func TestMakeoverSkipsUnjoined(t *testing.T) {
 	// Save original characters array and restore after test
 	originalCharacters := characters
@@ -159,21 +167,38 @@ func TestMakeoverSkipsUnjoined(t *testing.T) {
 		"Miles Edgeworth",
 	}
 
-	// Create a joined client and an unjoined client (UID -1)
+	// Create mock area
+	testArea := area.NewArea(area.AreaData{}, 50, 100, area.EviAny)
+
+	// Create a joined client
 	joinedClient := &Client{
 		uid:        1,
 		char:       0,
 		possessing: -1,
 		pair:       ClientPairInfo{wanted_id: -1, emote: "normal"},
 		pairedUID:  -1,
+		area:       testArea,
 	}
+	testArea.AddChar(joinedClient.CharID())
 
+	// Create an unjoined client (UID -1)
 	unjoinedClient := &Client{
-		uid:        -1, // Not joined yet
+		uid:        -1,
 		char:       -1,
 		possessing: -1,
 		pair:       ClientPairInfo{wanted_id: -1, emote: ""},
 		pairedUID:  -1,
+		area:       testArea,
+	}
+
+	// Create a client in char select (CharID -1 but UID valid)
+	charSelectClient := &Client{
+		uid:        2,
+		char:       -1,
+		possessing: -1,
+		pair:       ClientPairInfo{wanted_id: -1, emote: ""},
+		pairedUID:  -1,
+		area:       testArea,
 	}
 
 	// Save original clients list and restore after test
@@ -186,17 +211,22 @@ func TestMakeoverSkipsUnjoined(t *testing.T) {
 	clients = ClientList{list: make(map[*Client]struct{})}
 	clients.list[joinedClient] = struct{}{}
 	clients.list[unjoinedClient] = struct{}{}
+	clients.list[charSelectClient] = struct{}{}
 
 	targetChar := "Miles Edgeworth"
-	
+	targetCharID := getCharacterID(targetChar)
+
 	// Simulate what cmdMakeover does
 	var count int
 	for c := range clients.GetAllClients() {
-		if c.Uid() == -1 {
+		if c.Uid() == -1 || c.CharID() == -1 {
 			continue
 		}
-		currentPair := c.PairInfo()
-		c.SetPairInfo(targetChar, currentPair.emote, currentPair.flip, currentPair.offset)
+
+		c.Area().RemoveChar(c.CharID())
+		c.SetCharID(targetCharID)
+		c.SetPairInfo("", "", "", "")
+		c.Area().AddChar(targetCharID)
 		count++
 	}
 
@@ -206,14 +236,27 @@ func TestMakeoverSkipsUnjoined(t *testing.T) {
 	}
 
 	// Verify joined client was updated
-	if joinedClient.PairInfo().name != targetChar {
-		t.Errorf("Expected joined client to have PairInfo name '%s', got '%s'",
-			targetChar, joinedClient.PairInfo().name)
+	if joinedClient.CharID() != targetCharID {
+		t.Errorf("Expected joined client to have CharID %d, got %d",
+			targetCharID, joinedClient.CharID())
+	}
+
+	// Verify PairInfo was cleared
+	if joinedClient.PairInfo().name != "" {
+		t.Errorf("Expected joined client to have empty PairInfo name, got '%s'",
+			joinedClient.PairInfo().name)
 	}
 
 	// Verify unjoined client was NOT updated
-	if unjoinedClient.PairInfo().name != "" {
-		t.Errorf("Expected unjoined client to have empty PairInfo name, got '%s'",
-			unjoinedClient.PairInfo().name)
+	if unjoinedClient.CharID() != -1 {
+		t.Errorf("Expected unjoined client to still have CharID -1, got %d",
+			unjoinedClient.CharID())
+	}
+
+	// Verify char select client was NOT updated
+	if charSelectClient.CharID() != -1 {
+		t.Errorf("Expected char select client to still have CharID -1, got %d",
+			charSelectClient.CharID())
 	}
 }
+

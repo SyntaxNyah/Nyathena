@@ -227,7 +227,7 @@ func initCommands() {
 			handler:  cmdMakeover,
 			minArgs:  1,
 			usage:    "Usage: /makeover <character>",
-			desc:     "Forces all users to iniswap into the specified character.",
+			desc:     "Forces all users to completely change into the specified character.",
 			reqPerms: permissions.PermissionField["ADMIN"],
 		},
 		"mod": {
@@ -1408,28 +1408,48 @@ func cmdMakeover(client *Client, args []string, _ string) {
 	// Count how many clients will be affected
 	var count int
 	
-	// Iterate through all clients and force iniswap
+	// Iterate through all clients and force character change
 	for c := range clients.GetAllClients() {
 		// Skip clients that are not fully joined (UID == -1)
 		if c.Uid() == -1 {
 			continue
 		}
 		
-		// Set the client's pair info to iniswap to the target character
-		// Keep their current emote, flip, and offset values
-		currentPair := c.PairInfo()
-		c.SetPairInfo(charName, currentPair.emote, currentPair.flip, currentPair.offset)
+		// Skip clients who don't have a character selected
+		if c.CharID() == -1 {
+			continue
+		}
+		
+		// Remove their current character from the area's taken list
+		c.Area().RemoveChar(c.CharID())
+		
+		// Set the client's character ID to the target character
+		c.SetCharID(charID)
+		c.SetShowname(c.CurrentCharacter())
+		
+		// Clear any iniswap/pair info so they use the actual character
+		c.SetPairInfo("", "", "", "")
+		
+		// Send packet to client to update their character
+		c.SendPacket("PV", "0", "CID", strconv.Itoa(charID))
+		
+		// Add the new character to the area (allow duplicates for this admin command)
+		c.Area().AddChar(charID)
+		
+		// Update the area's character availability
+		writeToArea(c.Area(), "CharsCheck", c.Area().Taken()...)
+		
 		count++
 	}
 	
 	// Send confirmation message to the admin
-	client.SendServerMessage(fmt.Sprintf("Forced %d client(s) to iniswap into %s.", count, charName))
+	client.SendServerMessage(fmt.Sprintf("Forced %d client(s) to change into %s.", count, charName))
 	
 	// Log the action
-	addToBuffer(client, "CMD", fmt.Sprintf("Forced all clients to iniswap into %v.", charName), true)
+	addToBuffer(client, "CMD", fmt.Sprintf("Forced all clients to change into %v.", charName), true)
 	
 	// Send a global server message to all clients
-	writeToAll("CT", encode(config.Name), encode(fmt.Sprintf("An admin has forced everyone to appear as %s.", charName)), "1")
+	writeToAll("CT", encode(config.Name), encode(fmt.Sprintf("An admin has forced everyone to become %s.", charName)), "1")
 }
 
 // Handles /mod
