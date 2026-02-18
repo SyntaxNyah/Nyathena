@@ -48,14 +48,14 @@ func TestGetAllowedOrigins(t *testing.T) {
 			expectedResult: []string{"web.aceattorneyonline.com", "custom.example.com:8080"},
 		},
 		{
-			name:           "Custom asset URL without protocol - fallback to wildcard",
+			name:           "Custom asset URL without protocol - fallback to default only",
 			assetURL:       "custom.example.com",
-			expectedResult: []string{"*"},
+			expectedResult: []string{"web.aceattorneyonline.com"},
 		},
 		{
-			name:           "Invalid URL - fallback to wildcard",
+			name:           "Invalid URL - fallback to default only",
 			assetURL:       "://invalid-url",
-			expectedResult: []string{"*"},
+			expectedResult: []string{"web.aceattorneyonline.com"},
 		},
 		{
 			name:           "URL with subdomain",

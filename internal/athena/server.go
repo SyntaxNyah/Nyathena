@@ -270,10 +270,9 @@ func getAllowedOrigins(assetURL string) []string {
 			// Add the custom asset URL's host to allowed origins
 			allowedOrigins = append(allowedOrigins, parsedURL.Host)
 		} else {
-			// If parsing fails or no host is found, allow all origins as a fallback
-			// This ensures custom asset URLs still work even if URL format is unexpected
-			logger.LogDebugf("Could not parse asset_url '%s', allowing all origins", assetURL)
-			allowedOrigins = []string{"*"}
+			// If parsing fails or no host is found, log a warning and only allow default origin
+			// This is safer than allowing all origins with a wildcard
+			logger.LogWarningf("Could not parse asset_url '%s', only allowing default WebAO origin. Please check your configuration.", assetURL)
 		}
 	}
 	
