@@ -1734,7 +1734,13 @@ func cmdPossess(client *Client, args []string, _ string) {
 	// Use PairInfo().name if available (contains iniswapped character), otherwise use their actual character
 	targetCharName := target.PairInfo().name
 	if targetCharName == "" {
-		targetCharName = characters[target.CharID()]
+		// Bounds check before accessing characters array (defensive check, already validated at lines 1712-1715)
+		if target.CharID() >= 0 && target.CharID() < len(characters) {
+			targetCharName = characters[target.CharID()]
+		} else {
+			client.SendServerMessage("Target has an invalid character.")
+			return
+		}
 	}
 
 	// Get the character ID for the displayed character
