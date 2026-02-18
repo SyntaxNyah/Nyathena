@@ -1405,8 +1405,9 @@ func cmdMakeover(client *Client, args []string, _ string) {
 		return
 	}
 	
-	// Count how many clients will be affected
+	// Count how many clients will be affected and track affected areas
 	var count int
+	affectedAreas := make(map[*area.Area]struct{})
 	
 	// Iterate through all clients and force character change
 	for c := range clients.GetAllClients() {
@@ -1425,9 +1426,9 @@ func cmdMakeover(client *Client, args []string, _ string) {
 		
 		// Set the client's character ID to the target character
 		c.SetCharID(charID)
-		c.SetShowname(charName)
 		
 		// Clear any iniswap/pair info so they use the actual character
+		// This also resets the showname to the character name
 		c.SetPairInfo("", "", "", "")
 		
 		// Send packet to client to update their character
@@ -1438,10 +1439,15 @@ func cmdMakeover(client *Client, args []string, _ string) {
 		// Add the new character to the area (allow duplicates for this admin command)
 		c.Area().AddChar(charID)
 		
-		// Update the area's character availability
-		writeToArea(c.Area(), "CharsCheck", c.Area().Taken()...)
+		// Track which areas have been affected
+		affectedAreas[c.Area()] = struct{}{}
 		
 		count++
+	}
+	
+	// Update character availability for all affected areas
+	for a := range affectedAreas {
+		writeToArea(a, "CharsCheck", a.Taken()...)
 	}
 	
 	// Send confirmation message to the admin
