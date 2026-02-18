@@ -111,6 +111,14 @@ func TestGetIpid(t *testing.T) {
 			name:  "Different IPs produce different IPIDs",
 			input: "10.0.0.1:8080",
 		},
+		{
+			name:  "IPv6 with port",
+			input: "[2001:db8::1]:8080",
+		},
+		{
+			name:  "IPv6 without port",
+			input: "2001:db8::1",
+		},
 	}
 
 	for _, tt := range tests {
@@ -143,6 +151,34 @@ func TestUniqueIPIDs(t *testing.T) {
 		ipid := getIpid(ip)
 		if ipids[ipid] {
 			t.Errorf("Duplicate IPID found for IP %v: %v", ip, ipid)
+		}
+		ipids[ipid] = true
+	}
+
+	if len(ipids) != len(ips) {
+		t.Errorf("Expected %d unique IPIDs, got %d", len(ips), len(ipids))
+	}
+}
+
+func TestUniqueIPIDsWithoutPorts(t *testing.T) {
+	// Test that different IPs WITHOUT ports produce different IPIDs
+	// This is critical for reverse proxy scenarios where X-Forwarded-For
+	// or X-Real-IP headers provide IPs without ports
+	ips := []string{
+		"192.168.1.1",
+		"192.168.1.2",
+		"10.0.0.1",
+		"172.16.0.1",
+		"203.0.113.45",
+		"203.0.113.46",
+		"198.51.100.20",
+	}
+
+	ipids := make(map[string]bool)
+	for _, ip := range ips {
+		ipid := getIpid(ip)
+		if ipids[ipid] {
+			t.Errorf("Duplicate IPID found for portless IP %v: %v", ip, ipid)
 		}
 		ipids[ipid] = true
 	}
