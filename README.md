@@ -52,36 +52,3 @@ To enable secure WebSocket connections for Cloudflare and other proxies:
 3. Server handles TLS encryption directly
 
 When advertising to the master server, your server will be listed with `wss://` support regardless of which option you choose.
-
-### WebSocket Origin Configuration
-To control which domains can connect to your server via WebSocket:
-
-1. In `config.toml`, configure `websocket_origins`:
-   ```toml
-   # For production - specify allowed origins explicitly
-   websocket_origins = ["https://web.aceattorneyonline.com"]
-   
-   # To allow multiple domains
-   websocket_origins = ["https://web.aceattorneyonline.com", "https://yourdomain.com"]
-   
-   # To allow any subdomain
-   websocket_origins = ["https://*.yourdomain.com"]
-   
-   # For development only - accept any origin (INSECURE for production)
-   websocket_origins = ["*"]
-   ```
-
-**Security Note**: The default configuration accepts connections from any origin (`["*"]`). For production deployments, always specify explicit allowed origins to prevent unauthorized access.
-
-### Static Asset Serving
-If you want to serve game assets (characters, backgrounds, music) directly from the server:
-
-1. Create a directory for your assets (e.g., `assets/`)
-2. Place your asset files in subdirectories (e.g., `assets/characters/`, `assets/backgrounds/`)
-3. In `config.toml`, set:
-   ```toml
-   asset_path = "assets"
-   ```
-4. Assets will be available at `http://yourserver/base/`
-
-This is optional - you can also use an external asset server or CDN by setting `asset_url` instead.

@@ -32,22 +32,6 @@ tls_cert_path = ""
 # Path to TLS private key file (optional - leave empty if using a reverse proxy like Cloudflare).
 tls_key_path = ""
 
-# WebSocket origin patterns for CORS validation.
-# This controls which origins (domains) are allowed to establish WebSocket connections.
-# Supports wildcard patterns for flexibility:
-#   ["*"] - Accept any origin (useful for development, but insecure for production)
-#   ["https://web.aceattorneyonline.com"] - Only allow the official WebAO client
-#   ["https://*.example.com"] - Allow all subdomains of example.com
-#   ["https://hatsune.miku.pizza", "https://web.aceattorneyonline.com"] - Allow specific domains
-# 
-# DEFAULT: ["*"] accepts all origins - CHANGE THIS FOR PRODUCTION!
-# WARNING: The default wildcard setting is insecure for production use. 
-# For production deployments, explicitly specify the allowed origins to prevent unauthorized access.
-# 
-# Example production configuration:
-#   websocket_origins = ["https://web.aceattorneyonline.com"]
-websocket_origins = ["*"]
-
 # Set to true if running behind a reverse proxy (nginx, Apache, etc.)
 # When enabled, the master server will advertise the external ports instead of internal listening ports
 reverse_proxy_mode = false
@@ -146,15 +130,7 @@ multiclient_limit = 16
 
 # Sets the URL for the server's WebAO assets.
 # If this is blank, vanilla assets will be used.
-# This tells clients where to download assets from (e.g., "https://example.com/assets").
 asset_url = ""
-
-# Sets the local filesystem path to serve assets from via HTTP/HTTPS on the /base/ endpoint.
-# This is optional and only needed if you want the server to serve static game assets
-# (characters, backgrounds, music, etc.) directly via HTTP/HTTPS on the /base/ path.
-# Leave blank if using a separate asset server, CDN, or reverse proxy for asset serving.
-# Example: "assets" would serve files from ./assets/ directory at http://yourserver/base/
-asset_path = ""
 
 # Sets the URL for the server's Discord webhook.
 # If this is blank, the discord webhook will be disabled.
