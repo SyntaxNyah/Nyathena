@@ -23,7 +23,7 @@ import (
 	"testing"
 )
 
-func TestLoadMusic_NormalizesToLowercase(t *testing.T) {
+func TestLoadMusic_PreservesOriginalCase(t *testing.T) {
 	// Create a temporary directory for test config
 	tmpDir, err := os.MkdirTemp("", "athena-test-*")
 	if err != nil {
@@ -58,16 +58,16 @@ YTTD/[YTTD] Voice Of Healing.opus`
 		t.Fatalf("LoadMusic() failed: %v", err)
 	}
 
-	// Expected result: file paths should be lowercase, categories should remain as-is
+	// Expected result: Original case should be preserved
 	expected := []string{
 		"Prelude",
-		"ace attorney/prelude/[aa] opening.opus",
-		"ace attorney/prelude/[jfa] prelude.opus",
+		"Ace Attorney/Prelude/[AA] Opening.opus",
+		"Ace Attorney/Prelude/[JFA] Prelude.opus",
 		"Trial",
-		"ace attorney/trial/[aa] trial.opus",
+		"Ace Attorney/Trial/[AA] Trial.opus",
 		"Character Themes",
-		"ace attorney/character themes/[aa] maya fey - turnabout sisters 2001.opus",
-		"yttd/[yttd] voice of healing.opus",
+		"Ace Attorney/Character Themes/[AA] Maya Fey - Turnabout Sisters 2001.opus",
+		"YTTD/[YTTD] Voice Of Healing.opus",
 	}
 
 	if !reflect.DeepEqual(music, expected) {
@@ -106,7 +106,7 @@ Pursuit`
 		t.Fatalf("LoadMusic() failed: %v", err)
 	}
 
-	// Expected result: categories should not be changed to lowercase
+	// Expected result: categories should remain exactly as in file
 	expected := []string{
 		"Prelude",
 		"Questioning",

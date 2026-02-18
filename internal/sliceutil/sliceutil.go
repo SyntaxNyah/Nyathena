@@ -17,10 +17,23 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>. */
 // Package sliceutil provides functions for common slice operations.
 package sliceutil
 
+import "strings"
+
 // ContainsString checks if a string is within a string slice.
 func ContainsString(container []string, value string) bool {
 	for _, x := range container {
 		if x == value {
+			return true
+		}
+	}
+	return false
+}
+
+// ContainsStringCaseInsensitive checks if a string is within a string slice, ignoring case.
+func ContainsStringCaseInsensitive(container []string, value string) bool {
+	valueLower := strings.ToLower(value)
+	for _, x := range container {
+		if strings.ToLower(x) == valueLower {
 			return true
 		}
 	}

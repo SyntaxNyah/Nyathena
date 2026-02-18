@@ -439,7 +439,7 @@ func pktAM(client *Client, p *packet.Packet) {
 		return
 	}
 
-	if sliceutil.ContainsString(music, p.Body[0]) {
+	if sliceutil.ContainsStringCaseInsensitive(music, p.Body[0]) {
 		if !client.CanChangeMusic() {
 			client.SendServerMessage("You are not allowed to change the music in this area.")
 			return
