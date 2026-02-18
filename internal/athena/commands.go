@@ -1730,18 +1730,33 @@ func cmdPossess(client *Client, args []string, _ string) {
 		targetEmote = "normal"
 	}
 
+	// Get the target's displayed character name (handles iniswap)
+	// Use PairInfo().name if available (contains iniswapped character), otherwise use their actual character
+	targetCharName := target.PairInfo().name
+	if targetCharName == "" {
+		targetCharName = characters[target.CharID()]
+	}
+
+	// Get the character ID for the displayed character
+	targetCharID := getCharacterID(targetCharName)
+	if targetCharID == -1 {
+		// If character name is not found, fall back to target's actual character
+		targetCharID = target.CharID()
+		targetCharName = characters[targetCharID]
+	}
+
 	// Create the IC message packet args following the MS packet format
 	// This is a ONE-TIME possession that copies the target's appearance completely
 	icArgs := make([]string, 30)
 	icArgs[0] = "chat"                        // desk_mod
 	icArgs[1] = ""                            // pre-anim
-	icArgs[2] = characters[target.CharID()]   // character name (target's character)
+	icArgs[2] = targetCharName                // character name (target's displayed character, including iniswap)
 	icArgs[3] = targetEmote                   // emote (target's emote)
 	icArgs[4] = encodedMsg                    // message (encoded)
 	icArgs[5] = target.Pos()                  // position (target's position to spoof them)
 	icArgs[6] = ""                            // sfx-name
 	icArgs[7] = "0"                           // emote_mod
-	icArgs[8] = strconv.Itoa(target.CharID()) // char_id (target's character)
+	icArgs[8] = strconv.Itoa(targetCharID)    // char_id (ID of target's displayed character)
 	icArgs[9] = "0"                           // sfx-delay
 	icArgs[10] = "0"                          // objection_mod
 	icArgs[11] = "0"                          // evidence
@@ -1753,10 +1768,10 @@ func cmdPossess(client *Client, args []string, _ string) {
 		targetTextColor = "0"
 	}
 	icArgs[14] = targetTextColor              // text color (target's color)
-	// Use target's showname or character name
+	// Use target's showname or displayed character name
 	showname := target.Showname()
 	if strings.TrimSpace(showname) == "" {
-		showname = characters[target.CharID()]
+		showname = targetCharName
 	}
 	icArgs[15] = showname                     // showname (target's showname)
 	icArgs[16] = "-1"                         // pair_id

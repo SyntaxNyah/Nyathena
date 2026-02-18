@@ -158,3 +158,85 @@ func TestPossessPreservesAdminPosition(t *testing.T) {
 		t.Errorf("Expected admin's own position to remain 'def', got %s", admin.Pos())
 	}
 }
+
+// TestPossessWithIniswap tests that possession works correctly when target has iniswapped
+func TestPossessWithIniswap(t *testing.T) {
+	// Initialize mock characters list for testing
+	// In real usage, this is loaded from characters.txt
+	characters = []string{
+		"Phoenix Wright",   // ID 0
+		"Miles Edgeworth",  // ID 1
+		"Maya Fey",         // ID 2
+		"Franziska von Karma", // ID 3
+	}
+
+	// Create a target who has selected Phoenix Wright (ID 0)
+	target := &Client{
+		uid:        2,
+		char:       0, // Selected Phoenix Wright
+		possessing: -1,
+		pair:       ClientPairInfo{wanted_id: -1},
+		pos:        "def",
+	}
+
+	// Simulate target iniswapping to Miles Edgeworth
+	// This is what happens when they send an IC message with a different character
+	target.SetPairInfo("Miles Edgeworth", "normal", "0", "")
+
+	// Verify that PairInfo contains the iniswapped character
+	if target.PairInfo().name != "Miles Edgeworth" {
+		t.Errorf("Expected target PairInfo name to be 'Miles Edgeworth', got '%s'", target.PairInfo().name)
+	}
+
+	// Verify getCharacterID helper function works correctly
+	edgeworthID := getCharacterID("Miles Edgeworth")
+	if edgeworthID != 1 {
+		t.Errorf("Expected Miles Edgeworth ID to be 1, got %d", edgeworthID)
+	}
+
+	// When possessing this target, the code should use "Miles Edgeworth" (from PairInfo)
+	// not "Phoenix Wright" (from CharID)
+	targetCharName := target.PairInfo().name
+	if targetCharName == "" {
+		targetCharName = characters[target.CharID()]
+	}
+	if targetCharName != "Miles Edgeworth" {
+		t.Errorf("Expected target displayed character to be 'Miles Edgeworth', got '%s'", targetCharName)
+	}
+
+	// Verify the character ID lookup works
+	targetCharID := getCharacterID(targetCharName)
+	if targetCharID != 1 {
+		t.Errorf("Expected target displayed character ID to be 1, got %d", targetCharID)
+	}
+
+	// Test case when PairInfo is empty (no IC messages sent yet)
+	target2 := &Client{
+		uid:        3,
+		char:       2, // Maya Fey
+		possessing: -1,
+		pair:       ClientPairInfo{wanted_id: -1, name: ""}, // Empty PairInfo
+		pos:        "wit",
+	}
+
+	// When PairInfo.name is empty, should fall back to actual character
+	targetCharName2 := target2.PairInfo().name
+	if targetCharName2 == "" {
+		targetCharName2 = characters[target2.CharID()]
+	}
+	if targetCharName2 != "Maya Fey" {
+		t.Errorf("Expected fallback to actual character 'Maya Fey', got '%s'", targetCharName2)
+	}
+
+	// Test getCharacterID with invalid character name
+	invalidID := getCharacterID("NonexistentCharacter")
+	if invalidID != -1 {
+		t.Errorf("Expected getCharacterID to return -1 for invalid character, got %d", invalidID)
+	}
+
+	// Test case-insensitive character lookup
+	edgeworthID2 := getCharacterID("miles edgeworth")
+	if edgeworthID2 != 1 {
+		t.Errorf("Expected case-insensitive lookup to find Miles Edgeworth (ID 1), got %d", edgeworthID2)
+	}
+}

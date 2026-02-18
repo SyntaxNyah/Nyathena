@@ -201,11 +201,26 @@ func pktIC(client *Client, p *packet.Packet) {
 				targetEmote = "normal"
 			}
 
+			// Get the target's displayed character name (handles iniswap)
+			// Use PairInfo().name if available (contains iniswapped character), otherwise use their actual character
+			targetCharName := target.PairInfo().name
+			if targetCharName == "" {
+				targetCharName = characters[target.CharID()]
+			}
+
+			// Get the character ID for the displayed character
+			targetCharID := getCharacterID(targetCharName)
+			if targetCharID == -1 {
+				// If character name is not found, fall back to target's actual character
+				targetCharID = target.CharID()
+				targetCharName = characters[targetCharID]
+			}
+
 			// Replace character and appearance with target's (including their saved position)
-			args[2] = characters[target.CharID()]   // character name
-			args[3] = targetEmote                    // emote
-			args[5] = client.PossessedPos()          // position (saved target position)
-			args[8] = strconv.Itoa(target.CharID()) // char_id
+			args[2] = targetCharName                  // character name (target's displayed character, including iniswap)
+			args[3] = targetEmote                     // emote
+			args[5] = client.PossessedPos()           // position (saved target position)
+			args[8] = strconv.Itoa(targetCharID)      // char_id (ID of target's displayed character)
 
 			// Use target's text color
 			targetTextColor := target.LastTextColor()
@@ -214,10 +229,10 @@ func pktIC(client *Client, p *packet.Packet) {
 			}
 			args[14] = targetTextColor
 
-			// Use target's showname
+			// Use target's showname or displayed character name
 			targetShowname := target.Showname()
 			if strings.TrimSpace(targetShowname) == "" {
-				targetShowname = characters[target.CharID()]
+				targetShowname = targetCharName
 			}
 			args[15] = targetShowname
 		}

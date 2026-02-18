@@ -64,3 +64,14 @@ func getIpidList(ipids []string) []*Client {
 	}
 	return l
 }
+
+// getCharacterID returns the character ID for a given character name.
+// Returns -1 if the character name is not found.
+func getCharacterID(charName string) int {
+	for i, name := range characters {
+		if strings.EqualFold(name, charName) {
+			return i
+		}
+	}
+	return -1
+}
