@@ -1698,7 +1698,7 @@ func sendPairVisualRefresh(client *Client) {
 		flip              = "0"
 		realization       = "0"
 		textColor         = "0"
-		noPairing         = "-1^"  // Critical: indicates no pairing partner (^ is required by protocol)
+		noPairing         = "-1"  // Critical: indicates no pairing partner
 		selfOffset        = "0"
 		nonInterruptPre   = "0"
 		sfxLooping        = "0"
