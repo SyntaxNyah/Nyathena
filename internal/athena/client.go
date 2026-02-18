@@ -138,16 +138,18 @@ type Client struct {
 	lastRpsTime   time.Time
 	punishments   []PunishmentState
 	msgTimestamps []time.Time // Tracks message timestamps for rate limiting
+	possessing    int         // UID of the client being possessed (-1 if not possessing anyone)
 }
 
 // NewClient returns a new client.
 func NewClient(conn net.Conn, ipid string) *Client {
 	return &Client{
-		conn: conn,
-		uid:  -1,
-		char: -1,
-		pair: ClientPairInfo{wanted_id: -1},
-		ipid: ipid,
+		conn:       conn,
+		uid:        -1,
+		char:       -1,
+		pair:       ClientPairInfo{wanted_id: -1},
+		ipid:       ipid,
+		possessing: -1,
 	}
 }
 
@@ -229,6 +231,18 @@ func (client *Client) SendPacket(header string, contents ...string) {
 func (client *Client) clientCleanup() {
 	if client.Uid() != -1 {
 		logger.LogInfof("Client (IPID:%v UID:%v) left the server", client.ipid, client.Uid())
+
+		// Clear possession links if this client was possessing someone
+		if client.Possessing() != -1 {
+			client.SetPossessing(-1)
+		}
+
+		// Clear possession links if anyone was possessing this client
+		for c := range clients.GetAllClients() {
+			if c.Possessing() == client.Uid() {
+				c.SetPossessing(-1)
+			}
+		}
 
 		if client.Area().PlayerCount() <= 1 {
 			client.Area().Reset()
@@ -1046,4 +1060,18 @@ func (client *Client) CheckRateLimit() bool {
 	// Add current timestamp
 	client.msgTimestamps = append(client.msgTimestamps, now)
 	return false
+}
+
+// Possessing returns the UID of the client being possessed, or -1 if not possessing anyone.
+func (client *Client) Possessing() int {
+	client.mu.Lock()
+	defer client.mu.Unlock()
+	return client.possessing
+}
+
+// SetPossessing sets the UID of the client being possessed.
+func (client *Client) SetPossessing(uid int) {
+	client.mu.Lock()
+	client.possessing = uid
+	client.mu.Unlock()
 }

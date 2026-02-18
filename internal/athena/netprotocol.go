@@ -179,6 +179,45 @@ func pktIC(client *Client, p *packet.Packet) {
 	args = append(args[:19], args[17:]...)
 	args = append(args[:20], args[18:]...)
 
+	// Full possession: Transform admin's IC messages to appear from target
+	if client.Possessing() != -1 {
+		target, err := getClientByUid(client.Possessing())
+		if err != nil {
+			// Target no longer exists, clear possession
+			client.SetPossessing(-1)
+			client.SendServerMessage("Target disconnected. Possession ended.")
+		} else {
+			// Transform the message to use target's appearance
+			// Keep the admin's message content but use target's character/position/colors/etc
+			
+			// Get target's emote, or use "normal" as fallback
+			targetEmote := target.PairInfo().emote
+			if targetEmote == "" {
+				targetEmote = "normal"
+			}
+			
+			// Replace character and appearance with target's
+			args[2] = characters[target.CharID()]   // character name
+			args[3] = targetEmote                    // emote
+			args[5] = target.Pos()                   // position
+			args[8] = strconv.Itoa(target.CharID()) // char_id
+			
+			// Use target's text color
+			targetTextColor := target.LastTextColor()
+			if targetTextColor == "" {
+				targetTextColor = "0"
+			}
+			args[14] = targetTextColor
+			
+			// Use target's showname
+			targetShowname := target.Showname()
+			if strings.TrimSpace(targetShowname) == "" {
+				targetShowname = characters[target.CharID()]
+			}
+			args[15] = targetShowname
+		}
+	}
+
 	client.SetPos(args[5])
 	
 	// Check and clean up expired punishments
