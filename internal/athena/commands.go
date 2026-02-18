@@ -1738,7 +1738,7 @@ func cmdPossess(client *Client, args []string, _ string) {
 	icArgs[2] = characters[target.CharID()]   // character name (target's character)
 	icArgs[3] = targetEmote                   // emote (target's emote)
 	icArgs[4] = encodedMsg                    // message (encoded)
-	icArgs[5] = target.Pos()                  // position (target's position)
+	icArgs[5] = client.Pos()                  // position (admin's current position)
 	icArgs[6] = ""                            // sfx-name
 	icArgs[7] = "0"                           // emote_mod
 	icArgs[8] = strconv.Itoa(target.CharID()) // char_id (target's character)

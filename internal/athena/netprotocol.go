@@ -179,6 +179,9 @@ func pktIC(client *Client, p *packet.Packet) {
 	args = append(args[:19], args[17:]...)
 	args = append(args[:20], args[18:]...)
 
+	// Track if we're in fullpossess mode for validation adjustments
+	isPossessing := false
+	
 	// Full possession: Transform admin's IC messages to appear from target
 	if client.Possessing() != -1 {
 		target, err := getClientByUid(client.Possessing())
@@ -187,8 +190,9 @@ func pktIC(client *Client, p *packet.Packet) {
 			client.SetPossessing(-1)
 			client.SendServerMessage("Target disconnected. Possession ended.")
 		} else {
+			isPossessing = true
 			// Transform the message to use target's appearance
-			// Keep the admin's message content but use target's character/position/colors/etc
+			// Keep the admin's message content and position, but use target's character/colors/etc
 			
 			// Get target's emote, or use "normal" as fallback
 			targetEmote := target.PairInfo().emote
@@ -196,10 +200,10 @@ func pktIC(client *Client, p *packet.Packet) {
 				targetEmote = "normal"
 			}
 			
-			// Replace character and appearance with target's
+			// Replace character and appearance with target's (but keep admin's position in args[5])
 			args[2] = characters[target.CharID()]   // character name
 			args[3] = targetEmote                    // emote
-			args[5] = target.Pos()                   // position
+			// args[5] remains as admin's position
 			args[8] = strconv.Itoa(target.CharID()) // char_id
 			
 			// Use target's text color
@@ -303,7 +307,7 @@ func pktIC(client *Client, p *packet.Packet) {
 	switch {
 	case !sliceutil.ContainsString([]string{"chat", "0", "1", "2", "3", "4", "5"}, args[0]): // desk_mod
 		return
-	case !strings.EqualFold(characters[client.CharID()], args[2]) && !client.Area().IniswapAllowed(): // character name
+	case !isPossessing && !strings.EqualFold(characters[client.CharID()], args[2]) && !client.Area().IniswapAllowed(): // character name (skip check when possessing)
 		client.SendServerMessage("Iniswapping is not allowed in this area.")
 		return
 	case len(decode(args[4])) > config.MaxMsg: // message
@@ -313,7 +317,7 @@ func pktIC(client *Client, p *packet.Packet) {
 		return
 	case emote_mod < 0 || emote_mod > 6:
 		return
-	case args[8] != strconv.Itoa(client.CharID()): // char_id
+	case !isPossessing && args[8] != strconv.Itoa(client.CharID()): // char_id (skip check when possessing)
 		return
 	case objection < 0 || objection > 4: // objection_mod
 		return
