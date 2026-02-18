@@ -62,6 +62,11 @@ func TestGetAllowedOrigins(t *testing.T) {
 			assetURL:       "https://assets.cdn.example.com/webao",
 			expectedResult: []string{"web.aceattorneyonline.com", "assets.cdn.example.com"},
 		},
+		{
+			name:           "URL with path component (miku.pizza/base/)",
+			assetURL:       "https://miku.pizza/base/",
+			expectedResult: []string{"web.aceattorneyonline.com", "miku.pizza"},
+		},
 	}
 
 	for _, tt := range tests {
