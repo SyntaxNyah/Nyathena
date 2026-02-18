@@ -257,3 +257,107 @@ func TestPossessWithIniswap(t *testing.T) {
 		t.Errorf("Expected fallback to actual character 'Maya Fey', got '%s'", fallbackCharName)
 	}
 }
+
+// TestPersistentPairing tests the new persistent pairing functionality
+func TestPersistentPairing(t *testing.T) {
+	// Create two clients
+	client1 := &Client{
+		uid:       1,
+		char:      0,
+		pair:      ClientPairInfo{wanted_id: -1},
+		pairedUID: -1,
+		oocName:   "Player1",
+	}
+	client2 := &Client{
+		uid:       2,
+		char:      1,
+		pair:      ClientPairInfo{wanted_id: -1},
+		pairedUID: -1,
+		oocName:   "Player2",
+	}
+
+	// Initially, neither client should be paired
+	if client1.PairedUID() != -1 {
+		t.Errorf("Expected client1 to not be paired initially, got %d", client1.PairedUID())
+	}
+	if client2.PairedUID() != -1 {
+		t.Errorf("Expected client2 to not be paired initially, got %d", client2.PairedUID())
+	}
+
+	// Client1 sets intent to pair with client2
+	client1.SetPairedUID(client2.Uid())
+	if client1.PairedUID() != client2.Uid() {
+		t.Errorf("Expected client1 pairedUID to be %d, got %d", client2.Uid(), client1.PairedUID())
+	}
+
+	// Client2 should still not be paired
+	if client2.PairedUID() != -1 {
+		t.Errorf("Expected client2 to still not be paired, got %d", client2.PairedUID())
+	}
+
+	// Client2 accepts and pairs with client1
+	client2.SetPairedUID(client1.Uid())
+	if client2.PairedUID() != client1.Uid() {
+		t.Errorf("Expected client2 pairedUID to be %d, got %d", client1.Uid(), client2.PairedUID())
+	}
+
+	// Both clients should now be paired with each other
+	if client1.PairedUID() != client2.Uid() {
+		t.Errorf("Expected client1 paired with client2")
+	}
+	if client2.PairedUID() != client1.Uid() {
+		t.Errorf("Expected client2 paired with client1")
+	}
+
+	// Test unpairing
+	client1.SetPairedUID(-1)
+	if client1.PairedUID() != -1 {
+		t.Errorf("Expected client1 to be unpaired, got %d", client1.PairedUID())
+	}
+
+	// Client2 should still have the pairing (unpair is one-way in this test)
+	if client2.PairedUID() != 1 {
+		t.Errorf("Expected client2 still paired with client1, got %d", client2.PairedUID())
+	}
+}
+
+// TestPersistentPairingIndependent tests that persistent pairing is independent from character pairing
+func TestPersistentPairingIndependent(t *testing.T) {
+	// Create two clients
+	client1 := &Client{
+		uid:       10,
+		char:      0, // Phoenix Wright
+		pair:      ClientPairInfo{wanted_id: -1},
+		pairedUID: -1,
+	}
+	client2 := &Client{
+		uid:       20,
+		char:      1, // Miles Edgeworth
+		pair:      ClientPairInfo{wanted_id: -1},
+		pairedUID: -1,
+	}
+
+	// Set persistent pairing
+	client1.SetPairedUID(client2.Uid())
+	client2.SetPairedUID(client1.Uid())
+
+	// Change character wanted_id (old pairing system)
+	client1.SetPairWantedID(5)
+	client2.SetPairWantedID(3)
+
+	// Persistent pairing should be unaffected by character wanted_id
+	if client1.PairedUID() != client2.Uid() {
+		t.Errorf("Expected persistent pairing to remain after changing wanted_id")
+	}
+	if client2.PairedUID() != client1.Uid() {
+		t.Errorf("Expected persistent pairing to remain after changing wanted_id")
+	}
+
+	// Character pairing should be independent
+	if client1.PairWantedID() != 5 {
+		t.Errorf("Expected wanted_id to be 5, got %d", client1.PairWantedID())
+	}
+	if client2.PairWantedID() != 3 {
+		t.Errorf("Expected wanted_id to be 3, got %d", client2.PairWantedID())
+	}
+}
