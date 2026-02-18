@@ -153,6 +153,18 @@ func InitServer(conf *settings.Config) error {
 		areas = append(areas, area.NewArea(a, len(characters), conf.BufSize, evi_mode))
 	}
 	areaNames = strings.TrimSuffix(areaNames, "#")
+	
+	// Initialize area logging if enabled
+	logger.EnableAreaLogging = conf.EnableAreaLogging
+	if logger.EnableAreaLogging {
+		logger.LogInfo("Area logging is enabled. Creating area log directories...")
+		for _, a := range areas {
+			if err := logger.CreateAreaLogDirectory(a.Name()); err != nil {
+				logger.LogErrorf("Failed to create area log directory for %v: %v", a.Name(), err)
+			}
+		}
+	}
+	
 	if config.Advertise {
 		advert := ms.Advertisement{
 			Port:    config.Port,
@@ -327,6 +339,21 @@ func addToBuffer(client *Client, action string, message string, audit bool) {
 	s := fmt.Sprintf("%v | %v | %v | %v | %v | %v",
 		time.Now().UTC().Format("15:04:05"), action, client.CurrentCharacter(), client.Ipid(), client.OOCName(), message)
 	client.Area().UpdateBuffer(s)
+	
+	// Write to area-specific log file if area logging is enabled
+	if logger.EnableAreaLogging {
+		logEntry := fmt.Sprintf("[%v] | %v | %v | %v | %v | %v | %v | %v",
+			time.Now().UTC().Format("15:04:05"),
+			action,
+			client.CurrentCharacter(),
+			client.Ipid(),
+			client.Hdid(),
+			client.Showname(),
+			client.OOCName(),
+			message)
+		logger.WriteAreaLog(client.Area().Name(), logEntry)
+	}
+	
 	if audit {
 		logger.WriteAudit(s)
 	}

@@ -19,6 +19,7 @@ package logger
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -44,13 +45,15 @@ var (
 		Error:   "ERROR",
 		Fatal:   "FATAL",
 	}
-	LogPath      string
-	LogStdOut    bool
-	LogFile      bool
-	CurrentLevel LogLevel
-	outputLock   sync.Mutex
-	fileLock     sync.Mutex
-	DebugNetwork bool
+	LogPath           string
+	LogStdOut         bool
+	LogFile           bool
+	CurrentLevel      LogLevel
+	outputLock        sync.Mutex
+	fileLock          sync.Mutex
+	DebugNetwork      bool
+	EnableAreaLogging bool
+	areaLogLocks      sync.Map // Map of area names to their respective locks
 )
 
 // log writes a message to standard output and/or the log file if the level matches the server's set log level.
@@ -168,6 +171,74 @@ func WriteLog(s string) {
 	if err != nil {
 		LogFile = false
 		LogError(err.Error())
+		return
+	}
+}
+
+// sanitizeAreaName converts an area name to a safe folder name
+func sanitizeAreaName(name string) string {
+	// Replace slashes, backslashes, and other problematic characters
+	replacer := strings.NewReplacer(
+		"/", "_",
+		"\\", "_",
+		":", "_",
+		"*", "_",
+		"?", "_",
+		"\"", "_",
+		"<", "_",
+		">", "_",
+		"|", "_",
+	)
+	return replacer.Replace(name)
+}
+
+// CreateAreaLogDirectory creates a log directory for an area if it doesn't exist
+func CreateAreaLogDirectory(areaName string) error {
+	if !EnableAreaLogging {
+		return nil
+	}
+	safeAreaName := sanitizeAreaName(areaName)
+	dirPath := filepath.Join(LogPath, safeAreaName)
+	err := os.MkdirAll(dirPath, 0755)
+	if err != nil {
+		return fmt.Errorf("failed to create area log directory: %w", err)
+	}
+	return nil
+}
+
+// getAreaLock returns or creates a mutex for the specified area
+func getAreaLock(areaName string) *sync.Mutex {
+	lock, _ := areaLogLocks.LoadOrStore(areaName, &sync.Mutex{})
+	return lock.(*sync.Mutex)
+}
+
+// WriteAreaLog writes a log entry to an area's daily log file
+func WriteAreaLog(areaName, logEntry string) {
+	if !EnableAreaLogging {
+		return
+	}
+
+	safeAreaName := sanitizeAreaName(areaName)
+	lock := getAreaLock(safeAreaName)
+	lock.Lock()
+	defer lock.Unlock()
+
+	// Generate daily log file name
+	today := time.Now().Format("2006-01-02")
+	filename := filepath.Join(LogPath, safeAreaName, fmt.Sprintf("%s-%s.txt", safeAreaName, today))
+
+	// Open or create the file with append mode
+	f, err := os.OpenFile(filename, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
+	if err != nil {
+		LogErrorf("Failed to open area log file %s: %v", filename, err)
+		return
+	}
+	defer f.Close()
+
+	// Write the log entry with a newline
+	_, err = f.WriteString(logEntry + "\n")
+	if err != nil {
+		LogErrorf("Failed to write to area log file %s: %v", filename, err)
 		return
 	}
 }

@@ -67,10 +67,11 @@ type ServerConfig struct {
 }
 
 type LogConfig struct {
-	BufSize    int      `toml:"log_buffer_size"`
-	LogLevel   string   `toml:"log_level"`
-	LogDir     string   `toml:"log_directory"`
-	LogMethods []string `toml:"log_methods"`
+	BufSize          int      `toml:"log_buffer_size"`
+	LogLevel         string   `toml:"log_level"`
+	LogDir           string   `toml:"log_directory"`
+	LogMethods       []string `toml:"log_methods"`
+	EnableAreaLogging bool    `toml:"enable_area_logging"`
 }
 
 type MSConfig struct {
@@ -107,10 +108,11 @@ func defaultConfig() *Config {
 			RateLimitWindow:       10,
 		},
 		LogConfig{
-			BufSize:    150,
-			LogLevel:   "info",
-			LogDir:     "logs",
-			LogMethods: []string{"stdout"},
+			BufSize:           150,
+			LogLevel:          "info",
+			LogDir:            "logs",
+			LogMethods:        []string{"stdout"},
+			EnableAreaLogging: false,
 		},
 		MSConfig{
 			Advertise: false,

@@ -178,6 +178,12 @@ log_directory = "logs"
 # Methods: stdout, log_file
 log_methods = [ "stdout" ]
 
+# Enable per-area folder logging with daily rotation.
+# When enabled, each area gets its own folder under logs/ with daily log files.
+# Format: logs/AreaName/AreaName-YYYY-MM-DD.txt
+# Each log line includes: [HH:MM:SS] | ACTION | CHARACTER | IPID | HDID | SHOWNAME | OOC_NAME | MESSAGE
+enable_area_logging = false
+
 [MasterServer]
 
 # Whether or not to advertise your server on the master server, which will make it discoverable by players.
