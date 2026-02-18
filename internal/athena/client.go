@@ -1089,6 +1089,6 @@ func (client *Client) PossessedPos() string {
 // SetPossessedPos sets the saved position of the possessed target.
 func (client *Client) SetPossessedPos(pos string) {
 	client.mu.Lock()
+	defer client.mu.Unlock()
 	client.possessedPos = pos
-	client.mu.Unlock()
 }
