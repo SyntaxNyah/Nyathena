@@ -150,7 +150,13 @@ func LoadMusic() ([]string, error) {
 	defer f.Close()
 	in := bufio.NewScanner(f)
 	for in.Scan() {
-		musicList = append(musicList, in.Text())
+		line := in.Text()
+		// Normalize file paths to lowercase to match webAO file systems
+		// Categories (without '.') are kept as-is for display purposes
+		if strings.ContainsRune(line, '.') {
+			line = strings.ToLower(line)
+		}
+		musicList = append(musicList, line)
 	}
 	if len(musicList) == 0 {
 		return nil, fmt.Errorf("empty musiclist")
