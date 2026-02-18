@@ -1682,11 +1682,11 @@ func cmdPair(client *Client, args []string, usage string) {
 	}
 }
 
-// sendPairVisualRefresh sends a minimal IC message to force client to refresh pairing visuals
+// sendPairVisualRefresh sends a minimal IC message to force client's area to refresh pairing visuals
 func sendPairVisualRefresh(client *Client) {
 	// Send a blank IC message with no pairing info to force visual refresh
-	// This clears the ghost partner from the client's screen
-	client.SendPacket("MS", "chat",
+	// This clears the ghost partner from the client's screen (and from other clients who see this character)
+	writeToArea(client.Area(), "MS", "chat",
 		"0",                     // pre-animation
 		characters[client.CharID()], // character name/folder
 		"",                      // emote
@@ -1694,7 +1694,7 @@ func sendPairVisualRefresh(client *Client) {
 		client.Pos(),            // position
 		"",                      // sfx-name
 		"0",                     // emote_modifier
-		"0",                     // cid
+		strconv.Itoa(client.CharID()), // cid
 		"",                      // sfx-delay
 		"",                      // objection_modifier
 		"0",                     // evidence
