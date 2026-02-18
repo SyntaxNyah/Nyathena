@@ -1749,6 +1749,7 @@ func cmdUnpair(client *Client, _ []string, _ string) {
 	paired := clients.GetClientByUID(pairedUID)
 	if paired != nil {
 		paired.SetPairedUID(-1)
+		paired.SetPairWantedID(-1) // Clear transient pairing wanted ID
 		paired.SetPairInfo("", "", "", "") // Clear visual pair info
 		paired.SendServerMessage(fmt.Sprintf("%s (UID: %d) has ended the pairing.", client.OOCName(), client.Uid()))
 		// Send a blank IC message to force visual refresh and clear ghost partner
@@ -1756,6 +1757,7 @@ func cmdUnpair(client *Client, _ []string, _ string) {
 	}
 
 	client.SetPairedUID(-1)
+	client.SetPairWantedID(-1) // Clear transient pairing wanted ID
 	client.SetPairInfo("", "", "", "") // Clear visual pair info
 	client.SendServerMessage("Unpairing successful.")
 	addToBuffer(client, "CMD", "Unpaired.", false)
