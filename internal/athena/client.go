@@ -249,23 +249,15 @@ func (client *Client) clientCleanup() {
 			}
 		}
 
-		// Clear persistent pairing if this client was paired with someone
-		if client.PairedUID() != -1 {
-			paired := clients.GetClientByUID(client.PairedUID())
-			if paired != nil {
-				paired.SetPairedUID(-1)
-				paired.SendServerMessage("Your pair partner has disconnected. Pairing ended.")
-			}
-			client.SetPairedUID(-1)
-		}
-
-		// Clear persistent pairing if anyone was paired with this client
+		// Clear persistent pairing - check all clients for any pairing with this client
 		for c := range clients.GetAllClients() {
 			if c.PairedUID() == client.Uid() {
 				c.SetPairedUID(-1)
 				c.SendServerMessage("Your pair partner has disconnected. Pairing ended.")
 			}
 		}
+		// Clear this client's pairing reference
+		client.SetPairedUID(-1)
 
 		if client.Area().PlayerCount() <= 1 {
 			client.Area().Reset()
