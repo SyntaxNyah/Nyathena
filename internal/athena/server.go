@@ -24,7 +24,6 @@ import (
 	"math/rand"
 	"net"
 	"net/http"
-	"net/url"
 	"strconv"
 	"strings"
 	"sync"
@@ -260,30 +259,9 @@ func ListenWSS() {
 	}
 }
 
-// getAllowedOrigins returns the list of allowed WebSocket origins based on the server configuration.
-func getAllowedOrigins(assetURL string) []string {
-	allowedOrigins := []string{"web.aceattorneyonline.com"}
-	
-	// If a custom asset URL is configured, extract and allow its origin
-	if assetURL != "" {
-		if parsedURL, err := url.Parse(assetURL); err == nil && parsedURL.Host != "" {
-			// Add the custom asset URL's host to allowed origins
-			allowedOrigins = append(allowedOrigins, parsedURL.Host)
-		} else {
-			// If parsing fails or no host is found, log a warning and only allow default origin
-			// This is safer than allowing all origins with a wildcard
-			logger.LogWarningf("Could not parse asset_url '%s', only allowing default WebAO origin. Please check your configuration.", assetURL)
-		}
-	}
-	
-	return allowedOrigins
-}
-
 // HandleWS handles a websocket connection.
 func HandleWS(w http.ResponseWriter, r *http.Request) {
-	allowedOrigins := getAllowedOrigins(config.AssetURL)
-	
-	c, err := websocket.Accept(w, r, &websocket.AcceptOptions{OriginPatterns: allowedOrigins})
+	c, err := websocket.Accept(w, r, &websocket.AcceptOptions{OriginPatterns: []string{"web.aceattorneyonline.com"}}) // WS connections not originating from webAO will be rejected.
 	if err != nil {
 		logger.LogError(err.Error())
 		return
@@ -428,33 +406,25 @@ func CleanupServer() {
 }
 
 // getRealIP extracts the real client IP address from an HTTP request.
-// When reverse_proxy_mode is enabled in the config, it checks X-Forwarded-For 
-// and X-Real-IP headers (for reverse proxy setups like nginx or Cloudflare).
-// When reverse_proxy_mode is disabled, it always uses RemoteAddr directly.
-//
-// Security Note: Proxy headers (X-Forwarded-For, X-Real-IP) are only trusted when
-// reverse_proxy_mode is explicitly enabled. This prevents IP spoofing when the server
-// is directly exposed to the internet without a reverse proxy.
+// It checks X-Forwarded-For and X-Real-IP headers first (for reverse proxy setups),
+// then falls back to RemoteAddr if those headers are not present.
 func getRealIP(r *http.Request) string {
-	// Only trust proxy headers if reverse_proxy_mode is enabled in config
-	if config.ReverseProxyMode {
-		// Check X-Forwarded-For header first (may contain multiple IPs)
-		if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
-			// X-Forwarded-For can contain multiple IPs: "client, proxy1, proxy2"
-			// The first IP is the original client
-			ips := strings.Split(xff, ",")
-			if len(ips) > 0 {
-				return strings.TrimSpace(ips[0])
-			}
-		}
-		
-		// Check X-Real-IP header (single IP from reverse proxy)
-		if xri := r.Header.Get("X-Real-IP"); xri != "" {
-			return xri
+	// Check X-Forwarded-For header first (may contain multiple IPs)
+	if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
+		// X-Forwarded-For can contain multiple IPs: "client, proxy1, proxy2"
+		// The first IP is the original client
+		ips := strings.Split(xff, ",")
+		if len(ips) > 0 {
+			return strings.TrimSpace(ips[0])
 		}
 	}
 	
-	// Use RemoteAddr if reverse_proxy_mode is disabled or no proxy headers are present
+	// Check X-Real-IP header (single IP from reverse proxy)
+	if xri := r.Header.Get("X-Real-IP"); xri != "" {
+		return xri
+	}
+	
+	// Fallback to RemoteAddr if no proxy headers are present
 	return r.RemoteAddr
 }
 
@@ -462,16 +432,8 @@ func getRealIP(r *http.Request) string {
 func getIpid(s string) string {
 	// For privacy and ease of use, AO servers traditionally use a hashed version of a client's IP address to identify a client.
 	// Athena uses the MD5 hash of the IP address, encoded in base64.
-	
-	// Extract just the IP address, removing the port if present
-	// Use net.SplitHostPort which correctly handles both IPv4 and IPv6 addresses
-	ip, _, err := net.SplitHostPort(s)
-	if err != nil {
-		// If there's an error, the input doesn't have a port, so use it as-is
-		ip = s
-	}
-	
-	hash := md5.Sum([]byte(ip))
+	addr := strings.Split(s, ":")
+	hash := md5.Sum([]byte(strings.Join(addr[:len(addr)-1], ":")))
 	ipid := base64.StdEncoding.EncodeToString(hash[:])
 	return ipid[:len(ipid)-2] // Removes the trailing padding.
 }

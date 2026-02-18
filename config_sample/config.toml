@@ -130,8 +130,6 @@ multiclient_limit = 16
 
 # Sets the URL for the server's WebAO assets.
 # If this is blank, vanilla assets will be used.
-# When set, WebSocket connections from the custom asset URL's domain will be automatically allowed.
-# The URL should include the protocol (e.g., "https://example.com/assets").
 asset_url = ""
 
 # Sets the URL for the server's Discord webhook.

@@ -19,106 +19,62 @@ package athena
 import (
 	"net/http"
 	"testing"
-
-	"github.com/MangosArentLiterature/Athena/internal/settings"
 )
 
 func TestGetRealIP(t *testing.T) {
-	// Save original config and restore after tests
-	originalConfig := config
-	defer func() { config = originalConfig }()
-
 	tests := []struct {
-		name              string
-		reverseProxyMode  bool
-		remoteAddr        string
-		xForwardedFor     string
-		xRealIP           string
-		expectedResult    string
+		name           string
+		remoteAddr     string
+		xForwardedFor  string
+		xRealIP        string
+		expectedResult string
 	}{
 		{
-			name:              "Reverse proxy disabled - ignore X-Forwarded-For",
-			reverseProxyMode:  false,
-			remoteAddr:        "10.0.0.1:8080",
-			xForwardedFor:     "203.0.113.45",
-			xRealIP:           "",
-			expectedResult:    "10.0.0.1:8080",
+			name:           "No proxy headers - use RemoteAddr",
+			remoteAddr:     "192.168.1.100:12345",
+			xForwardedFor:  "",
+			xRealIP:        "",
+			expectedResult: "192.168.1.100:12345",
 		},
 		{
-			name:              "Reverse proxy disabled - ignore X-Real-IP",
-			reverseProxyMode:  false,
-			remoteAddr:        "10.0.0.1:8080",
-			xForwardedFor:     "",
-			xRealIP:           "203.0.113.45",
-			expectedResult:    "10.0.0.1:8080",
+			name:           "X-Forwarded-For with single IP",
+			remoteAddr:     "10.0.0.1:8080",
+			xForwardedFor:  "203.0.113.45",
+			xRealIP:        "",
+			expectedResult: "203.0.113.45",
 		},
 		{
-			name:              "Reverse proxy disabled - ignore both headers",
-			reverseProxyMode:  false,
-			remoteAddr:        "10.0.0.1:8080",
-			xForwardedFor:     "203.0.113.45",
-			xRealIP:           "198.51.100.20",
-			expectedResult:    "10.0.0.1:8080",
+			name:           "X-Forwarded-For with multiple IPs",
+			remoteAddr:     "10.0.0.1:8080",
+			xForwardedFor:  "203.0.113.45, 198.51.100.20, 10.0.0.1",
+			xRealIP:        "",
+			expectedResult: "203.0.113.45",
 		},
 		{
-			name:              "Reverse proxy enabled - no headers, use RemoteAddr",
-			reverseProxyMode:  true,
-			remoteAddr:        "192.168.1.100:12345",
-			xForwardedFor:     "",
-			xRealIP:           "",
-			expectedResult:    "192.168.1.100:12345",
+			name:           "X-Real-IP header",
+			remoteAddr:     "10.0.0.1:8080",
+			xForwardedFor:  "",
+			xRealIP:        "203.0.113.45",
+			expectedResult: "203.0.113.45",
 		},
 		{
-			name:              "Reverse proxy enabled - X-Forwarded-For with single IP",
-			reverseProxyMode:  true,
-			remoteAddr:        "10.0.0.1:8080",
-			xForwardedFor:     "203.0.113.45",
-			xRealIP:           "",
-			expectedResult:    "203.0.113.45",
+			name:           "Both headers present - X-Forwarded-For takes precedence",
+			remoteAddr:     "10.0.0.1:8080",
+			xForwardedFor:  "203.0.113.45",
+			xRealIP:        "198.51.100.20",
+			expectedResult: "203.0.113.45",
 		},
 		{
-			name:              "Reverse proxy enabled - X-Forwarded-For with multiple IPs",
-			reverseProxyMode:  true,
-			remoteAddr:        "10.0.0.1:8080",
-			xForwardedFor:     "203.0.113.45, 198.51.100.20, 10.0.0.1",
-			xRealIP:           "",
-			expectedResult:    "203.0.113.45",
-		},
-		{
-			name:              "Reverse proxy enabled - X-Real-IP header",
-			reverseProxyMode:  true,
-			remoteAddr:        "10.0.0.1:8080",
-			xForwardedFor:     "",
-			xRealIP:           "203.0.113.45",
-			expectedResult:    "203.0.113.45",
-		},
-		{
-			name:              "Reverse proxy enabled - both headers, X-Forwarded-For takes precedence",
-			reverseProxyMode:  true,
-			remoteAddr:        "10.0.0.1:8080",
-			xForwardedFor:     "203.0.113.45",
-			xRealIP:           "198.51.100.20",
-			expectedResult:    "203.0.113.45",
-		},
-		{
-			name:              "Reverse proxy enabled - X-Forwarded-For with whitespace",
-			reverseProxyMode:  true,
-			remoteAddr:        "10.0.0.1:8080",
-			xForwardedFor:     " 203.0.113.45 , 198.51.100.20",
-			xRealIP:           "",
-			expectedResult:    "203.0.113.45",
+			name:           "X-Forwarded-For with whitespace",
+			remoteAddr:     "10.0.0.1:8080",
+			xForwardedFor:  " 203.0.113.45 , 198.51.100.20",
+			xRealIP:        "",
+			expectedResult: "203.0.113.45",
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Set up test config
-			config = &settings.Config{
-				ServerConfig: settings.ServerConfig{
-					ReverseProxyMode: tt.reverseProxyMode,
-				},
-			}
-
 			req := &http.Request{
 				RemoteAddr: tt.remoteAddr,
 				Header:     make(http.Header),
@@ -206,79 +162,5 @@ func TestSameIPProducesSameIPID(t *testing.T) {
 
 	if ipid1 != ipid2 {
 		t.Errorf("Same IP with different ports should produce same IPID. Got %v and %v", ipid1, ipid2)
-	}
-}
-
-func TestIPsWithoutPortsProduceUniqueIPIDs(t *testing.T) {
-	// Test that IPs without ports produce unique IPIDs
-	// This is critical for reverse proxy scenarios where getRealIP returns just the IP
-	ips := []string{
-		"192.168.1.1",
-		"192.168.1.2",
-		"10.0.0.1",
-		"172.16.0.1",
-		"203.0.113.45",
-	}
-
-	ipids := make(map[string]bool)
-	for _, ip := range ips {
-		ipid := getIpid(ip)
-		if ipid == "" {
-			t.Errorf("getIpid(%v) returned empty string", ip)
-		}
-		if ipids[ipid] {
-			t.Errorf("Duplicate IPID found for IP %v: %v", ip, ipid)
-		}
-		ipids[ipid] = true
-	}
-
-	if len(ipids) != len(ips) {
-		t.Errorf("Expected %d unique IPIDs, got %d", len(ips), len(ipids))
-	}
-}
-
-func TestIPWithAndWithoutPortProduceSameIPID(t *testing.T) {
-	// Test that IP with port and without port produce the same IPID
-	tests := []struct {
-		name       string
-		withPort   string
-		withoutPort string
-	}{
-		{
-			name:        "Standard IPv4",
-			withPort:    "192.168.1.100:12345",
-			withoutPort: "192.168.1.100",
-		},
-		{
-			name:        "Different IP",
-			withPort:    "10.0.0.50:8080",
-			withoutPort: "10.0.0.50",
-		},
-		{
-			name:        "Public IP",
-			withPort:    "203.0.113.45:54321",
-			withoutPort: "203.0.113.45",
-		},
-		{
-			name:        "IPv6 loopback",
-			withPort:    "[::1]:8080",
-			withoutPort: "::1",
-		},
-		{
-			name:        "IPv6 address",
-			withPort:    "[2001:db8::1]:8080",
-			withoutPort: "2001:db8::1",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			ipidWithPort := getIpid(tt.withPort)
-			ipidWithoutPort := getIpid(tt.withoutPort)
-
-			if ipidWithPort != ipidWithoutPort {
-				t.Errorf("Same IP with and without port should produce same IPID. With port: %v, Without port: %v", ipidWithPort, ipidWithoutPort)
-			}
-		})
 	}
 }
