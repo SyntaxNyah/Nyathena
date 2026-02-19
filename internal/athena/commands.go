@@ -740,14 +740,43 @@ func initCommands() {
 // ParseCommand calls the appropriate function for a given command.
 func ParseCommand(client *Client, command string, args []string) {
 	if command == "help" {
-		var s []string
-		for name, cmd := range Commands {
-			if permissions.HasPermission(client.Perms(), cmd.reqPerms) || (cmd.reqPerms == permissions.PermissionField["CM"] && client.Area().HasCM(client.Uid())) {
-				s = append(s, fmt.Sprintf("- /%v: %v", name, cmd.desc))
+		// If specific command requested, show detailed help
+		if len(args) > 0 {
+			cmdName := args[0]
+			cmd, exists := Commands[cmdName]
+			if !exists {
+				client.SendServerMessage("Command not found: /" + cmdName)
+				return
 			}
+
+			// Check if user has permission to see this command
+			hasPermission := permissions.HasPermission(client.Perms(), cmd.reqPerms) || (cmd.reqPerms == permissions.PermissionField["CM"] && client.Area().HasCM(client.Uid()))
+			if !hasPermission {
+				client.SendServerMessage("You do not have permission to use that command.")
+				return
+			}
+
+			// Build detailed help for specific command
+			var permName string
+			for name, perm := range permissions.PermissionField {
+				if perm == cmd.reqPerms {
+					permName = name
+					break
+				}
+			}
+
+			help := fmt.Sprintf("=== HELP: /%s ===\n\n", cmdName)
+			help += fmt.Sprintf("Description: %s\n\n", cmd.desc)
+			help += fmt.Sprintf("Usage:\n%s\n\n", cmd.usage)
+			help += fmt.Sprintf("Required Permission: %s\n", permName)
+			help += "\n" + strings.Repeat("=", 40)
+
+			client.SendServerMessage(help)
+			return
 		}
-		sort.Strings(s)
-		client.SendServerMessage("Recognized commands:\n" + strings.Join(s, "\n") + "\n\nTo view detailed usage on a command, do /<command> -h")
+
+		// Otherwise, show categorized help
+		cmdHelp(client)
 		return
 	}
 
@@ -768,6 +797,130 @@ func ParseCommand(client *Client, command string, args []string) {
 		client.SendServerMessage("You do not have permission to use that command.")
 		return
 	}
+}
+
+// cmdHelp displays categorized help for all available commands
+func cmdHelp(client *Client) {
+	// Define command categories with their commands
+	categories := []struct {
+		Name     string
+		Commands []string
+	}{
+		{
+			Name:     "Player Information",
+			Commands: []string{"players", "areainfo", "status", "motd", "about"},
+		},
+		{
+			Name:     "Moderation",
+			Commands: []string{"mute", "unmute", "ban", "unban", "kick", "jail", "unjail", "editban", "getban"},
+		},
+		{
+			Name: "Custom Punishments - Text Modification",
+			Commands: []string{"parrot", "whisper", "backward", "stutterstep", "elongate", "uppercase", "lowercase",
+				"robotic", "alternating", "fancy", "uwu", "pirate", "shakespearean", "caveman"},
+		},
+		{
+			Name:     "Custom Punishments - Visibility",
+			Commands: []string{"emoji", "invisible"},
+		},
+		{
+			Name:     "Custom Punishments - Timing",
+			Commands: []string{"slowpoke", "fastspammer", "pause", "lag"},
+		},
+		{
+			Name:     "Custom Punishments - Social",
+			Commands: []string{"subtitles", "roulette", "spotlight"},
+		},
+		{
+			Name:     "Custom Punishments - Processing",
+			Commands: []string{"censor", "confused", "paranoid", "drunk", "hiccup", "whistle", "mumble"},
+		},
+		{
+			Name:     "Custom Punishments - Complex",
+			Commands: []string{"spaghetti", "torment", "rng", "essay", "haiku", "autospell", "unpunish", "stack"},
+		},
+		{
+			Name:     "Communication",
+			Commands: []string{"pm", "global", "mod", "modchat"},
+		},
+		{
+			Name: "Area Management",
+			Commands: []string{"move", "lock", "unlock", "invite", "uninvite", "summon", "kickarea",
+				"allowcms", "allowiniswap", "forcebglist", "lockbg", "nointpres"},
+		},
+		{
+			Name:     "Area CM Commands",
+			Commands: []string{"cm", "uncm", "bg", "play", "lockmusic", "evimode", "doc", "poll", "testimony"},
+		},
+		{
+			Name:     "Character & Gameplay",
+			Commands: []string{"charselect", "roll", "rps", "coinflip", "narrator", "pair", "unpair"},
+		},
+		{
+			Name:     "Evidence",
+			Commands: []string{"swapevi"},
+		},
+		{
+			Name:     "Audit & Logs",
+			Commands: []string{"log"},
+		},
+		{
+			Name:     "User Management",
+			Commands: []string{"login", "logout", "mkusr", "rmusr", "setrole"},
+		},
+		{
+			Name:     "Tournament",
+			Commands: []string{"tournament", "join-tournament"},
+		},
+		{
+			Name:     "Advanced",
+			Commands: []string{"possess", "fullpossess", "unpossess"},
+		},
+	}
+
+	var output strings.Builder
+	output.WriteString("╔════════════════════════════════════════╗\n")
+	output.WriteString("║       ATHENA COMMAND REFERENCE         ║\n")
+	output.WriteString("╚════════════════════════════════════════╝\n\n")
+
+	// Build help message organized by category
+	for _, category := range categories {
+		categoryHasCommands := false
+		var categoryOutput strings.Builder
+
+		// Check if any commands in this category are available to the user
+		for _, cmdName := range category.Commands {
+			cmd, exists := Commands[cmdName]
+			if !exists {
+				continue
+			}
+
+			// Check permission
+			hasPermission := permissions.HasPermission(client.Perms(), cmd.reqPerms) ||
+				(cmd.reqPerms == permissions.PermissionField["CM"] && client.Area().HasCM(client.Uid()))
+
+			if hasPermission {
+				if !categoryHasCommands {
+					categoryOutput.WriteString(fmt.Sprintf("┌─ %s ─┐\n", category.Name))
+					categoryHasCommands = true
+				}
+				categoryOutput.WriteString(fmt.Sprintf("│ /%s - %s\n", cmdName, cmd.desc))
+			}
+		}
+
+		// Add category to output if it has commands
+		if categoryHasCommands {
+			categoryOutput.WriteString("└" + strings.Repeat("─", 38) + "┘\n\n")
+			output.WriteString(categoryOutput.String())
+		}
+	}
+
+	output.WriteString(strings.Repeat("─", 40) + "\n")
+	output.WriteString("For detailed help: /help <command>\n")
+	output.WriteString("For command usage: /<command> -h\n")
+	output.WriteString(strings.Repeat("─", 40))
+
+	client.SendServerMessage(output.String())
 }
 
 // Handles /about
@@ -1472,40 +1625,40 @@ func cmdSummon(client *Client, args []string, usage string) {
 		client.SendServerMessage("Not enough arguments:\n" + usage)
 		return
 	}
-	
+
 	areaID, err := strconv.Atoi(args[0])
 	if err != nil || areaID < 0 || areaID > len(areas)-1 {
 		client.SendServerMessage("Invalid area.")
 		return
 	}
 	wantedArea := areas[areaID]
-	
+
 	// Get all connected clients
 	allClients := clients.GetAllClients()
-	
+
 	var count int
 	var reportBuilder strings.Builder
-	
+
 	// Move each client to the target area
 	for c := range allClients {
 		if !c.ChangeArea(wantedArea) {
 			continue
 		}
-		
+
 		// Send appropriate message based on whether this is the admin
 		if c == client {
 			c.SendServerMessage(fmt.Sprintf("Summoned all users to %v.", wantedArea.Name()))
 		} else {
 			c.SendServerMessage(fmt.Sprintf("You were summoned to %v.", wantedArea.Name()))
 		}
-		
+
 		if reportBuilder.Len() > 0 {
 			reportBuilder.WriteString(", ")
 		}
 		reportBuilder.WriteString(fmt.Sprintf("%v", c.Uid()))
 		count++
 	}
-	
+
 	report := reportBuilder.String()
 	if count > 0 {
 		addToBuffer(client, "CMD", fmt.Sprintf("Summoned %v user(s) (%v) to %v.", count, report, wantedArea.Name()), false)
@@ -1839,46 +1992,46 @@ func cmdPossess(client *Client, args []string, _ string) {
 	// Create the IC message packet args following the MS packet format
 	// This is a ONE-TIME possession that copies the target's appearance completely
 	icArgs := make([]string, 30)
-	icArgs[0] = "chat"                        // desk_mod
-	icArgs[1] = ""                            // pre-anim
-	icArgs[2] = targetCharName                // character name (target's displayed character, including iniswap)
-	icArgs[3] = targetEmote                   // emote (target's emote)
-	icArgs[4] = encodedMsg                    // message (encoded)
-	icArgs[5] = target.Pos()                  // position (target's position to spoof them)
-	icArgs[6] = ""                            // sfx-name
-	icArgs[7] = "0"                           // emote_mod
-	icArgs[8] = strconv.Itoa(targetCharID)    // char_id (ID of target's displayed character)
-	icArgs[9] = "0"                           // sfx-delay
-	icArgs[10] = "0"                          // objection_mod
-	icArgs[11] = "0"                          // evidence
-	icArgs[12] = "0"                          // flipping
-	icArgs[13] = "0"                          // realization
+	icArgs[0] = "chat"                     // desk_mod
+	icArgs[1] = ""                         // pre-anim
+	icArgs[2] = targetCharName             // character name (target's displayed character, including iniswap)
+	icArgs[3] = targetEmote                // emote (target's emote)
+	icArgs[4] = encodedMsg                 // message (encoded)
+	icArgs[5] = target.Pos()               // position (target's position to spoof them)
+	icArgs[6] = ""                         // sfx-name
+	icArgs[7] = "0"                        // emote_mod
+	icArgs[8] = strconv.Itoa(targetCharID) // char_id (ID of target's displayed character)
+	icArgs[9] = "0"                        // sfx-delay
+	icArgs[10] = "0"                       // objection_mod
+	icArgs[11] = "0"                       // evidence
+	icArgs[12] = "0"                       // flipping
+	icArgs[13] = "0"                       // realization
 	// Use target's last text color, default to "0" (white) if none set
 	targetTextColor := target.LastTextColor()
 	if targetTextColor == "" {
 		targetTextColor = "0"
 	}
-	icArgs[14] = targetTextColor              // text color (target's color)
+	icArgs[14] = targetTextColor // text color (target's color)
 	// Use target's showname, falling back to displayed character name
 	showname := target.Showname()
 	if strings.TrimSpace(showname) == "" {
 		showname = targetCharName
 	}
-	icArgs[15] = showname                     // showname (target's showname)
-	icArgs[16] = "-1"                         // pair_id
-	icArgs[17] = ""                           // pair_charid (server pairing)
-	icArgs[18] = ""                           // pair_emote (server pairing)
-	icArgs[19] = ""                           // offset
-	icArgs[20] = ""                           // pair_offset (server pairing)
-	icArgs[21] = ""                           // pair_flip (server pairing)
-	icArgs[22] = "0"                          // non-interrupting pre
-	icArgs[23] = "0"                          // sfx-looping
-	icArgs[24] = "0"                          // screenshake
-	icArgs[25] = ""                           // frames_shake
-	icArgs[26] = ""                           // frames_realization
-	icArgs[27] = ""                           // frames_sfx
-	icArgs[28] = "0"                          // additive
-	icArgs[29] = ""                           // blank (reserved)
+	icArgs[15] = showname // showname (target's showname)
+	icArgs[16] = "-1"     // pair_id
+	icArgs[17] = ""       // pair_charid (server pairing)
+	icArgs[18] = ""       // pair_emote (server pairing)
+	icArgs[19] = ""       // offset
+	icArgs[20] = ""       // pair_offset (server pairing)
+	icArgs[21] = ""       // pair_flip (server pairing)
+	icArgs[22] = "0"      // non-interrupting pre
+	icArgs[23] = "0"      // sfx-looping
+	icArgs[24] = "0"      // screenshake
+	icArgs[25] = ""       // frames_shake
+	icArgs[26] = ""       // frames_realization
+	icArgs[27] = ""       // frames_sfx
+	icArgs[28] = "0"      // additive
+	icArgs[29] = ""       // blank (reserved)
 
 	// Send the IC message to the target's area
 	writeToArea(target.Area(), "MS", icArgs...)
@@ -2284,7 +2437,7 @@ func cmdJail(client *Client, args []string, usage string) {
 	}
 
 	target.SetJailedUntil(jailUntil)
-	
+
 	msg := fmt.Sprintf("You have been jailed in %v.", target.Area().Name())
 	if strings.ToLower(*duration) != "perma" {
 		msg = fmt.Sprintf("You have been jailed in %v for %v.", target.Area().Name(), *duration)
@@ -2293,9 +2446,9 @@ func cmdJail(client *Client, args []string, usage string) {
 		msg += " Reason: " + *reason
 	}
 	target.SendServerMessage(msg)
-	
+
 	client.SendServerMessage(fmt.Sprintf("Jailed [%v] %v in %v.", uid, target.OOCName(), target.Area().Name()))
-	
+
 	logMsg := fmt.Sprintf("Jailed [%v] %v", uid, target.OOCName())
 	if *reason != "" {
 		logMsg += " for reason: " + *reason
@@ -2325,7 +2478,7 @@ func cmdUnjail(client *Client, args []string, _ string) {
 // Handles /rps
 func cmdRps(client *Client, args []string, _ string) {
 	// Check cooldown (30 seconds)
-	if time.Now().UTC().Before(client.LastRpsTime().Add(30 * time.Second)) && !client.LastRpsTime().IsZero() {
+	if time.Now().UTC().Before(client.LastRpsTime().Add(30*time.Second)) && !client.LastRpsTime().IsZero() {
 		remaining := time.Until(client.LastRpsTime().Add(30 * time.Second))
 		client.SendServerMessage(fmt.Sprintf("Please wait %v seconds before playing RPS again.", int(remaining.Seconds())+1))
 		return
@@ -2373,7 +2526,7 @@ func cmdCoinflip(client *Client, args []string, _ string) {
 
 	// Check if there's an active coinflip challenge in the area
 	activeChallenge := client.Area().ActiveCoinflip()
-	
+
 	if activeChallenge == nil {
 		// No active challenge - create a new one
 		challenge := &area.CoinflipChallenge{
@@ -2383,16 +2536,16 @@ func cmdCoinflip(client *Client, args []string, _ string) {
 		}
 		client.Area().SetActiveCoinflip(challenge)
 		client.Area().SetLastCoinflipTime(time.Now().UTC())
-		
+
 		// Announce the challenge
-		message := fmt.Sprintf("%v has chosen %v and is ready to coinflip! Type /coinflip %v to battle them!", 
+		message := fmt.Sprintf("%v has chosen %v and is ready to coinflip! Type /coinflip %v to battle them!",
 			client.OOCName(), choice, oppositeChoice(choice))
 		sendAreaServerMessage(client.Area(), message)
 		addToBuffer(client, "GAME", fmt.Sprintf("Started coinflip challenge with %v", choice), false)
-		
+
 	} else {
 		// There's an active challenge
-		
+
 		// Check if challenge has expired (30 seconds)
 		if time.Now().UTC().After(activeChallenge.CreatedAt.Add(30 * time.Second)) {
 			// Challenge expired, create new one
@@ -2403,34 +2556,34 @@ func cmdCoinflip(client *Client, args []string, _ string) {
 			}
 			client.Area().SetActiveCoinflip(challenge)
 			client.Area().SetLastCoinflipTime(time.Now().UTC())
-			
-			message := fmt.Sprintf("Previous coinflip expired. %v has chosen %v and is ready to coinflip! Type /coinflip %v to battle them!", 
+
+			message := fmt.Sprintf("Previous coinflip expired. %v has chosen %v and is ready to coinflip! Type /coinflip %v to battle them!",
 				client.OOCName(), choice, oppositeChoice(choice))
 			sendAreaServerMessage(client.Area(), message)
 			addToBuffer(client, "GAME", fmt.Sprintf("Started coinflip challenge with %v", choice), false)
 			return
 		}
-		
+
 		// Check if same player is trying to accept their own challenge
 		if activeChallenge.PlayerName == client.OOCName() {
 			client.SendServerMessage("You cannot accept your own coinflip challenge!")
 			return
 		}
-		
+
 		// Check if the choice is different from the challenger's choice
 		if activeChallenge.Choice == choice {
-			client.SendServerMessage(fmt.Sprintf("You must pick the opposite choice! The challenger picked %v, so you must pick %v.", 
+			client.SendServerMessage(fmt.Sprintf("You must pick the opposite choice! The challenger picked %v, so you must pick %v.",
 				activeChallenge.Choice, oppositeChoice(activeChallenge.Choice)))
 			return
 		}
-		
+
 		// Battle time! Flip the coin
 		gen := rand.New(rand.NewSource(time.Now().UnixNano()))
 		coinResult := "heads"
 		if gen.Intn(2) == 1 {
 			coinResult = "tails"
 		}
-		
+
 		// Determine winner
 		var winner string
 		if coinResult == activeChallenge.Choice {
@@ -2438,18 +2591,18 @@ func cmdCoinflip(client *Client, args []string, _ string) {
 		} else {
 			winner = client.OOCName()
 		}
-		
+
 		// Announce result
-		message := fmt.Sprintf("⚔️ COINFLIP BATTLE! %v (%v) vs %v (%v) - The coin landed on %v! 🎉 %v WINS! 🎉", 
+		message := fmt.Sprintf("⚔️ COINFLIP BATTLE! %v (%v) vs %v (%v) - The coin landed on %v! 🎉 %v WINS! 🎉",
 			activeChallenge.PlayerName, activeChallenge.Choice,
 			client.OOCName(), choice,
 			coinResult, winner)
 		sendAreaServerMessage(client.Area(), message)
-		
+
 		// Log for both players
-		addToBuffer(client, "GAME", fmt.Sprintf("Coinflip battle: %v vs %v - Result: %v - Winner: %v", 
+		addToBuffer(client, "GAME", fmt.Sprintf("Coinflip battle: %v vs %v - Result: %v - Winner: %v",
 			activeChallenge.Choice, choice, coinResult, winner), false)
-		
+
 		// Clear the challenge
 		client.Area().SetActiveCoinflip(nil)
 	}
@@ -2472,7 +2625,7 @@ func cmdPoll(client *Client, args []string, usage string) {
 	}
 
 	// Check cooldown (5 minutes)
-	if time.Now().UTC().Before(client.Area().LastPollTime().Add(5 * time.Minute)) && !client.Area().LastPollTime().IsZero() {
+	if time.Now().UTC().Before(client.Area().LastPollTime().Add(5*time.Minute)) && !client.Area().LastPollTime().IsZero() {
 		remaining := time.Until(client.Area().LastPollTime().Add(5 * time.Minute))
 		client.SendServerMessage(fmt.Sprintf("Please wait %v before creating another poll in this area.", remaining.Round(time.Second)))
 		return
@@ -2481,7 +2634,7 @@ func cmdPoll(client *Client, args []string, usage string) {
 	// Parse poll format: question|option1|option2|...
 	fullArg := strings.Join(args, " ")
 	parts := strings.Split(fullArg, "|")
-	
+
 	if len(parts) < 3 {
 		client.SendServerMessage("Not enough poll options. Format: " + usage)
 		return
@@ -3047,7 +3200,7 @@ func cmdTournament(client *Client, args []string, usage string) {
 			announcement := fmt.Sprintf("🏆 TOURNAMENT ENDED! Winner: UID %d with %d messages over %v! Congratulations!",
 				winner.uid, winner.messageCount, duration)
 			writeToAllClients("CT", "OOC", announcement)
-			
+
 			// Remove all punishments from winner
 			winnerClient.RemoveAllPunishments()
 			winnerClient.SendServerMessage("Congratulations! Your tournament punishments have been removed.")
@@ -3138,7 +3291,7 @@ func cmdJoinTournament(client *Client, args []string, usage string) {
 
 	numPunishments := 2 + rand.Intn(2) // 2 or 3 punishments
 	selectedPunishments := []PunishmentType{}
-	
+
 	// Randomly select unique punishments
 	shuffled := make([]PunishmentType, len(allPunishments))
 	copy(shuffled, allPunishments)
