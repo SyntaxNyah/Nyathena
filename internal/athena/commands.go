@@ -846,7 +846,7 @@ func cmdHelp(client *Client) {
 		{
 			Name: "Area Management",
 			Commands: []string{"move", "lock", "unlock", "invite", "uninvite", "summon", "kickarea",
-				"allowcms", "allowiniswap", "forcebglist", "lockbg", "lockmusic", "nointpres"},
+				"allowcms", "allowiniswap", "forcebglist", "lockbg", "nointpres"},
 		},
 		{
 			Name:     "Area CM Commands",
@@ -857,8 +857,8 @@ func cmdHelp(client *Client) {
 			Commands: []string{"charselect", "roll", "rps", "coinflip", "narrator", "pair", "unpair"},
 		},
 		{
-			Name:     "Evidence & Testimony",
-			Commands: []string{"swapevi", "testimony"},
+			Name:     "Evidence",
+			Commands: []string{"swapevi"},
 		},
 		{
 			Name:     "Audit & Logs",
