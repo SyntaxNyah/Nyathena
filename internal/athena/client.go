@@ -254,9 +254,6 @@ func (client *Client) clientCleanup() {
 			if c.PairedUID() == client.Uid() {
 				c.SetPairedUID(-1)
 				c.SendServerMessage("Your pair partner has disconnected. Pairing ended.")
-				sendClearPairPacket(c)
-				// Also clear the disconnected client's ghost sprite on c's display.
-				sendClearPairPacketTo(client, c)
 			}
 		}
 		// Clear this client's pairing reference

@@ -24,8 +24,9 @@ import (
 )
 
 var (
-	ServerName  string
-	ServerColor uint32 = 0x05b2f7
+	ServerName    string
+	ServerColor   uint32 = 0x05b2f7
+	PingRoleID    string
 )
 
 // PostModcall sends a modcall to the discord webhook.
@@ -35,8 +36,13 @@ func PostModcall(character string, area string, reason string) error {
 		Description: reason,
 		Color:       ServerColor,
 	}
+	content := ""
+	if PingRoleID != "" {
+		content = fmt.Sprintf("<@&%s>", PingRoleID)
+	}
 	p := discord.PostOptions{
 		Username: ServerName,
+		Content:  content,
 		Embeds:   []discord.Embed{e},
 	}
 	err := discord.Post(p)

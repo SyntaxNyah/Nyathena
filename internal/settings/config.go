@@ -59,6 +59,7 @@ type ServerConfig struct {
 	MCLimit               int    `toml:"multiclient_limit"`
 	AssetURL              string `toml:"asset_url"`
 	WebhookURL            string `toml:"webhook_url"`
+	WebhookPingRoleID     string `toml:"webhook_ping_role_id"`
 	MaxDice               int    `toml:"max_dice"`
 	MaxSide               int    `toml:"max_sides"`
 	Motd                  string `toml:"motd"`

@@ -140,6 +140,11 @@ asset_url = ""
 # and set this to the URL of your webhook.
 webhook_url = ""
 
+# Sets the Discord role ID to ping via the webhook when a modcall is received.
+# Right-click the role in Server Settings > Roles and select "Copy Role ID" (requires Developer Mode).
+# If this is blank, no role will be pinged.
+webhook_ping_role_id = ""
+
 # Sets the maximum number of dice that can be rolled at once.
 max_dice = 100
 

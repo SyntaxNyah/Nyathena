@@ -129,6 +129,7 @@ func InitServer(conf *settings.Config) error {
 	if config.WebhookURL != "" {
 		enableDiscord = true
 		webhook.ServerName = config.Name
+		webhook.PingRoleID = config.WebhookPingRoleID
 		discord.WebhookURL = config.WebhookURL
 	}
 
