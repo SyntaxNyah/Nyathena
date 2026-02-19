@@ -32,9 +32,10 @@ import (
 var ConfigPath string
 
 type Config struct {
-	ServerConfig `toml:"Server"`
-	LogConfig    `toml:"Logging"`
-	MSConfig     `toml:"MasterServer"`
+	ServerConfig  `toml:"Server"`
+	LogConfig     `toml:"Logging"`
+	MSConfig      `toml:"MasterServer"`
+	DiscordConfig `toml:"Discord"`
 }
 
 type ServerConfig struct {
@@ -79,6 +80,12 @@ type MSConfig struct {
 	MSAddr    string `toml:"addr"`
 }
 
+type DiscordConfig struct {
+	BotToken  string `toml:"bot_token"`
+	GuildID   string `toml:"guild_id"`
+	ModRoleID string `toml:"mod_role_id"`
+}
+
 // Returns a default configuration.
 func defaultConfig() *Config {
 	return &Config{
@@ -117,6 +124,11 @@ func defaultConfig() *Config {
 		MSConfig{
 			Advertise: false,
 			MSAddr:    "https://servers.aceattorneyonline.com/servers",
+		},
+		DiscordConfig{
+			BotToken:  "",
+			GuildID:   "",
+			ModRoleID: "",
 		},
 	}
 }

@@ -267,3 +267,21 @@ func UpdateDuration(id int, duration int64) error {
 func Close() {
 	db.Close()
 }
+
+// GetAllBans returns all bans from the database.
+func GetAllBans() ([]BanInfo, error) {
+	result, err := db.Query("SELECT * FROM BANS ORDER BY TIME DESC")
+	if err != nil {
+		return []BanInfo{}, err
+	}
+	defer result.Close()
+	var bans []BanInfo
+	for result.Next() {
+		var b BanInfo
+		if err := result.Scan(&b.Id, &b.Ipid, &b.Hdid, &b.Time, &b.Duration, &b.Reason, &b.Moderator); err != nil {
+			continue
+		}
+		bans = append(bans, b)
+	}
+	return bans, nil
+}

@@ -78,6 +78,7 @@ func main() {
 	}
 	logger.LogInfo("Started server.")
 	go athena.ListenTCP()
+	go athena.StartDiscordBot()
 	
 	// When both WS and WSS are enabled with the same port (common in reverse proxy setups),
 	// only start one listener to avoid "address already in use" error

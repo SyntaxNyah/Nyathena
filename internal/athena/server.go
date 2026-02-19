@@ -32,6 +32,7 @@ import (
 
 	"github.com/MangosArentLiterature/Athena/internal/area"
 	"github.com/MangosArentLiterature/Athena/internal/db"
+	discordbot "github.com/MangosArentLiterature/Athena/internal/discord/bot"
 	"github.com/MangosArentLiterature/Athena/internal/logger"
 	"github.com/MangosArentLiterature/Athena/internal/ms"
 	"github.com/MangosArentLiterature/Athena/internal/permissions"
@@ -192,6 +193,29 @@ func InitServer(conf *settings.Config) error {
 	}
 	initCommands()
 	return nil
+}
+
+// StartDiscordBot starts the Discord bot if a token is configured.
+// It should be called after InitServer.
+func StartDiscordBot() {
+	if config.BotToken == "" {
+		return
+	}
+	cfg := discordbot.Config{
+		Token:     config.BotToken,
+		GuildID:   config.GuildID,
+		ModRoleID: config.ModRoleID,
+	}
+	b, err := discordbot.New(cfg, NewServerAdapter())
+	if err != nil {
+		logger.LogErrorf("Failed to create Discord bot: %v", err)
+		return
+	}
+	if err := b.Start(); err != nil {
+		logger.LogErrorf("Failed to start Discord bot: %v", err)
+		return
+	}
+	logger.LogInfo("Discord bot started.")
 }
 
 // ListenTCP starts the server's TCP listener.

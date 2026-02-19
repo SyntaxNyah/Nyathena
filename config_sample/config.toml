@@ -192,3 +192,18 @@ advertise = false
 
 # The address of the master server. You shouldn't change this unless you know what you're doing.
 addr = "https://servers.aceattorneyonline.com/servers"
+
+[Discord]
+
+# Discord bot token. Leave blank to disable the Discord bot.
+# Create a bot at https://discord.com/developers/applications and copy the token here.
+bot_token = ""
+
+# The ID of the Discord server (guild) where the bot should register slash commands.
+# Right-click your server name in Discord and select "Copy Server ID" (requires Developer Mode).
+guild_id = ""
+
+# The ID of the Discord role that is allowed to use moderation commands.
+# Right-click the role in Server Settings > Roles and select "Copy Role ID".
+# Leave blank to allow all users to run commands (not recommended).
+mod_role_id = ""

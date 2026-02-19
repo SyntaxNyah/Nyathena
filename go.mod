@@ -12,7 +12,9 @@ require (
 )
 
 require (
+	github.com/bwmarrin/discordgo v0.28.1 // indirect
 	github.com/google/uuid v1.3.0 // indirect
+	github.com/gorilla/websocket v1.4.2 // indirect
 	github.com/kballard/go-shellquote v0.0.0-20180428030007-95032a82bc51 // indirect
 	github.com/klauspost/compress v1.10.3 // indirect
 	github.com/mattn/go-isatty v0.0.14 // indirect
