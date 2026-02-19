@@ -293,6 +293,20 @@ func initCommands() {
 			desc:     "Shows players in the current or all areas.",
 			reqPerms: permissions.PermissionField["NONE"],
 		},
+		"pair": {
+			handler:  cmdPair,
+			minArgs:  1,
+			usage:    "Usage: /pair <uid>",
+			desc:     "Sends or accepts a pair request with the specified player.",
+			reqPerms: permissions.PermissionField["NONE"],
+		},
+		"unpair": {
+			handler:  cmdUnpair,
+			minArgs:  0,
+			usage:    "Usage: /unpair",
+			desc:     "Cancels your current pair request or active pairing.",
+			reqPerms: permissions.PermissionField["NONE"],
+		},
 		"pm": {
 			handler:  cmdPM,
 			minArgs:  2,
@@ -1690,6 +1704,70 @@ func cmdPM(client *Client, args []string, _ string) {
 	for _, c := range toPM {
 		c.SendPacket("CT", fmt.Sprintf("[PM] %v", client.OOCName()), msg, "1")
 	}
+}
+
+// Handles /pair
+func cmdPair(client *Client, args []string, _ string) {
+	if client.CharID() < 0 {
+		client.SendServerMessage("You have not selected a character.")
+		return
+	}
+
+	uid, err := strconv.Atoi(args[0])
+	if err != nil {
+		client.SendServerMessage("Invalid UID.")
+		return
+	}
+
+	target, err := getClientByUid(uid)
+	if err != nil {
+		client.SendServerMessage("Client does not exist.")
+		return
+	}
+
+	if target == client {
+		client.SendServerMessage("You cannot pair with yourself.")
+		return
+	}
+
+	if target.Area() != client.Area() {
+		client.SendServerMessage("That player is not in your area.")
+		return
+	}
+
+	if target.CharID() < 0 {
+		client.SendServerMessage("That player has not selected a character.")
+		return
+	}
+
+	client.SetPairWantedID(target.CharID())
+
+	// Check if the target is already requesting to pair with us (mutual pairing).
+	if target.PairWantedID() == client.CharID() {
+		client.SendServerMessage(fmt.Sprintf("Now pairing with %v.", target.OOCName()))
+		target.SendServerMessage(fmt.Sprintf("%v accepted your pair request.", client.OOCName()))
+	} else {
+		client.SendServerMessage(fmt.Sprintf("Sent pair request to %v.", target.OOCName()))
+		target.SendServerMessage(fmt.Sprintf("%v wants to pair with you. Type /pair %v to accept.", client.OOCName(), client.Uid()))
+	}
+}
+
+// Handles /unpair
+func cmdUnpair(client *Client, _ []string, _ string) {
+	if client.PairWantedID() == -1 {
+		client.SendServerMessage("You do not have an active pair request.")
+		return
+	}
+
+	// Notify any client that was paired with us.
+	for c := range clients.GetAllClients() {
+		if c != client && c.Area() == client.Area() && c.PairWantedID() == client.CharID() {
+			c.SendServerMessage(fmt.Sprintf("%v has cancelled the pair.", client.OOCName()))
+		}
+	}
+
+	client.SetPairWantedID(-1)
+	client.SendServerMessage("Pair cancelled.")
 }
 
 // Handles /possess - one-time possession that mimics target's appearance for a single message

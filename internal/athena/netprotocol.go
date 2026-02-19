@@ -376,6 +376,14 @@ func pktIC(client *Client, p *packet.Packet) {
 		return
 	}
 
+	// If the client used /pair to set a desired pair but has not selected one via the
+	// in-client pair button (args[16] is absent or -1), inject the server-set pair
+	// character ID so the pairing animation activates exactly as if the pair button
+	// had been used.
+	if (args[16] == "" || args[16] == "-1") && client.PairWantedID() != -1 {
+		args[16] = strconv.Itoa(client.PairWantedID())
+	}
+
 	// Pairing validation
 	if args[16] != "" && args[16] != "-1" {
 		pid, err := strconv.Atoi(strings.Split(args[16], "^")[0])
