@@ -129,6 +129,7 @@ func InitServer(conf *settings.Config) error {
 		enableDiscord = true
 		webhook.ServerName = config.Name
 		discord.WebhookURL = config.WebhookURL
+		webhook.Initialize()
 	}
 
 	// Load areas.
@@ -448,6 +449,11 @@ func sendAreaServerMessage(area *area.Area, message string) {
 
 // CleanupServer closes all connections to the server, and closes the server's database.
 func CleanupServer() {
+	// Gracefully shutdown webhook worker if enabled
+	if enableDiscord {
+		webhook.Shutdown()
+	}
+	
 	for client := range clients.GetAllClients() {
 		client.conn.Close()
 	}
