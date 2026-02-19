@@ -4,6 +4,7 @@ go 1.19
 
 require (
 	github.com/BurntSushi/toml v1.2.0
+	github.com/bwmarrin/discordgo v0.28.1
 	github.com/ecnepsnai/discord v1.2.1
 	github.com/xhit/go-str2duration/v2 v2.0.0
 	golang.org/x/crypto v0.0.0-20220722155217-630584e8d5aa
@@ -12,7 +13,6 @@ require (
 )
 
 require (
-	github.com/bwmarrin/discordgo v0.28.1 // indirect
 	github.com/google/uuid v1.3.0 // indirect
 	github.com/gorilla/websocket v1.4.2 // indirect
 	github.com/kballard/go-shellquote v0.0.0-20180428030007-95032a82bc51 // indirect
