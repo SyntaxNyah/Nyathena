@@ -19,6 +19,7 @@ package webhook
 import (
 	"context"
 	"fmt"
+	"os"
 	"strings"
 	"sync"
 
@@ -58,9 +59,6 @@ func Shutdown() {
 	if cancel != nil {
 		cancel()
 	}
-	if webhookQueue != nil {
-		close(webhookQueue)
-	}
 	wg.Wait()
 }
 
@@ -75,6 +73,7 @@ func webhookWorker() {
 			for task := range webhookQueue {
 				processTask(task)
 			}
+			close(webhookQueue)
 			return
 		case task, ok := <-webhookQueue:
 			if !ok {
@@ -86,6 +85,7 @@ func webhookWorker() {
 }
 
 // processTask handles individual webhook tasks.
+// Errors are logged to stderr as webhook cannot import logger due to circular dependency.
 func processTask(task webhookTask) {
 	switch task.taskType {
 	case "modcall":
@@ -98,7 +98,10 @@ func processTask(task webhookTask) {
 			Username: ServerName,
 			Embeds:   []discord.Embed{e},
 		}
-		_ = discord.Post(p) // Error already logged by discord library
+		err := discord.Post(p)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "ERROR: Failed to post modcall webhook (character: %v, area: %v): %v\n", task.character, task.area, err)
+		}
 	case "report":
 		c := strings.NewReader(task.contents)
 		f := discord.FileOptions{
@@ -108,7 +111,10 @@ func processTask(task webhookTask) {
 		p := discord.PostOptions{
 			Username: ServerName,
 		}
-		_ = discord.UploadFile(p, f) // Error already logged by discord library
+		err := discord.UploadFile(p, f)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "ERROR: Failed to upload report webhook (filename: %v): %v\n", task.filename, err)
+		}
 	}
 }
 

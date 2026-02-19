@@ -75,7 +75,7 @@ The webhook integration is designed to be efficient and non-blocking:
 
 - **Asynchronous posting** - Webhook messages are queued and sent in the background
 - **No server delays** - In-game modcalls are not delayed waiting for Discord
-- **Automatic retry** - Failed messages are logged but don't crash the server
+- **Error logging** - Failed messages are logged but do not crash the server
 - **Memory efficient** - Queue has a fixed size to prevent memory leaks
 
 The webhook queue can hold up to 100 pending notifications. If the queue fills up (which would only happen if Discord is unreachable for an extended period), new notifications will be dropped rather than blocking the game server.
