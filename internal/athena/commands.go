@@ -740,14 +740,43 @@ func initCommands() {
 // ParseCommand calls the appropriate function for a given command.
 func ParseCommand(client *Client, command string, args []string) {
 	if command == "help" {
-		var s []string
-		for name, cmd := range Commands {
-			if permissions.HasPermission(client.Perms(), cmd.reqPerms) || (cmd.reqPerms == permissions.PermissionField["CM"] && client.Area().HasCM(client.Uid())) {
-				s = append(s, fmt.Sprintf("- /%v: %v", name, cmd.desc))
+		// If specific command requested, show detailed help
+		if len(args) > 0 {
+			cmdName := args[0]
+			cmd, exists := Commands[cmdName]
+			if !exists {
+				client.SendServerMessage("Command not found: /" + cmdName)
+				return
 			}
+			
+			// Check if user has permission to see this command
+			hasPermission := permissions.HasPermission(client.Perms(), cmd.reqPerms) || (cmd.reqPerms == permissions.PermissionField["CM"] && client.Area().HasCM(client.Uid()))
+			if !hasPermission {
+				client.SendServerMessage("You do not have permission to use that command.")
+				return
+			}
+			
+			// Build detailed help for specific command
+			var permName string
+			for name, perm := range permissions.PermissionField {
+				if perm == cmd.reqPerms {
+					permName = name
+					break
+				}
+			}
+			
+			help := fmt.Sprintf("=== HELP: /%s ===\n\n", cmdName)
+			help += fmt.Sprintf("Description: %s\n\n", cmd.desc)
+			help += fmt.Sprintf("Usage:\n%s\n\n", cmd.usage)
+			help += fmt.Sprintf("Required Permission: %s\n", permName)
+			help += "\n" + strings.Repeat("=", 40)
+			
+			client.SendServerMessage(help)
+			return
 		}
-		sort.Strings(s)
-		client.SendServerMessage("Recognized commands:\n" + strings.Join(s, "\n") + "\n\nTo view detailed usage on a command, do /<command> -h")
+		
+		// Otherwise, show categorized help
+		cmdHelp(client)
 		return
 	}
 
@@ -768,6 +797,130 @@ func ParseCommand(client *Client, command string, args []string) {
 		client.SendServerMessage("You do not have permission to use that command.")
 		return
 	}
+}
+
+// cmdHelp displays categorized help for all available commands
+func cmdHelp(client *Client) {
+	// Define command categories with their commands
+	categories := []struct {
+		Name     string
+		Commands []string
+	}{
+		{
+			Name: "Player Information",
+			Commands: []string{"players", "areainfo", "status", "motd", "about"},
+		},
+		{
+			Name: "Moderation",
+			Commands: []string{"mute", "unmute", "ban", "unban", "kick", "jail", "unjail", "editban", "getban"},
+		},
+		{
+			Name: "Custom Punishments - Text Modification",
+			Commands: []string{"parrot", "whisper", "backward", "stutterstep", "elongate", "uppercase", "lowercase", 
+				"robotic", "alternating", "fancy", "uwu", "pirate", "shakespearean", "caveman"},
+		},
+		{
+			Name: "Custom Punishments - Visibility",
+			Commands: []string{"emoji", "invisible"},
+		},
+		{
+			Name: "Custom Punishments - Timing",
+			Commands: []string{"slowpoke", "fastspammer", "pause", "lag"},
+		},
+		{
+			Name: "Custom Punishments - Social",
+			Commands: []string{"subtitles", "roulette", "spotlight"},
+		},
+		{
+			Name: "Custom Punishments - Processing",
+			Commands: []string{"censor", "confused", "paranoid", "drunk", "hiccup", "whistle", "mumble"},
+		},
+		{
+			Name: "Custom Punishments - Complex",
+			Commands: []string{"spaghetti", "torment", "rng", "essay", "haiku", "autospell", "unpunish", "stack"},
+		},
+		{
+			Name: "Communication",
+			Commands: []string{"pm", "global", "mod", "modchat"},
+		},
+		{
+			Name: "Area Management",
+			Commands: []string{"move", "lock", "unlock", "invite", "uninvite", "summon", "kickarea", 
+				"allowcms", "allowiniswap", "forcebglist", "lockbg", "lockmusic", "nointpres"},
+		},
+		{
+			Name: "Area CM Commands",
+			Commands: []string{"cm", "uncm", "bg", "play", "lockmusic", "evimode", "doc", "poll", "testimony"},
+		},
+		{
+			Name: "Character & Gameplay",
+			Commands: []string{"charselect", "roll", "rps", "coinflip", "narrator", "pair", "unpair"},
+		},
+		{
+			Name: "Evidence & Testimony",
+			Commands: []string{"swapevi", "testimony"},
+		},
+		{
+			Name: "Audit & Logs",
+			Commands: []string{"log"},
+		},
+		{
+			Name: "User Management",
+			Commands: []string{"login", "logout", "mkusr", "rmusr", "setrole"},
+		},
+		{
+			Name: "Tournament",
+			Commands: []string{"tournament", "join-tournament"},
+		},
+		{
+			Name: "Advanced",
+			Commands: []string{"possess", "fullpossess", "unpossess"},
+		},
+	}
+	
+	var output strings.Builder
+	output.WriteString("╔════════════════════════════════════════╗\n")
+	output.WriteString("║       ATHENA COMMAND REFERENCE         ║\n")
+	output.WriteString("╚════════════════════════════════════════╝\n\n")
+	
+	// Build help message organized by category
+	for _, category := range categories {
+		categoryHasCommands := false
+		var categoryOutput strings.Builder
+		
+		// Check if any commands in this category are available to the user
+		for _, cmdName := range category.Commands {
+			cmd, exists := Commands[cmdName]
+			if !exists {
+				continue
+			}
+			
+			// Check permission
+			hasPermission := permissions.HasPermission(client.Perms(), cmd.reqPerms) || 
+				(cmd.reqPerms == permissions.PermissionField["CM"] && client.Area().HasCM(client.Uid()))
+			
+			if hasPermission {
+				if !categoryHasCommands {
+					categoryOutput.WriteString(fmt.Sprintf("┌─ %s ─┐\n", category.Name))
+					categoryHasCommands = true
+				}
+				categoryOutput.WriteString(fmt.Sprintf("│ /%s - %s\n", cmdName, cmd.desc))
+			}
+		}
+		
+		// Add category to output if it has commands
+		if categoryHasCommands {
+			categoryOutput.WriteString("└" + strings.Repeat("─", 38) + "┘\n\n")
+			output.WriteString(categoryOutput.String())
+		}
+	}
+	
+	output.WriteString(strings.Repeat("─", 40) + "\n")
+	output.WriteString("For detailed help: /help <command>\n")
+	output.WriteString("For command usage: /<command> -h\n")
+	output.WriteString(strings.Repeat("─", 40))
+	
+	client.SendServerMessage(output.String())
 }
 
 // Handles /about
