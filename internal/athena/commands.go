@@ -1637,6 +1637,63 @@ func cmdParrot(client *Client, args []string, usage string) {
 	addToBuffer(client, "CMD", fmt.Sprintf("Parroted %v.", report), false)
 }
 
+// sendClearPairPacket sends a server-generated empty IC packet privately to a
+// client to clear the ghost pair sprite on WebAO. WebAO persists the pair
+// sprite from the last received MS# packet; sending a new packet with an empty
+// pair character name (icArgs[17]) causes WebAO to hide the pair sprite.
+// The message content is empty so the chatbox is hidden on WebAO as well.
+func sendClearPairPacket(client *Client) {
+	if client.CharID() < 0 || client.CharID() >= len(characters) {
+		return
+	}
+	charName := client.PairInfo().name
+	if charName == "" {
+		charName = characters[client.CharID()]
+	}
+	emote := client.PairInfo().emote
+	if emote == "" {
+		emote = "normal"
+	}
+	showname := client.Showname()
+	if strings.TrimSpace(showname) == "" {
+		showname = charName
+	}
+
+	args := make([]string, 30)
+	args[0] = "chat"
+	args[1] = ""
+	args[2] = charName
+	args[3] = emote
+	args[4] = ""                        // empty message hides chatbox on WebAO
+	args[5] = client.Pos()
+	args[6] = ""
+	args[7] = "0"
+	args[8] = strconv.Itoa(client.CharID())
+	args[9] = "0"
+	args[10] = "0"
+	args[11] = "0"
+	args[12] = "0"
+	args[13] = "0"
+	args[14] = "0"
+	args[15] = showname
+	args[16] = "-1"                     // no pair_id
+	args[17] = ""                       // empty pair character name clears WebAO pair sprite
+	args[18] = ""
+	args[19] = ""
+	args[20] = ""
+	args[21] = "0"
+	args[22] = "0"
+	args[23] = "0"
+	args[24] = "0"
+	args[25] = ""
+	args[26] = ""
+	args[27] = ""
+	args[28] = "0"
+	args[29] = ""
+
+	client.SendPacket("MS", args...)
+}
+
 // Handles /pair
 func cmdPair(client *Client, args []string, usage string) {
 	if len(args) == 0 {
@@ -1695,9 +1752,11 @@ func cmdUnpair(client *Client, _ []string, _ string) {
 	if paired != nil {
 		paired.SetPairedUID(-1)
 		paired.SendServerMessage(fmt.Sprintf("%s (UID: %d) has ended the pairing.", client.OOCName(), client.Uid()))
+		sendClearPairPacket(paired)
 	}
 
 	client.SetPairedUID(-1)
+	sendClearPairPacket(client)
 	client.SendServerMessage("Unpairing successful.")
 	addToBuffer(client, "CMD", "Unpaired.", false)
 }

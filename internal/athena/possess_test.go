@@ -17,6 +17,8 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>. */
 package athena
 
 import (
+	"net"
+	"strings"
 	"testing"
 )
 
@@ -480,5 +482,90 @@ func TestPersistentPairingWithOffsets(t *testing.T) {
 	}
 	if pairInfo2.name != "Miles Edgeworth" {
 		t.Errorf("Expected client2 name to be 'Miles Edgeworth', got '%s'", pairInfo2.name)
+	}
+}
+
+// TestSendClearPairPacketInvalidChar tests that sendClearPairPacket is a no-op
+// when the client has an invalid character ID (does not panic).
+func TestSendClearPairPacketInvalidChar(t *testing.T) {
+	originalCharacters := characters
+	t.Cleanup(func() {
+		characters = originalCharacters
+	})
+	characters = []string{"Phoenix Wright", "Miles Edgeworth"}
+
+	client := &Client{
+		char:      -1, // invalid: spectator
+		pair:      ClientPairInfo{wanted_id: -1},
+		pairedUID: -1,
+	}
+	// Should return without panic or sending any packet (no connection set up)
+	sendClearPairPacket(client)
+}
+
+// TestSendClearPairPacketContent verifies that sendClearPairPacket sends an MS#
+// packet with empty pair character name (args[17]) and empty message (args[4]),
+// which instructs WebAO to hide the ghost pair sprite and the chatbox.
+func TestSendClearPairPacketContent(t *testing.T) {
+	originalCharacters := characters
+	t.Cleanup(func() {
+		characters = originalCharacters
+	})
+	characters = []string{"Phoenix Wright", "Miles Edgeworth"}
+
+	// Create a connected pipe so we can read what the server sends.
+	serverConn, clientConn := net.Pipe()
+	defer serverConn.Close()
+	defer clientConn.Close()
+
+	c := &Client{
+		conn:      serverConn,
+		char:      0, // Phoenix Wright
+		pair:      ClientPairInfo{wanted_id: -1, name: "Phoenix Wright", emote: "normal"},
+		pairedUID: -1,
+		pos:       "def",
+		showname:  "Phoenix",
+	}
+
+	// Read the packet in a goroutine so the write doesn't block.
+	done := make(chan string, 1)
+	go func() {
+		buf := make([]byte, 4096)
+		n, _ := clientConn.Read(buf)
+		done <- string(buf[:n])
+	}()
+
+	sendClearPairPacket(c)
+
+	// Close server side so the Read unblocks even if fewer bytes arrive.
+	serverConn.Close()
+	packet := <-done
+
+	// The packet should be an MS# packet.
+	if !strings.HasPrefix(packet, "MS#") {
+		t.Errorf("Expected MS# packet, got: %q", packet)
+	}
+
+	// Split on '#' to check individual fields.
+	// Format: MS#args[0]#args[1]#...#args[29]#%
+	fields := strings.Split(packet, "#")
+	// fields[0] = "MS", fields[1] = args[0] (deskmod), ..., fields[18] = args[17] (pair char name)
+	if len(fields) < 19 {
+		t.Fatalf("Packet too short (got %d fields): %q", len(fields), packet)
+	}
+
+	// fields[5] = args[4] = message content — must be empty so chatbox is hidden
+	if fields[5] != "" {
+		t.Errorf("Expected empty message content (args[4]) to hide chatbox, got %q", fields[5])
+	}
+
+	// fields[17] = args[16] = pair_id — must be "-1"
+	if fields[17] != "-1" {
+		t.Errorf("Expected pair_id (args[16]) to be \"-1\", got %q", fields[17])
+	}
+
+	// fields[18] = args[17] = pair character name — must be empty to clear WebAO pair sprite
+	if fields[18] != "" {
+		t.Errorf("Expected pair character name (args[17]) to be empty to clear WebAO ghost sprite, got %q", fields[18])
 	}
 }
