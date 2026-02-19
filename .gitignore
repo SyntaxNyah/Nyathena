@@ -17,6 +17,7 @@
 # Binaries
 /athena
 /Athena
+/athena_test
 bin/
 dist/
 config/
