@@ -140,7 +140,6 @@ type Client struct {
 	msgTimestamps   []time.Time // Tracks message timestamps for rate limiting
 	possessing      int         // UID of the client being possessed (-1 if not possessing anyone)
 	possessedPos    string      // Position of the possessed target (saved at time of possession)
-	pairedUID       int         // UID of the persistently paired player (-1 if none)
 }
 
 // NewClient returns a new client.
@@ -152,7 +151,6 @@ func NewClient(conn net.Conn, ipid string) *Client {
 		pair:       ClientPairInfo{wanted_id: -1},
 		ipid:       ipid,
 		possessing: -1,
-		pairedUID:  -1,
 	}
 }
 
@@ -248,16 +246,6 @@ func (client *Client) clientCleanup() {
 				c.SetPossessedPos("")
 			}
 		}
-
-		// Clear persistent pairing - check all clients for any pairing with this client
-		for c := range clients.GetAllClients() {
-			if c.PairedUID() == client.Uid() {
-				c.SetPairedUID(-1)
-				c.SendServerMessage("Your pair partner has disconnected. Pairing ended.")
-			}
-		}
-		// Clear this client's pairing reference
-		client.SetPairedUID(-1)
 
 		if client.Area().PlayerCount() <= 1 {
 			client.Area().Reset()
@@ -522,20 +510,6 @@ func (client *Client) SetPairWantedID(id int) {
 	client.mu.Lock()
 	defer client.mu.Unlock()
 	client.pair.wanted_id = id
-}
-
-// PairedUID returns the UID of the client's persistent pair partner.
-func (client *Client) PairedUID() int {
-	client.mu.Lock()
-	defer client.mu.Unlock()
-	return client.pairedUID
-}
-
-// SetPairedUID sets the UID of the client's persistent pair partner.
-func (client *Client) SetPairedUID(uid int) {
-	client.mu.Lock()
-	defer client.mu.Unlock()
-	client.pairedUID = uid
 }
 
 // RemoveAuth logs a client out as moderator.

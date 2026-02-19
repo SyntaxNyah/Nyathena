@@ -279,13 +279,6 @@ func initCommands() {
 			desc:     "Parrots user(s).",
 			reqPerms: permissions.PermissionField["MUTE"],
 		},
-		"pair": {
-			handler:  cmdPair,
-			minArgs:  1,
-			usage:    "Usage: /pair <uid>",
-			desc:     "Pairs with another player. Pairing persists across room changes.",
-			reqPerms: permissions.PermissionField["NONE"],
-		},
 		"play": {
 			handler:  cmdPlay,
 			minArgs:  1,
@@ -439,13 +432,6 @@ func initCommands() {
 			usage:    "Usage: /unmute <uid1>,<uid2>...",
 			desc:     "Unmutes user(s).",
 			reqPerms: permissions.PermissionField["MUTE"],
-		},
-		"unpair": {
-			handler:  cmdUnpair,
-			minArgs:  0,
-			usage:    "Usage: /unpair",
-			desc:     "Unpairs from paired partner.",
-			reqPerms: permissions.PermissionField["NONE"],
 		},
 		"vote": {
 			handler:  cmdVote,
@@ -1635,71 +1621,6 @@ func cmdParrot(client *Client, args []string, usage string) {
 	report = strings.TrimSuffix(report, ", ")
 	client.SendServerMessage(fmt.Sprintf("Parroted %v clients.", count))
 	addToBuffer(client, "CMD", fmt.Sprintf("Parroted %v.", report), false)
-}
-
-// Handles /pair
-func cmdPair(client *Client, args []string, usage string) {
-	if len(args) == 0 {
-		client.SendServerMessage("Not enough arguments:\n" + usage)
-		return
-	}
-
-	targetUID, err := strconv.Atoi(args[0])
-	if err != nil {
-		client.SendServerMessage("Invalid UID format. Please provide a valid number.")
-		return
-	}
-	if targetUID < 0 {
-		client.SendServerMessage("Invalid UID. Please provide a positive number.")
-		return
-	}
-
-	// Can't pair with yourself
-	if targetUID == client.Uid() {
-		client.SendServerMessage("You cannot pair with yourself.")
-		return
-	}
-
-	// Find the target client
-	target := clients.GetClientByUID(targetUID)
-	if target == nil {
-		client.SendServerMessage("Player not found.")
-		return
-	}
-
-	// Check if target also wants to pair with client
-	if target.PairedUID() == client.Uid() {
-		// Mutual pairing confirmed!
-		client.SetPairedUID(target.Uid())
-		client.SendServerMessage(fmt.Sprintf("Successfully paired with %s (UID: %d).", target.OOCName(), target.Uid()))
-		target.SendServerMessage(fmt.Sprintf("Successfully paired with %s (UID: %d).", client.OOCName(), client.Uid()))
-		addToBuffer(client, "CMD", fmt.Sprintf("Paired with UID %d.", target.Uid()), false)
-	} else {
-		// Set our intent to pair, waiting for other player
-		client.SetPairedUID(targetUID)
-		client.SendServerMessage(fmt.Sprintf("Pairing request sent to %s (UID: %d). Waiting for them to type /pair %d.", target.OOCName(), target.Uid(), client.Uid()))
-		target.SendServerMessage(fmt.Sprintf("%s (UID: %d) wants to pair with you. Type /pair %d to accept.", client.OOCName(), client.Uid(), client.Uid()))
-	}
-}
-
-// Handles /unpair
-func cmdUnpair(client *Client, _ []string, _ string) {
-	pairedUID := client.PairedUID()
-	if pairedUID == -1 {
-		client.SendServerMessage("You are not paired with anyone.")
-		return
-	}
-
-	// Find the paired client and unpair them too
-	paired := clients.GetClientByUID(pairedUID)
-	if paired != nil {
-		paired.SetPairedUID(-1)
-		paired.SendServerMessage(fmt.Sprintf("%s (UID: %d) has ended the pairing.", client.OOCName(), client.Uid()))
-	}
-
-	client.SetPairedUID(-1)
-	client.SendServerMessage("Unpairing successful.")
-	addToBuffer(client, "CMD", "Unpaired.", false)
 }
 
 // Handles /play
