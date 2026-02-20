@@ -1668,7 +1668,7 @@ func cmdPlayers(client *Client, args []string, _ string) {
 	entry := func(c *Client, auth bool) string {
 		s := fmt.Sprintf("[%v] %v\n", c.Uid(), c.CurrentCharacter())
 		if auth {
-			if c.Authenticated() {
+			if permissions.IsModerator(c.Perms()) {
 				s += fmt.Sprintf("Mod: %v\n", c.ModName())
 			}
 			s += fmt.Sprintf("IPID: %v\n", c.Ipid())
