@@ -20,6 +20,7 @@ import (
 	"bufio"
 	"bytes"
 	"fmt"
+	"math"
 	"net"
 	"strconv"
 	"strings"
@@ -138,6 +139,7 @@ type Client struct {
 	lastRpsTime   time.Time
 	punishments     []PunishmentState
 	msgTimestamps   []time.Time // Tracks message timestamps for rate limiting
+	lastModcallTime time.Time   // Tracks last modcall time for cooldown
 	possessing      int         // UID of the client being possessed (-1 if not possessing anyone)
 	possessedPos    string      // Position of the possessed target (saved at time of possession)
 }
@@ -793,6 +795,34 @@ func (client *Client) LastRpsTime() time.Time {
 func (client *Client) SetLastRpsTime(t time.Time) {
 	client.mu.Lock()
 	client.lastRpsTime = t
+	client.mu.Unlock()
+}
+
+// CheckModcallCooldown checks if the client is within the modcall cooldown period.
+// Returns true (and the remaining seconds, rounded up) if the client must wait, false otherwise.
+// When the cooldown is disabled (0), always returns false.
+func (client *Client) CheckModcallCooldown() (bool, int) {
+	if config.ModcallCooldown <= 0 {
+		return false, 0
+	}
+	client.mu.Lock()
+	defer client.mu.Unlock()
+	if client.lastModcallTime.IsZero() {
+		return false, 0
+	}
+	elapsed := time.Since(client.lastModcallTime)
+	cooldown := time.Duration(config.ModcallCooldown) * time.Second
+	if elapsed < cooldown {
+		remaining := int(math.Ceil((cooldown - elapsed).Seconds()))
+		return true, remaining
+	}
+	return false, 0
+}
+
+// SetLastModcallTime records the current time as the client's last modcall time.
+func (client *Client) SetLastModcallTime() {
+	client.mu.Lock()
+	client.lastModcallTime = time.Now()
 	client.mu.Unlock()
 }
 

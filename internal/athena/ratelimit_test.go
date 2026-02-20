@@ -154,6 +154,83 @@ func TestRateLimitConcurrency(t *testing.T) {
 	}
 }
 
+// TestModcallCooldownDisabled tests that modcall cooldown can be disabled
+func TestModcallCooldownDisabled(t *testing.T) {
+	oldConfig := config
+	defer func() { config = oldConfig }()
+
+	config = &settings.Config{}
+	config.ModcallCooldown = 0
+
+	client := &Client{}
+
+	// Should never be limited when cooldown is disabled
+	for i := 0; i < 10; i++ {
+		if limited, _ := client.CheckModcallCooldown(); limited {
+			t.Errorf("Client was modcall-limited when cooldown is disabled")
+			return
+		}
+		client.SetLastModcallTime()
+	}
+}
+
+// TestModcallCooldownEnforced tests that the modcall cooldown is enforced
+func TestModcallCooldownEnforced(t *testing.T) {
+	oldConfig := config
+	defer func() { config = oldConfig }()
+
+	config = &settings.Config{}
+	config.ModcallCooldown = 60 // 60 second cooldown
+
+	client := &Client{}
+
+	// First modcall should be allowed
+	if limited, _ := client.CheckModcallCooldown(); limited {
+		t.Errorf("First modcall was blocked unexpectedly")
+		return
+	}
+	client.SetLastModcallTime()
+
+	// Immediate second modcall should be blocked
+	if limited, remaining := client.CheckModcallCooldown(); !limited {
+		t.Errorf("Second modcall was not blocked within cooldown period")
+	} else if remaining <= 0 || remaining > 60 {
+		t.Errorf("Unexpected remaining seconds: %d", remaining)
+	}
+}
+
+// TestModcallCooldownExpires tests that the cooldown expires correctly
+func TestModcallCooldownExpires(t *testing.T) {
+	oldConfig := config
+	defer func() { config = oldConfig }()
+
+	config = &settings.Config{}
+	config.ModcallCooldown = 1 // 1 second cooldown
+
+	client := &Client{}
+
+	// First modcall
+	if limited, _ := client.CheckModcallCooldown(); limited {
+		t.Errorf("First modcall was blocked unexpectedly")
+		return
+	}
+	client.SetLastModcallTime()
+
+	// Should be blocked immediately
+	if limited, _ := client.CheckModcallCooldown(); !limited {
+		t.Errorf("Modcall was not blocked within cooldown period")
+		return
+	}
+
+	// Wait for cooldown to expire
+	time.Sleep(1100 * time.Millisecond)
+
+	// Should be allowed again
+	if limited, _ := client.CheckModcallCooldown(); limited {
+		t.Errorf("Modcall was blocked after cooldown expired")
+	}
+}
+
 // TestRateLimitMemoryEfficiency tests that old timestamps are cleaned up
 func TestRateLimitMemoryEfficiency(t *testing.T) {
 	// Backup original config
