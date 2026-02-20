@@ -695,6 +695,15 @@ func pktPing(client *Client, _ *packet.Packet) {
 
 // Handles ZZ#%
 func pktModcall(client *Client, p *packet.Packet) {
+	if limited, remaining := client.CheckModcallCooldown(); limited {
+		unit := "seconds"
+		if remaining == 1 {
+			unit = "second"
+		}
+		client.SendServerMessage(fmt.Sprintf("You must wait %d %s before sending another modcall.", remaining, unit))
+		return
+	}
+	client.SetLastModcallTime()
 	var s string
 	if len(p.Body) >= 1 {
 		s = p.Body[0]

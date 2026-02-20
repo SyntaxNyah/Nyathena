@@ -66,6 +66,7 @@ type ServerConfig struct {
 	MaxStatement          int    `toml:"max_testimony"`
 	RateLimit             int    `toml:"message_rate_limit"`
 	RateLimitWindow       int    `toml:"message_rate_limit_window"`
+	ModcallCooldown       int    `toml:"modcall_cooldown"`
 }
 
 type LogConfig struct {
@@ -114,6 +115,7 @@ func defaultConfig() *Config {
 			MaxStatement:          10,
 			RateLimit:             20,
 			RateLimitWindow:       10,
+			ModcallCooldown:       0,
 		},
 		LogConfig{
 			BufSize:           150,

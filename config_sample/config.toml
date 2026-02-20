@@ -166,6 +166,12 @@ message_rate_limit = 20
 # Default: 10 seconds
 message_rate_limit_window = 10
 
+# Modcall cooldown: Minimum number of seconds a user must wait between modcalls.
+# Set to 0 to disable the cooldown (allow unlimited modcalls).
+# Example: setting this to 60 means a user can only send one modcall per 60 seconds.
+# Default: 0 (disabled)
+modcall_cooldown = 0
+
 [Logging]
 # Sets the number of actions (IC chat messages, OOC chat messages, judge actions, etc.) each area should store.
 # When a user calls a mod, this buffer will be flushed to a report file for review.
