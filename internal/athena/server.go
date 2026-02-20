@@ -471,6 +471,11 @@ func sendAreaServerMessage(area *area.Area, message string) {
 	writeToArea(area, "CT", encode(config.Name), encode(message), "1")
 }
 
+// sendGlobalServerMessage broadcasts a server OOC message to every joined client.
+func sendGlobalServerMessage(message string) {
+	writeToAll("CT", encode(config.Name), encode(message), "1")
+}
+
 // CleanupServer closes all connections to the server, and closes the server's database.
 func CleanupServer() {
 	for client := range clients.GetAllClients() {

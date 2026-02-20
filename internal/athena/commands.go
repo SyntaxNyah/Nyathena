@@ -734,6 +734,13 @@ func initCommands() {
 			desc:     "Join the active punishment tournament.",
 			reqPerms: permissions.PermissionField["NONE"],
 		},
+		"hotpotato": {
+			handler:  cmdHotPotato,
+			minArgs:  0,
+			usage:    "Usage: /hotpotato | /hotpotato accept",
+			desc:     "Start or join a Hot Potato mini-game event.",
+			reqPerms: permissions.PermissionField["NONE"],
+		},
 	}
 }
 
