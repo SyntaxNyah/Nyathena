@@ -57,3 +57,10 @@ func (r *Role) GetPermissions() uint64 {
 func HasPermission(perm uint64, required uint64) bool {
 	return required == (perm & required)
 }
+
+// IsModerator returns true if the supplied permissions include any server moderation
+// permissions beyond the CM permission (i.e., the user has actual moderator-level access).
+// Returns false for perm=0 (no permissions) or perm=CM (CM-only, not a server moderator).
+func IsModerator(perm uint64) bool {
+	return perm&^PermissionField["CM"] != 0
+}

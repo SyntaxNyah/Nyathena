@@ -1345,7 +1345,9 @@ func cmdLogin(client *Client, args []string, _ string) {
 		client.SetAuthenticated(true)
 		client.SetPerms(perms)
 		client.SetModName(args[0])
-		client.SendServerMessage("Logged in as moderator.")
+		if permissions.IsModerator(perms) {
+			client.SendServerMessage("Logged in as moderator.")
+		}
 		client.SendPacket("AUTH", "1")
 		client.SendServerMessage(fmt.Sprintf("Welcome, %v.", args[0]))
 		addToBuffer(client, "AUTH", fmt.Sprintf("Logged in as %v.", args[0]), true)
@@ -1681,7 +1683,7 @@ func cmdPlayers(client *Client, args []string, _ string) {
 			out += fmt.Sprintf("%v:\n%v players online.\n", a.Name(), a.PlayerCount())
 			for c := range clients.GetAllClients() {
 				if c.Area() == a {
-					out += entry(c, client.Authenticated())
+					out += entry(c, permissions.HasPermission(client.Perms(), permissions.PermissionField["BAN_INFO"]))
 				}
 			}
 			out += "----------\n"
@@ -1690,7 +1692,7 @@ func cmdPlayers(client *Client, args []string, _ string) {
 		out += fmt.Sprintf("%v:\n%v players online.\n", client.Area().Name(), client.Area().PlayerCount())
 		for c := range clients.GetAllClients() {
 			if c.Area() == client.Area() {
-				out += entry(c, client.Authenticated())
+				out += entry(c, permissions.HasPermission(client.Perms(), permissions.PermissionField["BAN_INFO"]))
 			}
 		}
 	}
