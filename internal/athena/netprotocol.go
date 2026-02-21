@@ -376,6 +376,16 @@ func pktIC(client *Client, p *packet.Packet) {
 		return
 	}
 
+	// If force-paired, always sync the wanted CharID to the partner's current CharID,
+	// keeping the pair active even when either player changes character or position.
+	if client.ForcePairUID() >= 0 {
+		if partner, err := getClientByUid(client.ForcePairUID()); err == nil && partner.CharID() >= 0 {
+			args[16] = strconv.Itoa(partner.CharID())
+			client.SetPairWantedID(partner.CharID())
+			partner.SetPairWantedID(client.CharID())
+		}
+	}
+
 	// If the client used /pair to set a desired pair but has not selected one via the
 	// in-client pair button (args[16] is absent or -1), inject the server-set pair
 	// character ID so the pairing animation activates exactly as if the pair button
@@ -396,7 +406,9 @@ func pktIC(client *Client, p *packet.Packet) {
 		client.SetPairWantedID(pid)
 		pairing := false
 		for c := range clients.GetAllClients() {
-			if c.CharID() == pid && c.Pos() == client.Pos() && c.PairWantedID() == client.CharID() {
+			isForce := client.ForcePairUID() >= 0 && client.ForcePairUID() == c.Uid() &&
+				c.ForcePairUID() >= 0 && c.ForcePairUID() == client.Uid()
+			if c.CharID() == pid && c.PairWantedID() == client.CharID() && (isForce || c.Pos() == client.Pos()) {
 				pairinfo := c.PairInfo()
 				args[17] = pairinfo.name
 				args[18] = pairinfo.emote

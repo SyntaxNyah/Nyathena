@@ -1816,6 +1816,8 @@ func cmdForcePair(client *Client, args []string, _ string) {
 
 	target1.SetPairWantedID(target2.CharID())
 	target2.SetPairWantedID(target1.CharID())
+	target1.SetForcePairUID(target2.Uid())
+	target2.SetForcePairUID(target1.Uid())
 
 	target1.SendServerMessage(fmt.Sprintf("You have been force-paired with %v by %v.", target2.OOCName(), client.OOCName()))
 	target2.SendServerMessage(fmt.Sprintf("You have been force-paired with %v by %v.", target1.OOCName(), client.OOCName()))
@@ -1825,9 +1827,19 @@ func cmdForcePair(client *Client, args []string, _ string) {
 
 // Handles /unpair
 func cmdUnpair(client *Client, _ []string, _ string) {
-	if client.PairWantedID() == -1 {
+	if client.PairWantedID() == -1 && client.ForcePairUID() == -1 {
 		client.SendServerMessage("You do not have an active pair request.")
 		return
+	}
+
+	// If force-paired, clear force-pair state on both sides.
+	if client.ForcePairUID() >= 0 {
+		if partner, err := getClientByUid(client.ForcePairUID()); err == nil {
+			partner.SetForcePairUID(-1)
+			partner.SetPairWantedID(-1)
+			partner.SendServerMessage(fmt.Sprintf("%v has cancelled the force-pair.", client.OOCName()))
+		}
+		client.SetForcePairUID(-1)
 	}
 
 	// Notify any client that was paired with us.

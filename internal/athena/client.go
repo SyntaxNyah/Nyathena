@@ -140,6 +140,7 @@ type Client struct {
 	punishments     []PunishmentState
 	msgTimestamps   []time.Time // Tracks message timestamps for rate limiting
 	lastModcallTime time.Time   // Tracks last modcall time for cooldown
+	forcePairUID    int         // UID of the client this client is force-paired with (-1 if none)
 	possessing      int         // UID of the client being possessed (-1 if not possessing anyone)
 	possessedPos    string      // Position of the possessed target (saved at time of possession)
 }
@@ -152,6 +153,7 @@ func NewClient(conn net.Conn, ipid string) *Client {
 		char:       -1,
 		pair:       ClientPairInfo{wanted_id: -1},
 		ipid:       ipid,
+		forcePairUID: -1,
 		possessing: -1,
 	}
 }
@@ -512,6 +514,20 @@ func (client *Client) SetPairWantedID(id int) {
 	client.mu.Lock()
 	defer client.mu.Unlock()
 	client.pair.wanted_id = id
+}
+
+// ForcePairUID returns the UID of the client this client is force-paired with, or -1 if none.
+func (client *Client) ForcePairUID() int {
+	client.mu.Lock()
+	defer client.mu.Unlock()
+	return client.forcePairUID
+}
+
+// SetForcePairUID sets the UID of the client this client is force-paired with.
+func (client *Client) SetForcePairUID(uid int) {
+	client.mu.Lock()
+	defer client.mu.Unlock()
+	client.forcePairUID = uid
 }
 
 // RemoveAuth logs a client out as moderator.
