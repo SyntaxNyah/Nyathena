@@ -79,8 +79,8 @@ func initCommands() {
 		"ban": {
 			handler:  cmdBan,
 			minArgs:  3,
-			usage:    "Usage: /ban -u <uid1>,<uid2>... | -i <ipid1>,<ipid2>... [-d duration] <reason>",
-			desc:     "Bans user(s) from the server.",
+			usage:    "Usage: /ban -u <uid1>,<uid2>... | -i <ipid1>,<ipid2>... [-d duration] <reason>\n-i supports offline IPIDs.",
+			desc:     "Bans user(s) from the server. Use -i to ban by IPID (supports offline users).",
 			reqPerms: permissions.PermissionField["BAN"],
 		},
 		"bg": {
@@ -849,12 +849,7 @@ func cmdBan(client *Client, args []string, usage string) {
 		return
 	}
 
-	var toBan []*Client
-	if len(*uids) > 0 {
-		toBan = getUidList(*uids)
-	} else if len(*ipids) > 0 {
-		toBan = getIpidList(*ipids)
-	} else {
+	if len(*uids) == 0 && len(*ipids) == 0 {
 		client.SendServerMessage("Not enough arguments:\n" + usage)
 		return
 	}
@@ -872,28 +867,73 @@ func cmdBan(client *Client, args []string, usage string) {
 		until = time.Now().UTC().Add(parsedDur).Unix()
 	}
 
+	var untilS string
+	if until == -1 {
+		untilS = "∞"
+	} else {
+		untilS = time.Unix(until, 0).UTC().Format("02 Jan 2006 15:04 MST")
+	}
+
 	var count int
 	var report string
-	for _, c := range toBan {
-		id, err := db.AddBan(c.Ipid(), c.Hdid(), banTime, until, reason, client.ModName())
-		if err != nil {
-			continue
+	if len(*uids) > 0 {
+		for _, c := range getUidList(*uids) {
+			id, err := db.AddBan(c.Ipid(), c.Hdid(), banTime, until, reason, client.ModName())
+			if err != nil {
+				continue
+			}
+			if !strings.Contains(report, c.Ipid()) {
+				report += c.Ipid() + ", "
+			}
+			c.SendPacket("KB", fmt.Sprintf("%v\nUntil: %v\nID: %v", reason, untilS, id))
+			c.conn.Close()
+			count++
 		}
-		var untilS string
-		if until == -1 {
-			untilS = "∞"
-		} else {
-			untilS = time.Unix(until, 0).UTC().Format("02 Jan 2006 15:04 MST")
+	} else {
+		for _, ipid := range *ipids {
+			onlineClients := getClientsByIpid(ipid)
+			if len(onlineClients) == 0 {
+				// Offline ban – no HDID available.
+				if _, err := db.AddBan(ipid, "", banTime, until, reason, client.ModName()); err != nil {
+					continue
+				}
+			} else {
+				// Online ban – record each unique HDID so the ban holds if the user
+				// reconnects from a different IP address.
+				banIDByHdid := make(map[string]int)
+				for _, c := range onlineClients {
+					if _, done := banIDByHdid[c.Hdid()]; done {
+						continue
+					}
+					id, err := db.AddBan(c.Ipid(), c.Hdid(), banTime, until, reason, client.ModName())
+					if err == nil {
+						banIDByHdid[c.Hdid()] = id
+					}
+				}
+				if len(banIDByHdid) == 0 {
+					continue
+				}
+				for _, c := range onlineClients {
+					if id, ok := banIDByHdid[c.Hdid()]; ok {
+						c.SendPacket("KB", fmt.Sprintf("%v\nUntil: %v\nID: %v", reason, untilS, id))
+					} else {
+						c.SendPacket("KB", fmt.Sprintf("%v\nUntil: %v", reason, untilS))
+					}
+					c.conn.Close()
+				}
+			}
+			if !strings.Contains(report, ipid) {
+				report += ipid + ", "
+			}
+			count++
 		}
-		if !strings.Contains(report, c.Ipid()) {
-			report += c.Ipid() + ", "
-		}
-		c.SendPacket("KB", fmt.Sprintf("%v\nUntil: %v\nID: %v", reason, untilS, id))
-		c.conn.Close()
-		count++
 	}
 	report = strings.TrimSuffix(report, ", ")
-	client.SendServerMessage(fmt.Sprintf("Banned %v clients.", count))
+	if len(*ipids) > 0 {
+		client.SendServerMessage(fmt.Sprintf("Banned %v IPID(s).", count))
+	} else {
+		client.SendServerMessage(fmt.Sprintf("Banned %v clients.", count))
+	}
 	sendPlayerArup()
 	addToBuffer(client, "CMD", fmt.Sprintf("Banned %v from server for %v: %v.", report, *duration, reason), true)
 }
