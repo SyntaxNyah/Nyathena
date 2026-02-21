@@ -378,11 +378,17 @@ func pktIC(client *Client, p *packet.Packet) {
 
 	// If force-paired, always sync the wanted CharID to the partner's current CharID,
 	// keeping the pair active even when either player changes character or position.
+	// Also sync the position so both characters are always broadcast at the same
+	// courtroom position, preventing the pairing sprite from breaking on clients.
 	if client.ForcePairUID() >= 0 {
 		if partner, err := getClientByUid(client.ForcePairUID()); err == nil && partner.CharID() >= 0 {
 			args[16] = strconv.Itoa(partner.CharID())
 			client.SetPairWantedID(partner.CharID())
 			partner.SetPairWantedID(client.CharID())
+			if pos := partner.Pos(); pos != "" {
+				args[5] = pos
+				client.SetPos(pos)
+			}
 		}
 	}
 
