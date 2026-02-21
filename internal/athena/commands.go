@@ -748,6 +748,13 @@ func initCommands() {
 			desc:     "Start or join a Hot Potato mini-game event.",
 			reqPerms: permissions.PermissionField["NONE"],
 		},
+		"giveaway": {
+			handler:  cmdGiveaway,
+			minArgs:  1,
+			usage:    "Usage: /giveaway start <item> | /giveaway enter",
+			desc:     "Start a giveaway or enter an active one.",
+			reqPerms: permissions.PermissionField["NONE"],
+		},
 	}
 }
 
