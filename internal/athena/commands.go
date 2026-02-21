@@ -300,6 +300,13 @@ func initCommands() {
 			desc:     "Sends or accepts a pair request with the specified player.",
 			reqPerms: permissions.PermissionField["NONE"],
 		},
+		"forcepair": {
+			handler:  cmdForcePair,
+			minArgs:  2,
+			usage:    "Usage: /forcepair <uid1> <uid2>",
+			desc:     "Forces two players to pair without requiring mutual consent.",
+			reqPerms: permissions.PermissionField["KICK"],
+		},
 		"unpair": {
 			handler:  cmdUnpair,
 			minArgs:  0,
@@ -1759,6 +1766,61 @@ func cmdPair(client *Client, args []string, _ string) {
 		client.SendServerMessage(fmt.Sprintf("Sent pair request to %v.", target.OOCName()))
 		target.SendServerMessage(fmt.Sprintf("%v wants to pair with you. Type /pair %v to accept.", client.OOCName(), client.Uid()))
 	}
+}
+
+// Handles /forcepair
+func cmdForcePair(client *Client, args []string, _ string) {
+	uid1, err := strconv.Atoi(args[0])
+	if err != nil {
+		client.SendServerMessage("Invalid UID.")
+		return
+	}
+
+	uid2, err := strconv.Atoi(args[1])
+	if err != nil {
+		client.SendServerMessage("Invalid UID.")
+		return
+	}
+
+	target1, err := getClientByUid(uid1)
+	if err != nil {
+		client.SendServerMessage(fmt.Sprintf("Client with UID %v does not exist.", uid1))
+		return
+	}
+
+	target2, err := getClientByUid(uid2)
+	if err != nil {
+		client.SendServerMessage(fmt.Sprintf("Client with UID %v does not exist.", uid2))
+		return
+	}
+
+	if target1 == target2 {
+		client.SendServerMessage("Cannot force a player to pair with themselves.")
+		return
+	}
+
+	if target1.Area() != target2.Area() {
+		client.SendServerMessage("Those players are not in the same area.")
+		return
+	}
+
+	if target1.CharID() < 0 {
+		client.SendServerMessage(fmt.Sprintf("UID %v has not selected a character.", uid1))
+		return
+	}
+
+	if target2.CharID() < 0 {
+		client.SendServerMessage(fmt.Sprintf("UID %v has not selected a character.", uid2))
+		return
+	}
+
+	target1.SetPairWantedID(target2.CharID())
+	target2.SetPairWantedID(target1.CharID())
+
+	target1.SendServerMessage(fmt.Sprintf("You have been force-paired with %v by %v.", target2.OOCName(), client.OOCName()))
+	target2.SendServerMessage(fmt.Sprintf("You have been force-paired with %v by %v.", target1.OOCName(), client.OOCName()))
+	client.SendServerMessage(fmt.Sprintf("Force-paired %v and %v.", target1.OOCName(), target2.OOCName()))
+	addToBuffer(client, "CMD", fmt.Sprintf("Force-paired UID %v and UID %v.", uid1, uid2), false)
 }
 
 // Handles /unpair
