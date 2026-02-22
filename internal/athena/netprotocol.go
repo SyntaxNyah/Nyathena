@@ -513,12 +513,16 @@ func pktIC(client *Client, p *packet.Packet) {
 	client.SetPairInfo(args[2], args[3], args[12], args[19])
 	client.SetLastMsg(args[4])
 	client.SetLastTextColor(args[14])
+	prevShowname := client.Showname()
 	if strings.TrimSpace(args[15]) == "" {
 		client.SetShowname(characters[client.CharID()])
 	} else {
 		client.SetShowname(args[15])
 	}
-	writeToAll("PU", strconv.Itoa(client.Uid()), "2", decode(client.Showname()))
+	// Only broadcast a PU showname update when the showname actually changed.
+	if client.Showname() != prevShowname {
+		writeToAll("PU", strconv.Itoa(client.Uid()), "2", decode(client.Showname()))
+	}
 	client.Area().SetLastSpeaker(client.CharID())
 
 	// Track tournament message count
@@ -797,12 +801,20 @@ func pktCaseAnn(client *Client, p *packet.Packet) {
 	}
 }
 
-// decode returns a given string as a decoded AO2 string.
+// decoder and encoder are package-level, pre-compiled replacers for the AO2 percent-encoding scheme.
+// Using package-level vars avoids re-allocating a new strings.Replacer on every encode/decode call.
+// strings.Replacer.Replace is safe for concurrent use; these vars must never be reassigned after init.
+var (
+	decoder = strings.NewReplacer("<percent>", "%", "<num>", "#", "<dollar>", "$", "<and>", "&")
+	encoder = strings.NewReplacer("%", "<percent>", "#", "<num>", "$", "<dollar>", "&", "<and>")
+)
+
+// decode returns a given AO2-encoded string in its decoded form.
 func decode(s string) string {
-	return strings.NewReplacer("<percent>", "%", "<num>", "#", "<dollar>", "$", "<and>", "&").Replace(s)
+	return decoder.Replace(s)
 }
 
-// encode returns a string encoded AO2 string.
+// encode returns a decoded string in AO2-encoded form.
 func encode(s string) string {
-	return strings.NewReplacer("%", "<percent>", "#", "<num>", "$", "<dollar>", "&", "<and>").Replace(s)
+	return encoder.Replace(s)
 }
