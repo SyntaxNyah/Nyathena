@@ -159,12 +159,12 @@ func (a *Area) Name() string {
 // Taken returns the area's taken list, where "-1" is taken and "0" is free
 func (a *Area) Taken() []string {
 	a.mu.Lock()
-	var takenList []string
-	for _, t := range a.taken {
+	takenList := make([]string, len(a.taken))
+	for i, t := range a.taken {
 		if t {
-			takenList = append(takenList, "-1")
+			takenList[i] = "-1"
 		} else {
-			takenList = append(takenList, "0")
+			takenList[i] = "0"
 		}
 	}
 	a.mu.Unlock()
