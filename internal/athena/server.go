@@ -384,6 +384,46 @@ func addToBuffer(client *Client, action string, message string, audit bool) {
 	}
 }
 
+// getAreaIndex returns the index of a given area in the areas slice.
+// Areas are always sourced from the global slice, so the fallback of 0 is a safe default.
+func getAreaIndex(a *area.Area) int {
+	for i, ar := range areas {
+		if ar == a {
+			return i
+		}
+	}
+	return 0
+}
+
+// sendPlayerListToClient sends PR and PU packets for all currently joined players to a new client.
+func sendPlayerListToClient(newClient *Client) {
+	for c := range clients.GetAllClients() {
+		if c.Uid() == -1 || c == newClient {
+			continue
+		}
+		uid := strconv.Itoa(c.Uid())
+		newClient.SendPacket("PR", uid, "0")
+		if c.OOCName() != "" {
+			newClient.SendPacket("PU", uid, "0", c.OOCName())
+		}
+		newClient.SendPacket("PU", uid, "1", c.CurrentCharacter())
+		newClient.SendPacket("PU", uid, "2", decode(c.Showname()))
+		newClient.SendPacket("PU", uid, "3", strconv.Itoa(getAreaIndex(c.Area())))
+	}
+}
+
+// broadcastPlayerJoin sends PR and PU packets to all clients when a new player joins.
+func broadcastPlayerJoin(client *Client) {
+	uid := strconv.Itoa(client.Uid())
+	writeToAll("PR", uid, "0")
+	if client.OOCName() != "" {
+		writeToAll("PU", uid, "0", client.OOCName())
+	}
+	writeToAll("PU", uid, "1", client.CurrentCharacter())
+	writeToAll("PU", uid, "2", decode(client.Showname()))
+	writeToAll("PU", uid, "3", strconv.Itoa(getAreaIndex(client.Area())))
+}
+
 // sendPlayerArup sends a player ARUP to all connected clients.
 func sendPlayerArup() {
 	plCounts := []string{"0"}

@@ -138,6 +138,10 @@ func pktReqDone(client *Client, _ *packet.Packet) {
 	sendCMArup()
 	sendStatusArup()
 	sendLockArup()
+	// Notify the client of their actual UID so the player list widget filters correctly.
+	client.SendPacket("ID", strconv.Itoa(client.Uid()), "Athena", encode(version))
+	sendPlayerListToClient(client)
+	broadcastPlayerJoin(client)
 	if config.Motd != "" {
 		client.SendServerMessage(config.Motd)
 	}
@@ -514,6 +518,7 @@ func pktIC(client *Client, p *packet.Packet) {
 	} else {
 		client.SetShowname(args[15])
 	}
+	writeToAll("PU", strconv.Itoa(client.Uid()), "2", decode(client.Showname()))
 	client.Area().SetLastSpeaker(client.CharID())
 
 	// Track tournament message count
@@ -649,6 +654,10 @@ func pktOOC(client *Client, p *packet.Packet) {
 		}
 	}
 	client.SetOocName(username)
+
+	if client.Uid() != -1 {
+		writeToAll("PU", strconv.Itoa(client.Uid()), "0", username)
+	}
 
 	if strings.HasPrefix(p.Body[1], "/") {
 		decoded := decode(p.Body[1])

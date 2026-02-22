@@ -271,6 +271,7 @@ func (client *Client) clientCleanup() {
 			updatePlayers <- players.GetPlayerCount()
 		}
 		client.Area().RemoveChar(client.CharID())
+		writeToAll("PR", strconv.Itoa(client.Uid()), "1")
 		sendPlayerArup()
 	}
 	client.conn.Close()
@@ -610,6 +611,7 @@ func (client *Client) ChangeArea(a *area.Area) bool {
 		client.SetCharID(-1)
 	}
 	client.JoinArea(a)
+	writeToAll("PU", strconv.Itoa(client.Uid()), "3", strconv.Itoa(getAreaIndex(a)))
 	if client.CharID() == -1 {
 		client.SendPacket("DONE")
 	} else {
@@ -740,6 +742,11 @@ func (client *Client) ChangeCharacter(id int) {
 		client.SetShowname(client.CurrentCharacter())
 		client.SendPacket("PV", "0", "CID", strconv.Itoa(id))
 		writeToArea(client.Area(), "CharsCheck", client.Area().Taken()...)
+		if client.Uid() != -1 {
+			uid := strconv.Itoa(client.Uid())
+			writeToAll("PU", uid, "1", client.CurrentCharacter())
+			writeToAll("PU", uid, "2", decode(client.Showname()))
+		}
 	}
 }
 
