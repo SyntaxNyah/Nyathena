@@ -2115,9 +2115,8 @@ func cmdRoll(client *Client, args []string, _ string) {
 		return
 	}
 	var result []string
-	gen := rand.New(rand.NewSource(time.Now().Unix()))
 	for i := 0; i < num; i++ {
-		result = append(result, fmt.Sprint(gen.Intn(sides)+1))
+		result = append(result, fmt.Sprint(rand.Intn(sides)+1))
 	}
 	if *private {
 		client.SendServerMessage(fmt.Sprintf("Results: %v.", strings.Join(result, ", ")))
@@ -2471,8 +2470,7 @@ func cmdRps(client *Client, args []string, _ string) {
 
 	// Generate random server choice
 	choices := []string{"rock", "paper", "scissors"}
-	gen := rand.New(rand.NewSource(time.Now().UnixNano()))
-	serverChoice := choices[gen.Intn(3)]
+	serverChoice := choices[rand.Intn(3)]
 
 	// Determine winner
 	var result string
@@ -2554,9 +2552,8 @@ func cmdCoinflip(client *Client, args []string, _ string) {
 		}
 		
 		// Battle time! Flip the coin
-		gen := rand.New(rand.NewSource(time.Now().UnixNano()))
 		coinResult := "heads"
-		if gen.Intn(2) == 1 {
+		if rand.Intn(2) == 1 {
 			coinResult = "tails"
 		}
 		

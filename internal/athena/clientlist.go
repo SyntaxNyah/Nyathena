@@ -20,7 +20,7 @@ import "sync"
 
 type ClientList struct {
 	list map[*Client]struct{}
-	mu   sync.Mutex
+	mu   sync.RWMutex
 }
 
 // AddClient adds a client to the list.
@@ -37,15 +37,22 @@ func (cl *ClientList) RemoveClient(c *Client) {
 	cl.mu.Unlock()
 }
 
-// GetAllClients returns all clients in the list.
+// GetAllClients returns a snapshot of all clients in the list.
+// A snapshot is returned so callers can iterate safely without holding a lock.
 func (cl *ClientList) GetAllClients() map[*Client]struct{} {
-	return cl.list
+	cl.mu.RLock()
+	snapshot := make(map[*Client]struct{}, len(cl.list))
+	for k := range cl.list {
+		snapshot[k] = struct{}{}
+	}
+	cl.mu.RUnlock()
+	return snapshot
 }
 
 // GetClientByUID returns a client by their UID, or nil if not found.
 func (cl *ClientList) GetClientByUID(uid int) *Client {
-	cl.mu.Lock()
-	defer cl.mu.Unlock()
+	cl.mu.RLock()
+	defer cl.mu.RUnlock()
 	for client := range cl.list {
 		if client.Uid() == uid {
 			return client

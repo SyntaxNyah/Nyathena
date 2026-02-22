@@ -53,6 +53,8 @@ var (
 	characters, music, backgrounds, parrot []string
 	areas                                  []*area.Area
 	areaNames                              string
+	areaIndexMap                           map[*area.Area]int // pre-computed index lookup for O(1) getAreaIndex
+	cachedAllowedOrigins                   []string           // pre-computed WS origin list
 	roles                                  []permissions.Role
 	uids                                   uidmanager.UidManager
 	players                                playercount.PlayerCount
@@ -61,11 +63,11 @@ var (
 	updatePlayers                                     = make(chan int)      // Updates the advertiser's player count.
 	advertDone                                        = make(chan struct{}) // Signals the advertiser to stop.
 	FatalError                                        = make(chan error)    // Signals that the server should stop after a fatal error.
-	
+
 	// Tournament mode state
-	tournamentActive     bool
-	tournamentMutex      sync.Mutex
-	tournamentStartTime  time.Time
+	tournamentActive       bool
+	tournamentMutex        sync.Mutex
+	tournamentStartTime    time.Time
 	tournamentParticipants map[int]*TournamentParticipant // uid -> participant data
 )
 
@@ -134,8 +136,13 @@ func InitServer(conf *settings.Config) error {
 	}
 
 	// Load areas.
-	for _, a := range areaData {
-		areaNames += a.Name + "#"
+	areas = make([]*area.Area, 0, len(areaData))
+	var areaNameBuilder strings.Builder
+	for i, a := range areaData {
+		if i > 0 {
+			areaNameBuilder.WriteByte('#')
+		}
+		areaNameBuilder.WriteString(a.Name)
 		var evi_mode area.EvidenceMode
 		switch strings.ToLower(a.Evi_mode) {
 		case "any":
@@ -154,7 +161,16 @@ func InitServer(conf *settings.Config) error {
 		}
 		areas = append(areas, area.NewArea(a, len(characters), conf.BufSize, evi_mode))
 	}
-	areaNames = strings.TrimSuffix(areaNames, "#")
+	areaNames = areaNameBuilder.String()
+
+	// Build O(1) area-index lookup map.
+	areaIndexMap = make(map[*area.Area]int, len(areas))
+	for i, a := range areas {
+		areaIndexMap[a] = i
+	}
+
+	// Pre-compute the list of allowed WebSocket origins.
+	cachedAllowedOrigins = getAllowedOrigins(config.AssetURL)
 	
 	// Initialize area logging if enabled
 	logger.EnableAreaLogging = conf.EnableAreaLogging
@@ -318,9 +334,7 @@ func getAllowedOrigins(assetURL string) []string {
 
 // HandleWS handles a websocket connection.
 func HandleWS(w http.ResponseWriter, r *http.Request) {
-	allowedOrigins := getAllowedOrigins(config.AssetURL)
-	
-	c, err := websocket.Accept(w, r, &websocket.AcceptOptions{OriginPatterns: allowedOrigins})
+	c, err := websocket.Accept(w, r, &websocket.AcceptOptions{OriginPatterns: cachedAllowedOrigins})
 	if err != nil {
 		logger.LogError(err.Error())
 		return
@@ -361,14 +375,15 @@ func writeToAllClients(header string, contents ...string) {
 
 // addToBuffer writes to an area buffer according to a client's action.
 func addToBuffer(client *Client, action string, message string, audit bool) {
+	now := time.Now().UTC().Format("15:04:05")
 	s := fmt.Sprintf("%v | %v | %v | %v | %v | %v",
-		time.Now().UTC().Format("15:04:05"), action, client.CurrentCharacter(), client.Ipid(), client.OOCName(), message)
+		now, action, client.CurrentCharacter(), client.Ipid(), client.OOCName(), message)
 	client.Area().UpdateBuffer(s)
-	
+
 	// Write to area-specific log file if area logging is enabled
 	if logger.EnableAreaLogging {
 		logEntry := fmt.Sprintf("[%v] | %v | %v | %v | %v | %v | %v | %v",
-			time.Now().UTC().Format("15:04:05"),
+			now,
 			action,
 			client.CurrentCharacter(),
 			client.Ipid(),
@@ -378,34 +393,71 @@ func addToBuffer(client *Client, action string, message string, audit bool) {
 			message)
 		logger.WriteAreaLog(client.Area().Name(), logEntry)
 	}
-	
+
 	if audit {
 		logger.WriteAudit(s)
 	}
 }
 
+// getAreaIndex returns the index of a given area in the areas slice.
+// All areas come from the global slice initialised at startup, so the map
+// always contains every valid *Area pointer.  A missing key returns 0,
+// which matches the historic fallback behaviour.
+func getAreaIndex(a *area.Area) int {
+	return areaIndexMap[a]
+}
+
+// sendPlayerListToClient sends PR and PU packets for all currently joined players to a new client.
+func sendPlayerListToClient(newClient *Client) {
+	for c := range clients.GetAllClients() {
+		if c.Uid() == -1 || c == newClient {
+			continue
+		}
+		uid := strconv.Itoa(c.Uid())
+		newClient.SendPacket("PR", uid, "0")
+		if c.OOCName() != "" {
+			newClient.SendPacket("PU", uid, "0", c.OOCName())
+		}
+		newClient.SendPacket("PU", uid, "1", c.CurrentCharacter())
+		newClient.SendPacket("PU", uid, "2", decode(c.Showname()))
+		newClient.SendPacket("PU", uid, "3", strconv.Itoa(getAreaIndex(c.Area())))
+	}
+}
+
+// broadcastPlayerJoin sends PR and PU packets to all clients when a new player joins.
+func broadcastPlayerJoin(client *Client) {
+	uid := strconv.Itoa(client.Uid())
+	writeToAll("PR", uid, "0")
+	if client.OOCName() != "" {
+		writeToAll("PU", uid, "0", client.OOCName())
+	}
+	writeToAll("PU", uid, "1", client.CurrentCharacter())
+	writeToAll("PU", uid, "2", decode(client.Showname()))
+	writeToAll("PU", uid, "3", strconv.Itoa(getAreaIndex(client.Area())))
+}
+
 // sendPlayerArup sends a player ARUP to all connected clients.
 func sendPlayerArup() {
-	plCounts := []string{"0"}
+	plCounts := make([]string, 1, 1+len(areas))
+	plCounts[0] = "0"
 	for _, a := range areas {
-		s := strconv.Itoa(a.PlayerCount())
-		plCounts = append(plCounts, s)
+		plCounts = append(plCounts, strconv.Itoa(a.PlayerCount()))
 	}
 	writeToAll("ARUP", plCounts...)
 }
 
 // sendCMArup sends a CM ARUP to all connected clients.
 func sendCMArup() {
-	returnL := []string{"2"}
+	returnL := make([]string, 1, 1+len(areas))
+	returnL[0] = "2"
 	for _, a := range areas {
-		var cms []string
-		var uids []int
-		uids = append(uids, a.CMs()...)
-		if len(uids) == 0 {
+		cmUIDs := a.CMs()
+		if len(cmUIDs) == 0 {
 			returnL = append(returnL, "FREE")
 			continue
 		}
-		for _, u := range uids {
+		cms := make([]string, 0, len(cmUIDs))
+		for _, u := range cmUIDs {
 			c, err := getClientByUid(u)
 			if err != nil {
 				continue
@@ -419,7 +471,8 @@ func sendCMArup() {
 
 // sendStatusArup sends a status ARUP to all connected clients.
 func sendStatusArup() {
-	statuses := []string{"1"}
+	statuses := make([]string, 1, 1+len(areas))
+	statuses[0] = "1"
 	for _, a := range areas {
 		statuses = append(statuses, a.Status().String())
 	}
@@ -428,7 +481,8 @@ func sendStatusArup() {
 
 // sendLockArup sends a lock ARUP to all connected clients.
 func sendLockArup() {
-	locks := []string{"3"}
+	locks := make([]string, 1, 1+len(areas))
+	locks[0] = "3"
 	for _, a := range areas {
 		locks = append(locks, a.Lock().String())
 	}
@@ -447,10 +501,8 @@ func getRole(name string) (permissions.Role, error) {
 
 // getClientByUid returns the client with the given uid.
 func getClientByUid(uid int) (*Client, error) {
-	for c := range clients.GetAllClients() {
-		if c.Uid() == uid {
-			return c, nil
-		}
+	if c := clients.GetClientByUID(uid); c != nil {
+		return c, nil
 	}
 	return nil, fmt.Errorf("client does not exist")
 }
@@ -534,7 +586,7 @@ func getIpid(s string) string {
 }
 
 // getParrotMsg returns a random string from the server's parrot list.
+// parrot is validated to be non-empty in InitServer, so no bounds check is required here.
 func getParrotMsg() string {
-	gen := rand.New(rand.NewSource(time.Now().Unix()))
-	return parrot[gen.Intn(len(parrot))]
+	return parrot[rand.Intn(len(parrot))]
 }

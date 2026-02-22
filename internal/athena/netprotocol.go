@@ -138,6 +138,10 @@ func pktReqDone(client *Client, _ *packet.Packet) {
 	sendCMArup()
 	sendStatusArup()
 	sendLockArup()
+	// Notify the client of their actual UID so the player list widget filters correctly.
+	client.SendPacket("ID", strconv.Itoa(client.Uid()), "Athena", encode(version))
+	sendPlayerListToClient(client)
+	broadcastPlayerJoin(client)
 	if config.Motd != "" {
 		client.SendServerMessage(config.Motd)
 	}
@@ -509,10 +513,15 @@ func pktIC(client *Client, p *packet.Packet) {
 	client.SetPairInfo(args[2], args[3], args[12], args[19])
 	client.SetLastMsg(args[4])
 	client.SetLastTextColor(args[14])
+	prevShowname := client.Showname()
 	if strings.TrimSpace(args[15]) == "" {
 		client.SetShowname(characters[client.CharID()])
 	} else {
 		client.SetShowname(args[15])
+	}
+	// Only broadcast a PU showname update when the showname actually changed.
+	if client.Showname() != prevShowname {
+		writeToAll("PU", strconv.Itoa(client.Uid()), "2", decode(client.Showname()))
 	}
 	client.Area().SetLastSpeaker(client.CharID())
 
@@ -649,6 +658,10 @@ func pktOOC(client *Client, p *packet.Packet) {
 		}
 	}
 	client.SetOocName(username)
+
+	if client.Uid() != -1 {
+		writeToAll("PU", strconv.Itoa(client.Uid()), "0", username)
+	}
 
 	if strings.HasPrefix(p.Body[1], "/") {
 		decoded := decode(p.Body[1])
@@ -788,12 +801,20 @@ func pktCaseAnn(client *Client, p *packet.Packet) {
 	}
 }
 
-// decode returns a given string as a decoded AO2 string.
+// decoder and encoder are package-level, pre-compiled replacers for the AO2 percent-encoding scheme.
+// Using package-level vars avoids re-allocating a new strings.Replacer on every encode/decode call.
+// strings.Replacer.Replace is safe for concurrent use; these vars must never be reassigned after init.
+var (
+	decoder = strings.NewReplacer("<percent>", "%", "<num>", "#", "<dollar>", "$", "<and>", "&")
+	encoder = strings.NewReplacer("%", "<percent>", "#", "<num>", "$", "<dollar>", "&", "<and>")
+)
+
+// decode returns a given AO2-encoded string in its decoded form.
 func decode(s string) string {
-	return strings.NewReplacer("<percent>", "%", "<num>", "#", "<dollar>", "$", "<and>", "&").Replace(s)
+	return decoder.Replace(s)
 }
 
-// encode returns a string encoded AO2 string.
+// encode returns a decoded string in AO2-encoded form.
 func encode(s string) string {
-	return strings.NewReplacer("%", "<percent>", "#", "<num>", "$", "<dollar>", "&", "<and>").Replace(s)
+	return encoder.Replace(s)
 }
