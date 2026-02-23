@@ -122,7 +122,15 @@ func pktReqChar(client *Client, _ *packet.Packet) {
 
 // Handles RM#%
 func pktReqAM(client *Client, _ *packet.Packet) {
-	client.write(fmt.Sprintf("SM#%v#%v#%%", areaNames, strings.Join(music, "#")))
+	areaList := strings.Split(areaNames, "#")
+	all := make([]string, 0, len(areaList)+len(music))
+	for _, a := range areaList {
+		all = append(all, encode(a))
+	}
+	for _, m := range music {
+		all = append(all, encode(m))
+	}
+	client.SendPacket("SM", all...)
 }
 
 // Handles RD#%
@@ -601,7 +609,7 @@ func pktAM(client *Client, p *packet.Packet) {
 		return
 	}
 
-	if sliceutil.ContainsString(music, p.Body[0]) {
+	if sliceutil.ContainsString(music, decode(p.Body[0])) {
 		if !client.CanChangeMusic() {
 			client.SendServerMessage("You are not allowed to change the music in this area.")
 			return
@@ -609,11 +617,11 @@ func pktAM(client *Client, p *packet.Packet) {
 		song := p.Body[0]
 		name := client.Showname()
 		effects := "0"
-		if !strings.ContainsRune(p.Body[0], '.') { // Chosen song is a category, and should stop the music.
+		if !strings.ContainsRune(decode(p.Body[0]), '.') { // Chosen song is a category, and should stop the music.
 			song = "~stop.mp3"
 			addToBuffer(client, "MUSIC", "Stopped the music.", false)
 		} else {
-			addToBuffer(client, "MUSIC", fmt.Sprintf("Changed music to %v.", song), false)
+			addToBuffer(client, "MUSIC", fmt.Sprintf("Changed music to %v.", decode(p.Body[0])), false)
 		}
 		if len(p.Body) > 2 {
 			name = p.Body[2]
@@ -622,7 +630,7 @@ func pktAM(client *Client, p *packet.Packet) {
 			effects = p.Body[3]
 		}
 		writeToArea(client.Area(), "MC", song, p.Body[1], name, "1", "0", effects)
-	} else if strings.Contains(areaNames, p.Body[0]) {
+	} else if strings.Contains(areaNames, decode(p.Body[0])) {
 		if decode(p.Body[0]) == client.Area().Name() {
 			return
 		}

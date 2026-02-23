@@ -167,7 +167,9 @@ func LoadMusic() ([]string, error) {
 	defer f.Close()
 	in := bufio.NewScanner(f)
 	for in.Scan() {
-		musicList = append(musicList, in.Text())
+		if line := strings.TrimSpace(in.Text()); line != "" {
+			musicList = append(musicList, line)
+		}
 	}
 	if len(musicList) == 0 {
 		return nil, fmt.Errorf("empty musiclist")
