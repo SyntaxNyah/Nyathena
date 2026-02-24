@@ -27,7 +27,7 @@ func ContainsString(container []string, value string) bool {
 	return false
 }
 
-// ContainsString checks if an int is within an int slice.
+// ContainsInt checks if an int is within an int slice.
 func ContainsInt(container []int, value int) bool {
 	for _, x := range container {
 		if x == value {

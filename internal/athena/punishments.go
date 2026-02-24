@@ -45,11 +45,6 @@ func truncateText(text string) string {
 	return text
 }
 
-// applyWhisper makes text only visible to mods (returned as empty for now, handled elsewhere)
-func applyWhisper(text string) string {
-	return text // Visibility handling done in broadcast logic
-}
-
 // applyBackward reverses character order
 func applyBackward(text string) string {
 	runes := []rune(text)
@@ -417,13 +412,6 @@ func applyEssay(text string) string {
 	return text
 }
 
-// applyHaiku adds a note about haiku format
-func applyHaiku(text string) string {
-	// This is a validation, not a transformation
-	// The actual validation should happen in message handling
-	return text
-}
-
 // applyAutospell intentionally misspells words
 func applyAutospell(text string) string {
 	replacements := map[string]string{
@@ -481,8 +469,6 @@ func applySpotlight(text string) string {
 // ApplyPunishmentToText applies a punishment effect to text
 func ApplyPunishmentToText(text string, pType PunishmentType) string {
 	switch pType {
-	case PunishmentWhisper:
-		return applyWhisper(text)
 	case PunishmentBackward:
 		return applyBackward(text)
 	case PunishmentStutterstep:
@@ -527,8 +513,6 @@ func ApplyPunishmentToText(text string, pType PunishmentType) string {
 		return applyRng(text)
 	case PunishmentEssay:
 		return applyEssay(text)
-	case PunishmentHaiku:
-		return applyHaiku(text)
 	case PunishmentAutospell:
 		return applyAutospell(text)
 	case PunishmentSubtitles:
@@ -551,11 +535,6 @@ func ApplyPunishmentToTextWithState(text string, pType PunishmentType, state *Pu
 	default:
 		return ApplyPunishmentToText(text, pType)
 	}
-}
-
-// ApplyPunishmentToTextWithUserID applies a punishment effect that requires user ID
-func ApplyPunishmentToTextWithUserID(text string, pType PunishmentType, userID int) string {
-	return ApplyPunishmentToText(text, pType)
 }
 
 // GetRandomEmoji returns a random emoji string
