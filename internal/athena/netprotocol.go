@@ -476,7 +476,13 @@ func pktIC(client *Client, p *packet.Packet) {
 		}
 		if !pairing {
 			args[16] = "-1^"
+			args[17] = ""
+			args[18] = ""
 		}
+	} else {
+		// No pair attempted: ensure otherName/otherEmote are empty.
+		args[17] = ""
+		args[18] = ""
 	}
 
 	// Offset validation
