@@ -53,7 +53,6 @@ var (
 	areas                                  []*area.Area
 	areaNames                              string
 	areaIndexMap                           map[*area.Area]int // pre-computed index lookup for O(1) getAreaIndex
-	cachedAllowedOrigins                   []string           // pre-computed WS origin list
 	roles                                  []permissions.Role
 	uids                                   uidmanager.UidManager
 	players                                playercount.PlayerCount
@@ -168,9 +167,6 @@ func InitServer(conf *settings.Config) error {
 		areaIndexMap[a] = i
 	}
 
-	// Pre-compute the list of allowed WebSocket origins.
-	cachedAllowedOrigins = getAllowedOrigins()
-	
 	// Initialize area logging if enabled
 	logger.EnableAreaLogging = conf.EnableAreaLogging
 	if logger.EnableAreaLogging {
@@ -312,15 +308,9 @@ func ListenWSS() {
 	}
 }
 
-// getAllowedOrigins returns the list of allowed WebSocket origins.
-// All origins are permitted so that any WebAO client can connect regardless of where it is hosted.
-func getAllowedOrigins() []string {
-	return []string{"*"}
-}
-
 // HandleWS handles a websocket connection.
 func HandleWS(w http.ResponseWriter, r *http.Request) {
-	c, err := websocket.Accept(w, r, &websocket.AcceptOptions{OriginPatterns: cachedAllowedOrigins})
+	c, err := websocket.Accept(w, r, &websocket.AcceptOptions{OriginPatterns: []string{"*"}})
 	if err != nil {
 		logger.LogError(err.Error())
 		return
