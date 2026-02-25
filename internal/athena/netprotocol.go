@@ -636,6 +636,7 @@ func pktAM(client *Client, p *packet.Packet) {
 			if a.Name() == decode(p.Body[0]) {
 				if !client.ChangeArea(a) {
 					client.SendServerMessage("You are not invited to that area.")
+					return
 				}
 				client.SendServerMessage(fmt.Sprintf("Moved to %v.", a.Name()))
 				return
