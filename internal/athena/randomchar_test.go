@@ -20,6 +20,7 @@ import (
 	"testing"
 
 	"github.com/MangosArentLiterature/Athena/internal/area"
+	"github.com/MangosArentLiterature/Athena/internal/permissions"
 )
 
 // TestGetRandomFreeChar verifies that getRandomFreeChar returns a free character
@@ -112,4 +113,77 @@ func TestGetRandomFreeChar(t *testing.T) {
 			t.Errorf("getRandomFreeChar returned %d, want -1 (empty character list)", id)
 		}
 	})
+}
+
+// TestForceRandomCharCommandRegistered verifies that the /forcerandomchar command
+// is properly registered in the Commands map with ADMIN-only permissions.
+func TestForceRandomCharCommandRegistered(t *testing.T) {
+	initCommands()
+
+	cmd, ok := Commands["forcerandomchar"]
+	if !ok {
+		t.Fatal("forcerandomchar command is not registered in Commands map")
+	}
+
+	if cmd.handler == nil {
+		t.Error("forcerandomchar command has a nil handler")
+	}
+
+	wantPerms := permissions.PermissionField["ADMIN"]
+	if cmd.reqPerms != wantPerms {
+		t.Errorf("forcerandomchar reqPerms = %v, want ADMIN (%v)", cmd.reqPerms, wantPerms)
+	}
+
+	if cmd.minArgs != 0 {
+		t.Errorf("forcerandomchar minArgs = %d, want 0", cmd.minArgs)
+	}
+}
+
+// TestForceRandomCharOnlyAffectsCurrentArea verifies that cmdForceRandomChar
+// changes characters only for clients in the admin's area.
+func TestForceRandomCharOnlyAffectsCurrentArea(t *testing.T) {
+	origChars := characters
+	t.Cleanup(func() { characters = origChars })
+	characters = []string{"Phoenix Wright", "Miles Edgeworth", "Maya Fey", "Franziska von Karma"}
+
+	// Snapshot and restore the global clients list.
+	origClients := clients
+	t.Cleanup(func() { clients = origClients })
+	clients = ClientList{list: make(map[*Client]struct{})}
+
+	adminArea := area.NewArea(area.AreaData{}, len(characters), 0, area.EviAny)
+	otherArea := area.NewArea(area.AreaData{}, len(characters), 0, area.EviAny)
+
+	// Client in the admin's area.
+	inArea := &Client{uid: 1, char: 0, possessing: -1, pair: ClientPairInfo{wanted_id: -1}}
+	inArea.SetArea(adminArea)
+	adminArea.AddChar(0)
+
+	// Client in a different area — must not be changed.
+	outArea := &Client{uid: 2, char: 1, possessing: -1, pair: ClientPairInfo{wanted_id: -1}}
+	outArea.SetArea(otherArea)
+	otherArea.AddChar(1)
+
+	clients.AddClient(inArea)
+	clients.AddClient(outArea)
+
+	// Verify that getRandomFreeChar returns -1 for the client in the other area
+	// (character 1 is taken there), and returns a free character for inArea.
+	freeForIn := getRandomFreeChar(inArea)
+	if freeForIn == -1 {
+		t.Fatal("expected a free character for inArea client, got -1")
+	}
+
+	freeForOut := getRandomFreeChar(outArea)
+	if freeForOut == -1 {
+		t.Fatal("expected a free character for outArea client, got -1")
+	}
+
+	// Verify area isolation: free chars for inArea are from adminArea, not otherArea.
+	if adminArea.IsTaken(freeForIn) {
+		t.Errorf("getRandomFreeChar returned taken character %d for inArea client", freeForIn)
+	}
+	if otherArea.IsTaken(freeForOut) {
+		t.Errorf("getRandomFreeChar returned taken character %d for outArea client", freeForOut)
+	}
 }
