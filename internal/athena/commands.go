@@ -139,6 +139,13 @@ func initCommands() {
 			desc:     "Prints ban(s) matching the search parameters, or prints the 5 most recent bans.",
 			reqPerms: permissions.PermissionField["BAN_INFO"],
 		},
+		"gas": {
+			handler:  func(client *Client, _ []string, _ string) { cmdPlayers(client, []string{"-a"}, "") },
+			minArgs:  0,
+			usage:    "Usage: /gas",
+			desc:     "Shows players in all areas.",
+			reqPerms: permissions.PermissionField["NONE"],
+		},
 		"global": {
 			handler:  cmdGlobal,
 			minArgs:  1,
