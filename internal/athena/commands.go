@@ -314,6 +314,13 @@ func initCommands() {
 			desc:     "Cancels your current pair request or active pairing.",
 			reqPerms: permissions.PermissionField["NONE"],
 		},
+		"forcerandomchar": {
+			handler:  cmdForceRandomChar,
+			minArgs:  0,
+			usage:    "Usage: /forcerandomchar",
+			desc:     "Forces all players in the current area to select a random free character.",
+			reqPerms: permissions.PermissionField["ADMIN"],
+		},
 		"forceunpair": {
 			handler:  cmdForceUnpair,
 			minArgs:  1,
@@ -1022,6 +1029,36 @@ func cmdRandomChar(client *Client, _ []string, _ string) {
 		return
 	}
 	client.ChangeCharacter(newid)
+}
+
+// Handles /forcerandomchar
+func cmdForceRandomChar(client *Client, _ []string, _ string) {
+	var count int
+	var reportBuilder strings.Builder
+	for c := range clients.GetAllClients() {
+		if c.Area() != client.Area() {
+			continue
+		}
+		newid := getRandomFreeChar(c)
+		if newid == -1 {
+			continue
+		}
+		c.ChangeCharacter(newid)
+		if c != client {
+			c.SendServerMessage("An admin forced all players in the area to a random character.")
+		}
+		if reportBuilder.Len() > 0 {
+			reportBuilder.WriteString(", ")
+		}
+		reportBuilder.WriteString(fmt.Sprintf("%v", c.Uid()))
+		count++
+	}
+	if count > 0 {
+		client.SendServerMessage(fmt.Sprintf("Forced %v player(s) in the area to a random character.", count))
+		addToBuffer(client, "CMD", fmt.Sprintf("Force random char on %v user(s) (%v) in area.", count, reportBuilder.String()), false)
+	} else {
+		client.SendServerMessage("No players in the area had their character changed.")
+	}
 }
 
 // Handles /cm
