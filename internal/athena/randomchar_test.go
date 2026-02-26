@@ -139,6 +139,61 @@ func TestForceRandomCharCommandRegistered(t *testing.T) {
 	}
 }
 
+// TestForceRandomCharTargetsUID verifies the UID-lookup infrastructure that
+// cmdForceRandomChar uses when called with a UID argument.
+func TestForceRandomCharTargetsUID(t *testing.T) {
+	origChars := characters
+	t.Cleanup(func() { characters = origChars })
+	characters = []string{"Phoenix Wright", "Miles Edgeworth", "Maya Fey", "Franziska von Karma"}
+
+	origClients := clients
+	t.Cleanup(func() { clients = origClients })
+	clients = ClientList{list: make(map[*Client]struct{})}
+
+	a := area.NewArea(area.AreaData{}, len(characters), 0, area.EviAny)
+
+	// The targeted player.
+	target := &Client{uid: 20, char: 1, possessing: -1, pair: ClientPairInfo{wanted_id: -1}}
+	target.SetArea(a)
+	a.AddChar(1)
+
+	// A bystander in the same area.
+	bystander := &Client{uid: 30, char: 2, possessing: -1, pair: ClientPairInfo{wanted_id: -1}}
+	bystander.SetArea(a)
+	a.AddChar(2)
+
+	clients.AddClient(target)
+	clients.AddClient(bystander)
+
+	// Verify that getClientByUid finds the correct client.
+	found, err := getClientByUid(20)
+	if err != nil {
+		t.Fatalf("getClientByUid(20) returned error: %v", err)
+	}
+	if found != target {
+		t.Errorf("getClientByUid(20) returned wrong client")
+	}
+
+	// Verify that an unknown UID returns an error (invalid-UID branch).
+	if _, err := getClientByUid(99); err == nil {
+		t.Error("getClientByUid(99) expected error for unknown UID, got nil")
+	}
+
+	// Verify that the free character returned is not already taken by the target or bystander.
+	freeForTarget := getRandomFreeChar(target)
+	if freeForTarget == -1 {
+		t.Fatal("expected a free character for target, got -1")
+	}
+	if a.IsTaken(freeForTarget) {
+		t.Errorf("getRandomFreeChar returned already-taken character %d for target", freeForTarget)
+	}
+
+	// The bystander's character must still be taken — the per-UID path must not touch other clients.
+	if !a.IsTaken(bystander.char) {
+		t.Error("bystander's character should remain taken before any forced change")
+	}
+}
+
 // TestForceRandomCharOnlyAffectsCurrentArea verifies that cmdForceRandomChar
 // changes characters only for clients in the admin's area.
 func TestForceRandomCharOnlyAffectsCurrentArea(t *testing.T) {
