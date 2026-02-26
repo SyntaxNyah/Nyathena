@@ -317,8 +317,8 @@ func initCommands() {
 		"forcerandomchar": {
 			handler:  cmdForceRandomChar,
 			minArgs:  0,
-			usage:    "Usage: /forcerandomchar",
-			desc:     "Forces all players in the current area to select a random free character.",
+			usage:    "Usage: /forcerandomchar [uid]",
+			desc:     "Forces all players in the current area (or a specific player by UID) to select a random free character.",
 			reqPerms: permissions.PermissionField["ADMIN"],
 		},
 		"forceunpair": {
@@ -1031,8 +1031,33 @@ func cmdRandomChar(client *Client, _ []string, _ string) {
 	client.ChangeCharacter(newid)
 }
 
-// Handles /forcerandomchar
-func cmdForceRandomChar(client *Client, _ []string, _ string) {
+// Handles /forcerandomchar [uid]
+func cmdForceRandomChar(client *Client, args []string, _ string) {
+	// If a UID argument is provided, target only that specific player.
+	if len(args) >= 1 {
+		uid, err := strconv.Atoi(args[0])
+		if err != nil {
+			client.SendServerMessage("Invalid UID.")
+			return
+		}
+		target, err := getClientByUid(uid)
+		if err != nil {
+			client.SendServerMessage(fmt.Sprintf("Client with UID %v does not exist.", uid))
+			return
+		}
+		newid := getRandomFreeChar(target)
+		if newid == -1 {
+			client.SendServerMessage("No free characters available for that player.")
+			return
+		}
+		target.ChangeCharacter(newid)
+		target.SendServerMessage("An admin forced you to a random character.")
+		client.SendServerMessage(fmt.Sprintf("Forced UID %v to a random character.", uid))
+		addToBuffer(client, "CMD", fmt.Sprintf("Force random char on UID %v.", uid), false)
+		return
+	}
+
+	// No UID provided — target all players in the current area.
 	var count int
 	var reportBuilder strings.Builder
 	for c := range clients.GetAllClients() {
