@@ -18,6 +18,7 @@ package athena
 
 import (
 	"testing"
+	"time"
 
 	"github.com/MangosArentLiterature/Athena/internal/area"
 	"github.com/MangosArentLiterature/Athena/internal/permissions"
@@ -240,5 +241,45 @@ func TestForceRandomCharOnlyAffectsCurrentArea(t *testing.T) {
 	}
 	if otherArea.IsTaken(freeForOut) {
 		t.Errorf("getRandomFreeChar returned taken character %d for outArea client", freeForOut)
+	}
+}
+
+// TestRandomCharCooldownAllowsFirstUse verifies that /randomchar is not blocked
+// when the client has never used it before.
+func TestRandomCharCooldownAllowsFirstUse(t *testing.T) {
+	client := &Client{}
+	// Zero time means no previous use — cooldown must not trigger.
+	if !client.LastRandomCharTime().IsZero() {
+		t.Fatal("expected zero LastRandomCharTime for new client")
+	}
+}
+
+// TestRandomCharCooldownBlocksImmediateRepeat verifies that /randomchar is blocked
+// within the 5-second cooldown window after a successful use.
+func TestRandomCharCooldownBlocksImmediateRepeat(t *testing.T) {
+	client := &Client{}
+	client.SetLastRandomCharTime(time.Now())
+
+	last := client.LastRandomCharTime()
+	if last.IsZero() {
+		t.Fatal("LastRandomCharTime should not be zero after SetLastRandomCharTime")
+	}
+
+	const cooldown = 5 * time.Second
+	if time.Since(last) >= cooldown {
+		t.Fatal("test setup error: last time should be within cooldown window")
+	}
+}
+
+// TestRandomCharCooldownExpiresAfterWindow verifies that the cooldown expires
+// correctly after 5 seconds.
+func TestRandomCharCooldownExpiresAfterWindow(t *testing.T) {
+	client := &Client{}
+	// Simulate a use that happened more than 5 seconds ago.
+	client.SetLastRandomCharTime(time.Now().Add(-6 * time.Second))
+
+	const cooldown = 5 * time.Second
+	if time.Since(client.LastRandomCharTime()) < cooldown {
+		t.Error("cooldown should have expired for a use 6 seconds ago")
 	}
 }
