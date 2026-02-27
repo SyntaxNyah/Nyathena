@@ -178,6 +178,25 @@ message_rate_limit_window = 10
 # Default: 0 (disabled)
 modcall_cooldown = 0
 
+# Connection rate limiting: Maximum number of new connections an IP can make within the
+# connection rate limit window. Connections that exceed this limit are immediately rejected
+# before the WebSocket handshake, preventing floods from crashing the server.
+# Set to 0 to disable connection rate limiting.
+# Default: 10 connections
+connection_rate_limit = 10
+
+# Connection rate limiting: Time window in seconds for counting new connections per IP.
+# For example, with connection_rate_limit=10 and connection_rate_limit_window=10,
+# an IP may open at most 10 new connections every 10 seconds.
+# Default: 10 seconds
+connection_rate_limit_window = 10
+
+# Whether to automatically ban IPs that exceed the connection rate limit.
+# When enabled, any IP that triggers the connection rate limit is banned using the
+# default_ban_duration and cannot reconnect until the ban expires.
+# Default: false
+connection_flood_autoban = false
+
 [Logging]
 # Sets the number of actions (IC chat messages, OOC chat messages, judge actions, etc.) each area should store.
 # When a user calls a mod, this buffer will be flushed to a report file for review.

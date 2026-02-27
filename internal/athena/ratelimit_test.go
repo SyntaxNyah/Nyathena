@@ -264,3 +264,125 @@ func TestRateLimitMemoryEfficiency(t *testing.T) {
 		t.Errorf("Old timestamps were not cleaned up. Initial: %d, Current: %d", initialLen, len(client.msgTimestamps))
 	}
 }
+
+// TestConnRateLimitDisabled tests that connection rate limiting can be disabled.
+func TestConnRateLimitDisabled(t *testing.T) {
+	oldConfig := config
+	defer func() { config = oldConfig }()
+
+	config = &settings.Config{}
+	config.ConnRateLimit = 0
+
+	// Reset tracker for a clean test
+	connTracker.mu.Lock()
+	connTracker.timestamps = make(map[string][]time.Time)
+	connTracker.mu.Unlock()
+
+	ipid := "testipDisabled"
+	for i := 0; i < 100; i++ {
+		if checkConnRateLimit(ipid) {
+			t.Errorf("Connection was rejected when connection rate limiting is disabled (attempt %d)", i+1)
+			return
+		}
+	}
+}
+
+// TestConnRateLimitBasic tests that the connection rate limit is enforced.
+func TestConnRateLimitBasic(t *testing.T) {
+	oldConfig := config
+	defer func() { config = oldConfig }()
+
+	config = &settings.Config{}
+	config.ConnRateLimit = 5
+	config.ConnRateLimitWindow = 5
+
+	// Reset tracker for a clean test
+	connTracker.mu.Lock()
+	connTracker.timestamps = make(map[string][]time.Time)
+	connTracker.mu.Unlock()
+
+	ipid := "testipBasic"
+
+	// First 5 connections should be allowed
+	for i := 0; i < 5; i++ {
+		if checkConnRateLimit(ipid) {
+			t.Errorf("Connection %d was rejected (limit is 5)", i+1)
+			return
+		}
+	}
+
+	// 6th connection should be rejected
+	if !checkConnRateLimit(ipid) {
+		t.Errorf("Connection was not rejected after exceeding the limit")
+	}
+}
+
+// TestConnRateLimitWindowExpiry tests that the connection rate window resets after expiry.
+func TestConnRateLimitWindowExpiry(t *testing.T) {
+	oldConfig := config
+	defer func() { config = oldConfig }()
+
+	config = &settings.Config{}
+	config.ConnRateLimit = 3
+	config.ConnRateLimitWindow = 1
+
+	// Reset tracker for a clean test
+	connTracker.mu.Lock()
+	connTracker.timestamps = make(map[string][]time.Time)
+	connTracker.mu.Unlock()
+
+	ipid := "testipExpiry"
+
+	// Fill up the limit
+	for i := 0; i < 3; i++ {
+		if checkConnRateLimit(ipid) {
+			t.Errorf("Connection %d was rejected prematurely", i+1)
+			return
+		}
+	}
+
+	// Should be rejected now
+	if !checkConnRateLimit(ipid) {
+		t.Errorf("Connection was not rejected after reaching the limit")
+		return
+	}
+
+	// Wait for window to expire
+	time.Sleep(time.Duration(config.ConnRateLimitWindow)*time.Second + 100*time.Millisecond)
+
+	// Should be allowed again after window expiry
+	if checkConnRateLimit(ipid) {
+		t.Errorf("Connection was rejected after window expired")
+	}
+}
+
+// TestConnRateLimitIsolation tests that different IPs are tracked independently.
+func TestConnRateLimitIsolation(t *testing.T) {
+	oldConfig := config
+	defer func() { config = oldConfig }()
+
+	config = &settings.Config{}
+	config.ConnRateLimit = 2
+	config.ConnRateLimitWindow = 10
+
+	// Reset tracker for a clean test
+	connTracker.mu.Lock()
+	connTracker.timestamps = make(map[string][]time.Time)
+	connTracker.mu.Unlock()
+
+	ipid1 := "testipIso1"
+	ipid2 := "testipIso2"
+
+	// Fill up limit for ipid1
+	checkConnRateLimit(ipid1)
+	checkConnRateLimit(ipid1)
+	if !checkConnRateLimit(ipid1) {
+		t.Errorf("ipid1 was not rejected after exceeding the limit")
+		return
+	}
+
+	// ipid2 should not be affected
+	if checkConnRateLimit(ipid2) {
+		t.Errorf("ipid2 was rejected even though it has not exceeded its limit")
+	}
+}
