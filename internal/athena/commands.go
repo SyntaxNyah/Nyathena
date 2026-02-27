@@ -1048,11 +1048,23 @@ func cmdCharSelect(client *Client, args []string, _ string) {
 
 // Handles /randomchar
 func cmdRandomChar(client *Client, _ []string, _ string) {
+	// Enforce 5-second rate limit.
+	const cooldown = 5 * time.Second
+	if last := client.LastRandomCharTime(); !last.IsZero() && time.Since(last) < cooldown {
+		remaining := int(time.Until(last.Add(cooldown)).Seconds()) + 1
+		unit := "seconds"
+		if remaining == 1 {
+			unit = "second"
+		}
+		client.SendServerMessage(fmt.Sprintf("Please wait %d %s before using /randomchar again.", remaining, unit))
+		return
+	}
 	newid := getRandomFreeChar(client)
 	if newid == -1 {
 		client.SendServerMessage("No free characters available.")
 		return
 	}
+	client.SetLastRandomCharTime(time.Now())
 	client.ChangeCharacter(newid)
 }
 

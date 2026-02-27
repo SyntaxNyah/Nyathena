@@ -139,7 +139,8 @@ type Client struct {
 	lastRpsTime   time.Time
 	punishments     []PunishmentState
 	msgTimestamps   []time.Time // Tracks message timestamps for rate limiting
-	lastModcallTime time.Time   // Tracks last modcall time for cooldown
+	lastModcallTime    time.Time   // Tracks last modcall time for cooldown
+	lastRandomCharTime time.Time   // Tracks last /randomchar time for cooldown
 	forcePairUID    int         // UID of the client this client is force-paired with (-1 if none)
 	possessing      int         // UID of the client being possessed (-1 if not possessing anyone)
 	possessedPos    string      // Position of the possessed target (saved at time of possession)
@@ -848,6 +849,20 @@ func (client *Client) CheckModcallCooldown() (bool, int) {
 func (client *Client) SetLastModcallTime() {
 	client.mu.Lock()
 	client.lastModcallTime = time.Now()
+	client.mu.Unlock()
+}
+
+// LastRandomCharTime returns the last time the client used /randomchar.
+func (client *Client) LastRandomCharTime() time.Time {
+	client.mu.Lock()
+	defer client.mu.Unlock()
+	return client.lastRandomCharTime
+}
+
+// SetLastRandomCharTime records the current time as the client's last /randomchar time.
+func (client *Client) SetLastRandomCharTime(t time.Time) {
+	client.mu.Lock()
+	client.lastRandomCharTime = t
 	client.mu.Unlock()
 }
 
