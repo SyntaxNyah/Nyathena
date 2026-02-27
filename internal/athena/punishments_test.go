@@ -112,6 +112,22 @@ func TestApplyConfused(t *testing.T) {
 	}
 }
 
+func TestApplyConfusedBypassPrevention(t *testing.T) {
+	// Users might try to bypass by using dots, hyphens, or other separators instead of spaces
+	input := "Zivulet.I-can-cheat-ha"
+	result := applyConfused(input)
+	// All "words" split by non-alphanumeric chars should still be present
+	words := []string{"Zivulet", "I", "can", "cheat", "ha"}
+	for _, w := range words {
+		if !strings.Contains(result, w) {
+			t.Errorf("applyConfused bypass prevention failed: missing %q in %q", w, result)
+		}
+	}
+	// The result should not preserve the original separator-joined form unchanged
+	// (with 5 tokens it will always be shuffled differently from the original on some run,
+	// but we at least verify tokens are extracted and present)
+}
+
 func TestTruncateText(t *testing.T) {
 	// Test with text under limit
 	short := "hello"

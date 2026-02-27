@@ -18,9 +18,13 @@ package athena
 
 import (
 	"math/rand"
+	"regexp"
 	"strings"
 	"unicode"
 )
+
+// confusedSplitter splits on any sequence of non-letter, non-digit characters
+var confusedSplitter = regexp.MustCompile(`[^\p{L}\p{N}]+`)
 
 const maxTextLength = 2000
 
@@ -252,11 +256,18 @@ func applyCensor(text string) string {
 
 // applyConfused reorders words randomly
 func applyConfused(text string) string {
-	words := strings.Fields(text)
+	// Split on any non-letter, non-digit characters to prevent bypass via dots, hyphens, etc.
+	parts := confusedSplitter.Split(text, -1)
+	var words []string
+	for _, w := range parts {
+		if w != "" {
+			words = append(words, w)
+		}
+	}
 	if len(words) <= 1 {
 		return text
 	}
-	
+
 	// Shuffle words
 	for i := range words {
 		j := rand.Intn(len(words))
