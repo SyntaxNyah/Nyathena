@@ -938,7 +938,7 @@ func cmdBan(client *Client, args []string, usage string) {
 			c.SendPacket("KB", fmt.Sprintf("%v\nUntil: %v\nID: %v", reason, untilS, id))
 			c.conn.Close()
 			count++
-			if err := webhook.PostBan(c.CurrentCharacter(), c.OOCName(), c.Ipid(), id, *duration, reason, client.ModName()); err != nil {
+			if err := webhook.PostBan(c.CurrentCharacter(), c.Showname(), c.OOCName(), c.Ipid(), c.Uid(), id, *duration, reason, client.ModName()); err != nil {
 				logger.LogErrorf("while posting ban webhook: %v", err)
 			}
 		}
@@ -951,7 +951,7 @@ func cmdBan(client *Client, args []string, usage string) {
 				if err != nil {
 					continue
 				}
-				if err := webhook.PostBan("N/A", "N/A", ipid, id, *duration, reason, client.ModName()); err != nil {
+				if err := webhook.PostBan("N/A", "N/A", "N/A", ipid, -1, id, *duration, reason, client.ModName()); err != nil {
 					logger.LogErrorf("while posting ban webhook: %v", err)
 				}
 			} else {
@@ -973,7 +973,7 @@ func cmdBan(client *Client, args []string, usage string) {
 				for _, c := range onlineClients {
 					if id, ok := banIDByHdid[c.Hdid()]; ok {
 						c.SendPacket("KB", fmt.Sprintf("%v\nUntil: %v\nID: %v", reason, untilS, id))
-						if err := webhook.PostBan(c.CurrentCharacter(), c.OOCName(), ipid, id, *duration, reason, client.ModName()); err != nil {
+						if err := webhook.PostBan(c.CurrentCharacter(), c.Showname(), c.OOCName(), ipid, c.Uid(), id, *duration, reason, client.ModName()); err != nil {
 							logger.LogErrorf("while posting ban webhook: %v", err)
 						}
 					} else {
@@ -1399,7 +1399,7 @@ func cmdKick(client *Client, args []string, usage string) {
 		c.SendPacket("KK", reason)
 		c.conn.Close()
 		count++
-		if err := webhook.PostKick(c.CurrentCharacter(), c.OOCName(), c.Ipid(), reason, client.ModName()); err != nil {
+		if err := webhook.PostKick(c.CurrentCharacter(), c.Showname(), c.OOCName(), c.Ipid(), reason, client.ModName(), c.Uid()); err != nil {
 			logger.LogErrorf("while posting kick webhook: %v", err)
 		}
 	}
@@ -2472,11 +2472,25 @@ func cmdUnban(client *Client, args []string, _ string) {
 		if err != nil {
 			continue
 		}
+		// Look up ban details before nullifying so the webhook embed is informative.
+		bans, dbErr := db.GetBan(db.BANID, id)
 		err = db.UnBan(id)
 		if err != nil {
 			continue
 		}
 		report += fmt.Sprintf("%v, ", s)
+		if dbErr == nil && len(bans) > 0 {
+			b := bans[0]
+			var durStr string
+			if b.Duration == -1 {
+				durStr = "Permanent"
+			} else {
+				durStr = time.Unix(b.Duration, 0).UTC().Format("02 Jan 2006 15:04 MST")
+			}
+			if err := webhook.PostUnban(id, b.Ipid, b.Reason, durStr, b.Moderator, client.ModName()); err != nil {
+				logger.LogErrorf("while posting unban webhook: %v", err)
+			}
+		}
 	}
 	report = strings.TrimSuffix(report, ", ")
 	client.SendServerMessage(fmt.Sprintf("Nullified bans: %v", report))
