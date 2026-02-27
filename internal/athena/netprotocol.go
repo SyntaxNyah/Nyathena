@@ -167,6 +167,11 @@ func getRandomFreeChar(client *Client) int {
 
 // Handles CC#%
 func pktChangeChar(client *Client, p *packet.Packet) {
+	// Check rate limit first
+	if client.CheckRateLimit() {
+		client.KickForRateLimit()
+		return
+	}
 	newid, err := strconv.Atoi(p.Body[1])
 	if err != nil {
 		return

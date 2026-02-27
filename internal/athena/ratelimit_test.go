@@ -386,3 +386,31 @@ func TestConnRateLimitIsolation(t *testing.T) {
 		t.Errorf("ipid2 was rejected even though it has not exceeded its limit")
 	}
 }
+
+// TestCharSelectRateLimit verifies that rapid CC (charselect) packets are subject
+// to the same rate limit as other packets, preventing server crash via charselect spam.
+func TestCharSelectRateLimit(t *testing.T) {
+	oldConfig := config
+	defer func() { config = oldConfig }()
+
+	config = &settings.Config{}
+	config.RateLimit = 3
+	config.RateLimitWindow = 1
+
+	client := &Client{
+		msgTimestamps: []time.Time{},
+	}
+
+	// First 3 charselect-equivalent calls should be allowed.
+	for i := 0; i < 3; i++ {
+		if client.CheckRateLimit() {
+			t.Errorf("charselect was rate limited on call %d (limit is 3)", i+1)
+			return
+		}
+	}
+
+	// 4th call should be rejected, just as pktChangeChar would reject it.
+	if !client.CheckRateLimit() {
+		t.Errorf("charselect was not rate limited after exceeding the limit")
+	}
+}
