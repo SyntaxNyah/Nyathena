@@ -387,8 +387,123 @@ func TestConnRateLimitIsolation(t *testing.T) {
 	}
 }
 
-// TestCharSelectRateLimit verifies that rapid CC (charselect) packets are subject
-// to the same rate limit as other packets, preventing server crash via charselect spam.
+// TestOOCRateLimitDisabled tests that OOC rate limiting can be disabled.
+func TestOOCRateLimitDisabled(t *testing.T) {
+	oldConfig := config
+	defer func() { config = oldConfig }()
+
+	config = &settings.Config{}
+	config.OOCRateLimit = 0
+
+	client := &Client{
+		oocMsgTimestamps: []time.Time{},
+	}
+
+	// Should never be rate limited when disabled
+	for i := 0; i < 100; i++ {
+		if client.CheckOOCRateLimit() {
+			t.Errorf("Client was OOC rate limited when OOC rate limiting is disabled (attempt %d)", i+1)
+			return
+		}
+	}
+}
+
+// TestOOCRateLimitBasic tests that the OOC rate limit is enforced.
+func TestOOCRateLimitBasic(t *testing.T) {
+	oldConfig := config
+	defer func() { config = oldConfig }()
+
+	config = &settings.Config{}
+	config.OOCRateLimit = 4
+	config.OOCRateLimitWindow = 1
+
+	client := &Client{
+		oocMsgTimestamps: []time.Time{},
+	}
+
+	// First 4 OOC messages should be allowed
+	for i := 0; i < 4; i++ {
+		if client.CheckOOCRateLimit() {
+			t.Errorf("OOC message %d was blocked (limit is 4)", i+1)
+			return
+		}
+	}
+
+	// 5th OOC message should be blocked
+	if !client.CheckOOCRateLimit() {
+		t.Errorf("OOC message was not blocked after exceeding the limit")
+	}
+}
+
+// TestOOCRateLimitWindowExpiry tests that the OOC rate window resets after expiry.
+func TestOOCRateLimitWindowExpiry(t *testing.T) {
+	oldConfig := config
+	defer func() { config = oldConfig }()
+
+	config = &settings.Config{}
+	config.OOCRateLimit = 4
+	config.OOCRateLimitWindow = 1
+
+	client := &Client{
+		oocMsgTimestamps: []time.Time{},
+	}
+
+	// Fill up the limit
+	for i := 0; i < 4; i++ {
+		if client.CheckOOCRateLimit() {
+			t.Errorf("OOC message %d was blocked prematurely", i+1)
+			return
+		}
+	}
+
+	// Should be blocked now
+	if !client.CheckOOCRateLimit() {
+		t.Errorf("OOC message was not blocked after reaching the limit")
+		return
+	}
+
+	// Wait for window to expire
+	time.Sleep(time.Duration(config.OOCRateLimitWindow)*time.Second + 100*time.Millisecond)
+
+	// Should be allowed again
+	if client.CheckOOCRateLimit() {
+		t.Errorf("OOC message was blocked after window expired")
+	}
+}
+
+// TestOOCRateLimitIndependentFromGeneral tests that the OOC rate limit is tracked
+// independently from the general message rate limit.
+func TestOOCRateLimitIndependentFromGeneral(t *testing.T) {
+	oldConfig := config
+	defer func() { config = oldConfig }()
+
+	config = &settings.Config{}
+	config.RateLimit = 20
+	config.RateLimitWindow = 10
+	config.OOCRateLimit = 4
+	config.OOCRateLimitWindow = 1
+
+	client := &Client{
+		msgTimestamps:    []time.Time{},
+		oocMsgTimestamps: []time.Time{},
+	}
+
+	// Exhaust the OOC rate limit
+	for i := 0; i < 4; i++ {
+		client.CheckOOCRateLimit()
+	}
+
+	// OOC limit should be exceeded
+	if !client.CheckOOCRateLimit() {
+		t.Errorf("OOC rate limit was not enforced after 4 messages")
+	}
+
+	// General rate limit should not be affected by OOC messages
+	if client.CheckRateLimit() {
+		t.Errorf("General rate limit was incorrectly triggered by OOC messages")
+	}
+}
+
 func TestCharSelectRateLimit(t *testing.T) {
 	oldConfig := config
 	defer func() { config = oldConfig }()

@@ -197,6 +197,18 @@ connection_rate_limit_window = 10
 # Default: false
 connection_flood_autoban = false
 
+# OOC rate limiting: Maximum number of OOC messages a player can send within the OOC rate limit window.
+# OOC packets that exceed this limit are silently dropped, preventing OOC flooding.
+# Set to 0 to disable OOC rate limiting.
+# Default: 4 messages
+ooc_rate_limit = 4
+
+# OOC rate limiting: Time window in seconds for counting OOC messages.
+# For example, with ooc_rate_limit=4 and ooc_rate_limit_window=1,
+# players can send at most 4 OOC messages per second.
+# Default: 1 second
+ooc_rate_limit_window = 1
+
 [Logging]
 # Sets the number of actions (IC chat messages, OOC chat messages, judge actions, etc.) each area should store.
 # When a user calls a mod, this buffer will be flushed to a report file for review.

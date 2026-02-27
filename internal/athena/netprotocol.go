@@ -702,6 +702,11 @@ func pktOOC(client *Client, p *packet.Packet) {
 		return
 	}
 
+	// Check OOC-specific rate limit; drop packet silently if exceeded
+	if client.CheckOOCRateLimit() {
+		return
+	}
+
 	username := decode(strings.TrimSpace(p.Body[0]))
 	if username == "" || username == config.Name || len(username) > 30 || strings.ContainsAny(username, "[]") {
 		client.SendServerMessage("Invalid username.")
