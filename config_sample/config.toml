@@ -144,6 +144,13 @@ webhook_url = ""
 # If this is blank, no role will be pinged.
 webhook_ping_role_id = ""
 
+# Sets the URL for the punishment (ban/kick) Discord webhook.
+# If set, a detailed embed will be posted to this webhook channel whenever a moderator
+# bans or kicks a player. The embed includes: IC name, OOC name, IPID, Ban ID (bans only),
+# duration (bans only), reason, and the moderator who issued the punishment.
+# Leave blank to disable punishment webhook logging.
+punishment_webhook_url = ""
+
 # Sets the maximum number of dice that can be rolled at once.
 max_dice = 100
 

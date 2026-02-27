@@ -33,6 +33,7 @@ import (
 	"github.com/MangosArentLiterature/Athena/internal/logger"
 	"github.com/MangosArentLiterature/Athena/internal/permissions"
 	"github.com/MangosArentLiterature/Athena/internal/sliceutil"
+	"github.com/MangosArentLiterature/Athena/internal/webhook"
 	"github.com/xhit/go-str2duration/v2"
 )
 
@@ -937,14 +938,21 @@ func cmdBan(client *Client, args []string, usage string) {
 			c.SendPacket("KB", fmt.Sprintf("%v\nUntil: %v\nID: %v", reason, untilS, id))
 			c.conn.Close()
 			count++
+			if err := webhook.PostBan(c.CurrentCharacter(), c.Showname(), c.OOCName(), c.Ipid(), c.Uid(), id, *duration, reason, client.ModName()); err != nil {
+				logger.LogErrorf("while posting ban webhook: %v", err)
+			}
 		}
 	} else {
 		for _, ipid := range *ipids {
 			onlineClients := getClientsByIpid(ipid)
 			if len(onlineClients) == 0 {
 				// Offline ban – no HDID available.
-				if _, err := db.AddBan(ipid, "", banTime, until, reason, client.ModName()); err != nil {
+				id, err := db.AddBan(ipid, "", banTime, until, reason, client.ModName())
+				if err != nil {
 					continue
+				}
+				if err := webhook.PostBan("N/A", "N/A", "N/A", ipid, -1, id, *duration, reason, client.ModName()); err != nil {
+					logger.LogErrorf("while posting ban webhook: %v", err)
 				}
 			} else {
 				// Online ban – record each unique HDID so the ban holds if the user
@@ -965,6 +973,9 @@ func cmdBan(client *Client, args []string, usage string) {
 				for _, c := range onlineClients {
 					if id, ok := banIDByHdid[c.Hdid()]; ok {
 						c.SendPacket("KB", fmt.Sprintf("%v\nUntil: %v\nID: %v", reason, untilS, id))
+						if err := webhook.PostBan(c.CurrentCharacter(), c.Showname(), c.OOCName(), ipid, c.Uid(), id, *duration, reason, client.ModName()); err != nil {
+							logger.LogErrorf("while posting ban webhook: %v", err)
+						}
 					} else {
 						c.SendPacket("KB", fmt.Sprintf("%v\nUntil: %v", reason, untilS))
 					}
@@ -1388,6 +1399,9 @@ func cmdKick(client *Client, args []string, usage string) {
 		c.SendPacket("KK", reason)
 		c.conn.Close()
 		count++
+		if err := webhook.PostKick(c.CurrentCharacter(), c.Showname(), c.OOCName(), c.Ipid(), reason, client.ModName(), c.Uid()); err != nil {
+			logger.LogErrorf("while posting kick webhook: %v", err)
+		}
 	}
 	report = strings.TrimSuffix(report, ", ")
 	client.SendServerMessage(fmt.Sprintf("Kicked %v clients.", count))
@@ -2458,11 +2472,25 @@ func cmdUnban(client *Client, args []string, _ string) {
 		if err != nil {
 			continue
 		}
+		// Look up ban details before nullifying so the webhook embed is informative.
+		bans, dbErr := db.GetBan(db.BANID, id)
 		err = db.UnBan(id)
 		if err != nil {
 			continue
 		}
 		report += fmt.Sprintf("%v, ", s)
+		if dbErr == nil && len(bans) > 0 {
+			b := bans[0]
+			var durStr string
+			if b.Duration == -1 {
+				durStr = "Permanent"
+			} else {
+				durStr = time.Unix(b.Duration, 0).UTC().Format("02 Jan 2006 15:04 MST")
+			}
+			if err := webhook.PostUnban(id, b.Ipid, b.Reason, durStr, b.Moderator, client.ModName()); err != nil {
+				logger.LogErrorf("while posting unban webhook: %v", err)
+			}
+		}
 	}
 	report = strings.TrimSuffix(report, ", ")
 	client.SendServerMessage(fmt.Sprintf("Nullified bans: %v", report))

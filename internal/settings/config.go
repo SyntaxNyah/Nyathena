@@ -60,6 +60,7 @@ type ServerConfig struct {
 	AssetURL              string `toml:"asset_url"`
 	WebhookURL            string `toml:"webhook_url"`
 	WebhookPingRoleID     string `toml:"webhook_ping_role_id"`
+	PunishmentWebhookURL  string `toml:"punishment_webhook_url"`
 	MaxDice               int    `toml:"max_dice"`
 	MaxSide               int    `toml:"max_sides"`
 	Motd                  string `toml:"motd"`
