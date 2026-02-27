@@ -181,6 +181,13 @@ func initCommands() {
 			desc:     "Kicks user(s) from the current area.",
 			reqPerms: permissions.PermissionField["CM"],
 		},
+		"kickother": {
+			handler:  cmdKickOther,
+			minArgs:  0,
+			usage:    "Usage: /kickother",
+			desc:     "Kicks all other connections sharing your IP (ghost clients).",
+			reqPerms: permissions.PermissionField["NONE"],
+		},
 		"lock": {
 			handler:  cmdLock,
 			minArgs:  0,
@@ -1414,6 +1421,21 @@ func cmdAreaKick(client *Client, args []string, _ string) {
 	report = strings.TrimSuffix(report, ", ")
 	client.SendServerMessage(fmt.Sprintf("Kicked %v clients.", count))
 	addToBuffer(client, "CMD", fmt.Sprintf("Kicked %v from area.", report), false)
+}
+
+// Handles /kickother
+func cmdKickOther(client *Client, args []string, _ string) {
+	var count int
+	for _, c := range getClientsByIpid(client.Ipid()) {
+		if c == client {
+			continue
+		}
+		c.SendPacket("KK", "Ghost client kicked.")
+		c.conn.Close()
+		count++
+	}
+	client.SendServerMessage(fmt.Sprintf("Kicked %v ghost client(s).", count))
+	sendPlayerArup()
 }
 
 // Handles /lock
