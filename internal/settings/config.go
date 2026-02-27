@@ -71,6 +71,8 @@ type ServerConfig struct {
 	ConnRateLimit         int    `toml:"connection_rate_limit"`
 	ConnRateLimitWindow   int    `toml:"connection_rate_limit_window"`
 	ConnFloodAutoban      bool   `toml:"connection_flood_autoban"`
+	OOCRateLimit          int    `toml:"ooc_rate_limit"`
+	OOCRateLimitWindow    int    `toml:"ooc_rate_limit_window"`
 }
 
 type LogConfig struct {
@@ -123,6 +125,8 @@ func defaultConfig() *Config {
 			ConnRateLimit:         10,
 			ConnRateLimitWindow:   10,
 			ConnFloodAutoban:      false,
+			OOCRateLimit:          4,
+			OOCRateLimitWindow:    1,
 		},
 		LogConfig{
 			BufSize:           150,

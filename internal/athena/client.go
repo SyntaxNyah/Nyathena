@@ -139,6 +139,7 @@ type Client struct {
 	lastRpsTime   time.Time
 	punishments     []PunishmentState
 	msgTimestamps   []time.Time // Tracks message timestamps for rate limiting
+	oocMsgTimestamps []time.Time // Tracks OOC message timestamps for OOC rate limiting
 	lastModcallTime    time.Time   // Tracks last modcall time for cooldown
 	lastRandomCharTime time.Time   // Tracks last /randomchar time for cooldown
 	forcePairUID    int         // UID of the client this client is force-paired with (-1 if none)
@@ -1132,6 +1133,44 @@ func (client *Client) CheckRateLimit() bool {
 
 	// Add current timestamp
 	client.msgTimestamps = append(client.msgTimestamps, now)
+	return false
+}
+
+// CheckOOCRateLimit checks if the client has exceeded the OOC message rate limit.
+// Returns true if rate limit is exceeded and the OOC packet should be dropped, false if the packet is allowed.
+// Uses a sliding window approach, mirroring CheckRateLimit.
+func (client *Client) CheckOOCRateLimit() bool {
+	if config.OOCRateLimit <= 0 {
+		return false
+	}
+
+	client.mu.Lock()
+	defer client.mu.Unlock()
+
+	now := time.Now()
+	window := time.Duration(config.OOCRateLimitWindow) * time.Second
+
+	cutoff := now.Add(-window)
+
+	validIdx := -1
+	for i, ts := range client.oocMsgTimestamps {
+		if ts.After(cutoff) {
+			validIdx = i
+			break
+		}
+	}
+
+	if validIdx == -1 {
+		client.oocMsgTimestamps = nil
+	} else if validIdx > 0 {
+		client.oocMsgTimestamps = client.oocMsgTimestamps[validIdx:]
+	}
+
+	if len(client.oocMsgTimestamps) >= config.OOCRateLimit {
+		return true
+	}
+
+	client.oocMsgTimestamps = append(client.oocMsgTimestamps, now)
 	return false
 }
 
