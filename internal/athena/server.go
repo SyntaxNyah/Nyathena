@@ -125,12 +125,19 @@ func InitServer(conf *settings.Config) error {
 		return fmt.Errorf("failed to parse default_ban_duration: %v", err.Error())
 	}
 
+	// Webhook setup: set server name once for all webhook functions.
+	webhook.ServerName = config.Name
+
 	// Discord webhook.
 	if config.WebhookURL != "" {
 		enableDiscord = true
-		webhook.ServerName = config.Name
 		webhook.PingRoleID = config.WebhookPingRoleID
 		discord.WebhookURL = config.WebhookURL
+	}
+
+	// Punishment webhook (ban/kick logging).
+	if config.PunishmentWebhookURL != "" {
+		webhook.PunishmentWebhookURL = config.PunishmentWebhookURL
 	}
 
 	// Load areas.

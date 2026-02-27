@@ -33,6 +33,7 @@ import (
 	"github.com/MangosArentLiterature/Athena/internal/logger"
 	"github.com/MangosArentLiterature/Athena/internal/permissions"
 	"github.com/MangosArentLiterature/Athena/internal/sliceutil"
+	"github.com/MangosArentLiterature/Athena/internal/webhook"
 	"github.com/xhit/go-str2duration/v2"
 )
 
@@ -937,14 +938,21 @@ func cmdBan(client *Client, args []string, usage string) {
 			c.SendPacket("KB", fmt.Sprintf("%v\nUntil: %v\nID: %v", reason, untilS, id))
 			c.conn.Close()
 			count++
+			if err := webhook.PostBan(c.CurrentCharacter(), c.OOCName(), c.Ipid(), id, *duration, reason, client.ModName()); err != nil {
+				logger.LogErrorf("while posting ban webhook: %v", err)
+			}
 		}
 	} else {
 		for _, ipid := range *ipids {
 			onlineClients := getClientsByIpid(ipid)
 			if len(onlineClients) == 0 {
 				// Offline ban – no HDID available.
-				if _, err := db.AddBan(ipid, "", banTime, until, reason, client.ModName()); err != nil {
+				id, err := db.AddBan(ipid, "", banTime, until, reason, client.ModName())
+				if err != nil {
 					continue
+				}
+				if err := webhook.PostBan("N/A", "N/A", ipid, id, *duration, reason, client.ModName()); err != nil {
+					logger.LogErrorf("while posting ban webhook: %v", err)
 				}
 			} else {
 				// Online ban – record each unique HDID so the ban holds if the user
@@ -965,6 +973,9 @@ func cmdBan(client *Client, args []string, usage string) {
 				for _, c := range onlineClients {
 					if id, ok := banIDByHdid[c.Hdid()]; ok {
 						c.SendPacket("KB", fmt.Sprintf("%v\nUntil: %v\nID: %v", reason, untilS, id))
+						if err := webhook.PostBan(c.CurrentCharacter(), c.OOCName(), ipid, id, *duration, reason, client.ModName()); err != nil {
+							logger.LogErrorf("while posting ban webhook: %v", err)
+						}
 					} else {
 						c.SendPacket("KB", fmt.Sprintf("%v\nUntil: %v", reason, untilS))
 					}
@@ -1388,6 +1399,9 @@ func cmdKick(client *Client, args []string, usage string) {
 		c.SendPacket("KK", reason)
 		c.conn.Close()
 		count++
+		if err := webhook.PostKick(c.CurrentCharacter(), c.OOCName(), c.Ipid(), reason, client.ModName()); err != nil {
+			logger.LogErrorf("while posting kick webhook: %v", err)
+		}
 	}
 	report = strings.TrimSuffix(report, ", ")
 	client.SendServerMessage(fmt.Sprintf("Kicked %v clients.", count))

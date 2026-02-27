@@ -17,17 +17,92 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>. */
 package webhook
 
 import (
+	"bytes"
+	"encoding/json"
 	"fmt"
+	"io"
+	"net/http"
 	"strings"
 
 	"github.com/ecnepsnai/discord"
 )
 
 var (
-	ServerName    string
-	ServerColor   uint32 = 0x05b2f7
-	PingRoleID    string
+	ServerName           string
+	ServerColor          uint32 = 0x05b2f7
+	PingRoleID           string
+	PunishmentWebhookURL string
 )
+
+// postToURL posts a discord message to the given webhook URL directly,
+// bypassing the global discord.WebhookURL variable.
+func postToURL(url string, content discord.PostOptions) error {
+	if url == "" {
+		return nil
+	}
+	body := &bytes.Buffer{}
+	if err := json.NewEncoder(body).Encode(content); err != nil {
+		return err
+	}
+	resp, err := http.Post(url, "application/json", body)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != 200 && resp.StatusCode != 204 {
+		respBody, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("HTTP error %d: %s", resp.StatusCode, string(respBody))
+	}
+	return nil
+}
+
+// PostBan sends a ban notification embed to the punishment webhook.
+func PostBan(icName, oocName, ipid string, banID int, duration, reason, moderator string) error {
+	if PunishmentWebhookURL == "" {
+		return nil
+	}
+	e := discord.Embed{
+		Title: "🔨 Player Banned",
+		Color: 0xe74c3c,
+		Fields: []discord.Field{
+			{Name: "IC Name", Value: icName, Inline: true},
+			{Name: "OOC Name", Value: oocName, Inline: true},
+			{Name: "IPID", Value: ipid, Inline: false},
+			{Name: "Ban ID", Value: fmt.Sprintf("%d", banID), Inline: true},
+			{Name: "Duration", Value: duration, Inline: true},
+			{Name: "Reason", Value: reason, Inline: false},
+			{Name: "Moderator", Value: moderator, Inline: true},
+		},
+	}
+	p := discord.PostOptions{
+		Username: ServerName,
+		Embeds:   []discord.Embed{e},
+	}
+	return postToURL(PunishmentWebhookURL, p)
+}
+
+// PostKick sends a kick notification embed to the punishment webhook.
+func PostKick(icName, oocName, ipid, reason, moderator string) error {
+	if PunishmentWebhookURL == "" {
+		return nil
+	}
+	e := discord.Embed{
+		Title: "👢 Player Kicked",
+		Color: 0xe67e22,
+		Fields: []discord.Field{
+			{Name: "IC Name", Value: icName, Inline: true},
+			{Name: "OOC Name", Value: oocName, Inline: true},
+			{Name: "IPID", Value: ipid, Inline: false},
+			{Name: "Reason", Value: reason, Inline: false},
+			{Name: "Moderator", Value: moderator, Inline: true},
+		},
+	}
+	p := discord.PostOptions{
+		Username: ServerName,
+		Embeds:   []discord.Embed{e},
+	}
+	return postToURL(PunishmentWebhookURL, p)
+}
 
 // PostModcall sends a modcall to the discord webhook.
 func PostModcall(character string, area string, reason string) error {
