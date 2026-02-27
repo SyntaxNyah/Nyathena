@@ -62,6 +62,14 @@ var (
 	advertDone                                        = make(chan struct{}) // Signals the advertiser to stop.
 	FatalError                                        = make(chan error)    // Signals that the server should stop after a fatal error.
 
+	// connTracker tracks connection attempts per IP for connection-rate limiting.
+	connTracker = struct {
+		mu         sync.Mutex
+		timestamps map[string][]time.Time // ipid -> connection attempt timestamps
+	}{
+		timestamps: make(map[string][]time.Time),
+	}
+
 	// Tournament mode state
 	tournamentActive       bool
 	tournamentMutex        sync.Mutex
@@ -211,6 +219,7 @@ func InitServer(conf *settings.Config) error {
 		go ms.Advertise(config.MSAddr, advert, updatePlayers, advertDone)
 	}
 	initCommands()
+	go startConnTrackerCleanup()
 	return nil
 }
 
@@ -253,6 +262,14 @@ func ListenTCP() {
 			logger.LogError(err.Error())
 		}
 		ipid := getIpid(conn.RemoteAddr().String())
+		if checkConnRateLimit(ipid) {
+			logger.LogInfof("Connection from %v rejected (connection rate limit exceeded)", ipid)
+			if config.ConnFloodAutoban {
+				autoBanFlooder(ipid)
+			}
+			conn.Close()
+			continue
+		}
 		if logger.DebugNetwork {
 			logger.LogDebugf("Connection recieved from %v", ipid)
 		}
@@ -317,14 +334,22 @@ func ListenWSS() {
 
 // HandleWS handles a websocket connection.
 func HandleWS(w http.ResponseWriter, r *http.Request) {
+	ipid := getIpid(getRealIP(r))
+	if checkConnRateLimit(ipid) {
+		logger.LogInfof("Connection from %v rejected (connection rate limit exceeded)", ipid)
+		if config.ConnFloodAutoban {
+			autoBanFlooder(ipid)
+		}
+		http.Error(w, "Too many connections", http.StatusTooManyRequests)
+		return
+	}
 	c, err := websocket.Accept(w, r, &websocket.AcceptOptions{OriginPatterns: []string{"*"}})
 	if err != nil {
 		logger.LogError(err.Error())
 		return
 	}
-	ipid := getIpid(getRealIP(r))
 	if logger.DebugNetwork {
-		logger.LogDebugf("Connection recieved from %v", ipid)
+		logger.LogDebugf("Connection received from %v", ipid)
 	}
 	client := NewClient(websocket.NetConn(context.TODO(), c, websocket.MessageText), ipid)
 	go client.HandleClient()
@@ -572,4 +597,85 @@ func getIpid(s string) string {
 // parrot is validated to be non-empty in InitServer, so no bounds check is required here.
 func getParrotMsg() string {
 	return parrot[rand.Intn(len(parrot))]
+}
+
+// checkConnRateLimit checks whether the given ipid has exceeded the connection rate limit.
+// It records every connection attempt (including rejected ones) in the sliding window.
+// Returns true if the connection should be rejected.
+func checkConnRateLimit(ipid string) bool {
+	if config.ConnRateLimit <= 0 {
+		return false
+	}
+
+	connTracker.mu.Lock()
+	defer connTracker.mu.Unlock()
+
+	now := time.Now()
+	window := time.Duration(config.ConnRateLimitWindow) * time.Second
+	cutoff := now.Add(-window)
+
+	// Prune timestamps outside the current window.
+	times := connTracker.timestamps[ipid]
+	valid := make([]time.Time, 0, len(times))
+	for _, t := range times {
+		if t.After(cutoff) {
+			valid = append(valid, t)
+		}
+	}
+
+	// Record this attempt regardless of outcome, so floods are always counted.
+	valid = append(valid, now)
+	connTracker.timestamps[ipid] = valid
+
+	return len(valid) > config.ConnRateLimit
+}
+
+// autoBanFlooder adds a temporary ban for an IP that has exceeded the connection rate limit.
+// If the IP is already banned, no additional ban is added.
+func autoBanFlooder(ipid string) {
+	banned, _, err := db.IsBanned(db.IPID, ipid)
+	if err != nil || banned {
+		return
+	}
+	dur, err := str2duration.ParseDuration(config.BanLen)
+	if err != nil {
+		return
+	}
+	expiry := time.Now().UTC().Add(dur).Unix()
+	_, err = db.AddBan(ipid, "", time.Now().UTC().Unix(), expiry, "Automatic ban: connection flooding", "Server")
+	if err != nil {
+		logger.LogErrorf("Failed to auto-ban flooder %v: %v", ipid, err)
+		return
+	}
+	logger.LogInfof("Auto-banned %v for connection flooding", ipid)
+}
+
+// startConnTrackerCleanup periodically removes stale entries from the connection tracker
+// to prevent unbounded memory growth from unique IPs that no longer connect.
+// This goroutine runs for the lifetime of the server process; a graceful stop is not
+// required because the process exits when the server stops.
+func startConnTrackerCleanup() {
+	ticker := time.NewTicker(5 * time.Minute)
+	for range ticker.C {
+		if config == nil || config.ConnRateLimitWindow <= 0 {
+			continue
+		}
+		window := time.Duration(config.ConnRateLimitWindow) * time.Second
+		cutoff := time.Now().Add(-window)
+		connTracker.mu.Lock()
+		for ipid, times := range connTracker.timestamps {
+			valid := make([]time.Time, 0, len(times))
+			for _, t := range times {
+				if t.After(cutoff) {
+					valid = append(valid, t)
+				}
+			}
+			if len(valid) == 0 {
+				delete(connTracker.timestamps, ipid)
+			} else {
+				connTracker.timestamps[ipid] = valid
+			}
+		}
+		connTracker.mu.Unlock()
+	}
 }

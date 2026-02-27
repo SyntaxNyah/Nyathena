@@ -68,6 +68,9 @@ type ServerConfig struct {
 	RateLimit             int    `toml:"message_rate_limit"`
 	RateLimitWindow       int    `toml:"message_rate_limit_window"`
 	ModcallCooldown       int    `toml:"modcall_cooldown"`
+	ConnRateLimit         int    `toml:"connection_rate_limit"`
+	ConnRateLimitWindow   int    `toml:"connection_rate_limit_window"`
+	ConnFloodAutoban      bool   `toml:"connection_flood_autoban"`
 }
 
 type LogConfig struct {
@@ -117,6 +120,9 @@ func defaultConfig() *Config {
 			RateLimit:             20,
 			RateLimitWindow:       10,
 			ModcallCooldown:       0,
+			ConnRateLimit:         10,
+			ConnRateLimitWindow:   10,
+			ConnFloodAutoban:      false,
 		},
 		LogConfig{
 			BufSize:           150,
