@@ -166,10 +166,17 @@ func (a *ServerAdapter) MutePlayer(uid int, duration time.Duration, reason strin
 		return fmt.Errorf("player not found: UID %d", uid)
 	}
 	c.SetMuted(ICOOCMuted)
+	var expires int64
 	if duration > 0 {
-		c.SetUnmuteTime(time.Now().UTC().Add(duration))
+		t := time.Now().UTC().Add(duration)
+		c.SetUnmuteTime(t)
+		expires = t.Unix()
 	} else {
 		c.SetUnmuteTime(time.Time{})
+		expires = 0
+	}
+	if err := db.UpsertMute(c.Ipid(), int(ICOOCMuted), expires); err != nil {
+		logger.LogErrorf("Failed to persist mute for %v: %v", c.Ipid(), err)
 	}
 	c.SendServerMessage(fmt.Sprintf("You have been muted. Reason: %s", reason))
 	return nil
@@ -182,6 +189,9 @@ func (a *ServerAdapter) UnmutePlayer(uid int) error {
 		return fmt.Errorf("player not found: UID %d", uid)
 	}
 	c.SetMuted(Unmuted)
+	if err := db.DeleteMute(c.Ipid()); err != nil {
+		logger.LogErrorf("Failed to remove persistent mute for %v: %v", c.Ipid(), err)
+	}
 	c.SendServerMessage("You have been unmuted.")
 	return nil
 }
@@ -226,6 +236,9 @@ func (a *ServerAdapter) GagPlayer(uid int) error {
 	}
 	c.SetMuted(ICMuted)
 	c.SetUnmuteTime(time.Time{})
+	if err := db.UpsertMute(c.Ipid(), int(ICMuted), 0); err != nil {
+		logger.LogErrorf("Failed to persist gag for %v: %v", c.Ipid(), err)
+	}
 	c.SendServerMessage("You have been gagged from IC chat.")
 	return nil
 }
@@ -238,6 +251,9 @@ func (a *ServerAdapter) UngagPlayer(uid int) error {
 	}
 	if c.Muted() == ICMuted {
 		c.SetMuted(Unmuted)
+		if err := db.DeleteMute(c.Ipid()); err != nil {
+			logger.LogErrorf("Failed to remove persistent gag for %v: %v", c.Ipid(), err)
+		}
 	}
 	c.SendServerMessage("Your gag has been removed.")
 	return nil
@@ -306,6 +322,13 @@ func (a *ServerAdapter) ApplyPunishment(uid int, punishmentName string, duration
 		return fmt.Errorf("unknown punishment: %s", punishmentName)
 	}
 	c.AddPunishment(pType, duration, "Applied by Discord moderator.")
+	var expires int64
+	if duration > 0 {
+		expires = time.Now().UTC().Add(duration).Unix()
+	}
+	if err := db.UpsertTextPunishment(c.Ipid(), int(pType), expires, "Applied by Discord moderator."); err != nil {
+		logger.LogErrorf("Failed to persist text punishment for %v: %v", c.Ipid(), err)
+	}
 	c.SendServerMessage(fmt.Sprintf("You have received the '%s' punishment.", punishmentName))
 	return nil
 }
@@ -321,6 +344,9 @@ func (a *ServerAdapter) RemovePunishment(uid int, punishmentName string) error {
 		return fmt.Errorf("unknown punishment: %s", punishmentName)
 	}
 	c.RemovePunishment(pType)
+	if err := db.DeleteTextPunishment(c.Ipid(), int(pType)); err != nil {
+		logger.LogErrorf("Failed to remove persistent text punishment for %v: %v", c.Ipid(), err)
+	}
 	return nil
 }
 

@@ -841,6 +841,76 @@ func initCommands() {
 			desc:     "Replaces messages with bunny sounds (*thump*, *binky!*, *flops*).",
 			reqPerms: permissions.PermissionField["MUTE"],
 		},
+		"tsundere": {
+			handler:  cmdTsundere,
+			minArgs:  1,
+			usage:    "Usage: /tsundere [-d duration] [-r reason] <uid1>,<uid2>...",
+			desc:     "It's not like I wanted to punish you, b-baka!! Wraps messages in tsundere denial.",
+			reqPerms: permissions.PermissionField["MUTE"],
+		},
+		"yandere": {
+			handler:  cmdYandere,
+			minArgs:  1,
+			usage:    "Usage: /yandere [-d duration] [-r reason] <uid1>,<uid2>...",
+			desc:     "Hehehe~ wraps messages in obsessive yandere flavour.",
+			reqPerms: permissions.PermissionField["MUTE"],
+		},
+		"kuudere": {
+			handler:  cmdKuudere,
+			minArgs:  1,
+			usage:    "Usage: /kuudere [-d duration] [-r reason] <uid1>,<uid2>...",
+			desc:     "Delivers messages in cold, emotionless monotone.",
+			reqPerms: permissions.PermissionField["MUTE"],
+		},
+		"dandere": {
+			handler:  cmdDandere,
+			minArgs:  1,
+			usage:    "Usage: /dandere [-d duration] [-r reason] <uid1>,<uid2>...",
+			desc:     "Makes messages extremely shy and hesitant with stutters.",
+			reqPerms: permissions.PermissionField["MUTE"],
+		},
+		"deredere": {
+			handler:  cmdDeredere,
+			minArgs:  1,
+			usage:    "Usage: /deredere [-d duration] [-r reason] <uid1>,<uid2>...",
+			desc:     "Wraps messages in over-the-top lovey-dovey sweetness.",
+			reqPerms: permissions.PermissionField["MUTE"],
+		},
+		"himedere": {
+			handler:  cmdHimedere,
+			minArgs:  1,
+			usage:    "Usage: /himedere [-d duration] [-r reason] <uid1>,<uid2>...",
+			desc:     "Makes messages imperious and royalty-like, commoner.",
+			reqPerms: permissions.PermissionField["MUTE"],
+		},
+		"kamidere": {
+			handler:  cmdKamidere,
+			minArgs:  1,
+			usage:    "Usage: /kamidere [-d duration] [-r reason] <uid1>,<uid2>...",
+			desc:     "Delivers messages as a self-proclaimed god to unworthy mortals.",
+			reqPerms: permissions.PermissionField["MUTE"],
+		},
+		"undere": {
+			handler:  cmdUndere,
+			minArgs:  1,
+			usage:    "Usage: /undere [-d duration] [-r reason] <uid1>,<uid2>...",
+			desc:     "Forces messages to agree with everything unconditionally.",
+			reqPerms: permissions.PermissionField["MUTE"],
+		},
+		"bakadere": {
+			handler:  cmdBakadere,
+			minArgs:  1,
+			usage:    "Usage: /bakadere [-d duration] [-r reason] <uid1>,<uid2>...",
+			desc:     "Inserts clumsy, airheaded interjections into every message.",
+			reqPerms: permissions.PermissionField["MUTE"],
+		},
+		"mayadere": {
+			handler:  cmdMayadere,
+			minArgs:  1,
+			usage:    "Usage: /mayadere [-d duration] [-r reason] <uid1>,<uid2>...",
+			desc:     "Wraps messages in eerie, enigmatic mystery. Kukuku~",
+			reqPerms: permissions.PermissionField["MUTE"],
+		},
 		"unpunish": {
 			handler:  cmdUnpunish,
 			minArgs:  1,
@@ -1856,10 +1926,17 @@ func cmdMute(client *Client, args []string, usage string) {
 			continue
 		}
 		c.SetMuted(m)
+		var expires int64
 		if *duration == -1 {
 			c.SetUnmuteTime(time.Time{})
+			expires = 0
 		} else {
-			c.SetUnmuteTime(time.Now().UTC().Add(time.Duration(*duration) * time.Second))
+			t := time.Now().UTC().Add(time.Duration(*duration) * time.Second)
+			c.SetUnmuteTime(t)
+			expires = t.Unix()
+		}
+		if err := db.UpsertMute(c.Ipid(), int(m), expires); err != nil {
+			logger.LogErrorf("Failed to persist mute for %v: %v", c.Ipid(), err)
 		}
 		c.SendServerMessage(msg)
 		count++
@@ -1919,10 +1996,17 @@ func cmdParrot(client *Client, args []string, usage string) {
 			continue
 		}
 		c.SetMuted(ParrotMuted)
+		var expires int64
 		if *duration == -1 {
 			c.SetUnmuteTime(time.Time{})
+			expires = 0
 		} else {
-			c.SetUnmuteTime(time.Now().UTC().Add(time.Duration(*duration) * time.Second))
+			t := time.Now().UTC().Add(time.Duration(*duration) * time.Second)
+			c.SetUnmuteTime(t)
+			expires = t.Unix()
+		}
+		if err := db.UpsertMute(c.Ipid(), int(ParrotMuted), expires); err != nil {
+			logger.LogErrorf("Failed to persist parrot mute for %v: %v", c.Ipid(), err)
 		}
 		c.SendServerMessage(msg)
 		count++
@@ -2675,6 +2759,9 @@ func cmdUnmute(client *Client, args []string, _ string) {
 			continue
 		}
 		c.SetMuted(Unmuted)
+		if err := db.DeleteMute(c.Ipid()); err != nil {
+			logger.LogErrorf("Failed to remove persistent mute for %v: %v", c.Ipid(), err)
+		}
 		c.SendServerMessage("You have been unmuted.")
 		count++
 		report += fmt.Sprintf("%v, ", c.Uid())
@@ -2722,7 +2809,9 @@ func cmdJail(client *Client, args []string, usage string) {
 	}
 
 	target.SetJailedUntil(jailUntil)
-	
+	if err := db.UpsertJail(target.Ipid(), jailUntil.Unix(), *reason); err != nil {
+		logger.LogErrorf("Failed to persist jail for %v: %v", target.Ipid(), err)
+	}
 	msg := fmt.Sprintf("You have been jailed in %v.", target.Area().Name())
 	if strings.ToLower(*duration) != "perma" {
 		msg = fmt.Sprintf("You have been jailed in %v for %v.", target.Area().Name(), *duration)
@@ -2751,6 +2840,9 @@ func cmdUnjail(client *Client, args []string, _ string) {
 			continue
 		}
 		c.SetJailedUntil(time.Time{})
+		if err := db.DeleteJail(c.Ipid()); err != nil {
+			logger.LogErrorf("Failed to remove persistent jail for %v: %v", c.Ipid(), err)
+		}
 		c.SendServerMessage("You have been released from jail.")
 		count++
 		report += fmt.Sprintf("%v, ", c.Uid())
@@ -3070,6 +3162,13 @@ func cmdPunishment(client *Client, args []string, usage string, pType Punishment
 
 	for _, c := range toPunish {
 		c.AddPunishment(pType, duration, *reason)
+		var expires int64
+		if duration > 0 {
+			expires = time.Now().UTC().Add(duration).Unix()
+		}
+		if err := db.UpsertTextPunishment(c.Ipid(), int(pType), expires, *reason); err != nil {
+			logger.LogErrorf("Failed to persist text punishment for %v: %v", c.Ipid(), err)
+		}
 		c.SendServerMessage(msg)
 		count++
 		report += fmt.Sprintf("%v, ", c.Uid())
@@ -3269,6 +3368,46 @@ func cmdBunny(client *Client, args []string, usage string) {
 	cmdPunishment(client, args, usage, PunishmentBunny)
 }
 
+func cmdTsundere(client *Client, args []string, usage string) {
+	cmdPunishment(client, args, usage, PunishmentTsundere)
+}
+
+func cmdYandere(client *Client, args []string, usage string) {
+	cmdPunishment(client, args, usage, PunishmentYandere)
+}
+
+func cmdKuudere(client *Client, args []string, usage string) {
+	cmdPunishment(client, args, usage, PunishmentKuudere)
+}
+
+func cmdDandere(client *Client, args []string, usage string) {
+	cmdPunishment(client, args, usage, PunishmentDandere)
+}
+
+func cmdDeredere(client *Client, args []string, usage string) {
+	cmdPunishment(client, args, usage, PunishmentDeredere)
+}
+
+func cmdHimedere(client *Client, args []string, usage string) {
+	cmdPunishment(client, args, usage, PunishmentHimedere)
+}
+
+func cmdKamidere(client *Client, args []string, usage string) {
+	cmdPunishment(client, args, usage, PunishmentKamidere)
+}
+
+func cmdUndere(client *Client, args []string, usage string) {
+	cmdPunishment(client, args, usage, PunishmentUndere)
+}
+
+func cmdBakadere(client *Client, args []string, usage string) {
+	cmdPunishment(client, args, usage, PunishmentBakadere)
+}
+
+func cmdMayadere(client *Client, args []string, usage string) {
+	cmdPunishment(client, args, usage, PunishmentMayadere)
+}
+
 // cmdUnpunish removes all or specific punishments from users
 func cmdUnpunish(client *Client, args []string, usage string) {
 	flags := flag.NewFlagSet("", 0)
@@ -3287,12 +3426,14 @@ func cmdUnpunish(client *Client, args []string, usage string) {
 
 	for _, c := range toUnpunish {
 		if *punishmentType == "" {
-			// Remove all punishments
-			punishments := c.GetActivePunishments()
-			if len(punishments) == 0 {
-				continue
-			}
+			// Remove all punishments (text, mute, and jail) from memory and DB.
 			c.RemoveAllPunishments()
+			c.SetMuted(Unmuted)
+			c.SetUnmuteTime(time.Time{})
+			c.SetJailedUntil(time.Time{})
+			if err := db.DeleteAllPunishments(c.Ipid()); err != nil {
+				logger.LogErrorf("Failed to remove persistent punishments for %v: %v", c.Ipid(), err)
+			}
 			c.SendServerMessage("All punishments have been removed.")
 		} else {
 			// Remove specific punishment type
@@ -3305,6 +3446,9 @@ func cmdUnpunish(client *Client, args []string, usage string) {
 				continue
 			}
 			c.RemovePunishment(pType)
+			if err := db.DeleteTextPunishment(c.Ipid(), int(pType)); err != nil {
+				logger.LogErrorf("Failed to remove persistent punishment for %v: %v", c.Ipid(), err)
+			}
 			c.SendServerMessage(fmt.Sprintf("Punishment '%v' has been removed.", pType.String()))
 		}
 		count++
@@ -3413,6 +3557,26 @@ func parsePunishmentType(s string) PunishmentType {
 		return PunishmentZoo
 	case "bunny":
 		return PunishmentBunny
+	case "tsundere":
+		return PunishmentTsundere
+	case "yandere":
+		return PunishmentYandere
+	case "kuudere":
+		return PunishmentKuudere
+	case "dandere":
+		return PunishmentDandere
+	case "deredere":
+		return PunishmentDeredere
+	case "himedere":
+		return PunishmentHimedere
+	case "kamidere":
+		return PunishmentKamidere
+	case "undere":
+		return PunishmentUndere
+	case "bakadere":
+		return PunishmentBakadere
+	case "mayadere":
+		return PunishmentMayadere
 	default:
 		return PunishmentNone
 	}
@@ -3556,8 +3720,11 @@ func cmdTournament(client *Client, args []string, usage string) {
 				winner.uid, winner.messageCount, duration)
 			writeToAllClients("CT", "OOC", announcement)
 			
-			// Remove all punishments from winner
+			// Remove all punishments from winner (memory and DB).
 			winnerClient.RemoveAllPunishments()
+			if err := db.DeleteAllPunishments(winnerClient.Ipid()); err != nil {
+				logger.LogErrorf("Failed to remove persistent punishments for tournament winner %v: %v", winnerClient.Ipid(), err)
+			}
 			winnerClient.SendServerMessage("Congratulations! Your tournament punishments have been removed.")
 		} else {
 			writeToAllClients("CT", "OOC", "🏆 TOURNAMENT ENDED! No participants.")

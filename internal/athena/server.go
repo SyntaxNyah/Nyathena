@@ -87,6 +87,12 @@ type TournamentParticipant struct {
 // InitServer initalizes the server's database, uids, configs, and advertiser.
 func InitServer(conf *settings.Config) error {
 	db.Open()
+	// Remove expired punishment rows left over from previous sessions.
+	// A failure here is non-fatal: expired rows are harmless (GetPunishments filters
+	// them at read-time), so we log and continue rather than aborting startup.
+	if err := db.PurgeExpired(); err != nil {
+		logger.LogErrorf("Failed to purge expired punishments: %v", err)
+	}
 	uids.InitHeap(conf.MaxPlayers)
 	config = conf
 	
