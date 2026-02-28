@@ -180,16 +180,16 @@ func TestUpsertAndDeleteTextPunishment(t *testing.T) {
 		t.Errorf("expected remaining Subtype=6, got %d", punishments[0].Subtype)
 	}
 
-	// Delete all text punishments.
-	if err := DeleteAllTextPunishments(ipid); err != nil {
-		t.Fatalf("DeleteAllTextPunishments failed: %v", err)
+	// Delete all punishments via DeleteAllPunishments.
+	if err := DeleteAllPunishments(ipid); err != nil {
+		t.Fatalf("DeleteAllPunishments failed: %v", err)
 	}
 	punishments, err = GetPunishments(ipid)
 	if err != nil {
 		t.Fatalf("GetPunishments after full delete failed: %v", err)
 	}
 	if len(punishments) != 0 {
-		t.Errorf("expected 0 punishments after DeleteAllTextPunishments, got %d", len(punishments))
+		t.Errorf("expected 0 punishments after DeleteAllPunishments, got %d", len(punishments))
 	}
 }
 
@@ -242,5 +242,81 @@ func TestGetPunishmentsReturnsPermanent(t *testing.T) {
 	}
 	if punishments[0].Expires != 0 {
 		t.Errorf("expected Expires=0 for permanent punishment, got %d", punishments[0].Expires)
+	}
+}
+
+func TestDeleteAllPunishments(t *testing.T) {
+	teardown := setupTestDB(t)
+	defer teardown()
+
+	ipid := "testipid6"
+
+	// Add one of each kind.
+	if err := UpsertMute(ipid, 1, 0); err != nil {
+		t.Fatalf("UpsertMute failed: %v", err)
+	}
+	if err := UpsertJail(ipid, time.Now().Add(1*time.Hour).Unix(), ""); err != nil {
+		t.Fatalf("UpsertJail failed: %v", err)
+	}
+	if err := UpsertTextPunishment(ipid, 5, 0, ""); err != nil {
+		t.Fatalf("UpsertTextPunishment failed: %v", err)
+	}
+
+	punishments, err := GetPunishments(ipid)
+	if err != nil {
+		t.Fatalf("GetPunishments failed: %v", err)
+	}
+	if len(punishments) != 3 {
+		t.Fatalf("expected 3 punishments before delete, got %d", len(punishments))
+	}
+
+	if err := DeleteAllPunishments(ipid); err != nil {
+		t.Fatalf("DeleteAllPunishments failed: %v", err)
+	}
+
+	punishments, err = GetPunishments(ipid)
+	if err != nil {
+		t.Fatalf("GetPunishments after DeleteAllPunishments failed: %v", err)
+	}
+	if len(punishments) != 0 {
+		t.Errorf("expected 0 punishments after DeleteAllPunishments, got %d", len(punishments))
+	}
+}
+
+func TestPurgeExpired(t *testing.T) {
+	teardown := setupTestDB(t)
+	defer teardown()
+
+	ipid := "testipid7"
+
+	past := time.Now().Add(-1 * time.Hour).Unix()
+	future := time.Now().Add(1 * time.Hour).Unix()
+
+	// One expired, one active, one permanent.
+	if err := UpsertTextPunishment(ipid, 1, past, "expired"); err != nil {
+		t.Fatalf("UpsertTextPunishment (expired) failed: %v", err)
+	}
+	if err := UpsertTextPunishment(ipid, 2, future, "active"); err != nil {
+		t.Fatalf("UpsertTextPunishment (active) failed: %v", err)
+	}
+	if err := UpsertTextPunishment(ipid, 3, 0, "permanent"); err != nil {
+		t.Fatalf("UpsertTextPunishment (permanent) failed: %v", err)
+	}
+
+	if err := PurgeExpired(); err != nil {
+		t.Fatalf("PurgeExpired failed: %v", err)
+	}
+
+	punishments, err := GetPunishments(ipid)
+	if err != nil {
+		t.Fatalf("GetPunishments after PurgeExpired failed: %v", err)
+	}
+	if len(punishments) != 2 {
+		t.Fatalf("expected 2 punishments after purge (active + permanent), got %d", len(punishments))
+	}
+	for _, p := range punishments {
+		if p.Subtype == 1 {
+			t.Errorf("expired punishment (Subtype=1) was not purged")
+		}
 	}
 }

@@ -3316,13 +3316,12 @@ func cmdUnpunish(client *Client, args []string, usage string) {
 
 	for _, c := range toUnpunish {
 		if *punishmentType == "" {
-			// Remove all punishments
-			punishments := c.GetActivePunishments()
-			if len(punishments) == 0 {
-				continue
-			}
+			// Remove all punishments (text, mute, and jail) from memory and DB.
 			c.RemoveAllPunishments()
-			if err := db.DeleteAllTextPunishments(c.Ipid()); err != nil {
+			c.SetMuted(Unmuted)
+			c.SetUnmuteTime(time.Time{})
+			c.SetJailedUntil(time.Time{})
+			if err := db.DeleteAllPunishments(c.Ipid()); err != nil {
 				logger.LogErrorf("Failed to remove persistent punishments for %v: %v", c.Ipid(), err)
 			}
 			c.SendServerMessage("All punishments have been removed.")
@@ -3591,8 +3590,11 @@ func cmdTournament(client *Client, args []string, usage string) {
 				winner.uid, winner.messageCount, duration)
 			writeToAllClients("CT", "OOC", announcement)
 			
-			// Remove all punishments from winner
+			// Remove all punishments from winner (memory and DB).
 			winnerClient.RemoveAllPunishments()
+			if err := db.DeleteAllPunishments(winnerClient.Ipid()); err != nil {
+				logger.LogErrorf("Failed to remove persistent punishments for tournament winner %v: %v", winnerClient.Ipid(), err)
+			}
 			winnerClient.SendServerMessage("Congratulations! Your tournament punishments have been removed.")
 		} else {
 			writeToAllClients("CT", "OOC", "🏆 TOURNAMENT ENDED! No participants.")

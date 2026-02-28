@@ -18,6 +18,7 @@ package db
 
 import (
 	"database/sql"
+	"fmt"
 	"strconv"
 	"time"
 
@@ -73,6 +74,22 @@ func Open() error {
 	if err != nil {
 		return err
 	}
+	// SQLite performs best with a single writer connection.
+	db.SetMaxOpenConns(1)
+
+	// Performance pragmas: WAL journal is faster for mixed read/write workloads;
+	// synchronous=NORMAL is safe with WAL and reduces fsync overhead;
+	// cache_size=-2000 allocates ~2 MB of page cache.
+	for _, pragma := range []string{
+		"PRAGMA journal_mode=WAL",
+		"PRAGMA synchronous=NORMAL",
+		"PRAGMA cache_size=-2000",
+	} {
+		if _, err := db.Exec(pragma); err != nil {
+			return fmt.Errorf("%s: %w", pragma, err)
+		}
+	}
+
 	var v int
 	r := db.QueryRow("PRAGMA user_version")
 	r.Scan(&v)
@@ -348,23 +365,20 @@ func DeleteTextPunishment(ipid string, pType int) error {
 	return err
 }
 
-// DeleteAllTextPunishments removes all text punishments for an IPID.
-func DeleteAllTextPunishments(ipid string) error {
-	_, err := db.Exec("DELETE FROM PUNISHMENTS WHERE IPID = ? AND KIND = ?", ipid, PunishKindText)
+// DeleteAllPunishments removes ALL stored punishments (mute, jail, and text) for an IPID.
+func DeleteAllPunishments(ipid string) error {
+	_, err := db.Exec("DELETE FROM PUNISHMENTS WHERE IPID = ?", ipid)
 	return err
 }
 
 // GetPunishments returns all currently active persistent punishments for an IPID.
-// Expired entries are deleted from the database before returning.
+// Expired entries are filtered in the query rather than deleted, keeping this a pure read.
+// Call PurgeExpired periodically to reclaim space from old expired rows.
 func GetPunishments(ipid string) ([]PersistentPunishment, error) {
 	now := time.Now().Unix()
-	// Clean up expired punishments (but not permanent ones where EXPIRES = 0).
-	_, err := db.Exec("DELETE FROM PUNISHMENTS WHERE IPID = ? AND EXPIRES != 0 AND EXPIRES <= ?", ipid, now)
-	if err != nil {
-		return nil, err
-	}
 	rows, err := db.Query(
-		"SELECT KIND, SUBTYPE, VALUE, EXPIRES, REASON FROM PUNISHMENTS WHERE IPID = ?", ipid)
+		"SELECT KIND, SUBTYPE, VALUE, EXPIRES, REASON FROM PUNISHMENTS WHERE IPID = ? AND (EXPIRES = 0 OR EXPIRES > ?)",
+		ipid, now)
 	if err != nil {
 		return nil, err
 	}
@@ -378,6 +392,13 @@ func GetPunishments(ipid string) ([]PersistentPunishment, error) {
 		punishments = append(punishments, p)
 	}
 	return punishments, nil
+}
+
+// PurgeExpired deletes all expired punishment rows from the database.
+// It is safe to call from a background goroutine.
+func PurgeExpired() error {
+	_, err := db.Exec("DELETE FROM PUNISHMENTS WHERE EXPIRES != 0 AND EXPIRES <= ?", time.Now().Unix())
+	return err
 }
 
 // GetAllBans returns all bans from the database.
