@@ -106,6 +106,17 @@ const (
 	PunishmentLion
 	PunishmentZoo
 	PunishmentBunny
+	// Dere-type Punishments (10 types)
+	PunishmentTsundere
+	PunishmentYandere
+	PunishmentKuudere
+	PunishmentDandere
+	PunishmentDeredere
+	PunishmentHimedere
+	PunishmentKamidere
+	PunishmentUndere
+	PunishmentBakadere
+	PunishmentMayadere
 )
 
 type PunishmentState struct {
@@ -737,6 +748,11 @@ func (client *Client) CheckUnmute() bool {
 	if time.Now().UTC().After(client.UnmuteTime()) && !client.UnmuteTime().IsZero() {
 		client.SendServerMessage("You have been unmuted.")
 		client.SetMuted(Unmuted)
+		go func(ipid string) {
+			if err := db.DeleteMute(ipid); err != nil {
+				logger.LogErrorf("Failed to remove expired mute from DB for %v: %v", ipid, err)
+			}
+		}(client.ipid)
 		return true
 	}
 	return false
@@ -1024,21 +1040,28 @@ func (client *Client) UpdatePunishmentState(pType PunishmentType, updateFunc fun
 }
 
 // CheckExpiredPunishments removes all expired punishments and returns true if any were removed.
+// Expired entries are also deleted from the database.
 func (client *Client) CheckExpiredPunishments() bool {
 	client.mu.Lock()
 	defer client.mu.Unlock()
-	
+
 	now := time.Now().UTC()
 	removed := false
-	
+
 	for i := len(client.punishments) - 1; i >= 0; i-- {
 		p := &client.punishments[i]
 		if !p.expiresAt.IsZero() && now.After(p.expiresAt) {
+			pType := p.punishmentType
 			client.punishments = append(client.punishments[:i], client.punishments[i+1:]...)
 			removed = true
+			go func(ipid string, t PunishmentType) {
+				if err := db.DeleteTextPunishment(ipid, int(t)); err != nil {
+					logger.LogErrorf("Failed to remove expired punishment from DB for %v: %v", ipid, err)
+				}
+			}(client.ipid, pType)
 		}
 	}
-	
+
 	return removed
 }
 
@@ -1157,6 +1180,26 @@ func (p PunishmentType) String() string {
 		return "zoo"
 	case PunishmentBunny:
 		return "bunny"
+	case PunishmentTsundere:
+		return "tsundere"
+	case PunishmentYandere:
+		return "yandere"
+	case PunishmentKuudere:
+		return "kuudere"
+	case PunishmentDandere:
+		return "dandere"
+	case PunishmentDeredere:
+		return "deredere"
+	case PunishmentHimedere:
+		return "himedere"
+	case PunishmentKamidere:
+		return "kamidere"
+	case PunishmentUndere:
+		return "undere"
+	case PunishmentBakadere:
+		return "bakadere"
+	case PunishmentMayadere:
+		return "mayadere"
 	default:
 		return "none"
 	}

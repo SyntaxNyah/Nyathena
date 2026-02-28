@@ -397,3 +397,135 @@ func TestApplyPunishmentToText(t *testing.T) {
 	}
 }
 
+
+// ── Dere-type punishment tests ───────────────────────────────────────────────
+
+func TestApplyTsundere(t *testing.T) {
+input := "hello"
+result := applyTsundere(input)
+if !strings.Contains(result, input) {
+t.Errorf("applyTsundere: expected original text %q in output %q", input, result)
+}
+if len(result) <= len(input) {
+t.Errorf("applyTsundere: expected output longer than input, got %q", result)
+}
+}
+
+func TestApplyYandere(t *testing.T) {
+input := "hello"
+result := applyYandere(input)
+if !strings.Contains(result, input) {
+t.Errorf("applyYandere: expected original text %q in output %q", input, result)
+}
+if !strings.Contains(result, "♥") {
+t.Errorf("applyYandere: expected ♥ in output %q", result)
+}
+}
+
+func TestApplyKuudere(t *testing.T) {
+input := "Hello World"
+result := applyKuudere(input)
+if result == input {
+t.Errorf("applyKuudere: expected transformed output, got unchanged %q", result)
+}
+lower := strings.ToLower(input)
+if !strings.Contains(result, lower) {
+t.Errorf("applyKuudere: expected lowercased input %q in output %q", lower, result)
+}
+}
+
+func TestApplyDandere(t *testing.T) {
+input := "hello there everyone"
+result := applyDandere(input)
+if result == input {
+t.Errorf("applyDandere: expected transformed output, got unchanged %q", result)
+}
+if !strings.Contains(result, "hello") {
+t.Errorf("applyDandere: expected original word in output %q", result)
+}
+}
+
+func TestApplyDeredere(t *testing.T) {
+input := "hello"
+result := applyDeredere(input)
+if !strings.Contains(result, input) {
+t.Errorf("applyDeredere: expected original text %q in output %q", input, result)
+}
+if !strings.Contains(result, "♥") {
+t.Errorf("applyDeredere: expected ♥ in output %q", result)
+}
+}
+
+func TestApplyHimedere(t *testing.T) {
+input := "hello"
+result := applyHimedere(input)
+if !strings.Contains(result, input) {
+t.Errorf("applyHimedere: expected original text %q in output %q", input, result)
+}
+if len(result) <= len(input) {
+t.Errorf("applyHimedere: expected output longer than input %q, got %q", input, result)
+}
+}
+
+func TestApplyKamidere(t *testing.T) {
+input := "hello"
+result := applyKamidere(input)
+if !strings.Contains(result, input) {
+t.Errorf("applyKamidere: expected original text %q in output %q", input, result)
+}
+if len(result) <= len(input) {
+t.Errorf("applyKamidere: expected output longer than input %q, got %q", input, result)
+}
+}
+
+func TestApplyUndere(t *testing.T) {
+input := "hello"
+result := applyUndere(input)
+if !strings.Contains(result, input) {
+t.Errorf("applyUndere: expected original text %q in output %q", input, result)
+}
+if len(result) <= len(input) {
+t.Errorf("applyUndere: expected output longer than input %q, got %q", input, result)
+}
+}
+
+func TestApplyBakadere(t *testing.T) {
+input := "hello there everyone"
+result := applyBakadere(input)
+if result == input {
+t.Errorf("applyBakadere: expected transformed output, got unchanged %q", result)
+}
+if !strings.Contains(result, "hello") {
+t.Errorf("applyBakadere: expected original word in output %q", result)
+}
+}
+
+func TestApplyMayadere(t *testing.T) {
+input := "hello"
+result := applyMayadere(input)
+if !strings.Contains(result, input) {
+t.Errorf("applyMayadere: expected original text %q in output %q", input, result)
+}
+if len(result) <= len(input) {
+t.Errorf("applyMayadere: expected output longer than input %q, got %q", input, result)
+}
+}
+
+func TestDerePunishmentTypes(t *testing.T) {
+// Ensure each dere type is dispatched and transforms the text.
+input := "test message"
+dereTypes := []PunishmentType{
+PunishmentTsundere, PunishmentYandere, PunishmentKuudere,
+PunishmentDandere, PunishmentDeredere, PunishmentHimedere,
+PunishmentKamidere, PunishmentUndere, PunishmentBakadere,
+PunishmentMayadere,
+}
+for _, pt := range dereTypes {
+t.Run(pt.String(), func(t *testing.T) {
+result := ApplyPunishmentToText(input, pt)
+if result == input {
+t.Errorf("%v: expected transformed output, got unchanged %q", pt, result)
+}
+})
+}
+}

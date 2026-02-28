@@ -841,6 +841,76 @@ func initCommands() {
 			desc:     "Replaces messages with bunny sounds (*thump*, *binky!*, *flops*).",
 			reqPerms: permissions.PermissionField["MUTE"],
 		},
+		"tsundere": {
+			handler:  cmdTsundere,
+			minArgs:  1,
+			usage:    "Usage: /tsundere [-d duration] [-r reason] <uid1>,<uid2>...",
+			desc:     "It's not like I wanted to punish you, b-baka!! Wraps messages in tsundere denial.",
+			reqPerms: permissions.PermissionField["MUTE"],
+		},
+		"yandere": {
+			handler:  cmdYandere,
+			minArgs:  1,
+			usage:    "Usage: /yandere [-d duration] [-r reason] <uid1>,<uid2>...",
+			desc:     "Hehehe~ wraps messages in obsessive yandere flavour.",
+			reqPerms: permissions.PermissionField["MUTE"],
+		},
+		"kuudere": {
+			handler:  cmdKuudere,
+			minArgs:  1,
+			usage:    "Usage: /kuudere [-d duration] [-r reason] <uid1>,<uid2>...",
+			desc:     "Delivers messages in cold, emotionless monotone.",
+			reqPerms: permissions.PermissionField["MUTE"],
+		},
+		"dandere": {
+			handler:  cmdDandere,
+			minArgs:  1,
+			usage:    "Usage: /dandere [-d duration] [-r reason] <uid1>,<uid2>...",
+			desc:     "Makes messages extremely shy and hesitant with stutters.",
+			reqPerms: permissions.PermissionField["MUTE"],
+		},
+		"deredere": {
+			handler:  cmdDeredere,
+			minArgs:  1,
+			usage:    "Usage: /deredere [-d duration] [-r reason] <uid1>,<uid2>...",
+			desc:     "Wraps messages in over-the-top lovey-dovey sweetness.",
+			reqPerms: permissions.PermissionField["MUTE"],
+		},
+		"himedere": {
+			handler:  cmdHimedere,
+			minArgs:  1,
+			usage:    "Usage: /himedere [-d duration] [-r reason] <uid1>,<uid2>...",
+			desc:     "Makes messages imperious and royalty-like, commoner.",
+			reqPerms: permissions.PermissionField["MUTE"],
+		},
+		"kamidere": {
+			handler:  cmdKamidere,
+			minArgs:  1,
+			usage:    "Usage: /kamidere [-d duration] [-r reason] <uid1>,<uid2>...",
+			desc:     "Delivers messages as a self-proclaimed god to unworthy mortals.",
+			reqPerms: permissions.PermissionField["MUTE"],
+		},
+		"undere": {
+			handler:  cmdUndere,
+			minArgs:  1,
+			usage:    "Usage: /undere [-d duration] [-r reason] <uid1>,<uid2>...",
+			desc:     "Forces messages to agree with everything unconditionally.",
+			reqPerms: permissions.PermissionField["MUTE"],
+		},
+		"bakadere": {
+			handler:  cmdBakadere,
+			minArgs:  1,
+			usage:    "Usage: /bakadere [-d duration] [-r reason] <uid1>,<uid2>...",
+			desc:     "Inserts clumsy, airheaded interjections into every message.",
+			reqPerms: permissions.PermissionField["MUTE"],
+		},
+		"mayadere": {
+			handler:  cmdMayadere,
+			minArgs:  1,
+			usage:    "Usage: /mayadere [-d duration] [-r reason] <uid1>,<uid2>...",
+			desc:     "Wraps messages in eerie, enigmatic mystery. Kukuku~",
+			reqPerms: permissions.PermissionField["MUTE"],
+		},
 		"unpunish": {
 			handler:  cmdUnpunish,
 			minArgs:  1,
@@ -3298,6 +3368,46 @@ func cmdBunny(client *Client, args []string, usage string) {
 	cmdPunishment(client, args, usage, PunishmentBunny)
 }
 
+func cmdTsundere(client *Client, args []string, usage string) {
+	cmdPunishment(client, args, usage, PunishmentTsundere)
+}
+
+func cmdYandere(client *Client, args []string, usage string) {
+	cmdPunishment(client, args, usage, PunishmentYandere)
+}
+
+func cmdKuudere(client *Client, args []string, usage string) {
+	cmdPunishment(client, args, usage, PunishmentKuudere)
+}
+
+func cmdDandere(client *Client, args []string, usage string) {
+	cmdPunishment(client, args, usage, PunishmentDandere)
+}
+
+func cmdDeredere(client *Client, args []string, usage string) {
+	cmdPunishment(client, args, usage, PunishmentDeredere)
+}
+
+func cmdHimedere(client *Client, args []string, usage string) {
+	cmdPunishment(client, args, usage, PunishmentHimedere)
+}
+
+func cmdKamidere(client *Client, args []string, usage string) {
+	cmdPunishment(client, args, usage, PunishmentKamidere)
+}
+
+func cmdUndere(client *Client, args []string, usage string) {
+	cmdPunishment(client, args, usage, PunishmentUndere)
+}
+
+func cmdBakadere(client *Client, args []string, usage string) {
+	cmdPunishment(client, args, usage, PunishmentBakadere)
+}
+
+func cmdMayadere(client *Client, args []string, usage string) {
+	cmdPunishment(client, args, usage, PunishmentMayadere)
+}
+
 // cmdUnpunish removes all or specific punishments from users
 func cmdUnpunish(client *Client, args []string, usage string) {
 	flags := flag.NewFlagSet("", 0)
@@ -3447,6 +3557,26 @@ func parsePunishmentType(s string) PunishmentType {
 		return PunishmentZoo
 	case "bunny":
 		return PunishmentBunny
+	case "tsundere":
+		return PunishmentTsundere
+	case "yandere":
+		return PunishmentYandere
+	case "kuudere":
+		return PunishmentKuudere
+	case "dandere":
+		return PunishmentDandere
+	case "deredere":
+		return PunishmentDeredere
+	case "himedere":
+		return PunishmentHimedere
+	case "kamidere":
+		return PunishmentKamidere
+	case "undere":
+		return PunishmentUndere
+	case "bakadere":
+		return PunishmentBakadere
+	case "mayadere":
+		return PunishmentMayadere
 	default:
 		return PunishmentNone
 	}

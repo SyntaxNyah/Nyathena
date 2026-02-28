@@ -554,6 +554,26 @@ func ApplyPunishmentToText(text string, pType PunishmentType) string {
 		return applyZoo(text)
 	case PunishmentBunny:
 		return applyBunny(text)
+	case PunishmentTsundere:
+		return applyTsundere(text)
+	case PunishmentYandere:
+		return applyYandere(text)
+	case PunishmentKuudere:
+		return applyKuudere(text)
+	case PunishmentDandere:
+		return applyDandere(text)
+	case PunishmentDeredere:
+		return applyDeredere(text)
+	case PunishmentHimedere:
+		return applyHimedere(text)
+	case PunishmentKamidere:
+		return applyKamidere(text)
+	case PunishmentUndere:
+		return applyUndere(text)
+	case PunishmentBakadere:
+		return applyBakadere(text)
+	case PunishmentMayadere:
+		return applyMayadere(text)
 	default:
 		return text
 	}
@@ -776,4 +796,208 @@ func applyBunny(text string) string {
 func GetRandomEmoji() string {
 	emojis := []string{"😀", "😎", "🤡", "👻", "🎃", "🦄", "🐱", "🐶", "🎮", "⭐"}
 	return emojis[rand.Intn(len(emojis))]
+}
+
+// ── Dere-type punishments ────────────────────────────────────────────────────
+
+// applyTsundere adds classic tsundere phrases: the message is wrapped in
+// reluctant denial followed by the actual text.
+func applyTsundere(text string) string {
+	prefixes := []string{
+		"I-It's not like I wanted to say this, b-baka!! ",
+		"D-Don't misunderstand! ",
+		"Hmph! It's not like I care or anything, but... ",
+		"W-Whatever! I only said this because I had to! ",
+		"B-Baka! Don't read into this! ",
+	}
+	suffixes := []string{
+		" ...N-Not that I meant it like that!!",
+		" ...b-baka!!",
+		" D-Don't get the wrong idea!",
+		" I-It's not like I'm happy about it!",
+		" ...Idiot.",
+	}
+	return prefixes[rand.Intn(len(prefixes))] + text + suffixes[rand.Intn(len(suffixes))]
+}
+
+// applyYandere wraps text in obsessive, unhinged yandere flavour.
+func applyYandere(text string) string {
+	prefixes := []string{
+		"My beloved~ ♥ Listen carefully... ",
+		"Hehehe~ nobody else can hear this but you~ ",
+		"I've been watching you... and ",
+		"You're MINE, so you have to know: ",
+		"*stabs diary* Okay I'll be calm now... ",
+	}
+	suffixes := []string{
+		" ...You won't leave me, will you? ♥",
+		" If you betray me I'll find you~ ♥",
+		" Hehehehe~ ♥",
+		" Remember: you belong to me. ♥",
+		" ...I love you so, so much. ♥",
+	}
+	return prefixes[rand.Intn(len(prefixes))] + text + suffixes[rand.Intn(len(suffixes))]
+}
+
+// applyKuudere transforms text into emotionless, flat delivery.
+func applyKuudere(text string) string {
+	text = strings.ToLower(text)
+	// Strip all punctuation emotion, add flat observation
+	suffixes := []string{
+		". Acknowledged.",
+		". I understand.",
+		". Noted.",
+		". That is all.",
+		". Affirmative.",
+	}
+	prefixes := []string{
+		"...",
+		"*monotone voice* ",
+		"*stares blankly* ",
+		"",
+		"",
+	}
+	return prefixes[rand.Intn(len(prefixes))] + text + suffixes[rand.Intn(len(suffixes))]
+}
+
+// applyDandere makes text extremely shy — small, trailing off, with hesitation.
+func applyDandere(text string) string {
+	words := strings.Fields(text)
+	if len(words) == 0 {
+		return "...u-um..."
+	}
+	// Insert ellipses and stutters into every few words
+	var sb strings.Builder
+	stutters := []string{"u-um... ", "a-ah... ", "s-sorry, ", "...uh... ", "e-err... "}
+	for i, w := range words {
+		if i > 0 {
+			sb.WriteByte(' ')
+		}
+		if i%3 == 0 && i != 0 {
+			sb.WriteString(stutters[rand.Intn(len(stutters))])
+		}
+		sb.WriteString(w)
+	}
+	suffixes := []string{"... s-sorry for talking so much...", "... if that's okay...", "... p-please ignore me...", "..."}
+	sb.WriteString(suffixes[rand.Intn(len(suffixes))])
+	return truncateText(sb.String())
+}
+
+// applyDeredere wraps text in over-the-top lovey-dovey sweetness.
+func applyDeredere(text string) string {
+	prefixes := []string{
+		"Kyaa~!! ♥♥♥ ",
+		"Oh my gosh you're so amazing!! ♥ ",
+		"I love everyone SO MUCH right now!! ♥ ",
+		"*sparkles* You're the best!! ♥ ",
+		"EEE I'm so happy~!! ♥ ",
+	}
+	suffixes := []string{
+		" ♥♥♥ You're wonderful!!!",
+		" I love you all so much~!! ♥",
+		" ~(*^▽^*)~ ♥",
+		" ♥ This is the best day EVER!!",
+		" EEE so amazing~!! ♥",
+	}
+	return prefixes[rand.Intn(len(prefixes))] + text + suffixes[rand.Intn(len(suffixes))]
+}
+
+// applyHimedere makes the speaker act like imperious royalty.
+func applyHimedere(text string) string {
+	prefixes := []string{
+		"Hmph! As expected of one such as I, I decree: ",
+		"Listen well, commoner. ",
+		"You should be honoured that I, in my grace, declare: ",
+		"Bow before me as I announce: ",
+		"As your superior in every way, I shall inform you: ",
+	}
+	suffixes := []string{
+		" Now bow!",
+		" Understand, peasant?",
+		" You're welcome.",
+		" That is my royal decree.",
+		" Do not keep me waiting.",
+	}
+	return prefixes[rand.Intn(len(prefixes))] + text + suffixes[rand.Intn(len(suffixes))]
+}
+
+// applyKamidere makes the speaker act like an insufferable god.
+func applyKamidere(text string) string {
+	prefixes := []string{
+		"KNEEL! The divine one speaks: ",
+		"Silence, mortals. I, a being of transcendent intellect, say: ",
+		"You are unworthy to receive these words, yet I bestow them: ",
+		"This world exists for my amusement. Hear me: ",
+		"As written in the cosmos, I proclaim: ",
+	}
+	suffixes := []string{
+		" It is so because I will it.",
+		" Rejoice that I acknowledged you.",
+		" You may thank me later.",
+		" I am never wrong.",
+		" Worship me.",
+	}
+	return prefixes[rand.Intn(len(prefixes))] + text + suffixes[rand.Intn(len(suffixes))]
+}
+
+// applyUndere makes the speaker agree with absolutely everything.
+func applyUndere(text string) string {
+	prefixes := []string{
+		"Yes! Absolutely! ",
+		"You're so right, and also: ",
+		"That's totally valid!! And: ",
+		"I agree completely! ",
+		"OMG yes and: ",
+	}
+	suffixes := []string{
+		" ...and I completely agree with that too!!",
+		" ...yes, yes, a thousand times yes!!",
+		" ...you're so right about everything!!",
+		" ...whatever you say is perfect!!",
+		" ...I would never disagree~",
+	}
+	return prefixes[rand.Intn(len(prefixes))] + text + suffixes[rand.Intn(len(suffixes))]
+}
+
+// applyBakadere makes text extremely clumsy and airheaded.
+func applyBakadere(text string) string {
+	words := strings.Fields(text)
+	if len(words) == 0 {
+		return "*trips* Ehehe~"
+	}
+	// Randomly swap adjacent words and insert clumsy interjections
+	interjections := []string{"*trips*", "*bumps into wall*", "ehehe~", "*drops everything*", "*falls over*", "uuu~"}
+	var sb strings.Builder
+	for i, w := range words {
+		if i > 0 {
+			sb.WriteByte(' ')
+		}
+		if rand.Intn(4) == 0 {
+			sb.WriteString(interjections[rand.Intn(len(interjections))])
+			sb.WriteByte(' ')
+		}
+		sb.WriteString(w)
+	}
+	endings := []string{" ...ehehe~", " *bumps into doorframe*", " Uuu, gomen~", " *accidentally knocks something over*"}
+	sb.WriteString(endings[rand.Intn(len(endings))])
+	return truncateText(sb.String())
+}
+
+// applyMayadere gives text an eerie, enigmatic, mysterious quality.
+func applyMayadere(text string) string {
+	prefixes := []string{
+		"...The shadows whisper to me that ",
+		"Kukuku~ Interesting... ",
+		"*appears from nowhere* ",
+		"How curious that you would say: ",
+		"I have foreseen this moment... ",
+	}
+	suffixes := []string{
+		" ...Just as I predicted.",
+		" ...How entertaining.",
+		" *vanishes into darkness*",
+		" ...The stars confirm it.",
+		" Kukuku~",
+	}
+	return prefixes[rand.Intn(len(prefixes))] + text + suffixes[rand.Intn(len(suffixes))]
 }
