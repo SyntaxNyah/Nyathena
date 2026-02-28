@@ -555,6 +555,41 @@ func (client *Client) RemoveAuth() {
 	client.SendPacket("AUTH", "-1")
 }
 
+// restorePunishments loads any persistent punishments for this client from the database
+// and applies them. Called once after the client successfully joins the server.
+func (client *Client) restorePunishments() {
+	punishments, err := db.GetPunishments(client.Ipid())
+	if err != nil {
+		logger.LogErrorf("Error loading punishments for %v: %v", client.Ipid(), err)
+		return
+	}
+	if len(punishments) == 0 {
+		return
+	}
+	for _, p := range punishments {
+		var expiresAt time.Time
+		if p.Expires != 0 {
+			expiresAt = time.Unix(p.Expires, 0).UTC()
+		}
+		switch p.Kind {
+		case db.PunishKindMute:
+			m := MuteState(p.Value)
+			client.SetMuted(m)
+			client.SetUnmuteTime(expiresAt)
+		case db.PunishKindJail:
+			client.SetJailedUntil(expiresAt)
+		case db.PunishKindText:
+			pType := PunishmentType(p.Subtype)
+			var remaining time.Duration
+			if p.Expires != 0 {
+				remaining = time.Until(expiresAt)
+			}
+			client.AddPunishment(pType, remaining, p.Reason)
+		}
+	}
+	client.SendServerMessage("Your active punishments have been restored.")
+}
+
 // CheckBanned returns if a client is currently banned.
 func (client *Client) CheckBanned(by db.BanLookup) {
 	var banned bool

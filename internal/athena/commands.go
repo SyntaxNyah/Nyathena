@@ -1856,10 +1856,17 @@ func cmdMute(client *Client, args []string, usage string) {
 			continue
 		}
 		c.SetMuted(m)
+		var expires int64
 		if *duration == -1 {
 			c.SetUnmuteTime(time.Time{})
+			expires = 0
 		} else {
-			c.SetUnmuteTime(time.Now().UTC().Add(time.Duration(*duration) * time.Second))
+			t := time.Now().UTC().Add(time.Duration(*duration) * time.Second)
+			c.SetUnmuteTime(t)
+			expires = t.Unix()
+		}
+		if err := db.UpsertMute(c.Ipid(), int(m), expires); err != nil {
+			logger.LogErrorf("Failed to persist mute for %v: %v", c.Ipid(), err)
 		}
 		c.SendServerMessage(msg)
 		count++
@@ -1919,10 +1926,17 @@ func cmdParrot(client *Client, args []string, usage string) {
 			continue
 		}
 		c.SetMuted(ParrotMuted)
+		var expires int64
 		if *duration == -1 {
 			c.SetUnmuteTime(time.Time{})
+			expires = 0
 		} else {
-			c.SetUnmuteTime(time.Now().UTC().Add(time.Duration(*duration) * time.Second))
+			t := time.Now().UTC().Add(time.Duration(*duration) * time.Second)
+			c.SetUnmuteTime(t)
+			expires = t.Unix()
+		}
+		if err := db.UpsertMute(c.Ipid(), int(ParrotMuted), expires); err != nil {
+			logger.LogErrorf("Failed to persist parrot mute for %v: %v", c.Ipid(), err)
 		}
 		c.SendServerMessage(msg)
 		count++
@@ -2675,6 +2689,9 @@ func cmdUnmute(client *Client, args []string, _ string) {
 			continue
 		}
 		c.SetMuted(Unmuted)
+		if err := db.DeleteMute(c.Ipid()); err != nil {
+			logger.LogErrorf("Failed to remove persistent mute for %v: %v", c.Ipid(), err)
+		}
 		c.SendServerMessage("You have been unmuted.")
 		count++
 		report += fmt.Sprintf("%v, ", c.Uid())
@@ -2722,7 +2739,9 @@ func cmdJail(client *Client, args []string, usage string) {
 	}
 
 	target.SetJailedUntil(jailUntil)
-	
+	if err := db.UpsertJail(target.Ipid(), jailUntil.Unix(), *reason); err != nil {
+		logger.LogErrorf("Failed to persist jail for %v: %v", target.Ipid(), err)
+	}
 	msg := fmt.Sprintf("You have been jailed in %v.", target.Area().Name())
 	if strings.ToLower(*duration) != "perma" {
 		msg = fmt.Sprintf("You have been jailed in %v for %v.", target.Area().Name(), *duration)
@@ -2751,6 +2770,9 @@ func cmdUnjail(client *Client, args []string, _ string) {
 			continue
 		}
 		c.SetJailedUntil(time.Time{})
+		if err := db.DeleteJail(c.Ipid()); err != nil {
+			logger.LogErrorf("Failed to remove persistent jail for %v: %v", c.Ipid(), err)
+		}
 		c.SendServerMessage("You have been released from jail.")
 		count++
 		report += fmt.Sprintf("%v, ", c.Uid())
@@ -3070,6 +3092,13 @@ func cmdPunishment(client *Client, args []string, usage string, pType Punishment
 
 	for _, c := range toPunish {
 		c.AddPunishment(pType, duration, *reason)
+		var expires int64
+		if duration > 0 {
+			expires = time.Now().UTC().Add(duration).Unix()
+		}
+		if err := db.UpsertTextPunishment(c.Ipid(), int(pType), expires, *reason); err != nil {
+			logger.LogErrorf("Failed to persist text punishment for %v: %v", c.Ipid(), err)
+		}
 		c.SendServerMessage(msg)
 		count++
 		report += fmt.Sprintf("%v, ", c.Uid())
@@ -3293,6 +3322,9 @@ func cmdUnpunish(client *Client, args []string, usage string) {
 				continue
 			}
 			c.RemoveAllPunishments()
+			if err := db.DeleteAllTextPunishments(c.Ipid()); err != nil {
+				logger.LogErrorf("Failed to remove persistent punishments for %v: %v", c.Ipid(), err)
+			}
 			c.SendServerMessage("All punishments have been removed.")
 		} else {
 			// Remove specific punishment type
@@ -3305,6 +3337,9 @@ func cmdUnpunish(client *Client, args []string, usage string) {
 				continue
 			}
 			c.RemovePunishment(pType)
+			if err := db.DeleteTextPunishment(c.Ipid(), int(pType)); err != nil {
+				logger.LogErrorf("Failed to remove persistent punishment for %v: %v", c.Ipid(), err)
+			}
 			c.SendServerMessage(fmt.Sprintf("Punishment '%v' has been removed.", pType.String()))
 		}
 		count++

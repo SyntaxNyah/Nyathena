@@ -147,6 +147,7 @@ func pktReqDone(client *Client, _ *packet.Packet) {
 	if config.Motd != "" {
 		client.SendServerMessage(config.Motd)
 	}
+	client.restorePunishments()
 	logger.LogInfof("Client (IPID:%v UID:%v) joined the server", client.Ipid(), client.Uid())
 }
 

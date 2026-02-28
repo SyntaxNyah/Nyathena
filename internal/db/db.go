@@ -48,7 +48,23 @@ var db *sql.DB
 
 // Database version.
 // This should be incremented whenever changes are made to the DB that require existing databases to upgrade.
-const ver = 1
+const ver = 2
+
+// Persistent punishment kind constants.
+const (
+	PunishKindMute = 0 // Mute/parrot; VALUE holds the MuteState integer.
+	PunishKindJail = 1 // Jail; VALUE unused (0).
+	PunishKindText = 2 // Text/behaviour punishment; SUBTYPE holds the PunishmentType integer.
+)
+
+// PersistentPunishment holds one row from the PUNISHMENTS table.
+type PersistentPunishment struct {
+	Kind    int
+	Subtype int   // 0 for mute/jail; PunishmentType for text punishments.
+	Value   int   // MuteState for mutes; 0 for others.
+	Expires int64 // Unix timestamp; 0 = no expiry (permanent).
+	Reason  string
+}
 
 // Opens the server's database connection.
 func Open() error {
@@ -74,6 +90,18 @@ func Open() error {
 	if err != nil {
 		return err
 	}
+	_, err = db.Exec(`CREATE TABLE IF NOT EXISTS PUNISHMENTS(
+		IPID    TEXT    NOT NULL,
+		KIND    INTEGER NOT NULL,
+		SUBTYPE INTEGER NOT NULL DEFAULT 0,
+		VALUE   INTEGER NOT NULL DEFAULT 0,
+		EXPIRES INTEGER NOT NULL DEFAULT 0,
+		REASON  TEXT    NOT NULL DEFAULT '',
+		UNIQUE(IPID, KIND, SUBTYPE)
+	)`)
+	if err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -81,7 +109,13 @@ func Open() error {
 func upgradeDB(v int) error {
 	switch v {
 	case 0:
-		_, err := db.Exec("PRAGMA user_version = " + "1")
+		_, err := db.Exec("PRAGMA user_version = 1")
+		if err != nil {
+			return err
+		}
+		fallthrough
+	case 1:
+		_, err := db.Exec("PRAGMA user_version = 2")
 		if err != nil {
 			return err
 		}
@@ -266,6 +300,84 @@ func UpdateDuration(id int, duration int64) error {
 // Closes the server's database connection.
 func Close() {
 	db.Close()
+}
+
+// UpsertMute stores (or replaces) the mute state for an IPID.
+// muteType is the MuteState integer value. expires is a Unix timestamp (0 = permanent).
+func UpsertMute(ipid string, muteType int, expires int64) error {
+	_, err := db.Exec(
+		"INSERT OR REPLACE INTO PUNISHMENTS(IPID, KIND, SUBTYPE, VALUE, EXPIRES, REASON) VALUES(?, ?, 0, ?, ?, '')",
+		ipid, PunishKindMute, muteType, expires)
+	return err
+}
+
+// DeleteMute removes any stored mute for an IPID.
+func DeleteMute(ipid string) error {
+	_, err := db.Exec("DELETE FROM PUNISHMENTS WHERE IPID = ? AND KIND = ?", ipid, PunishKindMute)
+	return err
+}
+
+// UpsertJail stores (or replaces) the jail state for an IPID.
+// expires is a Unix timestamp of when the jail ends.
+func UpsertJail(ipid string, expires int64, reason string) error {
+	_, err := db.Exec(
+		"INSERT OR REPLACE INTO PUNISHMENTS(IPID, KIND, SUBTYPE, VALUE, EXPIRES, REASON) VALUES(?, ?, 0, 0, ?, ?)",
+		ipid, PunishKindJail, expires, reason)
+	return err
+}
+
+// DeleteJail removes any stored jail for an IPID.
+func DeleteJail(ipid string) error {
+	_, err := db.Exec("DELETE FROM PUNISHMENTS WHERE IPID = ? AND KIND = ?", ipid, PunishKindJail)
+	return err
+}
+
+// UpsertTextPunishment stores (or replaces) a text/behaviour punishment for an IPID.
+// pType is the PunishmentType integer. expires is a Unix timestamp (0 = permanent).
+func UpsertTextPunishment(ipid string, pType int, expires int64, reason string) error {
+	_, err := db.Exec(
+		"INSERT OR REPLACE INTO PUNISHMENTS(IPID, KIND, SUBTYPE, VALUE, EXPIRES, REASON) VALUES(?, ?, ?, 0, ?, ?)",
+		ipid, PunishKindText, pType, expires, reason)
+	return err
+}
+
+// DeleteTextPunishment removes a specific text punishment for an IPID.
+func DeleteTextPunishment(ipid string, pType int) error {
+	_, err := db.Exec("DELETE FROM PUNISHMENTS WHERE IPID = ? AND KIND = ? AND SUBTYPE = ?",
+		ipid, PunishKindText, pType)
+	return err
+}
+
+// DeleteAllTextPunishments removes all text punishments for an IPID.
+func DeleteAllTextPunishments(ipid string) error {
+	_, err := db.Exec("DELETE FROM PUNISHMENTS WHERE IPID = ? AND KIND = ?", ipid, PunishKindText)
+	return err
+}
+
+// GetPunishments returns all currently active persistent punishments for an IPID.
+// Expired entries are deleted from the database before returning.
+func GetPunishments(ipid string) ([]PersistentPunishment, error) {
+	now := time.Now().Unix()
+	// Clean up expired punishments (but not permanent ones where EXPIRES = 0).
+	_, err := db.Exec("DELETE FROM PUNISHMENTS WHERE IPID = ? AND EXPIRES != 0 AND EXPIRES <= ?", ipid, now)
+	if err != nil {
+		return nil, err
+	}
+	rows, err := db.Query(
+		"SELECT KIND, SUBTYPE, VALUE, EXPIRES, REASON FROM PUNISHMENTS WHERE IPID = ?", ipid)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var punishments []PersistentPunishment
+	for rows.Next() {
+		var p PersistentPunishment
+		if err := rows.Scan(&p.Kind, &p.Subtype, &p.Value, &p.Expires, &p.Reason); err != nil {
+			continue
+		}
+		punishments = append(punishments, p)
+	}
+	return punishments, nil
 }
 
 // GetAllBans returns all bans from the database.
