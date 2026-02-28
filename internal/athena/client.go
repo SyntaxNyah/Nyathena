@@ -93,7 +93,7 @@ const (
 	// Advanced (2 types)
 	PunishmentHaiku
 	PunishmentAutospell
-	// Animal Punishments (11 types)
+	// Animal Punishments (12 types)
 	PunishmentMonkey
 	PunishmentSnake
 	PunishmentDog
@@ -105,6 +105,7 @@ const (
 	PunishmentHorse
 	PunishmentLion
 	PunishmentZoo
+	PunishmentBunny
 )
 
 type PunishmentState struct {
@@ -1119,6 +1120,8 @@ func (p PunishmentType) String() string {
 		return "lion"
 	case PunishmentZoo:
 		return "zoo"
+	case PunishmentBunny:
+		return "bunny"
 	default:
 		return "none"
 	}

@@ -834,6 +834,13 @@ func initCommands() {
 			desc:     "Applies a random animal sound punishment to each message.",
 			reqPerms: permissions.PermissionField["MUTE"],
 		},
+		"bunny": {
+			handler:  cmdBunny,
+			minArgs:  1,
+			usage:    "Usage: /bunny [-d duration] [-r reason] <uid1>,<uid2>...",
+			desc:     "Replaces messages with bunny sounds (*thump*, *binky!*, *flops*).",
+			reqPerms: permissions.PermissionField["MUTE"],
+		},
 		"unpunish": {
 			handler:  cmdUnpunish,
 			minArgs:  1,
@@ -3258,6 +3265,10 @@ func cmdZoo(client *Client, args []string, usage string) {
 	cmdPunishment(client, args, usage, PunishmentZoo)
 }
 
+func cmdBunny(client *Client, args []string, usage string) {
+	cmdPunishment(client, args, usage, PunishmentBunny)
+}
+
 // cmdUnpunish removes all or specific punishments from users
 func cmdUnpunish(client *Client, args []string, usage string) {
 	flags := flag.NewFlagSet("", 0)
@@ -3400,6 +3411,8 @@ func parsePunishmentType(s string) PunishmentType {
 		return PunishmentLion
 	case "zoo":
 		return PunishmentZoo
+	case "bunny":
+		return PunishmentBunny
 	default:
 		return PunishmentNone
 	}

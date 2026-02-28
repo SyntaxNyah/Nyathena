@@ -552,6 +552,8 @@ func ApplyPunishmentToText(text string, pType PunishmentType) string {
 		return applyLion(text)
 	case PunishmentZoo:
 		return applyZoo(text)
+	case PunishmentBunny:
+		return applyBunny(text)
 	default:
 		return text
 	}
@@ -747,9 +749,27 @@ func applyZoo(text string) string {
 		applyDuck,
 		applyHorse,
 		applyLion,
+		applyBunny,
 	}
 	effect := animalEffects[rand.Intn(len(animalEffects))]
 	return effect(text)
+}
+
+// applyBunny replaces text with bunny sounds
+func applyBunny(text string) string {
+	words := strings.Fields(text)
+	if len(words) == 0 {
+		return "*thump thump*"
+	}
+	bunnySounds := []string{"*thump*", "*thump thump*", "*nose twitch*", "*hops away*", "*binky!*", "*flops*", "*teeth chattering*", "*nudges*"}
+	var result strings.Builder
+	for i := range words {
+		if i > 0 {
+			result.WriteString(" ")
+		}
+		result.WriteString(bunnySounds[rand.Intn(len(bunnySounds))])
+	}
+	return truncateText(result.String())
 }
 
 // GetRandomEmoji returns a random emoji string

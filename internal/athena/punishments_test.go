@@ -317,6 +317,29 @@ func TestApplyZoo(t *testing.T) {
 	}
 }
 
+func TestApplyBunny(t *testing.T) {
+	input := "hello world"
+	result := applyBunny(input)
+	bunnySounds := []string{"*thump*", "*thump thump*", "*nose twitch*", "*hops away*", "*binky!*", "*flops*", "*teeth chattering*", "*nudges*"}
+	found := false
+	for _, sound := range bunnySounds {
+		if strings.Contains(result, sound) {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Errorf("applyBunny failed: got %q, expected bunny sounds", result)
+	}
+}
+
+func TestApplyBunnyEmpty(t *testing.T) {
+	result := applyBunny("")
+	if result != "*thump thump*" {
+		t.Errorf("applyBunny empty failed: got %q, want %q", result, "*thump thump*")
+	}
+}
+
 func TestApplyPunishmentToTextAnimal(t *testing.T) {
 	// Use input with 's' so even snake punishment changes it
 	input := "this is serious stuff"
@@ -336,6 +359,7 @@ func TestApplyPunishmentToTextAnimal(t *testing.T) {
 		{"Horse", PunishmentHorse},
 		{"Lion", PunishmentLion},
 		{"Zoo", PunishmentZoo},
+		{"Bunny", PunishmentBunny},
 	}
 
 	for _, tt := range animalTests {
