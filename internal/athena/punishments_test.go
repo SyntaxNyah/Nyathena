@@ -151,6 +151,227 @@ func TestGetRandomEmoji(t *testing.T) {
 	}
 }
 
+func TestApplyMonkey(t *testing.T) {
+	input := "hello world"
+	result := applyMonkey(input)
+	monkeySounds := []string{"ook", "eek", "ooh ooh", "ahh ahh", "oo oo", "ee ee", "*scratches head*", "*swings from tree*"}
+	found := false
+	for _, sound := range monkeySounds {
+		if strings.Contains(result, sound) {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Errorf("applyMonkey failed: got %q, expected monkey sounds", result)
+	}
+}
+
+func TestApplyMonkeyEmpty(t *testing.T) {
+	result := applyMonkey("")
+	if result != "OOH OOH AHH AHH" {
+		t.Errorf("applyMonkey empty failed: got %q, want %q", result, "OOH OOH AHH AHH")
+	}
+}
+
+func TestApplySnake(t *testing.T) {
+	input := "this is serious"
+	result := applySnake(input)
+	if !strings.Contains(result, "sss") {
+		t.Errorf("applySnake failed: got %q, expected extended s sounds", result)
+	}
+}
+
+func TestApplyDog(t *testing.T) {
+	input := "hello world"
+	result := applyDog(input)
+	dogSounds := []string{"woof", "arf", "grr", "bark!", "ruff", "yip", "*wags tail*", "bork"}
+	found := false
+	for _, sound := range dogSounds {
+		if strings.Contains(result, sound) {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Errorf("applyDog failed: got %q, expected dog sounds", result)
+	}
+}
+
+func TestApplyDogEmpty(t *testing.T) {
+	result := applyDog("")
+	if result != "WOOF!" {
+		t.Errorf("applyDog empty failed: got %q, want %q", result, "WOOF!")
+	}
+}
+
+func TestApplyCat(t *testing.T) {
+	input := "hello world"
+	result := applyCat(input)
+	catSounds := []string{"meow", "purrr~", "mrrrow", "mew", "nya~", "*purrs*", "prrrr", "mrrr"}
+	found := false
+	for _, sound := range catSounds {
+		if strings.Contains(result, sound) {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Errorf("applyCat failed: got %q, expected cat sounds", result)
+	}
+}
+
+func TestApplyCatEmpty(t *testing.T) {
+	result := applyCat("")
+	if result != "meow~" {
+		t.Errorf("applyCat empty failed: got %q, want %q", result, "meow~")
+	}
+}
+
+func TestApplyBird(t *testing.T) {
+	input := "hello world"
+	result := applyBird(input)
+	birdSounds := []string{"tweet", "chirp", "squawk", "cheep", "coo coo", "*flaps wings*", "peep", "caw"}
+	found := false
+	for _, sound := range birdSounds {
+		if strings.Contains(result, sound) {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Errorf("applyBird failed: got %q, expected bird sounds", result)
+	}
+}
+
+func TestApplyCow(t *testing.T) {
+	input := "hello world"
+	result := applyCow(input)
+	if !strings.Contains(strings.ToLower(result), "moo") && !strings.Contains(result, "*chews cud*") {
+		t.Errorf("applyCow failed: got %q, expected cow sounds", result)
+	}
+}
+
+func TestApplyFrog(t *testing.T) {
+	input := "hello world"
+	result := applyFrog(input)
+	frogSounds := []string{"ribbit", "croak", "brrr-ribbit", "riiibbit", "*jumps*", "crrroak"}
+	found := false
+	for _, sound := range frogSounds {
+		if strings.Contains(result, sound) {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Errorf("applyFrog failed: got %q, expected frog sounds", result)
+	}
+}
+
+func TestApplyDuck(t *testing.T) {
+	input := "hello world"
+	result := applyDuck(input)
+	if !strings.Contains(strings.ToLower(result), "quack") && !strings.Contains(result, "*waddles*") {
+		t.Errorf("applyDuck failed: got %q, expected duck sounds", result)
+	}
+}
+
+func TestApplyHorse(t *testing.T) {
+	input := "hello world"
+	result := applyHorse(input)
+	horseSounds := []string{"neigh", "whinny", "nicker", "NEIGH!", "*clip clop*", "hrrrr", "snort"}
+	found := false
+	for _, sound := range horseSounds {
+		if strings.Contains(result, sound) {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Errorf("applyHorse failed: got %q, expected horse sounds", result)
+	}
+}
+
+func TestApplyLion(t *testing.T) {
+	input := "hello world"
+	result := applyLion(input)
+	lionSounds := []string{"ROAR", "grrr", "rawr", "GRRR", "*snarls*", "rrrroar", "RAWRR"}
+	found := false
+	for _, sound := range lionSounds {
+		if strings.Contains(result, sound) {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Errorf("applyLion failed: got %q, expected lion sounds", result)
+	}
+}
+
+func TestApplyZoo(t *testing.T) {
+	// Zoo should apply some animal sound - use input with 's' to ensure snake also changes it
+	input := "this is something"
+	result := applyZoo(input)
+	if result == input {
+		t.Errorf("applyZoo failed: output same as input %q", result)
+	}
+}
+
+func TestApplyBunny(t *testing.T) {
+	input := "hello world"
+	result := applyBunny(input)
+	bunnySounds := []string{"*thump*", "*thump thump*", "*nose twitch*", "*hops away*", "*binky!*", "*flops*", "*teeth chattering*", "*nudges*"}
+	found := false
+	for _, sound := range bunnySounds {
+		if strings.Contains(result, sound) {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Errorf("applyBunny failed: got %q, expected bunny sounds", result)
+	}
+}
+
+func TestApplyBunnyEmpty(t *testing.T) {
+	result := applyBunny("")
+	if result != "*thump thump*" {
+		t.Errorf("applyBunny empty failed: got %q, want %q", result, "*thump thump*")
+	}
+}
+
+func TestApplyPunishmentToTextAnimal(t *testing.T) {
+	// Use input with 's' so even snake punishment changes it
+	input := "this is serious stuff"
+
+	animalTests := []struct {
+		name  string
+		pType PunishmentType
+	}{
+		{"Monkey", PunishmentMonkey},
+		{"Snake", PunishmentSnake},
+		{"Dog", PunishmentDog},
+		{"Cat", PunishmentCat},
+		{"Bird", PunishmentBird},
+		{"Cow", PunishmentCow},
+		{"Frog", PunishmentFrog},
+		{"Duck", PunishmentDuck},
+		{"Horse", PunishmentHorse},
+		{"Lion", PunishmentLion},
+		{"Zoo", PunishmentZoo},
+		{"Bunny", PunishmentBunny},
+	}
+
+	for _, tt := range animalTests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := ApplyPunishmentToText(input, tt.pType)
+			if result == input {
+				t.Errorf("%s: expected different output, got same: %q", tt.name, result)
+			}
+		})
+	}
+}
+
 func TestApplyPunishmentToText(t *testing.T) {
 	input := "hello world"
 	
