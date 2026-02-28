@@ -530,6 +530,28 @@ func ApplyPunishmentToText(text string, pType PunishmentType) string {
 		return applySubtitles(text)
 	case PunishmentSpotlight:
 		return applySpotlight(text)
+	case PunishmentMonkey:
+		return applyMonkey(text)
+	case PunishmentSnake:
+		return applySnake(text)
+	case PunishmentDog:
+		return applyDog(text)
+	case PunishmentCat:
+		return applyCat(text)
+	case PunishmentBird:
+		return applyBird(text)
+	case PunishmentCow:
+		return applyCow(text)
+	case PunishmentFrog:
+		return applyFrog(text)
+	case PunishmentDuck:
+		return applyDuck(text)
+	case PunishmentHorse:
+		return applyHorse(text)
+	case PunishmentLion:
+		return applyLion(text)
+	case PunishmentZoo:
+		return applyZoo(text)
 	default:
 		return text
 	}
@@ -546,6 +568,188 @@ func ApplyPunishmentToTextWithState(text string, pType PunishmentType, state *Pu
 	default:
 		return ApplyPunishmentToText(text, pType)
 	}
+}
+
+// applyMonkey replaces text with monkey noises
+func applyMonkey(text string) string {
+	words := strings.Fields(text)
+	if len(words) == 0 {
+		return "OOH OOH AHH AHH"
+	}
+	monkeySounds := []string{"ook", "eek", "ooh ooh", "ahh ahh", "oo oo", "ee ee", "*scratches head*", "*swings from tree*"}
+	var result strings.Builder
+	for i := range words {
+		if i > 0 {
+			result.WriteString(" ")
+		}
+		result.WriteString(monkeySounds[rand.Intn(len(monkeySounds))])
+	}
+	return truncateText(result.String())
+}
+
+// applySnake replaces s sounds with extended hissing
+func applySnake(text string) string {
+	text = strings.ReplaceAll(text, "s", "sss")
+	text = strings.ReplaceAll(text, "S", "SSS")
+	if rand.Float32() < 0.5 {
+		suffixes := []string{" *hisss*", " ssss...", " ~hisssss~"}
+		text += suffixes[rand.Intn(len(suffixes))]
+	}
+	return truncateText(text)
+}
+
+// applyDog replaces text with dog sounds
+func applyDog(text string) string {
+	words := strings.Fields(text)
+	if len(words) == 0 {
+		return "WOOF!"
+	}
+	dogSounds := []string{"woof", "arf", "grr", "bark!", "ruff", "yip", "*wags tail*", "bork"}
+	var result strings.Builder
+	for i := range words {
+		if i > 0 {
+			result.WriteString(" ")
+		}
+		result.WriteString(dogSounds[rand.Intn(len(dogSounds))])
+	}
+	return truncateText(result.String())
+}
+
+// applyCat replaces text with cat sounds
+func applyCat(text string) string {
+	words := strings.Fields(text)
+	if len(words) == 0 {
+		return "meow~"
+	}
+	catSounds := []string{"meow", "purrr~", "mrrrow", "mew", "nya~", "*purrs*", "prrrr", "mrrr"}
+	var result strings.Builder
+	for i := range words {
+		if i > 0 {
+			result.WriteString(" ")
+		}
+		result.WriteString(catSounds[rand.Intn(len(catSounds))])
+	}
+	return truncateText(result.String())
+}
+
+// applyBird replaces text with bird sounds
+func applyBird(text string) string {
+	words := strings.Fields(text)
+	if len(words) == 0 {
+		return "tweet!"
+	}
+	birdSounds := []string{"tweet", "chirp", "squawk", "cheep", "coo coo", "*flaps wings*", "peep", "caw"}
+	var result strings.Builder
+	for i := range words {
+		if i > 0 {
+			result.WriteString(" ")
+		}
+		result.WriteString(birdSounds[rand.Intn(len(birdSounds))])
+	}
+	return truncateText(result.String())
+}
+
+// applyCow replaces text with cow sounds
+func applyCow(text string) string {
+	words := strings.Fields(text)
+	if len(words) == 0 {
+		return "MOO"
+	}
+	cowSounds := []string{"moo", "mooo", "MOOO", "moooo", "*chews cud*", "muu", "MOO MOO"}
+	var result strings.Builder
+	for i := range words {
+		if i > 0 {
+			result.WriteString(" ")
+		}
+		result.WriteString(cowSounds[rand.Intn(len(cowSounds))])
+	}
+	return truncateText(result.String())
+}
+
+// applyFrog replaces text with frog sounds
+func applyFrog(text string) string {
+	words := strings.Fields(text)
+	if len(words) == 0 {
+		return "ribbit!"
+	}
+	frogSounds := []string{"ribbit", "croak", "brrr-ribbit", "riiibbit", "*jumps*", "crrroak", "ribbit-ribbit"}
+	var result strings.Builder
+	for i := range words {
+		if i > 0 {
+			result.WriteString(" ")
+		}
+		result.WriteString(frogSounds[rand.Intn(len(frogSounds))])
+	}
+	return truncateText(result.String())
+}
+
+// applyDuck replaces text with duck sounds
+func applyDuck(text string) string {
+	words := strings.Fields(text)
+	if len(words) == 0 {
+		return "QUACK!"
+	}
+	duckSounds := []string{"quack", "QUACK", "quaaack", "quack quack", "*waddles*", "quuuack", "QUACK QUACK"}
+	var result strings.Builder
+	for i := range words {
+		if i > 0 {
+			result.WriteString(" ")
+		}
+		result.WriteString(duckSounds[rand.Intn(len(duckSounds))])
+	}
+	return truncateText(result.String())
+}
+
+// applyHorse replaces text with horse sounds
+func applyHorse(text string) string {
+	words := strings.Fields(text)
+	if len(words) == 0 {
+		return "NEIGH!"
+	}
+	horseSounds := []string{"neigh", "whinny", "nicker", "NEIGH!", "*clip clop*", "hrrrr", "snort"}
+	var result strings.Builder
+	for i := range words {
+		if i > 0 {
+			result.WriteString(" ")
+		}
+		result.WriteString(horseSounds[rand.Intn(len(horseSounds))])
+	}
+	return truncateText(result.String())
+}
+
+// applyLion replaces text with lion sounds
+func applyLion(text string) string {
+	words := strings.Fields(text)
+	if len(words) == 0 {
+		return "ROAR!"
+	}
+	lionSounds := []string{"ROAR", "grrr", "rawr", "GRRR", "*snarls*", "rrrroar", "RAWRR"}
+	var result strings.Builder
+	for i := range words {
+		if i > 0 {
+			result.WriteString(" ")
+		}
+		result.WriteString(lionSounds[rand.Intn(len(lionSounds))])
+	}
+	return truncateText(result.String())
+}
+
+// applyZoo applies a random animal punishment from the full zoo
+func applyZoo(text string) string {
+	animalEffects := []func(string) string{
+		applyMonkey,
+		applySnake,
+		applyDog,
+		applyCat,
+		applyBird,
+		applyCow,
+		applyFrog,
+		applyDuck,
+		applyHorse,
+		applyLion,
+	}
+	effect := animalEffects[rand.Intn(len(animalEffects))]
+	return effect(text)
 }
 
 // GetRandomEmoji returns a random emoji string

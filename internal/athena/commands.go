@@ -756,6 +756,84 @@ func initCommands() {
 			desc:     "Autocorrects to wrong words.",
 			reqPerms: permissions.PermissionField["MUTE"],
 		},
+		// Punishment commands - Animal Sounds
+		"monkey": {
+			handler:  cmdMonkey,
+			minArgs:  1,
+			usage:    "Usage: /monkey [-d duration] [-r reason] <uid1>,<uid2>...",
+			desc:     "Replaces messages with monkey noises (ook, eek, ooh ooh).",
+			reqPerms: permissions.PermissionField["MUTE"],
+		},
+		"snake": {
+			handler:  cmdSnake,
+			minArgs:  1,
+			usage:    "Usage: /snake [-d duration] [-r reason] <uid1>,<uid2>...",
+			desc:     "Makes messages hissss like a ssssnake.",
+			reqPerms: permissions.PermissionField["MUTE"],
+		},
+		"dog": {
+			handler:  cmdDog,
+			minArgs:  1,
+			usage:    "Usage: /dog [-d duration] [-r reason] <uid1>,<uid2>...",
+			desc:     "Replaces messages with dog sounds (woof, arf, grr, bork).",
+			reqPerms: permissions.PermissionField["MUTE"],
+		},
+		"cat": {
+			handler:  cmdCat,
+			minArgs:  1,
+			usage:    "Usage: /cat [-d duration] [-r reason] <uid1>,<uid2>...",
+			desc:     "Replaces messages with cat sounds (meow, purrr~, mrrrow).",
+			reqPerms: permissions.PermissionField["MUTE"],
+		},
+		"bird": {
+			handler:  cmdBird,
+			minArgs:  1,
+			usage:    "Usage: /bird [-d duration] [-r reason] <uid1>,<uid2>...",
+			desc:     "Replaces messages with bird sounds (tweet, chirp, squawk).",
+			reqPerms: permissions.PermissionField["MUTE"],
+		},
+		"cow": {
+			handler:  cmdCow,
+			minArgs:  1,
+			usage:    "Usage: /cow [-d duration] [-r reason] <uid1>,<uid2>...",
+			desc:     "Replaces messages with cow sounds (moo, mooo, MOOO).",
+			reqPerms: permissions.PermissionField["MUTE"],
+		},
+		"frog": {
+			handler:  cmdFrog,
+			minArgs:  1,
+			usage:    "Usage: /frog [-d duration] [-r reason] <uid1>,<uid2>...",
+			desc:     "Replaces messages with frog sounds (ribbit, croak).",
+			reqPerms: permissions.PermissionField["MUTE"],
+		},
+		"duck": {
+			handler:  cmdDuck,
+			minArgs:  1,
+			usage:    "Usage: /duck [-d duration] [-r reason] <uid1>,<uid2>...",
+			desc:     "Replaces messages with duck sounds (quack, QUACK).",
+			reqPerms: permissions.PermissionField["MUTE"],
+		},
+		"horse": {
+			handler:  cmdHorse,
+			minArgs:  1,
+			usage:    "Usage: /horse [-d duration] [-r reason] <uid1>,<uid2>...",
+			desc:     "Replaces messages with horse sounds (neigh, whinny, snort).",
+			reqPerms: permissions.PermissionField["MUTE"],
+		},
+		"lion": {
+			handler:  cmdLion,
+			minArgs:  1,
+			usage:    "Usage: /lion [-d duration] [-r reason] <uid1>,<uid2>...",
+			desc:     "Replaces messages with lion sounds (ROAR, grrr, rawr).",
+			reqPerms: permissions.PermissionField["MUTE"],
+		},
+		"zoo": {
+			handler:  cmdZoo,
+			minArgs:  1,
+			usage:    "Usage: /zoo [-d duration] [-r reason] <uid1>,<uid2>...",
+			desc:     "Applies a random animal sound punishment to each message.",
+			reqPerms: permissions.PermissionField["MUTE"],
+		},
 		"unpunish": {
 			handler:  cmdUnpunish,
 			minArgs:  1,
@@ -3136,6 +3214,50 @@ func cmdAutospell(client *Client, args []string, usage string) {
 	cmdPunishment(client, args, usage, PunishmentAutospell)
 }
 
+func cmdMonkey(client *Client, args []string, usage string) {
+	cmdPunishment(client, args, usage, PunishmentMonkey)
+}
+
+func cmdSnake(client *Client, args []string, usage string) {
+	cmdPunishment(client, args, usage, PunishmentSnake)
+}
+
+func cmdDog(client *Client, args []string, usage string) {
+	cmdPunishment(client, args, usage, PunishmentDog)
+}
+
+func cmdCat(client *Client, args []string, usage string) {
+	cmdPunishment(client, args, usage, PunishmentCat)
+}
+
+func cmdBird(client *Client, args []string, usage string) {
+	cmdPunishment(client, args, usage, PunishmentBird)
+}
+
+func cmdCow(client *Client, args []string, usage string) {
+	cmdPunishment(client, args, usage, PunishmentCow)
+}
+
+func cmdFrog(client *Client, args []string, usage string) {
+	cmdPunishment(client, args, usage, PunishmentFrog)
+}
+
+func cmdDuck(client *Client, args []string, usage string) {
+	cmdPunishment(client, args, usage, PunishmentDuck)
+}
+
+func cmdHorse(client *Client, args []string, usage string) {
+	cmdPunishment(client, args, usage, PunishmentHorse)
+}
+
+func cmdLion(client *Client, args []string, usage string) {
+	cmdPunishment(client, args, usage, PunishmentLion)
+}
+
+func cmdZoo(client *Client, args []string, usage string) {
+	cmdPunishment(client, args, usage, PunishmentZoo)
+}
+
 // cmdUnpunish removes all or specific punishments from users
 func cmdUnpunish(client *Client, args []string, usage string) {
 	flags := flag.NewFlagSet("", 0)
@@ -3256,6 +3378,28 @@ func parsePunishmentType(s string) PunishmentType {
 		return PunishmentHaiku
 	case "autospell":
 		return PunishmentAutospell
+	case "monkey":
+		return PunishmentMonkey
+	case "snake":
+		return PunishmentSnake
+	case "dog":
+		return PunishmentDog
+	case "cat":
+		return PunishmentCat
+	case "bird":
+		return PunishmentBird
+	case "cow":
+		return PunishmentCow
+	case "frog":
+		return PunishmentFrog
+	case "duck":
+		return PunishmentDuck
+	case "horse":
+		return PunishmentHorse
+	case "lion":
+		return PunishmentLion
+	case "zoo":
+		return PunishmentZoo
 	default:
 		return PunishmentNone
 	}
