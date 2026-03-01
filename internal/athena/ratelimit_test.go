@@ -529,3 +529,186 @@ func TestCharSelectRateLimit(t *testing.T) {
 		t.Errorf("charselect was not rate limited after exceeding the limit")
 	}
 }
+
+// TestIPModcallCooldownDisabled tests that the per-IP modcall cooldown can be disabled.
+func TestIPModcallCooldownDisabled(t *testing.T) {
+	oldConfig := config
+	defer func() { config = oldConfig }()
+
+	config = &settings.Config{}
+	config.ModcallCooldown = 0
+
+	ipModcallTracker.mu.Lock()
+	ipModcallTracker.times = make(map[string]time.Time)
+	ipModcallTracker.mu.Unlock()
+
+	ipid := "testIPModcallDisabled"
+	for i := 0; i < 10; i++ {
+		if limited, _ := checkIPModcallCooldown(ipid); limited {
+			t.Errorf("IP was modcall-limited when cooldown is disabled")
+			return
+		}
+		setIPModcallTime(ipid)
+	}
+}
+
+// TestIPModcallCooldownEnforced tests that the per-IP modcall cooldown is enforced across connections.
+func TestIPModcallCooldownEnforced(t *testing.T) {
+	oldConfig := config
+	defer func() { config = oldConfig }()
+
+	config = &settings.Config{}
+	config.ModcallCooldown = 60
+
+	ipModcallTracker.mu.Lock()
+	ipModcallTracker.times = make(map[string]time.Time)
+	ipModcallTracker.mu.Unlock()
+
+	ipid := "testIPModcallEnforced"
+
+	if limited, _ := checkIPModcallCooldown(ipid); limited {
+		t.Errorf("First modcall was blocked unexpectedly")
+		return
+	}
+	setIPModcallTime(ipid)
+
+	if limited, remaining := checkIPModcallCooldown(ipid); !limited {
+		t.Errorf("Second modcall was not blocked within cooldown period")
+	} else if remaining <= 0 || remaining > 60 {
+		t.Errorf("Unexpected remaining seconds: %d", remaining)
+	}
+}
+
+// TestIPModcallCooldownPersistsAcrossConnections tests that per-IP cooldown is not reset
+// when a new client is created for the same IP (simulating a new connection).
+func TestIPModcallCooldownPersistsAcrossConnections(t *testing.T) {
+	oldConfig := config
+	defer func() { config = oldConfig }()
+
+	config = &settings.Config{}
+	config.ModcallCooldown = 60
+
+	ipModcallTracker.mu.Lock()
+	ipModcallTracker.times = make(map[string]time.Time)
+	ipModcallTracker.mu.Unlock()
+
+	ipid := "testIPModcallPersists"
+
+	// First modcall allowed
+	if limited, _ := checkIPModcallCooldown(ipid); limited {
+		t.Errorf("First modcall was blocked unexpectedly")
+		return
+	}
+	setIPModcallTime(ipid)
+
+	// Simulate a new connection (new client) with the same IPID – cooldown must still apply.
+	if limited, _ := checkIPModcallCooldown(ipid); !limited {
+		t.Errorf("Modcall cooldown did not persist across a simulated new connection")
+	}
+}
+
+// TestIPOOCRateLimitDisabled tests that per-IP OOC rate limiting can be disabled.
+func TestIPOOCRateLimitDisabled(t *testing.T) {
+	oldConfig := config
+	defer func() { config = oldConfig }()
+
+	config = &settings.Config{}
+	config.OOCRateLimit = 0
+
+	ipOOCTracker.mu.Lock()
+	ipOOCTracker.timestamps = make(map[string][]time.Time)
+	ipOOCTracker.mu.Unlock()
+
+	ipid := "testIPOOCDisabled"
+	for i := 0; i < 100; i++ {
+		if checkIPOOCRateLimit(ipid) {
+			t.Errorf("IP was OOC rate limited when OOC rate limiting is disabled (attempt %d)", i+1)
+			return
+		}
+	}
+}
+
+// TestIPOOCRateLimitBasic tests that the per-IP OOC rate limit is enforced.
+func TestIPOOCRateLimitBasic(t *testing.T) {
+	oldConfig := config
+	defer func() { config = oldConfig }()
+
+	config = &settings.Config{}
+	config.OOCRateLimit = 4
+	config.OOCRateLimitWindow = 1
+
+	ipOOCTracker.mu.Lock()
+	ipOOCTracker.timestamps = make(map[string][]time.Time)
+	ipOOCTracker.mu.Unlock()
+
+	ipid := "testIPOOCBasic"
+
+	for i := 0; i < 4; i++ {
+		if checkIPOOCRateLimit(ipid) {
+			t.Errorf("OOC message %d was blocked (limit is 4)", i+1)
+			return
+		}
+	}
+
+	if !checkIPOOCRateLimit(ipid) {
+		t.Errorf("OOC message was not blocked after exceeding the limit")
+	}
+}
+
+// TestIPOOCRateLimitPersistsAcrossConnections tests that per-IP OOC rate limiting is not reset
+// when a new client is created for the same IP (simulating a new connection).
+func TestIPOOCRateLimitPersistsAcrossConnections(t *testing.T) {
+	oldConfig := config
+	defer func() { config = oldConfig }()
+
+	config = &settings.Config{}
+	config.OOCRateLimit = 4
+	config.OOCRateLimitWindow = 5
+
+	ipOOCTracker.mu.Lock()
+	ipOOCTracker.timestamps = make(map[string][]time.Time)
+	ipOOCTracker.mu.Unlock()
+
+	ipid := "testIPOOCPersists"
+
+	// Exhaust limit
+	for i := 0; i < 4; i++ {
+		checkIPOOCRateLimit(ipid)
+	}
+
+	// Simulate a new connection (new client) – rate limit must still apply.
+	if !checkIPOOCRateLimit(ipid) {
+		t.Errorf("OOC rate limit did not persist across a simulated new connection")
+	}
+}
+
+// TestIPOOCRateLimitWindowExpiry tests that the per-IP OOC rate window resets after expiry.
+func TestIPOOCRateLimitWindowExpiry(t *testing.T) {
+	oldConfig := config
+	defer func() { config = oldConfig }()
+
+	config = &settings.Config{}
+	config.OOCRateLimit = 4
+	config.OOCRateLimitWindow = 1
+
+	ipOOCTracker.mu.Lock()
+	ipOOCTracker.timestamps = make(map[string][]time.Time)
+	ipOOCTracker.mu.Unlock()
+
+	ipid := "testIPOOCExpiry"
+
+	for i := 0; i < 4; i++ {
+		checkIPOOCRateLimit(ipid)
+	}
+
+	if !checkIPOOCRateLimit(ipid) {
+		t.Errorf("OOC message was not blocked after reaching the limit")
+		return
+	}
+
+	time.Sleep(time.Duration(config.OOCRateLimitWindow)*time.Second + 100*time.Millisecond)
+
+	if checkIPOOCRateLimit(ipid) {
+		t.Errorf("OOC message was blocked after window expired")
+	}
+}

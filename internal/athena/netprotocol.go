@@ -703,8 +703,8 @@ func pktOOC(client *Client, p *packet.Packet) {
 		return
 	}
 
-	// Check OOC-specific rate limit; drop packet silently if exceeded
-	if client.CheckOOCRateLimit() {
+	// Check OOC-specific rate limit per IP; persists across connections to prevent bypass via reconnection.
+	if checkIPOOCRateLimit(client.Ipid()) {
 		return
 	}
 
@@ -793,7 +793,7 @@ func pktPing(client *Client, _ *packet.Packet) {
 
 // Handles ZZ#%
 func pktModcall(client *Client, p *packet.Packet) {
-	if limited, remaining := client.CheckModcallCooldown(); limited {
+	if limited, remaining := checkIPModcallCooldown(client.Ipid()); limited {
 		unit := "seconds"
 		if remaining == 1 {
 			unit = "second"
@@ -801,7 +801,7 @@ func pktModcall(client *Client, p *packet.Packet) {
 		client.SendServerMessage(fmt.Sprintf("You must wait %d %s before sending another modcall.", remaining, unit))
 		return
 	}
-	client.SetLastModcallTime()
+	setIPModcallTime(client.Ipid())
 	var s string
 	if len(p.Body) >= 1 {
 		s = p.Body[0]
