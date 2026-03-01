@@ -829,7 +829,7 @@ func applyDuck(text string) string {
 	if len(words) == 0 {
 		return "QUACK!"
 	}
-	duckSounds := []string{"quack", "QUACK", "quaaack", "quack quack", "*waddles*", "quuuack", "QUACK QUACK"}
+	duckSounds := []string{"quack", "QUACK", "quack!", "quack quack", "*waddles*", "QUACK!", "QUACK QUACK"}
 	var result strings.Builder
 	for i := range words {
 		if i > 0 {

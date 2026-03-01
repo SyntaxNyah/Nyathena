@@ -665,6 +665,23 @@ func (evimod EvidenceMode) String() string {
 	return ""
 }
 
+// String returns the string representation of the testimony recorder state.
+func (tr TRState) String() string {
+	switch tr {
+	case TRIdle:
+		return "idle"
+	case TRRecording:
+		return "recording"
+	case TRPlayback:
+		return "playback"
+	case TRUpdating:
+		return "updating"
+	case TRInserting:
+		return "inserting"
+	}
+	return ""
+}
+
 // ActivePoll returns the area's active poll.
 func (a *Area) ActivePoll() *Poll {
 	a.mu.Lock()

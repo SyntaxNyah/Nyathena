@@ -75,6 +75,9 @@ var (
 	tournamentMutex        sync.Mutex
 	tournamentStartTime    time.Time
 	tournamentParticipants map[int]*TournamentParticipant // uid -> participant data
+
+	// server is the package-level singleton created by InitServer.
+	server *Server
 )
 
 // TournamentParticipant tracks a user's tournament performance
@@ -84,8 +87,43 @@ type TournamentParticipant struct {
 	joinedAt     time.Time
 }
 
-// InitServer initalizes the server's database, uids, configs, and advertiser.
-func InitServer(conf *settings.Config) error {
+// Server owns the runtime state for an Athena server instance and provides
+// a structured API over it. It is created by NewServer and stored as the
+// active instance in the package-level server variable. Package-level
+// functions (e.g. ListenTCP) delegate to the active server's methods.
+//
+// Dependency injection: pass a *settings.Config to NewServer; all other
+// dependencies (areas, roles, uids, etc.) are wired up inside the constructor.
+// The package-level globals are kept in sync so that existing helper functions
+// and command handlers continue to operate correctly.
+type Server struct {
+	config                 *settings.Config
+	characters             []string
+	music                  []string
+	backgrounds            []string
+	parrot                 []string
+	areas                  []*area.Area
+	areaNames              string
+	areaIndexMap           map[*area.Area]int
+	roles                  []permissions.Role
+	uids                   uidmanager.UidManager
+	players                playercount.PlayerCount
+	enableDiscord          bool
+	clients                ClientList
+	updatePlayers          chan int
+	advertDone             chan struct{}
+	tournamentActive       bool
+	tournamentMutex        sync.Mutex
+	tournamentStartTime    time.Time
+	tournamentParticipants map[int]*TournamentParticipant
+}
+
+// NewServer initializes a new Server from the provided configuration, wiring
+// up all dependencies (database, areas, roles, uid heap, advertiser, etc.).
+// It also populates the package-level global variables so that existing helper
+// functions and command handlers continue to operate correctly.
+// Call InitServer for the legacy single-process entry point.
+func NewServer(conf *settings.Config) (*Server, error) {
 	db.Open()
 	// Remove expired punishment rows left over from previous sessions.
 	// A failure here is non-fatal: expired rows are harmless (GetPunishments filters
@@ -93,69 +131,74 @@ func InitServer(conf *settings.Config) error {
 	if err := db.PurgeExpired(); err != nil {
 		logger.LogErrorf("Failed to purge expired punishments: %v", err)
 	}
-	uids.InitHeap(conf.MaxPlayers)
-	config = conf
-	
-	// Initialize tournament state
-	tournamentParticipants = make(map[int]*TournamentParticipant)
+
+	s := &Server{
+		config:                 conf,
+		clients:                ClientList{list: make(map[*Client]struct{})},
+		updatePlayers:          updatePlayers,
+		advertDone:             advertDone,
+		tournamentParticipants: make(map[int]*TournamentParticipant),
+	}
+
+	s.uids.InitHeap(conf.MaxPlayers)
 
 	// Load server data.
 	var err error
-	music, err = settings.LoadMusic()
+	s.music, err = settings.LoadMusic()
 	if err != nil {
-		return err
+		return nil, err
 	}
-	characters, err = settings.LoadFile("/characters.txt")
+	s.characters, err = settings.LoadFile("/characters.txt")
 	if err != nil {
-		return err
-	} else if len(characters) == 0 {
-		return fmt.Errorf("empty character list")
+		return nil, err
+	} else if len(s.characters) == 0 {
+		return nil, fmt.Errorf("empty character list")
 	}
 	areaData, err := settings.LoadAreas()
 	if err != nil {
-		return err
+		return nil, err
 	}
 
-	roles, err = settings.LoadRoles()
+	s.roles, err = settings.LoadRoles()
 	if err != nil {
-		return err
+		return nil, err
 	}
 
-	backgrounds, err = settings.LoadFile("/backgrounds.txt")
+	s.backgrounds, err = settings.LoadFile("/backgrounds.txt")
 	if err != nil {
-		return err
-	} else if len(backgrounds) == 0 {
-		return fmt.Errorf("empty background list")
+		return nil, err
+	} else if len(s.backgrounds) == 0 {
+		return nil, fmt.Errorf("empty background list")
 	}
 
-	parrot, err = settings.LoadFile("/parrot.txt")
+	s.parrot, err = settings.LoadFile("/parrot.txt")
 	if err != nil {
-		return err
-	} else if len(parrot) == 0 {
-		return fmt.Errorf("empty parrot list")
+		return nil, err
+	} else if len(s.parrot) == 0 {
+		return nil, fmt.Errorf("empty parrot list")
 	}
 	_, err = str2duration.ParseDuration(conf.BanLen)
 	if err != nil {
-		return fmt.Errorf("failed to parse default_ban_duration: %v", err.Error())
+		return nil, fmt.Errorf("failed to parse default_ban_duration: %v", err.Error())
 	}
 
 	// Webhook setup: set server name once for all webhook functions.
-	webhook.ServerName = config.Name
+	webhook.ServerName = conf.Name
 
 	// Discord webhook.
-	if config.WebhookURL != "" {
-		enableDiscord = true
-		webhook.PingRoleID = config.WebhookPingRoleID
-		discord.WebhookURL = config.WebhookURL
+	if conf.WebhookURL != "" {
+		s.enableDiscord = true
+		webhook.PingRoleID = conf.WebhookPingRoleID
+		discord.WebhookURL = conf.WebhookURL
 	}
 
 	// Punishment webhook (ban/kick logging).
-	if config.PunishmentWebhookURL != "" {
-		webhook.PunishmentWebhookURL = config.PunishmentWebhookURL
+	if conf.PunishmentWebhookURL != "" {
+		webhook.PunishmentWebhookURL = conf.PunishmentWebhookURL
 	}
 
 	// Load areas.
-	areas = make([]*area.Area, 0, len(areaData))
+	s.areas = make([]*area.Area, 0, len(areaData))
 	var areaNameBuilder strings.Builder
 	for i, a := range areaData {
 		if i > 0 {
@@ -174,71 +217,96 @@ func InitServer(conf *settings.Config) error {
 			logger.LogWarningf("Area %v has an invalid or undefined evidence mode, defaulting to 'cms'.", a.Name)
 			evi_mode = area.EviCMs
 		}
-		if a.Bg == "" || !sliceutil.ContainsString(backgrounds, a.Bg) {
+		if a.Bg == "" || !sliceutil.ContainsString(s.backgrounds, a.Bg) {
 			logger.LogWarningf("Area %v has an invalid or undefined background, defaulting to 'default'.", a.Name)
 			a.Bg = "default"
 		}
-		areas = append(areas, area.NewArea(a, len(characters), conf.BufSize, evi_mode))
+		s.areas = append(s.areas, area.NewArea(a, len(s.characters), conf.BufSize, evi_mode))
 	}
-	areaNames = areaNameBuilder.String()
+	s.areaNames = areaNameBuilder.String()
 
 	// Build O(1) area-index lookup map.
-	areaIndexMap = make(map[*area.Area]int, len(areas))
-	for i, a := range areas {
-		areaIndexMap[a] = i
+	s.areaIndexMap = make(map[*area.Area]int, len(s.areas))
+	for i, a := range s.areas {
+		s.areaIndexMap[a] = i
 	}
 
-	// Initialize area logging if enabled
+	// Initialize area logging if enabled.
 	logger.EnableAreaLogging = conf.EnableAreaLogging
 	if logger.EnableAreaLogging {
 		logger.LogInfo("Area logging is enabled. Creating area log directories...")
-		for _, a := range areas {
+		for _, a := range s.areas {
 			if err := logger.CreateAreaLogDirectory(a.Name()); err != nil {
 				logger.LogErrorf("Failed to create area log directory for %v: %v", a.Name(), err)
 			}
 		}
 	}
-	
-	if config.Advertise {
+
+	if conf.Advertise {
 		advert := ms.Advertisement{
-			Port:    config.Port,
-			Players: players.GetPlayerCount(),
-			Name:    config.Name,
-			Desc:    config.Desc}
-		if config.AdvertiseHostname != "" {
-			advert.IP = config.AdvertiseHostname
+			Port:    conf.Port,
+			Players: s.players.GetPlayerCount(),
+			Name:    conf.Name,
+			Desc:    conf.Desc}
+		if conf.AdvertiseHostname != "" {
+			advert.IP = conf.AdvertiseHostname
 		}
-		if config.EnableWS {
-			if config.ReverseProxyMode {
-				advert.WSPort = config.ReverseProxyHTTPPort
+		if conf.EnableWS {
+			if conf.ReverseProxyMode {
+				advert.WSPort = conf.ReverseProxyHTTPPort
 			} else {
-				advert.WSPort = config.WSPort
+				advert.WSPort = conf.WSPort
 			}
 		}
-		if config.EnableWSS {
-			if config.ReverseProxyMode {
-				advert.WSSPort = config.ReverseProxyHTTPSPort
+		if conf.EnableWSS {
+			if conf.ReverseProxyMode {
+				advert.WSSPort = conf.ReverseProxyHTTPSPort
 			} else {
-				advert.WSSPort = config.WSSPort
+				advert.WSSPort = conf.WSSPort
 			}
 		}
-		go ms.Advertise(config.MSAddr, advert, updatePlayers, advertDone)
+		go ms.Advertise(conf.MSAddr, advert, updatePlayers, advertDone)
 	}
+
+	// Propagate to package-level globals so that existing helper functions
+	// and command handlers continue to work without modification.
+	config = s.config
+	characters = s.characters
+	music = s.music
+	backgrounds = s.backgrounds
+	parrot = s.parrot
+	areas = s.areas
+	areaNames = s.areaNames
+	areaIndexMap = s.areaIndexMap
+	roles = s.roles
+	uids = s.uids
+	enableDiscord = s.enableDiscord
+	tournamentParticipants = s.tournamentParticipants
+
 	initCommands()
 	go startConnTrackerCleanup()
-	return nil
+	return s, nil
+}
+
+// InitServer initializes the server and stores it as the package-level singleton.
+// It is the legacy entry point used by the main package; callers that need to
+// manage the server lifecycle directly should use NewServer instead.
+func InitServer(conf *settings.Config) error {
+	var err error
+	server, err = NewServer(conf)
+	return err
 }
 
 // StartDiscordBot starts the Discord bot if a token is configured.
 // It should be called after InitServer.
-func StartDiscordBot() {
-	if config.BotToken == "" {
+func (s *Server) StartDiscordBot() {
+	if s.config.BotToken == "" {
 		return
 	}
 	cfg := discordbot.Config{
-		Token:     config.BotToken,
-		GuildID:   config.GuildID,
-		ModRoleID: config.ModRoleID,
+		Token:     s.config.BotToken,
+		GuildID:   s.config.GuildID,
+		ModRoleID: s.config.ModRoleID,
 	}
 	b, err := discordbot.New(cfg, NewServerAdapter())
 	if err != nil {
@@ -252,8 +320,12 @@ func StartDiscordBot() {
 	logger.LogInfo("Discord bot started.")
 }
 
+// StartDiscordBot starts the Discord bot on the active server instance.
+// Kept for backward compatibility; delegates to server.StartDiscordBot.
+func StartDiscordBot() { server.StartDiscordBot() }
+
 // ListenTCP starts the server's TCP listener.
-func ListenTCP() {
+func (s *Server) ListenTCP() {
 	listener, err := net.Listen("tcp", config.Addr+":"+strconv.Itoa(config.Port))
 	if err != nil {
 		FatalError <- err
@@ -284,8 +356,12 @@ func ListenTCP() {
 	}
 }
 
+// ListenTCP starts the TCP listener on the active server instance.
+// Kept for backward compatibility; delegates to server.ListenTCP.
+func ListenTCP() { server.ListenTCP() }
+
 // ListenWS starts the server's websocket listener.
-func ListenWS() {
+func (s *Server) ListenWS() {
 	listener, err := net.Listen("tcp", config.Addr+":"+strconv.Itoa(config.WSPort))
 	if err != nil {
 		FatalError <- err
@@ -296,19 +372,23 @@ func ListenWS() {
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", HandleWS)
-	s := &http.Server{
+	srv := &http.Server{
 		Handler: mux,
 	}
-	err = s.Serve(listener)
+	err = srv.Serve(listener)
 	if err != http.ErrServerClosed {
 		FatalError <- err
 	}
 }
 
+// ListenWS starts the WebSocket listener on the active server instance.
+// Kept for backward compatibility; delegates to server.ListenWS.
+func ListenWS() { server.ListenWS() }
+
 // ListenWSS starts the server's secure websocket listener.
 // If TLS certificate and key paths are provided, it serves with TLS (direct HTTPS).
 // If not provided, it serves plain HTTP (useful when behind a reverse proxy like Cloudflare).
-func ListenWSS() {
+func (s *Server) ListenWSS() {
 	listener, err := net.Listen("tcp", config.Addr+":"+strconv.Itoa(config.WSSPort))
 	if err != nil {
 		FatalError <- err
@@ -319,24 +399,28 @@ func ListenWSS() {
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", HandleWS)
-	s := &http.Server{
+	srv := &http.Server{
 		Handler: mux,
 	}
-	
+
 	// Use TLS if certificate and key paths are provided, otherwise serve plain HTTP
 	// (useful when behind a reverse proxy that handles TLS termination)
 	if config.TLSCertPath != "" && config.TLSKeyPath != "" {
 		logger.LogDebugf("WSS using TLS with cert: %s", config.TLSCertPath)
-		err = s.ServeTLS(listener, config.TLSCertPath, config.TLSKeyPath)
+		err = srv.ServeTLS(listener, config.TLSCertPath, config.TLSKeyPath)
 	} else {
 		logger.LogDebug("WSS using plain HTTP (expecting reverse proxy for TLS)")
-		err = s.Serve(listener)
+		err = srv.Serve(listener)
 	}
-	
+
 	if err != http.ErrServerClosed {
 		FatalError <- err
 	}
 }
+
+// ListenWSS starts the secure WebSocket listener on the active server instance.
+// Kept for backward compatibility; delegates to server.ListenWSS.
+func ListenWSS() { server.ListenWSS() }
 
 // HandleWS handles a websocket connection.
 func HandleWS(w http.ResponseWriter, r *http.Request) {
@@ -360,6 +444,18 @@ func HandleWS(w http.ResponseWriter, r *http.Request) {
 	client := NewClient(websocket.NetConn(context.TODO(), c, websocket.MessageText), ipid)
 	go client.HandleClient()
 }
+
+// CleanupServer closes all connections to the server and closes the database.
+func (s *Server) CleanupServer() {
+	for client := range clients.GetAllClients() {
+		client.conn.Close()
+	}
+	db.Close()
+}
+
+// CleanupServer closes all connections on the active server instance.
+// Kept for backward compatibility; delegates to server.CleanupServer.
+func CleanupServer() { server.CleanupServer() }
 
 // writeToAll sends a message to all connected clients.
 func writeToAll(header string, contents ...string) {
@@ -542,16 +638,8 @@ func sendGlobalServerMessage(message string) {
 	writeToAll("CT", encode(config.Name), encode(message), "1")
 }
 
-// CleanupServer closes all connections to the server, and closes the server's database.
-func CleanupServer() {
-	for client := range clients.GetAllClients() {
-		client.conn.Close()
-	}
-	db.Close()
-}
-
 // getRealIP extracts the real client IP address from an HTTP request.
-// When reverse_proxy_mode is enabled in the config, it checks X-Forwarded-For 
+// When reverse_proxy_mode is enabled in the config, it checks X-Forwarded-For
 // and X-Real-IP headers (for reverse proxy setups like nginx or Cloudflare).
 // When reverse_proxy_mode is disabled, it always uses RemoteAddr directly.
 //
@@ -570,13 +658,13 @@ func getRealIP(r *http.Request) string {
 				return strings.TrimSpace(ips[0])
 			}
 		}
-		
+
 		// Check X-Real-IP header (single IP from reverse proxy)
 		if xri := r.Header.Get("X-Real-IP"); xri != "" {
 			return xri
 		}
 	}
-	
+
 	// Use RemoteAddr if reverse_proxy_mode is disabled or no proxy headers are present
 	return r.RemoteAddr
 }
@@ -585,7 +673,7 @@ func getRealIP(r *http.Request) string {
 func getIpid(s string) string {
 	// For privacy and ease of use, AO servers traditionally use a hashed version of a client's IP address to identify a client.
 	// Athena uses the MD5 hash of the IP address, encoded in base64.
-	
+
 	// Extract just the IP address, removing the port if present
 	// Use net.SplitHostPort which correctly handles both IPv4 and IPv6 addresses
 	ip, _, err := net.SplitHostPort(s)
@@ -593,7 +681,7 @@ func getIpid(s string) string {
 		// If there's an error, the input doesn't have a port, so use it as-is
 		ip = s
 	}
-	
+
 	hash := md5.Sum([]byte(ip))
 	ipid := base64.StdEncoding.EncodeToString(hash[:])
 	return ipid[:len(ipid)-2] // Removes the trailing padding.
@@ -685,3 +773,4 @@ func startConnTrackerCleanup() {
 		connTracker.mu.Unlock()
 	}
 }
+
