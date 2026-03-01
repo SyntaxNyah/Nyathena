@@ -21,6 +21,78 @@ import (
 	"testing"
 )
 
+func TestApplyShakespearean(t *testing.T) {
+	// Core word replacements
+	result := applyShakespearean("you are here")
+	if !strings.Contains(result, "thou") {
+		t.Errorf("applyShakespearean: expected 'thou' (you→thou) in %q", result)
+	}
+	if !strings.Contains(result, "art") {
+		t.Errorf("applyShakespearean: expected 'art' (are→art) in %q", result)
+	}
+	if !strings.Contains(result, "hither") {
+		t.Errorf("applyShakespearean: expected 'hither' (here→hither) in %q", result)
+	}
+
+	// Capitalisation is preserved
+	result2 := applyShakespearean("You are here")
+	if !strings.Contains(result2, "Thou") {
+		t.Errorf("applyShakespearean: expected capitalised 'Thou' in %q", result2)
+	}
+
+	// Punctuation attached to a word is preserved
+	result3 := applyShakespearean("are you okay?")
+	if !strings.Contains(result3, "thou") || !strings.Contains(result3, "art") {
+		t.Errorf("applyShakespearean: expected replacements with trailing punct in %q", result3)
+	}
+	if !strings.Contains(result3, "well") { // "okay" → "very well"
+		t.Errorf("applyShakespearean: expected 'very well' (okay→very well) in %q", result3)
+	}
+
+	// Additional vocabulary
+	for input, want := range map[string]string{
+		"never":   "ne'er",
+		"maybe":   "perchance",
+		"soon":    "anon",
+		"goodbye": "farewell",
+		"really":  "forsooth",
+		"sad":     "woeful",
+		"angry":   "wrathful",
+		"world":   "realm",
+	} {
+		r := applyShakespearean(input)
+		if !strings.Contains(r, want) {
+			t.Errorf("applyShakespearean: expected %q→%q, got %q", input, want, r)
+		}
+	}
+
+	// Prefixes and suffixes appear across a large sample (probabilistic check)
+	prefixFound, suffixFound := false, false
+	for i := 0; i < 200 && (!prefixFound || !suffixFound); i++ {
+		r := applyShakespearean("you are here")
+		knownPrefixes := []string{"Hark! ", "Forsooth! ", "Zounds! ", "Prithee, ", "Methinks ", "By my troth! ", "O fie! ", "Marry! ", "'Tis said that ", "Good morrow! "}
+		for _, p := range knownPrefixes {
+			if strings.HasPrefix(r, p) {
+				prefixFound = true
+				break
+			}
+		}
+		knownSuffixes := []string{", methinks.", ", forsooth!", ", I prithee.", ", good soul.", ", 'tis so!", ", verily.", ", upon mine honour.", ", I dare say."}
+		for _, s := range knownSuffixes {
+			if strings.HasSuffix(r, s) {
+				suffixFound = true
+				break
+			}
+		}
+	}
+	if !prefixFound {
+		t.Error("applyShakespearean: no prefix appeared in 200 runs (expected ~40% chance)")
+	}
+	if !suffixFound {
+		t.Error("applyShakespearean: no suffix appeared in 200 runs (expected ~30% chance)")
+	}
+}
+
 func TestApplyUppercase(t *testing.T) {
 	input := "hello world"
 	expected := "HELLO WORLD"
