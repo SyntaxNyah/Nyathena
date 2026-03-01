@@ -949,8 +949,8 @@ func initCommands() {
 		"hotpotato": {
 			handler:  cmdHotPotato,
 			minArgs:  0,
-			usage:    "Usage: /hotpotato | /hotpotato accept",
-			desc:     "Start or join a Hot Potato mini-game event.",
+			usage:    "Usage: /hotpotato | /hotpotato accept | /hotpotato pass",
+			desc:     "Start or join a Hot Potato mini-game event. The carrier can use /hotpotato pass to pass the potato randomly.",
 			reqPerms: permissions.PermissionField["NONE"],
 		},
 		"giveaway": {

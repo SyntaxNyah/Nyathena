@@ -32,6 +32,7 @@ const (
 	hotPotatoCooldown           = 5 * time.Minute  // global delay between games
 	hotPotatoMinParticipants    = 2                 // minimum opt-ins required to start
 	hotPotatoPunishmentDuration = 10 * time.Minute // how long punishments last
+	hotPotatoPassCooldown       = 10 * time.Second // minimum delay between passes
 )
 
 // hotPotatoRules is broadcast in OOC when a game is announced.
@@ -45,6 +46,7 @@ Type /hotpotato accept within 60 seconds to join.
 • When time's up, opted-in players sharing the carrier's area get a random punishment.
 • If the carrier is a MODERATOR, those players are KICKED from the server instead.
 • If the carrier ends up alone, THEY receive the punishment themselves.
+• The carrier can type /hotpotato pass to pass the potato to a random participant (10s cooldown).
 • Players who did not opt in are completely safe and unaffected.
 • Only one game can run at a time (5-minute cooldown between games).
 
@@ -89,11 +91,13 @@ type hotPotatoState struct {
 	participants map[int]struct{} // set of opted-in UIDs
 	carrierUID   int             // UID of the carrier (-1 when no game is active)
 	lastGameEnd  time.Time       // when the last game ended (drives the cooldown)
+	passLastUsed map[int]time.Time // when each UID last used /hotpotato pass
 }
 
 var hotPotato = hotPotatoState{
 	participants: make(map[int]struct{}),
 	carrierUID:   -1,
+	passLastUsed: make(map[int]time.Time),
 }
 
 // ── Cooldown helper ──────────────────────────────────────────────────────────
@@ -110,19 +114,25 @@ func isHotPotatoCoolingDown() (bool, int) {
 		return false, 0
 	}
 	if remaining := hotPotatoCooldown - time.Since(end); remaining > 0 {
-		return true, int(remaining.Seconds()) + 1
+		return true, int((remaining+time.Second-1)/time.Second)
 	}
 	return false, 0
 }
 
 // ── Command entry point ──────────────────────────────────────────────────────
 
-// cmdHotPotato is the entry point for both /hotpotato (start) and
-// /hotpotato accept (opt-in).
+// cmdHotPotato is the entry point for both /hotpotato (start),
+// /hotpotato accept (opt-in), and /hotpotato pass (pass the potato).
 func cmdHotPotato(client *Client, args []string, _ string) {
-	if len(args) > 0 && args[0] == "accept" {
-		hotPotatoAccept(client)
-		return
+	if len(args) > 0 {
+		switch args[0] {
+		case "accept":
+			hotPotatoAccept(client)
+			return
+		case "pass":
+			hotPotatoPass(client)
+			return
+		}
 	}
 	hotPotatoStart(client)
 }
@@ -143,15 +153,15 @@ func hotPotatoStart(client *Client) {
 	if !hotPotato.lastGameEnd.IsZero() {
 		if remaining := hotPotatoCooldown - time.Since(hotPotato.lastGameEnd); remaining > 0 {
 			hotPotato.mu.Unlock()
-			client.SendServerMessage(fmt.Sprintf("Hot Potato is on cooldown. Please wait %d seconds.", int(remaining.Seconds())+1))
+			client.SendServerMessage(fmt.Sprintf("Hot Potato is on cooldown. Please wait %d seconds.", int((remaining+time.Second-1)/time.Second)))
 			return
 		}
 	}
 
 	hotPotato.optInActive = true
-	hotPotato.gameActive = false
 	hotPotato.participants = make(map[int]struct{})
 	hotPotato.carrierUID = -1
+	hotPotato.passLastUsed = make(map[int]time.Time)
 	hotPotato.mu.Unlock()
 
 	// All I/O after the lock is released.
@@ -187,6 +197,78 @@ func hotPotatoAccept(client *Client) {
 	sendGlobalServerMessage(fmt.Sprintf("🥔 %v joined Hot Potato! (%d participant(s))", client.OOCName(), count))
 }
 
+// ── Pass ─────────────────────────────────────────────────────────────────────
+
+// hotPotatoPass allows the current carrier to pass the potato to a random
+// other participant. The carrier must wait hotPotatoPassCooldown (10 s) between
+// consecutive passes. The new carrier is chosen at random from the set of
+// opted-in UIDs that are still connected.
+func hotPotatoPass(client *Client) {
+	uid := client.Uid()
+
+	hotPotato.mu.Lock()
+
+	if !hotPotato.gameActive {
+		hotPotato.mu.Unlock()
+		client.SendServerMessage("There is no active Hot Potato game right now.")
+		return
+	}
+
+	if hotPotato.carrierUID != uid {
+		hotPotato.mu.Unlock()
+		client.SendServerMessage("You are not holding the Hot Potato.")
+		return
+	}
+
+	// Enforce per-carrier pass cooldown.
+	if last, ok := hotPotato.passLastUsed[uid]; ok {
+		if elapsed := time.Since(last); elapsed < hotPotatoPassCooldown {
+			remaining := hotPotatoPassCooldown - elapsed
+			hotPotato.mu.Unlock()
+			client.SendServerMessage(fmt.Sprintf("You must wait %d more second(s) before passing again.", int((remaining+time.Second-1)/time.Second)))
+			return
+		}
+	}
+
+	// Snapshot other participants under the lock; filter connectivity outside it.
+	others := make([]int, 0, len(hotPotato.participants)-1)
+	for p := range hotPotato.participants {
+		if p != uid {
+			others = append(others, p)
+		}
+	}
+	hotPotato.mu.Unlock()
+
+	// Filter in-place to still-connected participants.
+	n := 0
+	for _, p := range others {
+		if _, err := getClientByUid(p); err == nil {
+			others[n] = p
+			n++
+		}
+	}
+	if n == 0 {
+		client.SendServerMessage("There are no other connected participants to pass to.")
+		return
+	}
+
+	newCarrierUID := others[rand.Intn(n)]
+
+	// Record the pass and update the carrier — under the lock.
+	hotPotato.mu.Lock()
+	hotPotato.passLastUsed[uid] = time.Now()
+	hotPotato.carrierUID = newCarrierUID
+	hotPotato.mu.Unlock()
+
+	// Notify the new carrier and announce globally.
+	if newCarrier, err := getClientByUid(newCarrierUID); err == nil {
+		newCarrier.SendServerMessage("🥔🔥 The Hot Potato has been passed to YOU! You have it now — run!")
+	}
+	sendGlobalServerMessage("🥔 The Hot Potato has been passed to a new carrier! Who has it now…?")
+	addToBuffer(client, "HOTPOTATO",
+		fmt.Sprintf("Passed potato from UID %d to UID %d", uid, newCarrierUID), false)
+}
+
 // ── Background timers ────────────────────────────────────────────────────────
 
 // hotPotatoOptInTimer sleeps for the opt-in window, then either launches the
@@ -201,20 +283,22 @@ func hotPotatoOptInTimer() {
 		return
 	}
 	hotPotato.optInActive = false
-	rawUIDs := make([]int, 0, len(hotPotato.participants))
+	uids := make([]int, 0, len(hotPotato.participants))
 	for uid := range hotPotato.participants {
-		rawUIDs = append(rawUIDs, uid)
+		uids = append(uids, uid)
 	}
 	hotPotato.mu.Unlock()
 
-	// Filter to still-connected players — outside the lock so getClientByUid
-	// does not run concurrently with hotPotato.mu held.
-	validUIDs := make([]int, 0, len(rawUIDs))
-	for _, uid := range rawUIDs {
+	// Filter in-place to still-connected players — outside the lock so
+	// getClientByUid does not run while hotPotato.mu is held.
+	n := 0
+	for _, uid := range uids {
 		if _, err := getClientByUid(uid); err == nil {
-			validUIDs = append(validUIDs, uid)
+			uids[n] = uid
+			n++
 		}
 	}
+	validUIDs := uids[:n]
 
 	if len(validUIDs) < hotPotatoMinParticipants {
 		hotPotato.mu.Lock()
@@ -249,15 +333,16 @@ func hotPotatoOptInTimer() {
 		)
 	}
 
-	go hotPotatoGameTimer(carrierUID)
+	go hotPotatoGameTimer()
 }
 
 // hotPotatoGameTimer sleeps for the game duration, then hands off to
-// hotPotatoResolve for outcome resolution.
-func hotPotatoGameTimer(carrierUID int) {
+// hotPotatoResolve for outcome resolution. The carrier is read from state at
+// resolution time so any passes made during the game are honoured.
+func hotPotatoGameTimer() {
 	time.Sleep(hotPotatoGameDuration)
 
-	// Atomically close the game and snapshot participant UIDs.
+	// Atomically close the game and snapshot the current carrier and participant UIDs.
 	hotPotato.mu.Lock()
 	if !hotPotato.gameActive {
 		hotPotato.mu.Unlock() // already resolved
@@ -266,13 +351,14 @@ func hotPotatoGameTimer(carrierUID int) {
 	hotPotato.gameActive = false
 	hotPotato.optInActive = false
 	hotPotato.lastGameEnd = time.Now().UTC()
+	currentCarrierUID := hotPotato.carrierUID
 	participantUIDs := make([]int, 0, len(hotPotato.participants))
 	for uid := range hotPotato.participants {
 		participantUIDs = append(participantUIDs, uid)
 	}
 	hotPotato.mu.Unlock()
 
-	hotPotatoResolve(carrierUID, participantUIDs)
+	hotPotatoResolve(currentCarrierUID, participantUIDs)
 }
 
 // ── Resolution ───────────────────────────────────────────────────────────────

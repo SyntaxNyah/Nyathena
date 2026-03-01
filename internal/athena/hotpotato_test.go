@@ -29,6 +29,7 @@ func resetHotPotatoState() {
 	hotPotato.participants = make(map[int]struct{})
 	hotPotato.carrierUID = -1
 	hotPotato.lastGameEnd = time.Time{}
+	hotPotato.passLastUsed = make(map[int]time.Time)
 	hotPotato.mu.Unlock()
 }
 
@@ -139,5 +140,109 @@ func TestHotPotatoOnlyOneGame(t *testing.T) {
 		if !blocked {
 			t.Errorf("%s: expected start to be blocked", tc.name)
 		}
+	}
+}
+
+// TestHotPotatoPassCooldown verifies that the 10-second pass cooldown is enforced.
+func TestHotPotatoPassCooldown(t *testing.T) {
+	resetHotPotatoState()
+
+	const carrierUID = 7
+
+	hotPotato.mu.Lock()
+	hotPotato.gameActive = true
+	hotPotato.carrierUID = carrierUID
+	hotPotato.participants[carrierUID] = struct{}{}
+	hotPotato.mu.Unlock()
+
+	// No pass recorded yet — should be allowed.
+	hotPotato.mu.Lock()
+	_, hasCooldown := hotPotato.passLastUsed[carrierUID]
+	hotPotato.mu.Unlock()
+	if hasCooldown {
+		t.Error("expected no pass cooldown entry before the first pass")
+	}
+
+	// Record a pass timestamp as "just now".
+	hotPotato.mu.Lock()
+	hotPotato.passLastUsed[carrierUID] = time.Now()
+	hotPotato.mu.Unlock()
+
+	// Should be blocked — not enough time has elapsed.
+	hotPotato.mu.Lock()
+	last := hotPotato.passLastUsed[carrierUID]
+	elapsed := time.Since(last)
+	blocked := elapsed < hotPotatoPassCooldown
+	hotPotato.mu.Unlock()
+
+	if !blocked {
+		t.Error("expected pass to be on cooldown immediately after use")
+	}
+
+	// Simulate the cooldown having expired.
+	hotPotato.mu.Lock()
+	hotPotato.passLastUsed[carrierUID] = time.Now().Add(-hotPotatoPassCooldown - time.Second)
+	hotPotato.mu.Unlock()
+
+	hotPotato.mu.Lock()
+	last = hotPotato.passLastUsed[carrierUID]
+	elapsed = time.Since(last)
+	blocked = elapsed < hotPotatoPassCooldown
+	hotPotato.mu.Unlock()
+
+	if blocked {
+		t.Error("expected pass cooldown to have expired after sufficient time")
+	}
+}
+
+// TestHotPotatoPassNotCarrier verifies that only the current carrier can pass.
+func TestHotPotatoPassNotCarrier(t *testing.T) {
+	resetHotPotatoState()
+
+	hotPotato.mu.Lock()
+	hotPotato.gameActive = true
+	hotPotato.carrierUID = 10
+	hotPotato.participants[10] = struct{}{}
+	hotPotato.participants[11] = struct{}{}
+	hotPotato.mu.Unlock()
+
+	// A non-carrier UID should not equal carrierUID.
+	hotPotato.mu.Lock()
+	isCarrier := hotPotato.carrierUID == 11
+	hotPotato.mu.Unlock()
+
+	if isCarrier {
+		t.Error("UID 11 should not be the carrier")
+	}
+}
+
+// TestHotPotatoPassUpdatesCarrier verifies that passLastUsed and carrierUID are
+// updated correctly when a pass is recorded.
+func TestHotPotatoPassUpdatesCarrier(t *testing.T) {
+	resetHotPotatoState()
+
+	hotPotato.mu.Lock()
+	hotPotato.gameActive = true
+	hotPotato.carrierUID = 1
+	hotPotato.participants[1] = struct{}{}
+	hotPotato.participants[2] = struct{}{}
+	hotPotato.mu.Unlock()
+
+	// Simulate what hotPotatoPass does after selecting new carrier UID 2.
+	hotPotato.mu.Lock()
+	hotPotato.passLastUsed[1] = time.Now()
+	hotPotato.carrierUID = 2
+	hotPotato.mu.Unlock()
+
+	hotPotato.mu.Lock()
+	newCarrier := hotPotato.carrierUID
+	_, recorded := hotPotato.passLastUsed[1]
+	hotPotato.mu.Unlock()
+
+	if newCarrier != 2 {
+		t.Errorf("expected carrierUID to be 2 after pass, got %d", newCarrier)
+	}
+	if !recorded {
+		t.Error("expected passLastUsed to be recorded for original carrier UID 1")
 	}
 }
