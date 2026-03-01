@@ -76,9 +76,9 @@ func cmdAllowIniswap(client *Client, args []string, _ string) {
 // Handles /areainfo
 
 func cmdAreaInfo(client *Client, _ []string, _ string) {
-	out := fmt.Sprintf("\nBG: %v\nEvi mode: %v\nAllow iniswap: %v\nNon-interrupting pres: %v\nCMs allowed: %v\nForce BG list: %v\nBG locked: %v\nMusic locked: %v",
+	out := fmt.Sprintf("\nBG: %v\nEvi mode: %v\nAllow iniswap: %v\nNon-interrupting pres: %v\nCMs allowed: %v\nForce BG list: %v\nBG locked: %v\nMusic locked: %v\nSpectate mode: %v",
 		client.Area().Background(), client.Area().EvidenceMode().String(), client.Area().IniswapAllowed(), client.Area().NoInterrupt(),
-		client.Area().CMsAllowed(), client.Area().ForceBGList(), client.Area().LockBG(), client.Area().LockMusic())
+		client.Area().CMsAllowed(), client.Area().ForceBGList(), client.Area().LockBG(), client.Area().LockMusic(), client.Area().SpectateMode())
 	client.SendServerMessage(out)
 }
 
@@ -812,6 +812,79 @@ func cmdUnlock(client *Client, _ []string, _ string) {
 	sendLockArup()
 	sendAreaServerMessage(client.Area(), fmt.Sprintf("%v unlocked the area.", client.OOCName()))
 	addToBuffer(client, "CMD", "Unlocked the area.", false)
+}
+
+// Handles /spectate
+
+func cmdSpectate(client *Client, args []string, usage string) {
+	if len(args) == 0 {
+		// Toggle spectate mode
+		if client.Area().SpectateMode() {
+			client.Area().SetSpectateMode(false)
+			client.SendServerMessage("Spectate mode disabled.")
+			addToBuffer(client, "CMD", "Disabled spectate mode.", false)
+		} else {
+			client.Area().SetSpectateMode(true)
+			client.SendServerMessage("Spectate mode enabled. Only CMs and invited players can speak in IC.")
+			addToBuffer(client, "CMD", "Enabled spectate mode.", false)
+		}
+		return
+	}
+
+	switch args[0] {
+	case "invite":
+		if len(args) < 2 {
+			client.SendServerMessage("Not enough arguments:\n" + usage)
+			return
+		}
+		if !client.Area().SpectateMode() {
+			client.SendServerMessage("Spectate mode is not enabled.")
+			return
+		}
+		toInvite := getUidList(strings.Split(args[1], ","))
+		var count int
+		var report string
+		for _, c := range toInvite {
+			if c.Area() != client.Area() {
+				continue
+			}
+			if client.Area().AddSpectateInvited(c.Uid()) {
+				c.SendServerMessage("You were invited to speak in IC during spectate mode.")
+				count++
+				report += fmt.Sprintf("%v, ", c.Uid())
+			}
+		}
+		report = strings.TrimSuffix(report, ", ")
+		client.SendServerMessage(fmt.Sprintf("Spectate-invited %v users.", count))
+		addToBuffer(client, "CMD", fmt.Sprintf("Spectate-invited %v to speak in IC.", report), false)
+	case "uninvite":
+		if len(args) < 2 {
+			client.SendServerMessage("Not enough arguments:\n" + usage)
+			return
+		}
+		if !client.Area().SpectateMode() {
+			client.SendServerMessage("Spectate mode is not enabled.")
+			return
+		}
+		toUninvite := getUidList(strings.Split(args[1], ","))
+		var count int
+		var report string
+		for _, c := range toUninvite {
+			if c == client || client.Area().HasCM(c.Uid()) {
+				continue
+			}
+			if client.Area().RemoveSpectateInvited(c.Uid()) {
+				c.SendServerMessage("You are no longer invited to speak in IC during spectate mode.")
+				count++
+				report += fmt.Sprintf("%v, ", c.Uid())
+			}
+		}
+		report = strings.TrimSuffix(report, ", ")
+		client.SendServerMessage(fmt.Sprintf("Spectate-uninvited %v users.", count))
+		addToBuffer(client, "CMD", fmt.Sprintf("Spectate-uninvited %v from speaking in IC.", report), false)
+	default:
+		client.SendServerMessage("Unknown subcommand. " + usage)
+	}
 }
 
 // Handles /unmute
