@@ -18,7 +18,6 @@ package athena
 
 import (
 	"fmt"
-	"math"
 	"math/rand"
 	"strings"
 	"sync"
@@ -115,7 +114,7 @@ func isHotPotatoCoolingDown() (bool, int) {
 		return false, 0
 	}
 	if remaining := hotPotatoCooldown - time.Since(end); remaining > 0 {
-		return true, int(remaining.Seconds()) + 1
+		return true, int((remaining+time.Second-1)/time.Second)
 	}
 	return false, 0
 }
@@ -125,13 +124,15 @@ func isHotPotatoCoolingDown() (bool, int) {
 // cmdHotPotato is the entry point for both /hotpotato (start),
 // /hotpotato accept (opt-in), and /hotpotato pass (pass the potato).
 func cmdHotPotato(client *Client, args []string, _ string) {
-	if len(args) > 0 && args[0] == "accept" {
-		hotPotatoAccept(client)
-		return
-	}
-	if len(args) > 0 && args[0] == "pass" {
-		hotPotatoPass(client)
-		return
+	if len(args) > 0 {
+		switch args[0] {
+		case "accept":
+			hotPotatoAccept(client)
+			return
+		case "pass":
+			hotPotatoPass(client)
+			return
+		}
 	}
 	hotPotatoStart(client)
 }
@@ -152,13 +153,12 @@ func hotPotatoStart(client *Client) {
 	if !hotPotato.lastGameEnd.IsZero() {
 		if remaining := hotPotatoCooldown - time.Since(hotPotato.lastGameEnd); remaining > 0 {
 			hotPotato.mu.Unlock()
-			client.SendServerMessage(fmt.Sprintf("Hot Potato is on cooldown. Please wait %d seconds.", int(remaining.Seconds())+1))
+			client.SendServerMessage(fmt.Sprintf("Hot Potato is on cooldown. Please wait %d seconds.", int((remaining+time.Second-1)/time.Second)))
 			return
 		}
 	}
 
 	hotPotato.optInActive = true
-	hotPotato.gameActive = false
 	hotPotato.participants = make(map[int]struct{})
 	hotPotato.carrierUID = -1
 	hotPotato.passLastUsed = make(map[int]time.Time)
@@ -223,37 +223,36 @@ func hotPotatoPass(client *Client) {
 	// Enforce per-carrier pass cooldown.
 	if last, ok := hotPotato.passLastUsed[uid]; ok {
 		if elapsed := time.Since(last); elapsed < hotPotatoPassCooldown {
-			remaining := int(math.Ceil((hotPotatoPassCooldown - elapsed).Seconds()))
+			remaining := hotPotatoPassCooldown - elapsed
 			hotPotato.mu.Unlock()
-			client.SendServerMessage(fmt.Sprintf("You must wait %d more second(s) before passing again.", remaining))
+			client.SendServerMessage(fmt.Sprintf("You must wait %d more second(s) before passing again.", int((remaining+time.Second-1)/time.Second)))
 			return
 		}
 	}
 
-	// Snapshot the other participants so we can resolve their clients outside
-	// the lock (getClientByUid may lock its own mutex).
-	otherUIDs := make([]int, 0, len(hotPotato.participants)-1)
+	// Snapshot other participants under the lock; filter connectivity outside it.
+	others := make([]int, 0, len(hotPotato.participants)-1)
 	for p := range hotPotato.participants {
 		if p != uid {
-			otherUIDs = append(otherUIDs, p)
+			others = append(others, p)
 		}
 	}
 	hotPotato.mu.Unlock()
 
-	// Filter to still-connected participants.
-	eligible := make([]int, 0, len(otherUIDs))
-	for _, p := range otherUIDs {
+	// Filter in-place to still-connected participants.
+	n := 0
+	for _, p := range others {
 		if _, err := getClientByUid(p); err == nil {
-			eligible = append(eligible, p)
+			others[n] = p
+			n++
 		}
 	}
-
-	if len(eligible) == 0 {
+	if n == 0 {
 		client.SendServerMessage("There are no other connected participants to pass to.")
 		return
 	}
 
-	newCarrierUID := eligible[rand.Intn(len(eligible))]
+	newCarrierUID := others[rand.Intn(n)]
 
 	// Record the pass and update the carrier — under the lock.
 	hotPotato.mu.Lock()
@@ -284,20 +283,22 @@ func hotPotatoOptInTimer() {
 		return
 	}
 	hotPotato.optInActive = false
-	rawUIDs := make([]int, 0, len(hotPotato.participants))
+	uids := make([]int, 0, len(hotPotato.participants))
 	for uid := range hotPotato.participants {
-		rawUIDs = append(rawUIDs, uid)
+		uids = append(uids, uid)
 	}
 	hotPotato.mu.Unlock()
 
-	// Filter to still-connected players — outside the lock so getClientByUid
-	// does not run concurrently with hotPotato.mu held.
-	validUIDs := make([]int, 0, len(rawUIDs))
-	for _, uid := range rawUIDs {
+	// Filter in-place to still-connected players — outside the lock so
+	// getClientByUid does not run while hotPotato.mu is held.
+	n := 0
+	for _, uid := range uids {
 		if _, err := getClientByUid(uid); err == nil {
-			validUIDs = append(validUIDs, uid)
+			uids[n] = uid
+			n++
 		}
 	}
+	validUIDs := uids[:n]
 
 	if len(validUIDs) < hotPotatoMinParticipants {
 		hotPotato.mu.Lock()
