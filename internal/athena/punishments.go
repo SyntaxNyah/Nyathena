@@ -202,26 +202,142 @@ func applyPirate(text string) string {
 // applyShakespearean converts to Shakespearean English
 func applyShakespearean(text string) string {
 	replacements := map[string]string{
-		"you":   "thou",
-		"your":  "thy",
-		"yours": "thine",
-		"are":   "art",
-		"yes":   "aye",
-		"no":    "nay",
+		"you":       "thou",
+		"your":      "thy",
+		"yours":     "thine",
+		"are":       "art",
+		"yes":       "aye",
+		"no":        "nay",
+		"have":      "hast",
+		"has":       "hath",
+		"do":        "dost",
+		"does":      "doth",
+		"will":      "shalt",
+		"would":     "wouldst",
+		"could":     "couldst",
+		"should":    "shouldst",
+		"was":       "wast",
+		"were":      "wert",
+		"never":     "ne'er",
+		"ever":      "e'er",
+		"over":      "o'er",
+		"every":     "ev'ry",
+		"before":    "ere",
+		"hello":     "hail",
+		"goodbye":   "farewell",
+		"bye":       "fare thee well",
+		"why":       "wherefore",
+		"where":     "whence",
+		"here":      "hither",
+		"there":     "thither",
+		"away":      "hence",
+		"soon":      "anon",
+		"please":    "prithee",
+		"help":      "aid",
+		"maybe":     "perchance",
+		"perhaps":   "mayhaps",
+		"truly":     "verily",
+		"really":    "forsooth",
+		"sure":      "forsooth",
+		"totally":   "verily",
+		"actually":  "in sooth",
+		"okay":      "very well",
+		"ok":        "very well",
+		"again":     "once more",
+		"stop":      "cease",
+		"start":     "commence",
+		"begin":     "commence",
+		"die":       "perish",
+		"dead":      "fallen",
+		"kill":      "slay",
+		"fight":     "battle",
+		"bad":       "vile",
+		"very":      "most",
+		"awesome":   "most wondrous",
+		"cool":      "most excellent",
+		"amazing":   "wondrous",
+		"beautiful": "beauteous",
+		"happy":     "merry",
+		"sad":       "woeful",
+		"angry":     "wrathful",
+		"tired":     "weary",
+		"people":    "souls",
+		"person":    "soul",
+		"friend":    "companion",
+		"enemy":     "foe",
+		"home":      "dwelling",
+		"house":     "abode",
+		"money":     "coin",
+		"world":     "realm",
+		"morning":   "morn",
+		"evening":   "eve",
+		"night":     "eventide",
+		"worry":     "fret",
+		"hurry":     "make haste",
+		"because":   "for",
+		"although":  "albeit",
+		"thing":     "matter",
+		"things":    "matters",
+		"speak":     "speakest",
+		"say":       "sayest",
 	}
-	
+
 	words := strings.Fields(text)
 	for i, word := range words {
-		lower := strings.ToLower(word)
+		// Strip trailing punctuation for lookup, restore it after
+		punct := ""
+		stripped := word
+		if len(stripped) > 0 {
+			last := rune(stripped[len(stripped)-1])
+			if strings.ContainsRune(".,!?;:", last) {
+				punct = string(last)
+				stripped = stripped[:len(stripped)-1]
+			}
+		}
+		lower := strings.ToLower(stripped)
 		if replacement, ok := replacements[lower]; ok {
-			words[i] = replacement
+			// Preserve leading capital if original word was capitalised
+			if len(stripped) > 0 && unicode.IsUpper([]rune(stripped)[0]) {
+				r := []rune(replacement)
+				r[0] = unicode.ToUpper(r[0])
+				replacement = string(r)
+			}
+			words[i] = replacement + punct
 		}
 	}
-	
+
 	result := strings.Join(words, " ")
-	if rand.Float32() < 0.2 {
-		result = "Hark! " + result
+
+	prefixes := []string{
+		"Hark! ",
+		"Forsooth! ",
+		"Zounds! ",
+		"Prithee, ",
+		"Methinks ",
+		"By my troth! ",
+		"O fie! ",
+		"Marry! ",
+		"'Tis said that ",
+		"Good morrow! ",
 	}
+	if rand.Float32() < 0.4 {
+		result = prefixes[rand.Intn(len(prefixes))] + result
+	}
+
+	suffixes := []string{
+		", methinks.",
+		", forsooth!",
+		", I prithee.",
+		", good soul.",
+		", 'tis so!",
+		", verily.",
+		", upon mine honour.",
+		", I dare say.",
+	}
+	if rand.Float32() < 0.3 {
+		result = result + suffixes[rand.Intn(len(suffixes))]
+	}
+
 	return truncateText(result)
 }
 
