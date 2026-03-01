@@ -101,6 +101,8 @@ type Area struct {
 	playerVotes         map[int]int
 	activeCoinflip      *CoinflipChallenge
 	lastCoinflipTime    time.Time
+	spectateMode        bool
+	spectateInvited     []int
 }
 
 type AreaData struct {
@@ -540,7 +542,57 @@ func (a *Area) Reset() {
 	a.activePoll = nil
 	a.pollVotes = nil
 	a.playerVotes = nil
+	a.spectateMode = false
+	a.spectateInvited = []int{}
 	a.mu.Unlock()
+}
+
+// SpectateMode returns whether spectate mode is enabled in the area.
+func (a *Area) SpectateMode() bool {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return a.spectateMode
+}
+
+// SetSpectateMode sets spectate mode in the area.
+func (a *Area) SetSpectateMode(b bool) {
+	a.mu.Lock()
+	a.spectateMode = b
+	if !b {
+		a.spectateInvited = []int{}
+	}
+	a.mu.Unlock()
+}
+
+// AddSpectateInvited adds a UID to the spectate IC invite list.
+func (a *Area) AddSpectateInvited(uid int) bool {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if sliceutil.ContainsInt(a.spectateInvited, uid) {
+		return false
+	}
+	a.spectateInvited = append(a.spectateInvited, uid)
+	return true
+}
+
+// RemoveSpectateInvited removes a UID from the spectate IC invite list.
+func (a *Area) RemoveSpectateInvited(uid int) bool {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	for i, id := range a.spectateInvited {
+		if id == uid {
+			a.spectateInvited = append(a.spectateInvited[:i], a.spectateInvited[i+1:]...)
+			return true
+		}
+	}
+	return false
+}
+
+// HasSpectateInvited returns whether the given UID is in the spectate IC invite list.
+func (a *Area) HasSpectateInvited(uid int) bool {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return sliceutil.ContainsInt(a.spectateInvited, uid)
 }
 
 // ForceBGList returns whether the server BG list is enforced in the area.

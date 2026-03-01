@@ -416,6 +416,13 @@ func initCommands() {
 			desc:     "Changes a moderator user's role.",
 			reqPerms: permissions.PermissionField["ADMIN"],
 		},
+		"spectate": {
+			handler:  cmdSpectate,
+			minArgs:  0,
+			usage:    "Usage: /spectate [invite|uninvite <uid1>,<uid2>...]",
+			desc:     "Toggles spectate mode, or invites/uninvites users to speak in IC during spectate mode.",
+			reqPerms: permissions.PermissionField["CM"],
+		},
 		"status": {
 			handler:  cmdStatus,
 			minArgs:  1,

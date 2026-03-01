@@ -701,6 +701,9 @@ func (client *Client) CanSpeakIC() bool {
 	case client.Area().Lock() == area.LockSpectatable && !sliceutil.ContainsInt(client.area.Invited(), client.Uid()) &&
 		!permissions.HasPermission(client.Perms(), permissions.PermissionField["BYPASS_LOCK"]):
 		return false
+	case client.Area().SpectateMode() && !client.Area().HasCM(client.Uid()) && !client.Area().HasSpectateInvited(client.Uid()) &&
+		!permissions.HasPermission(client.Perms(), permissions.PermissionField["BYPASS_LOCK"]):
+		return false
 	case client.Muted() == ICMuted || client.Muted() == ICOOCMuted:
 		return client.CheckUnmute()
 	}
