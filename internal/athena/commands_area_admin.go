@@ -821,11 +821,11 @@ func cmdSpectate(client *Client, args []string, usage string) {
 		// Toggle spectate mode
 		if client.Area().SpectateMode() {
 			client.Area().SetSpectateMode(false)
-			sendAreaServerMessage(client.Area(), fmt.Sprintf("%v disabled spectate mode.", client.OOCName()))
+			client.SendServerMessage("Spectate mode disabled.")
 			addToBuffer(client, "CMD", "Disabled spectate mode.", false)
 		} else {
 			client.Area().SetSpectateMode(true)
-			sendAreaServerMessage(client.Area(), fmt.Sprintf("%v enabled spectate mode. Only CMs and invited players can speak in IC.", client.OOCName()))
+			client.SendServerMessage("Spectate mode enabled. Only CMs and invited players can speak in IC.")
 			addToBuffer(client, "CMD", "Enabled spectate mode.", false)
 		}
 		return
