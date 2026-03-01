@@ -911,6 +911,13 @@ func initCommands() {
 			desc:     "Wraps messages in eerie, enigmatic mystery. Kukuku~",
 			reqPerms: permissions.PermissionField["MUTE"],
 		},
+		"emoticon": {
+			handler:  cmdEmoticon,
+			minArgs:  1,
+			usage:    "Usage: /emoticon [-d duration] [-r reason] <uid1>,<uid2>...",
+			desc:     "Forces user to speak only in emoticons (:P, :D, :3, etc.).",
+			reqPerms: permissions.PermissionField["MUTE"],
+		},
 		"unpunish": {
 			handler:  cmdUnpunish,
 			minArgs:  1,
@@ -3406,6 +3413,10 @@ func cmdBakadere(client *Client, args []string, usage string) {
 
 func cmdMayadere(client *Client, args []string, usage string) {
 	cmdPunishment(client, args, usage, PunishmentMayadere)
+}
+
+func cmdEmoticon(client *Client, args []string, usage string) {
+	cmdPunishment(client, args, usage, PunishmentEmoticon)
 }
 
 // cmdUnpunish removes all or specific punishments from users

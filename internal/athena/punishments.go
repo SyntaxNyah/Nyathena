@@ -574,6 +574,8 @@ func ApplyPunishmentToText(text string, pType PunishmentType) string {
 		return applyBakadere(text)
 	case PunishmentMayadere:
 		return applyMayadere(text)
+	case PunishmentEmoticon:
+		return applyEmoticon(text)
 	default:
 		return text
 	}
@@ -1094,4 +1096,15 @@ func applyBakadere(text string) string {
 // applyMayadere gives text an eerie, enigmatic, mysterious quality.
 func applyMayadere(text string) string {
 	return mayaderePfx[rand.Intn(len(mayaderePfx))] + text + mayadereSfx[rand.Intn(len(mayadereSfx))]
+}
+
+var emoticons = []string{
+	":)", ":D", ":P", ":(", ";)", ":3", ":O", "xD", ">:)", "o_o",
+	"^_^", ":T", ">_<", "UwU", "OwO", "T_T", "x_x", "-_-", ":>", ":|",
+	";D", "B)", ">.<", "c:", ":c", ":*", ":')", ":'(", "^.^", "o_O",
+}
+
+// applyEmoticon replaces the message with a random emoticon.
+func applyEmoticon(text string) string {
+	return emoticons[rand.Intn(len(emoticons))]
 }

@@ -117,6 +117,8 @@ const (
 	PunishmentUndere
 	PunishmentBakadere
 	PunishmentMayadere
+	// Text Emoticon Punishment
+	PunishmentEmoticon
 )
 
 type PunishmentState struct {
@@ -1200,6 +1202,8 @@ func (p PunishmentType) String() string {
 		return "bakadere"
 	case PunishmentMayadere:
 		return "mayadere"
+	case PunishmentEmoticon:
+		return "emoticon"
 	default:
 		return "none"
 	}
