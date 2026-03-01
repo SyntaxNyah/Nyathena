@@ -21,6 +21,7 @@ import (
 	"crypto/md5"
 	"encoding/base64"
 	"fmt"
+	"math"
 	"math/rand"
 	"net"
 	"net/http"
@@ -66,6 +67,22 @@ var (
 	connTracker = struct {
 		mu         sync.Mutex
 		timestamps map[string][]time.Time // ipid -> connection attempt timestamps
+	}{
+		timestamps: make(map[string][]time.Time),
+	}
+
+	// ipModcallTracker tracks the last modcall time per IP across connections.
+	ipModcallTracker = struct {
+		mu    sync.Mutex
+		times map[string]time.Time // ipid -> last modcall time
+	}{
+		times: make(map[string]time.Time),
+	}
+
+	// ipOOCTracker tracks OOC message timestamps per IP across connections.
+	ipOOCTracker = struct {
+		mu         sync.Mutex
+		timestamps map[string][]time.Time // ipid -> OOC message timestamps
 	}{
 		timestamps: make(map[string][]time.Time),
 	}
@@ -771,6 +788,97 @@ func startConnTrackerCleanup() {
 			}
 		}
 		connTracker.mu.Unlock()
+
+		// Clean up stale modcall entries.
+		if config.ModcallCooldown > 0 {
+			cooldown := time.Duration(config.ModcallCooldown) * time.Second
+			modcallCutoff := time.Now().Add(-cooldown)
+			ipModcallTracker.mu.Lock()
+			for ipid, t := range ipModcallTracker.times {
+				if !t.After(modcallCutoff) {
+					delete(ipModcallTracker.times, ipid)
+				}
+			}
+			ipModcallTracker.mu.Unlock()
+		}
+
+		// Clean up stale OOC rate limit entries.
+		if config.OOCRateLimitWindow > 0 {
+			oocWindow := time.Duration(config.OOCRateLimitWindow) * time.Second
+			oocCutoff := time.Now().Add(-oocWindow)
+			ipOOCTracker.mu.Lock()
+			for ipid, times := range ipOOCTracker.timestamps {
+				valid := make([]time.Time, 0, len(times))
+				for _, t := range times {
+					if t.After(oocCutoff) {
+						valid = append(valid, t)
+					}
+				}
+				if len(valid) == 0 {
+					delete(ipOOCTracker.timestamps, ipid)
+				} else {
+					ipOOCTracker.timestamps[ipid] = valid
+				}
+			}
+			ipOOCTracker.mu.Unlock()
+		}
 	}
+}
+
+// checkIPModcallCooldown checks if the given IPID is within the modcall cooldown period.
+// Unlike the per-client check, this persists across connections, preventing bypass via reconnection.
+// Returns true (and remaining seconds, rounded up) if the IPID must wait, false otherwise.
+func checkIPModcallCooldown(ipid string) (bool, int) {
+	if config.ModcallCooldown <= 0 {
+		return false, 0
+	}
+	ipModcallTracker.mu.Lock()
+	defer ipModcallTracker.mu.Unlock()
+	last, exists := ipModcallTracker.times[ipid]
+	if !exists {
+		return false, 0
+	}
+	elapsed := time.Since(last)
+	cooldown := time.Duration(config.ModcallCooldown) * time.Second
+	if elapsed < cooldown {
+		remaining := int(math.Ceil((cooldown - elapsed).Seconds()))
+		return true, remaining
+	}
+	return false, 0
+}
+
+// setIPModcallTime records the current time as the last modcall time for the given IPID.
+func setIPModcallTime(ipid string) {
+	ipModcallTracker.mu.Lock()
+	ipModcallTracker.times[ipid] = time.Now()
+	ipModcallTracker.mu.Unlock()
+}
+
+// checkIPOOCRateLimit checks if the given IPID has exceeded the OOC message rate limit.
+// Unlike the per-client check, this persists across connections, preventing bypass via reconnection.
+// Returns true if the packet should be dropped, false if allowed.
+func checkIPOOCRateLimit(ipid string) bool {
+	if config.OOCRateLimit <= 0 {
+		return false
+	}
+	ipOOCTracker.mu.Lock()
+	defer ipOOCTracker.mu.Unlock()
+	now := time.Now()
+	window := time.Duration(config.OOCRateLimitWindow) * time.Second
+	cutoff := now.Add(-window)
+	times := ipOOCTracker.timestamps[ipid]
+	valid := make([]time.Time, 0, len(times))
+	for _, t := range times {
+		if t.After(cutoff) {
+			valid = append(valid, t)
+		}
+	}
+	if len(valid) >= config.OOCRateLimit {
+		ipOOCTracker.timestamps[ipid] = valid
+		return true
+	}
+	valid = append(valid, now)
+	ipOOCTracker.timestamps[ipid] = valid
+	return false
 }
 
