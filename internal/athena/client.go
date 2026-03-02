@@ -171,6 +171,7 @@ type Client struct {
 	forcePairUID    int         // UID of the client this client is force-paired with (-1 if none)
 	possessing      int         // UID of the client being possessed (-1 if not possessing anyone)
 	possessedPos    string      // Position of the possessed target (saved at time of possession)
+	joinTime        time.Time   // Time when the client completed joining the server
 }
 
 // NewClient returns a new client.

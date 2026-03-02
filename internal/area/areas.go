@@ -103,6 +103,7 @@ type Area struct {
 	lastCoinflipTime    time.Time
 	spectateMode        bool
 	spectateInvited     []int
+	lastOOCMsg          string
 }
 
 type AreaData struct {
@@ -849,5 +850,19 @@ func (a *Area) ClearPoll() {
 	a.activePoll = nil
 	a.pollVotes = nil
 	a.playerVotes = nil
+	a.mu.Unlock()
+}
+
+// LastOOCMsg returns the last OOC message sent in the area.
+func (a *Area) LastOOCMsg() string {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return a.lastOOCMsg
+}
+
+// SetLastOOCMsg sets the last OOC message sent in the area.
+func (a *Area) SetLastOOCMsg(msg string) {
+	a.mu.Lock()
+	a.lastOOCMsg = msg
 	a.mu.Unlock()
 }

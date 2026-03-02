@@ -20,10 +20,12 @@ import (
 	"crypto/md5"
 	"encoding/base64"
 	"fmt"
+	"math"
 	"math/rand"
 	"regexp"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/MangosArentLiterature/Athena/internal/area"
 	"github.com/MangosArentLiterature/Athena/internal/db"
@@ -131,6 +133,7 @@ func pktReqDone(client *Client, _ *packet.Packet) {
 		return
 	}
 	client.SetUid(uids.GetUid())
+	client.joinTime = time.Now()
 	players.AddPlayer()
 	if config.Advertise {
 		updatePlayers <- players.GetPlayerCount()
@@ -741,7 +744,12 @@ func pktOOC(client *Client, p *packet.Packet) {
 		client.SendServerMessage("You are muted from speaking in OOC.")
 		return
 	}
+	if strings.EqualFold(strings.TrimSpace(p.Body[1]), client.Area().LastOOCMsg()) {
+		client.SendServerMessage("Duplicate OOC messages are not allowed.")
+		return
+	}
 	writeToArea(client.Area(), "CT", encode(client.OOCName()), p.Body[1], "0")
+	client.Area().SetLastOOCMsg(strings.TrimSpace(p.Body[1]))
 	addToBuffer(client, "OOC", "\""+p.Body[1]+"\"", false)
 }
 
@@ -796,6 +804,16 @@ func pktPing(client *Client, _ *packet.Packet) {
 
 // Handles ZZ#%
 func pktModcall(client *Client, p *packet.Packet) {
+	const modcallJoinWait = 60 * time.Second
+	if elapsed := time.Since(client.joinTime); elapsed < modcallJoinWait {
+		remaining := int(math.Ceil((modcallJoinWait - elapsed).Seconds()))
+		unit := "seconds"
+		if remaining == 1 {
+			unit = "second"
+		}
+		client.SendServerMessage(fmt.Sprintf("You must wait %d %s after joining before sending a modcall.", remaining, unit))
+		return
+	}
 	if limited, remaining := checkIPModcallCooldown(client.Ipid()); limited {
 		unit := "seconds"
 		if remaining == 1 {

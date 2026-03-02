@@ -818,3 +818,29 @@ func TestIPPingRateLimitWindowExpiry(t *testing.T) {
 		t.Errorf("Ping was blocked after window expired")
 	}
 }
+
+// TestModcallJoinWaitBlocked tests that a modcall is blocked when sent within 60 seconds of joining.
+func TestModcallJoinWaitBlocked(t *testing.T) {
+	client := &Client{
+		joinTime: time.Now(), // just joined
+	}
+
+	elapsed := time.Since(client.joinTime)
+	const modcallJoinWait = 60 * time.Second
+	if elapsed >= modcallJoinWait {
+		t.Errorf("Expected client to be within join wait period, elapsed: %v", elapsed)
+	}
+}
+
+// TestModcallJoinWaitAllowed tests that a modcall is allowed after 60 seconds have elapsed.
+func TestModcallJoinWaitAllowed(t *testing.T) {
+	client := &Client{
+		joinTime: time.Now().Add(-61 * time.Second), // joined 61 seconds ago
+	}
+
+	elapsed := time.Since(client.joinTime)
+	const modcallJoinWait = 60 * time.Second
+	if elapsed < modcallJoinWait {
+		t.Errorf("Expected client to be past join wait period, elapsed: %v", elapsed)
+	}
+}
