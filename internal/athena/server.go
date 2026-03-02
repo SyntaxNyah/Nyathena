@@ -179,6 +179,18 @@ func NewServer(conf *settings.Config) (*Server, error) {
 		logger.LogErrorf("Failed to purge expired punishments: %v", err)
 	}
 
+	// Prune KNOWN_IPS rows that have not been seen within the configured retention window.
+	// This keeps the table lean and ensures long-inactive IPs are subject to new-IP
+	// cooldowns if they ever reconnect.  A failure here is non-fatal.
+	if conf.IPRetentionDays > 0 {
+		cutoff := time.Now().AddDate(0, 0, -conf.IPRetentionDays).Unix()
+		if n, err := db.PruneInactiveIPs(cutoff); err != nil {
+			logger.LogErrorf("Failed to prune inactive IPs: %v", err)
+		} else if n > 0 {
+			logger.LogInfof("Pruned %d inactive IP(s) not seen in the last %d day(s).", n, conf.IPRetentionDays)
+		}
+	}
+
 	// Pre-populate the in-memory first-seen tracker with IPs that were seen in
 	// previous server sessions.  This ensures returning players are never treated
 	// as "new" by the global new-IP rate limiter after a restart.
@@ -428,6 +440,13 @@ func (s *Server) ListenTCP() {
 			continue
 		}
 		recordIPFirstSeen(ipid)
+		// Persist the IP and update its last-seen timestamp for all connections
+		// (new and returning). The upsert keeps FIRST_SEEN intact for existing rows.
+		go func(id string) {
+			if err := db.MarkIPKnown(id); err != nil {
+				logger.LogErrorf("Failed to update known IP %s: %v", id, err)
+			}
+		}(ipid)
 		if logger.DebugNetwork {
 			logger.LogDebugf("Connection received from %v", ipid)
 		}
@@ -519,6 +538,13 @@ func HandleWS(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	recordIPFirstSeen(ipid)
+	// Persist the IP and update its last-seen timestamp for all connections
+	// (new and returning). The upsert keeps FIRST_SEEN intact for existing rows.
+	go func(id string) {
+		if err := db.MarkIPKnown(id); err != nil {
+			logger.LogErrorf("Failed to update known IP %s: %v", id, err)
+		}
+	}(ipid)
 	c, err := websocket.Accept(w, r, &websocket.AcceptOptions{OriginPatterns: []string{"*"}})
 	if err != nil {
 		logger.LogError(err.Error())
@@ -810,6 +836,21 @@ func checkConnRateLimit(ipid string) bool {
 	return len(valid) > config.ConnRateLimit
 }
 
+// forgetIP removes an IPID from the in-memory first-seen tracker and from the
+// KNOWN_IPS database table. This is called when an IP is banned so that, once the
+// ban expires, the IP will be treated as new again (subject to cooldowns and rate limits).
+func forgetIP(ipid string) {
+	ipFirstSeenTracker.mu.Lock()
+	delete(ipFirstSeenTracker.times, ipid)
+	ipFirstSeenTracker.mu.Unlock()
+
+	go func() {
+		if err := db.RemoveKnownIP(ipid); err != nil {
+			logger.LogErrorf("Failed to remove banned IP %s from known IPs: %v", ipid, err)
+		}
+	}()
+}
+
 // autoBanFlooder adds a temporary ban for an IP that has exceeded the connection rate limit.
 // If the IP is already banned, no additional ban is added.
 func autoBanFlooder(ipid string) {
@@ -827,6 +868,7 @@ func autoBanFlooder(ipid string) {
 		logger.LogErrorf("Failed to auto-ban flooder %v: %v", ipid, err)
 		return
 	}
+	forgetIP(ipid)
 	logger.LogInfof("Auto-banned %v for connection flooding", ipid)
 }
 
@@ -1017,11 +1059,13 @@ func checkIPPingRateLimit(ipid string) bool {
 }
 
 // recordIPFirstSeen records the first time an IPID connects to this server session.
-// If the IPID has already been seen, this is a no-op; entries are never removed so that
-// returning IPIDs are never mistakenly treated as new again.
+// If the IPID has already been seen this call is a no-op for the in-memory tracker.
+// Entries are normally kept indefinitely so that returning players are never treated
+// as new again; however, banned IPs are explicitly removed via forgetIP so that a
+// reconnect after a ban expiry is subject to new-connection cooldowns.
 // When a genuinely new IPID is recorded, a timestamp is also pushed to globalNewIPTracker
-// for global new-connection rate limiting, and the IPID is persisted to the database so
-// that it survives server restarts and is never treated as new on reconnect.
+// for global new-connection rate limiting.
+// NOTE: the caller is responsible for persisting the IP to the database (db.MarkIPKnown).
 func recordIPFirstSeen(ipid string) {
 	ipFirstSeenTracker.mu.Lock()
 	if _, exists := ipFirstSeenTracker.times[ipid]; exists {
@@ -1037,14 +1081,6 @@ func recordIPFirstSeen(ipid string) {
 	globalNewIPTracker.mu.Lock()
 	globalNewIPTracker.timestamps = append(globalNewIPTracker.timestamps, time.Now())
 	globalNewIPTracker.mu.Unlock()
-
-	// Persist the new IP to the database asynchronously so the connection handler
-	// is not blocked by a disk write.  INSERT OR IGNORE means duplicate calls are safe.
-	go func() {
-		if err := db.MarkIPKnown(ipid); err != nil {
-			logger.LogErrorf("Failed to persist known IP %s: %v", ipid, err)
-		}
-	}()
 }
 
 // checkNewIPIDOOCCooldown checks whether a newly-seen IPID is still within the OOC chat cooldown.

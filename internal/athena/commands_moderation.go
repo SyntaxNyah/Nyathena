@@ -85,6 +85,7 @@ func cmdBan(client *Client, args []string, usage string) {
 			}
 			c.SendPacket("KB", fmt.Sprintf("%v\nUntil: %v\nID: %v", reason, untilS, id))
 			c.conn.Close()
+			forgetIP(c.Ipid())
 			count++
 			if err := webhook.PostBan(c.CurrentCharacter(), c.Showname(), c.OOCName(), c.Ipid(), c.Uid(), id, *duration, reason, client.ModName()); err != nil {
 				logger.LogErrorf("while posting ban webhook: %v", err)
@@ -99,6 +100,7 @@ func cmdBan(client *Client, args []string, usage string) {
 				if err != nil {
 					continue
 				}
+				forgetIP(ipid)
 				if err := webhook.PostBan("N/A", "N/A", "N/A", ipid, -1, id, *duration, reason, client.ModName()); err != nil {
 					logger.LogErrorf("while posting ban webhook: %v", err)
 				}
@@ -118,6 +120,7 @@ func cmdBan(client *Client, args []string, usage string) {
 				if len(banIDByHdid) == 0 {
 					continue
 				}
+				forgetIP(ipid)
 				for _, c := range onlineClients {
 					if id, ok := banIDByHdid[c.Hdid()]; ok {
 						c.SendPacket("KB", fmt.Sprintf("%v\nUntil: %v\nID: %v", reason, untilS, id))
