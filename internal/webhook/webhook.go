@@ -34,6 +34,16 @@ var (
 	PunishmentWebhookURL string
 )
 
+// nonEmpty returns s if non-empty, otherwise "N/A".
+// This prevents Discord webhook 400 errors caused by embed fields
+// with empty values (the Discord API requires every field to have a value).
+func nonEmpty(s string) string {
+	if s == "" {
+		return "N/A"
+	}
+	return s
+}
+
 // postToURL posts a discord message to the given webhook URL directly,
 // bypassing the global discord.WebhookURL variable.
 func postToURL(url string, content discord.PostOptions) error {
@@ -69,15 +79,15 @@ func PostBan(icName, showname, oocName, ipid string, uid, banID int, duration, r
 		Title: "🔨 Player Banned",
 		Color: 0xe74c3c,
 		Fields: []discord.Field{
-			{Name: "IC Name", Value: icName, Inline: true},
-			{Name: "Showname", Value: showname, Inline: true},
-			{Name: "OOC Name", Value: oocName, Inline: true},
-			{Name: "IPID", Value: ipid, Inline: true},
+			{Name: "IC Name", Value: nonEmpty(icName), Inline: true},
+			{Name: "Showname", Value: nonEmpty(showname), Inline: true},
+			{Name: "OOC Name", Value: nonEmpty(oocName), Inline: true},
+			{Name: "IPID", Value: nonEmpty(ipid), Inline: true},
 			{Name: "UID", Value: uidVal, Inline: true},
 			{Name: "Ban ID", Value: fmt.Sprintf("%d", banID), Inline: true},
-			{Name: "Duration", Value: duration, Inline: true},
-			{Name: "Reason", Value: reason, Inline: false},
-			{Name: "Moderator", Value: moderator, Inline: true},
+			{Name: "Duration", Value: nonEmpty(duration), Inline: true},
+			{Name: "Reason", Value: nonEmpty(reason), Inline: false},
+			{Name: "Moderator", Value: nonEmpty(moderator), Inline: true},
 		},
 	}
 	p := discord.PostOptions{
@@ -96,13 +106,13 @@ func PostKick(icName, showname, oocName, ipid, reason, moderator string, uid int
 		Title: "👢 Player Kicked",
 		Color: 0xe67e22,
 		Fields: []discord.Field{
-			{Name: "IC Name", Value: icName, Inline: true},
-			{Name: "Showname", Value: showname, Inline: true},
-			{Name: "OOC Name", Value: oocName, Inline: true},
-			{Name: "IPID", Value: ipid, Inline: true},
+			{Name: "IC Name", Value: nonEmpty(icName), Inline: true},
+			{Name: "Showname", Value: nonEmpty(showname), Inline: true},
+			{Name: "OOC Name", Value: nonEmpty(oocName), Inline: true},
+			{Name: "IPID", Value: nonEmpty(ipid), Inline: true},
 			{Name: "UID", Value: fmt.Sprintf("%d", uid), Inline: true},
-			{Name: "Reason", Value: reason, Inline: false},
-			{Name: "Moderator", Value: moderator, Inline: true},
+			{Name: "Reason", Value: nonEmpty(reason), Inline: false},
+			{Name: "Moderator", Value: nonEmpty(moderator), Inline: true},
 		},
 	}
 	p := discord.PostOptions{
@@ -127,11 +137,11 @@ func PostUnban(banID int, ipid, originalReason, originalDuration, originalModera
 		Color: 0x2ecc71,
 		Fields: []discord.Field{
 			{Name: "Ban ID", Value: fmt.Sprintf("%d", banID), Inline: true},
-			{Name: "IPID", Value: ipid, Inline: true},
-			{Name: "Original Duration", Value: originalDuration, Inline: true},
-			{Name: "Original Reason", Value: originalReason, Inline: false},
-			{Name: "Originally Banned By", Value: originalModerator, Inline: true},
-			{Name: "Unbanned By", Value: unbannedBy, Inline: true},
+			{Name: "IPID", Value: nonEmpty(ipid), Inline: true},
+			{Name: "Original Duration", Value: nonEmpty(originalDuration), Inline: true},
+			{Name: "Original Reason", Value: nonEmpty(originalReason), Inline: false},
+			{Name: "Originally Banned By", Value: nonEmpty(originalModerator), Inline: true},
+			{Name: "Unbanned By", Value: nonEmpty(unbannedBy), Inline: true},
 		},
 	}
 	p := discord.PostOptions{
