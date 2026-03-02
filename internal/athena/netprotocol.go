@@ -709,6 +709,12 @@ func pktOOC(client *Client, p *packet.Packet) {
 
 	// Check OOC-specific rate limit per IP; persists across connections to prevent bypass via reconnection.
 	if checkIPOOCRateLimit(client.Ipid()) {
+		if config.PacketFloodAutoban {
+			autoBanSpammer(client.Ipid())
+			client.SendPacket("BD", "You have been automatically banned for OOC flooding.")
+			logger.LogInfof("Client (IPID:%v UID:%v) banned for OOC flooding", client.Ipid(), client.Uid())
+			client.conn.Close()
+		}
 		return
 	}
 
@@ -817,6 +823,10 @@ func pktPing(client *Client, _ *packet.Packet) {
 
 // Handles ZZ#%
 func pktModcall(client *Client, p *packet.Packet) {
+	if client.CheckRateLimit() {
+		client.KickForRateLimit()
+		return
+	}
 	if limited, remaining := checkIPJoinWait(client.Ipid()); limited {
 		unit := "seconds"
 		if remaining == 1 {

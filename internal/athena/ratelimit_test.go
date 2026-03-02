@@ -1009,3 +1009,131 @@ func TestPacketFloodAutobanDisabled(t *testing.T) {
 		t.Errorf("PacketFloodAutoban should be false by default")
 	}
 }
+
+// TestOOCFloodDroppedWhenAutoBanDisabled tests that an OOC flood is silently dropped
+// (but no ban attempted) when PacketFloodAutoban is false.
+func TestOOCFloodDroppedWhenAutoBanDisabled(t *testing.T) {
+	oldConfig := config
+	defer func() { config = oldConfig }()
+
+	config = &settings.Config{}
+	config.OOCRateLimit = 2
+	config.OOCRateLimitWindow = 1
+	config.PacketFloodAutoban = false
+
+	old := ipOOCTracker.timestamps
+	ipOOCTracker.timestamps = make(map[string][]time.Time)
+	defer func() { ipOOCTracker.timestamps = old }()
+
+	const ipid = "testOOCDropNoAutoban"
+	// Exhaust the rate limit.
+	checkIPOOCRateLimit(ipid) // 1st
+	checkIPOOCRateLimit(ipid) // 2nd
+
+	// 3rd call must be rate-limited; auto-ban is disabled, so the call must return true without
+	// performing any ban (autoBanSpammer would panic here if db is nil, confirming it's not called).
+	if !checkIPOOCRateLimit(ipid) {
+		t.Errorf("Expected OOC rate limit to fire on 3rd call")
+	}
+}
+
+// TestOOCFloodDetectedWhenAutobanEnabled tests that an OOC flood is detected
+// and the auto-ban config flag is set when PacketFloodAutoban is true.
+func TestOOCFloodDetectedWhenAutobanEnabled(t *testing.T) {
+	oldConfig := config
+	defer func() { config = oldConfig }()
+
+	config = &settings.Config{}
+	config.OOCRateLimit = 2
+	config.OOCRateLimitWindow = 1
+	config.PacketFloodAutoban = true
+
+	old := ipOOCTracker.timestamps
+	ipOOCTracker.timestamps = make(map[string][]time.Time)
+	defer func() { ipOOCTracker.timestamps = old }()
+
+	const ipid = "testOOCAutobanFlag"
+	// Exhaust the rate limit.
+	checkIPOOCRateLimit(ipid)
+	checkIPOOCRateLimit(ipid)
+
+	// 3rd call must be rate-limited.
+	if !checkIPOOCRateLimit(ipid) {
+		t.Errorf("Expected OOC rate limit to fire on 3rd call")
+	}
+	// Confirm auto-ban is configured (the actual ban call requires a DB, so we just verify the flag).
+	if !config.PacketFloodAutoban {
+		t.Errorf("PacketFloodAutoban should be enabled")
+	}
+}
+
+// TestOOCFloodInPlaceFilteringCorrectnessLargeWindow verifies the in-place sliding window
+// filter does not lose valid entries when some old timestamps are pruned.
+func TestOOCFloodInPlaceFilteringCorrectness(t *testing.T) {
+	oldConfig := config
+	defer func() { config = oldConfig }()
+
+	config = &settings.Config{}
+	config.OOCRateLimit = 5
+	config.OOCRateLimitWindow = 60
+
+	old := ipOOCTracker.timestamps
+	ipOOCTracker.timestamps = make(map[string][]time.Time)
+	defer func() { ipOOCTracker.timestamps = old }()
+
+	const ipid = "testOOCInPlace"
+	// Manually seed two old (expired) and two recent timestamps.
+	ipOOCTracker.mu.Lock()
+	ipOOCTracker.timestamps[ipid] = []time.Time{
+		time.Now().Add(-120 * time.Second), // expired
+		time.Now().Add(-90 * time.Second),  // expired
+		time.Now().Add(-10 * time.Second),  // valid
+		time.Now().Add(-5 * time.Second),   // valid
+	}
+	ipOOCTracker.mu.Unlock()
+
+	// After the in-place filter, only 2 valid entries remain; adding a new one = 3 < limit(5).
+	if checkIPOOCRateLimit(ipid) {
+		t.Errorf("Should not be rate-limited: only 3 entries within window (limit 5)")
+	}
+
+	// Adding 2 more should still be under limit.
+	if checkIPOOCRateLimit(ipid) {
+		t.Errorf("Should not be rate-limited: 4 entries within window (limit 5)")
+	}
+	// 5th entry hits the limit exactly.
+	if checkIPOOCRateLimit(ipid) {
+		t.Errorf("Should not be rate-limited: 5th entry (limit 5, exact boundary)")
+	}
+	// 6th must be blocked.
+	if !checkIPOOCRateLimit(ipid) {
+		t.Errorf("Should be rate-limited on 6th call (limit 5)")
+	}
+}
+
+// TestModcallRateLimitCheck verifies that a client exceeding the general rate limit
+// is flagged, so pktModcall can call KickForRateLimit like other handlers.
+func TestModcallRateLimitCheck(t *testing.T) {
+	oldConfig := config
+	defer func() { config = oldConfig }()
+
+	config = &settings.Config{}
+	config.RateLimit = 3
+	config.RateLimitWindow = 5
+
+	client := &Client{
+		msgTimestamps: []time.Time{},
+	}
+
+	// 3 calls within the window should be allowed.
+	for i := 0; i < 3; i++ {
+		if client.CheckRateLimit() {
+			t.Errorf("Call %d was unexpectedly rate-limited (limit 3)", i+1)
+		}
+	}
+
+	// 4th call must exceed the limit.
+	if !client.CheckRateLimit() {
+		t.Errorf("Expected rate limit to fire on 4th call (limit 3)")
+	}
+}

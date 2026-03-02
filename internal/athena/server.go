@@ -742,20 +742,22 @@ func checkConnRateLimit(ipid string) bool {
 	window := time.Duration(config.ConnRateLimitWindow) * time.Second
 	cutoff := now.Add(-window)
 
-	// Prune timestamps outside the current window.
+	// Prune timestamps outside the current window (in-place to avoid heap allocation).
 	times := connTracker.timestamps[ipid]
-	valid := make([]time.Time, 0, len(times))
+	n := 0
 	for _, t := range times {
 		if t.After(cutoff) {
-			valid = append(valid, t)
+			times[n] = t
+			n++
 		}
 	}
+	times = times[:n]
 
 	// Record this attempt regardless of outcome, so floods are always counted.
-	valid = append(valid, now)
-	connTracker.timestamps[ipid] = valid
+	times = append(times, now)
+	connTracker.timestamps[ipid] = times
 
-	return len(valid) > config.ConnRateLimit
+	return len(times) > config.ConnRateLimit
 }
 
 // autoBanFlooder adds a temporary ban for an IP that has exceeded the connection rate limit.
@@ -959,6 +961,8 @@ func checkIPJoinWait(ipid string) (bool, int) {
 // checkIPOOCRateLimit checks if the given IPID has exceeded the OOC message rate limit.
 // Unlike the per-client check, this persists across connections, preventing bypass via reconnection.
 // Returns true if the packet should be dropped, false if allowed.
+// The slice is filtered in-place to reuse the backing array; append only allocates when the
+// slice capacity must grow (amortized), avoiding a guaranteed per-call allocation.
 func checkIPOOCRateLimit(ipid string) bool {
 	if config.OOCRateLimit <= 0 {
 		return false
@@ -969,24 +973,26 @@ func checkIPOOCRateLimit(ipid string) bool {
 	window := time.Duration(config.OOCRateLimitWindow) * time.Second
 	cutoff := now.Add(-window)
 	times := ipOOCTracker.timestamps[ipid]
-	valid := make([]time.Time, 0, len(times))
+	n := 0
 	for _, t := range times {
 		if t.After(cutoff) {
-			valid = append(valid, t)
+			times[n] = t
+			n++
 		}
 	}
-	if len(valid) >= config.OOCRateLimit {
-		ipOOCTracker.timestamps[ipid] = valid
+	times = times[:n]
+	if len(times) >= config.OOCRateLimit {
+		ipOOCTracker.timestamps[ipid] = times
 		return true
 	}
-	valid = append(valid, now)
-	ipOOCTracker.timestamps[ipid] = valid
+	ipOOCTracker.timestamps[ipid] = append(times, now)
 	return false
 }
 
 // checkIPPingRateLimit checks if the given IPID has exceeded the ping (CH) rate limit.
 // This persists across connections, preventing bypass via reconnection.
 // Returns true if the ping should be dropped, false if allowed.
+// The slice is filtered in-place; append only allocates on amortized capacity growth.
 func checkIPPingRateLimit(ipid string) bool {
 	if config.PingRateLimit <= 0 {
 		return false
@@ -997,18 +1003,19 @@ func checkIPPingRateLimit(ipid string) bool {
 	window := time.Duration(config.PingRateLimitWindow) * time.Second
 	cutoff := now.Add(-window)
 	times := ipPingTracker.timestamps[ipid]
-	valid := make([]time.Time, 0, len(times))
+	n := 0
 	for _, t := range times {
 		if t.After(cutoff) {
-			valid = append(valid, t)
+			times[n] = t
+			n++
 		}
 	}
-	if len(valid) >= config.PingRateLimit {
-		ipPingTracker.timestamps[ipid] = valid
+	times = times[:n]
+	if len(times) >= config.PingRateLimit {
+		ipPingTracker.timestamps[ipid] = times
 		return true
 	}
-	valid = append(valid, now)
-	ipPingTracker.timestamps[ipid] = valid
+	ipPingTracker.timestamps[ipid] = append(times, now)
 	return false
 }
 
