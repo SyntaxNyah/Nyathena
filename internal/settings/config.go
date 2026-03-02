@@ -80,11 +80,12 @@ type ServerConfig struct {
 }
 
 type LogConfig struct {
-	BufSize          int      `toml:"log_buffer_size"`
-	LogLevel         string   `toml:"log_level"`
-	LogDir           string   `toml:"log_directory"`
-	LogMethods       []string `toml:"log_methods"`
-	EnableAreaLogging bool    `toml:"enable_area_logging"`
+	BufSize           int      `toml:"log_buffer_size"`
+	LogLevel          string   `toml:"log_level"`
+	LogDir            string   `toml:"log_directory"`
+	LogMethods        []string `toml:"log_methods"`
+	EnableAreaLogging bool     `toml:"enable_area_logging"`
+	EnableNetworkLog  bool     `toml:"enable_network_logging"`
 }
 
 type MSConfig struct {
@@ -142,6 +143,7 @@ func defaultConfig() *Config {
 			LogDir:            "logs",
 			LogMethods:        []string{"stdout"},
 			EnableAreaLogging: false,
+			EnableNetworkLog:  false,
 		},
 		MSConfig{
 			Advertise: false,

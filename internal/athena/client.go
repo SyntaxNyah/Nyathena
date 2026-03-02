@@ -22,6 +22,7 @@ import (
 	"fmt"
 	"math"
 	"net"
+	"runtime/debug"
 	"strconv"
 	"strings"
 	"sync"
@@ -189,7 +190,13 @@ func NewClient(conn net.Conn, ipid string) *Client {
 
 // handleClient handles a client connection to the server.
 func (client *Client) HandleClient() {
-	defer client.clientCleanup()
+	defer func() {
+		if r := recover(); r != nil {
+			logger.WriteNetworkLog(client.Hdid(), client.Ipid(), "CRASH", fmt.Sprintf("panic: %v\nstack: %s", r, debug.Stack()))
+			logger.LogErrorf("panic in HandleClient for IPID:%v: %v", client.Ipid(), r)
+		}
+		client.clientCleanup()
+	}()
 
 	client.CheckBanned(db.IPID)
 
@@ -228,10 +235,12 @@ func (client *Client) HandleClient() {
 	input.Split(splitfn) // Split input when a packet delimiter ('%') is found
 
 	for input.Scan() {
+		raw := strings.TrimSpace(input.Text())
 		if logger.DebugNetwork {
-			logger.LogDebugf("From %v: %v", client.ipid, strings.TrimSpace(input.Text()))
+			logger.LogDebugf("From %v: %v", client.ipid, raw)
 		}
-		packet, err := packet.NewPacket(strings.TrimSpace(input.Text()))
+		logger.WriteNetworkLog(client.Hdid(), client.Ipid(), "RECV", raw)
+		packet, err := packet.NewPacket(raw)
 		if err != nil {
 			continue // Discard invalid packets
 		}
@@ -253,6 +262,7 @@ func (client *Client) write(message string) {
 	if logger.DebugNetwork {
 		logger.LogDebugf("To %v: %v", client.ipid, message)
 	}
+	logger.WriteNetworkLog(client.Hdid(), client.Ipid(), "SEND", message)
 	client.mu.Unlock()
 }
 

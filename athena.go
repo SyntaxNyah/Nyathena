@@ -68,6 +68,7 @@ func main() {
 	logger.LogStdOut = sliceutil.ContainsString(config.LogMethods, "stdout")
 	logger.LogFile = sliceutil.ContainsString(config.LogMethods, "log_file")
 	logger.DebugNetwork = *netDebugFlag
+	logger.EnableNetworkLog = config.EnableNetworkLog
 	db.DBPath = settings.ConfigPath + "/athena.db"
 
 	err = athena.InitServer(config)

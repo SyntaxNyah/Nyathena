@@ -51,8 +51,10 @@ var (
 	CurrentLevel      LogLevel
 	outputLock        sync.Mutex
 	fileLock          sync.Mutex
+	networkLogLock    sync.Mutex
 	DebugNetwork      bool
 	EnableAreaLogging bool
+	EnableNetworkLog  bool
 	areaLogLocks      sync.Map // Map of area names to their respective locks
 )
 
@@ -153,6 +155,29 @@ func WriteAudit(s string) {
 	if err != nil {
 		LogError(err.Error())
 		return
+	}
+}
+
+// WriteNetworkLog writes a network packet entry to the network log file.
+// direction should be "RECV" (incoming) or "SEND" (outgoing).
+// Set content to a panic message for crash log entries.
+func WriteNetworkLog(hdid, ipid, direction, content string) {
+	if !EnableNetworkLog {
+		return
+	}
+	networkLogLock.Lock()
+	defer networkLogLock.Unlock()
+	f, err := os.OpenFile(LogPath+"/network.log", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
+	if err != nil {
+		LogError(err.Error())
+		return
+	}
+	defer f.Close()
+	entry := fmt.Sprintf("[%v] %v | IPID:%v | HDID:%v | %v\n",
+		time.Now().UTC().Format(time.RFC3339), direction, ipid, hdid, content)
+	_, err = f.WriteString(entry)
+	if err != nil {
+		LogError(err.Error())
 	}
 }
 

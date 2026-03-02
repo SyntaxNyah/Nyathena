@@ -256,6 +256,13 @@ log_methods = [ "stdout" ]
 # Each log line includes: [HH:MM:SS] | ACTION | CHARACTER | IPID | HDID | SHOWNAME | OOC_NAME | MESSAGE
 enable_area_logging = false
 
+# Enable network packet logging to logs/network.log.
+# When enabled, every incoming and outgoing packet is recorded with timestamp, direction,
+# IPID, HDID, and packet content. Crash/panic events are also written to this log.
+# Format: [TIMESTAMP] RECV/SEND/CRASH | IPID:<ipid> | HDID:<hdid> | <packet>
+# Note: This can generate large log files on busy servers.
+enable_network_logging = false
+
 [MasterServer]
 
 # Whether or not to advertise your server on the master server, which will make it discoverable by players.
