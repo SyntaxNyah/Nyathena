@@ -209,6 +209,18 @@ ooc_rate_limit = 4
 # Default: 1 second
 ooc_rate_limit_window = 1
 
+# Ping rate limiting: Maximum number of ping (CH) packets an IP can send within the ping rate limit window.
+# Ping packets that exceed this limit are silently dropped, preventing ping flooding even from new connections.
+# Set to 0 to disable ping rate limiting.
+# Default: 10 pings
+ping_rate_limit = 10
+
+# Ping rate limiting: Time window in seconds for counting ping packets.
+# For example, with ping_rate_limit=10 and ping_rate_limit_window=5,
+# an IP may send at most 10 pings every 5 seconds.
+# Default: 5 seconds
+ping_rate_limit_window = 5
+
 [Logging]
 # Sets the number of actions (IC chat messages, OOC chat messages, judge actions, etc.) each area should store.
 # When a user calls a mod, this buffer will be flushed to a report file for review.

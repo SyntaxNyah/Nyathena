@@ -788,6 +788,9 @@ func pktEditEvi(client *Client, p *packet.Packet) {
 
 // Handles CH#%
 func pktPing(client *Client, _ *packet.Packet) {
+	if checkIPPingRateLimit(client.Ipid()) {
+		return
+	}
 	client.SendPacket("CHECK")
 }
 

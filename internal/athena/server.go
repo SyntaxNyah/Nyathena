@@ -87,6 +87,14 @@ var (
 		timestamps: make(map[string][]time.Time),
 	}
 
+	// ipPingTracker tracks ping (CH) packet timestamps per IP across connections.
+	ipPingTracker = struct {
+		mu         sync.Mutex
+		timestamps map[string][]time.Time // ipid -> ping timestamps
+	}{
+		timestamps: make(map[string][]time.Time),
+	}
+
 	// Tournament mode state
 	tournamentActive       bool
 	tournamentMutex        sync.Mutex
@@ -822,6 +830,27 @@ func startConnTrackerCleanup() {
 			}
 			ipOOCTracker.mu.Unlock()
 		}
+
+		// Clean up stale ping rate limit entries.
+		if config.PingRateLimitWindow > 0 {
+			pingWindow := time.Duration(config.PingRateLimitWindow) * time.Second
+			pingCutoff := time.Now().Add(-pingWindow)
+			ipPingTracker.mu.Lock()
+			for ipid, times := range ipPingTracker.timestamps {
+				valid := make([]time.Time, 0, len(times))
+				for _, t := range times {
+					if t.After(pingCutoff) {
+						valid = append(valid, t)
+					}
+				}
+				if len(valid) == 0 {
+					delete(ipPingTracker.timestamps, ipid)
+				} else {
+					ipPingTracker.timestamps[ipid] = valid
+				}
+			}
+			ipPingTracker.mu.Unlock()
+		}
 	}
 }
 
@@ -879,6 +908,34 @@ func checkIPOOCRateLimit(ipid string) bool {
 	}
 	valid = append(valid, now)
 	ipOOCTracker.timestamps[ipid] = valid
+	return false
+}
+
+// checkIPPingRateLimit checks if the given IPID has exceeded the ping (CH) rate limit.
+// This persists across connections, preventing bypass via reconnection.
+// Returns true if the ping should be dropped, false if allowed.
+func checkIPPingRateLimit(ipid string) bool {
+	if config.PingRateLimit <= 0 {
+		return false
+	}
+	ipPingTracker.mu.Lock()
+	defer ipPingTracker.mu.Unlock()
+	now := time.Now()
+	window := time.Duration(config.PingRateLimitWindow) * time.Second
+	cutoff := now.Add(-window)
+	times := ipPingTracker.timestamps[ipid]
+	valid := make([]time.Time, 0, len(times))
+	for _, t := range times {
+		if t.After(cutoff) {
+			valid = append(valid, t)
+		}
+	}
+	if len(valid) >= config.PingRateLimit {
+		ipPingTracker.timestamps[ipid] = valid
+		return true
+	}
+	valid = append(valid, now)
+	ipPingTracker.timestamps[ipid] = valid
 	return false
 }
 

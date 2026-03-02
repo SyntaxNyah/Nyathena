@@ -712,3 +712,109 @@ func TestIPOOCRateLimitWindowExpiry(t *testing.T) {
 		t.Errorf("OOC message was blocked after window expired")
 	}
 }
+
+// TestIPPingRateLimitDisabled tests that ping rate limiting can be disabled.
+func TestIPPingRateLimitDisabled(t *testing.T) {
+	oldConfig := config
+	defer func() { config = oldConfig }()
+
+	config = &settings.Config{}
+	config.PingRateLimit = 0
+
+	ipPingTracker.mu.Lock()
+	ipPingTracker.timestamps = make(map[string][]time.Time)
+	ipPingTracker.mu.Unlock()
+
+	ipid := "testIPPingDisabled"
+	for i := 0; i < 100; i++ {
+		if checkIPPingRateLimit(ipid) {
+			t.Errorf("IP was ping rate limited when ping rate limiting is disabled (attempt %d)", i+1)
+			return
+		}
+	}
+}
+
+// TestIPPingRateLimitBasic tests that the per-IP ping rate limit is enforced.
+func TestIPPingRateLimitBasic(t *testing.T) {
+	oldConfig := config
+	defer func() { config = oldConfig }()
+
+	config = &settings.Config{}
+	config.PingRateLimit = 10
+	config.PingRateLimitWindow = 5
+
+	ipPingTracker.mu.Lock()
+	ipPingTracker.timestamps = make(map[string][]time.Time)
+	ipPingTracker.mu.Unlock()
+
+	ipid := "testIPPingBasic"
+
+	for i := 0; i < 10; i++ {
+		if checkIPPingRateLimit(ipid) {
+			t.Errorf("Ping %d was blocked (limit is 10)", i+1)
+			return
+		}
+	}
+
+	if !checkIPPingRateLimit(ipid) {
+		t.Errorf("Ping was not blocked after exceeding the limit")
+	}
+}
+
+// TestIPPingRateLimitPersistsAcrossConnections tests that per-IP ping rate limiting is not reset
+// when a new client is created for the same IP (simulating a new connection).
+func TestIPPingRateLimitPersistsAcrossConnections(t *testing.T) {
+	oldConfig := config
+	defer func() { config = oldConfig }()
+
+	config = &settings.Config{}
+	config.PingRateLimit = 10
+	config.PingRateLimitWindow = 5
+
+	ipPingTracker.mu.Lock()
+	ipPingTracker.timestamps = make(map[string][]time.Time)
+	ipPingTracker.mu.Unlock()
+
+	ipid := "testIPPingPersists"
+
+	// Exhaust limit
+	for i := 0; i < 10; i++ {
+		checkIPPingRateLimit(ipid)
+	}
+
+	// Simulate a new connection (new client) – rate limit must still apply.
+	if !checkIPPingRateLimit(ipid) {
+		t.Errorf("Ping rate limit did not persist across a simulated new connection")
+	}
+}
+
+// TestIPPingRateLimitWindowExpiry tests that the per-IP ping rate window resets after expiry.
+func TestIPPingRateLimitWindowExpiry(t *testing.T) {
+	oldConfig := config
+	defer func() { config = oldConfig }()
+
+	config = &settings.Config{}
+	config.PingRateLimit = 5
+	config.PingRateLimitWindow = 1
+
+	ipPingTracker.mu.Lock()
+	ipPingTracker.timestamps = make(map[string][]time.Time)
+	ipPingTracker.mu.Unlock()
+
+	ipid := "testIPPingExpiry"
+
+	for i := 0; i < 5; i++ {
+		checkIPPingRateLimit(ipid)
+	}
+
+	if !checkIPPingRateLimit(ipid) {
+		t.Errorf("Ping was not blocked after reaching the limit")
+		return
+	}
+
+	time.Sleep(time.Duration(config.PingRateLimitWindow)*time.Second + 100*time.Millisecond)
+
+	if checkIPPingRateLimit(ipid) {
+		t.Errorf("Ping was blocked after window expired")
+	}
+}
