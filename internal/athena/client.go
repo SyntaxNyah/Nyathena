@@ -192,8 +192,7 @@ func NewClient(conn net.Conn, ipid string) *Client {
 func (client *Client) HandleClient() {
 	defer func() {
 		if r := recover(); r != nil {
-			logger.WriteNetworkLog(client.Hdid(), client.Ipid(), "CRASH", fmt.Sprintf("panic: %v\nstack: %s", r, debug.Stack()))
-			logger.LogErrorf("panic in HandleClient for IPID:%v: %v", client.Ipid(), r)
+			logger.WriteCrashLog(r, debug.Stack())
 		}
 		client.clientCleanup()
 	}()

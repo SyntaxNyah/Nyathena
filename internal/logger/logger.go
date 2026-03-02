@@ -181,6 +181,28 @@ func WriteNetworkLog(hdid, ipid, direction, content string) {
 	}
 }
 
+// WriteCrashLog writes a timestamped crash report file containing the panic value and
+// stack trace to the log directory.  The crash event is also appended to network.log.
+// If LogPath is empty the crash file is written to the current directory.
+func WriteCrashLog(val interface{}, stack []byte) {
+	msg := fmt.Sprintf("panic: %v\n\n%s", val, stack)
+	LogFatalf("Server crash: %v", val)
+
+	fname := fmt.Sprintf("crash-%v.log", time.Now().UTC().Format("2006-01-02T150405Z"))
+	fpath := filepath.Join(LogPath, fname)
+	if LogPath == "" {
+		fpath = fname
+	}
+	fileLock.Lock()
+	if err := os.WriteFile(fpath, []byte(msg), 0644); err != nil {
+		fmt.Fprintf(os.Stderr, "CRASH (could not write %s): %s\n", fpath, msg)
+	}
+	fileLock.Unlock()
+
+	// Also record the crash in network.log so operators have one unified place to look.
+	WriteNetworkLog("-", "-", "CRASH", fmt.Sprintf("panic: %v", val))
+}
+
 // WriteLog writes a line to the server's log file.
 func WriteLog(s string) {
 	fileLock.Lock()

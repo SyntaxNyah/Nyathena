@@ -18,9 +18,11 @@ package main
 
 import (
 	"flag"
+	"fmt"
 	"os"
 	"os/signal"
 	"path"
+	"runtime/debug"
 	"syscall"
 
 	"github.com/MangosArentLiterature/Athena/internal/athena"
@@ -37,6 +39,14 @@ var (
 )
 
 func main() {
+	// Catch any panic on the main goroutine and log it before exiting.
+	defer func() {
+		if r := recover(); r != nil {
+			logger.WriteCrashLog(r, debug.Stack())
+			os.Exit(2)
+		}
+	}()
+
 	flag.Parse()
 	if *configFlag != "" {
 		settings.ConfigPath = path.Clean(*configFlag)
@@ -78,24 +88,24 @@ func main() {
 		os.Exit(1)
 	}
 	logger.LogInfo("Started server.")
-	go athena.ListenTCP()
-	go athena.StartDiscordBot()
-	
+	goWithCrashLog("ListenTCP", athena.ListenTCP)
+	goWithCrashLog("StartDiscordBot", athena.StartDiscordBot)
+
 	// When both WS and WSS are enabled with the same port (common in reverse proxy setups),
 	// only start one listener to avoid "address already in use" error
 	if config.EnableWS && config.EnableWSS && config.WSPort == config.WSSPort {
 		logger.LogDebugf("WS and WSS using same port %d, starting single listener", config.WSPort)
-		go athena.ListenWS()
+		goWithCrashLog("ListenWS", athena.ListenWS)
 	} else {
 		if config.EnableWS {
-			go athena.ListenWS()
+			goWithCrashLog("ListenWS", athena.ListenWS)
 		}
 		if config.EnableWSS {
-			go athena.ListenWSS()
+			goWithCrashLog("ListenWSS", athena.ListenWSS)
 		}
 	}
 	if !*cliFlag {
-		go athena.ListenInput()
+		goWithCrashLog("ListenInput", athena.ListenInput)
 	}
 	stop := make(chan (os.Signal), 2)
 	signal.Notify(stop, os.Interrupt, syscall.SIGINT, syscall.SIGTERM)
@@ -108,4 +118,22 @@ func main() {
 	}
 	athena.CleanupServer()
 	logger.LogInfo("Stopping server.")
+}
+
+// goWithCrashLog launches fn in a new goroutine.  If fn panics the crash is
+// logged to crash-<ts>.log and network.log, then a fatal error is sent so the
+// server shuts down cleanly.
+func goWithCrashLog(name string, fn func()) {
+	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				logger.WriteCrashLog(r, debug.Stack())
+				select {
+				case athena.FatalError <- fmt.Errorf("panic in %s: %v", name, r):
+				default:
+				}
+			}
+		}()
+		fn()
+	}()
 }
