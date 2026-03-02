@@ -104,6 +104,11 @@ var (
 		times: make(map[string]time.Time),
 	}
 
+	// areaLastOOCMsg stores the last OOC message body (raw, as received) sent in each area.
+	// Used to prevent consecutive identical OOC messages from different clients in the same area.
+	// Key: *area.Area, Value: string. sync.Map is zero-value ready; no initialisation required.
+	areaLastOOCMsg sync.Map
+
 	// Tournament mode state
 	tournamentActive       bool
 	tournamentMutex        sync.Mutex

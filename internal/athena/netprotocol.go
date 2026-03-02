@@ -703,8 +703,9 @@ func pktOOC(client *Client, p *packet.Packet) {
 		return
 	}
 
-	// Check OOC-specific rate limit per IP; persists across connections to prevent bypass via reconnection.
+	// Check OOC-specific rate limit per IP; kick on excess to prevent flood even across reconnections.
 	if checkIPOOCRateLimit(client.Ipid()) {
+		client.KickForRateLimit()
 		return
 	}
 
@@ -750,8 +751,16 @@ func pktOOC(client *Client, p *packet.Packet) {
 		client.SendServerMessage(fmt.Sprintf("New users must wait %d %s before using OOC chat.", remaining, unit))
 		return
 	}
-	writeToArea(client.Area(), "CT", encode(client.OOCName()), p.Body[1], "0")
-	addToBuffer(client, "OOC", "\""+p.Body[1]+"\"", false)
+	msg := p.Body[1]
+	// Reject duplicate OOC: if the last message sent in this area is identical, drop silently.
+	if last, ok := areaLastOOCMsg.Load(client.Area()); ok {
+		if lastStr, ok := last.(string); ok && lastStr == msg {
+			return
+		}
+	}
+	areaLastOOCMsg.Store(client.Area(), msg)
+	writeToArea(client.Area(), "CT", encode(client.OOCName()), msg, "0")
+	addToBuffer(client, "OOC", "\""+msg+"\"", false)
 }
 
 // Handles PE#%
