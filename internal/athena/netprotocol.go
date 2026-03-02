@@ -741,6 +741,15 @@ func pktOOC(client *Client, p *packet.Packet) {
 		client.SendServerMessage("You are muted from speaking in OOC.")
 		return
 	}
+	// Check new-IPID OOC cooldown; commands are exempt so new users can still interact with the server.
+	if limited, remaining := checkNewIPIDOOCCooldown(client.Ipid()); limited {
+		unit := "seconds"
+		if remaining == 1 {
+			unit = "second"
+		}
+		client.SendServerMessage(fmt.Sprintf("New users must wait %d %s before using OOC chat.", remaining, unit))
+		return
+	}
 	writeToArea(client.Area(), "CT", encode(client.OOCName()), p.Body[1], "0")
 	addToBuffer(client, "OOC", "\""+p.Body[1]+"\"", false)
 }
@@ -796,6 +805,14 @@ func pktPing(client *Client, _ *packet.Packet) {
 
 // Handles ZZ#%
 func pktModcall(client *Client, p *packet.Packet) {
+	if limited, remaining := checkNewIPIDModcallCooldown(client.Ipid()); limited {
+		unit := "seconds"
+		if remaining == 1 {
+			unit = "second"
+		}
+		client.SendServerMessage(fmt.Sprintf("New users must wait %d %s before sending a modcall.", remaining, unit))
+		return
+	}
 	if limited, remaining := checkIPModcallCooldown(client.Ipid()); limited {
 		unit := "seconds"
 		if remaining == 1 {

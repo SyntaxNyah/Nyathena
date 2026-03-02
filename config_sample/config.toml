@@ -221,6 +221,17 @@ ping_rate_limit = 10
 # Default: 5 seconds
 ping_rate_limit_window = 5
 
+# New IPID OOC cooldown: Number of seconds a brand-new IPID (one that has never connected
+# to this server session before) must wait before being allowed to send OOC chat messages.
+# Commands (starting with /) are exempt from this cooldown.
+# Set to 0 to disable. Default: 10 seconds.
+new_ipid_ooc_cooldown = 10
+
+# New IPID modcall cooldown: Number of seconds a brand-new IPID must wait before being
+# allowed to send a modcall. This prevents throwaway connections from flooding moderators.
+# Set to 0 to disable. Default: 60 seconds.
+new_ipid_modcall_cooldown = 60
+
 [Logging]
 # Sets the number of actions (IC chat messages, OOC chat messages, judge actions, etc.) each area should store.
 # When a user calls a mod, this buffer will be flushed to a report file for review.
@@ -243,6 +254,13 @@ log_methods = [ "stdout" ]
 # Format: logs/AreaName/AreaName-YYYY-MM-DD.txt
 # Each log line includes: [HH:MM:SS] | ACTION | CHARACTER | IPID | HDID | SHOWNAME | OOC_NAME | MESSAGE
 enable_area_logging = false
+
+# Enable network packet logging.
+# When enabled, every incoming and outgoing packet is written to logs/network.log with
+# a timestamp, direction (RECV/SEND), IPID, HDID, and the raw packet content.
+# Useful for incident review and crash analysis. Generates significant log volume.
+# Default: false
+enable_network_logging = false
 
 [MasterServer]
 

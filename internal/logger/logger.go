@@ -45,15 +45,17 @@ var (
 		Error:   "ERROR",
 		Fatal:   "FATAL",
 	}
-	LogPath           string
-	LogStdOut         bool
-	LogFile           bool
-	CurrentLevel      LogLevel
-	outputLock        sync.Mutex
-	fileLock          sync.Mutex
-	DebugNetwork      bool
-	EnableAreaLogging bool
-	areaLogLocks      sync.Map // Map of area names to their respective locks
+	LogPath              string
+	LogStdOut            bool
+	LogFile              bool
+	CurrentLevel         LogLevel
+	outputLock           sync.Mutex
+	fileLock             sync.Mutex
+	networkLogLock       sync.Mutex
+	DebugNetwork         bool
+	EnableAreaLogging    bool
+	EnableNetworkLogging bool
+	areaLogLocks         sync.Map // Map of area names to their respective locks
 )
 
 // log writes a message to standard output and/or the log file if the level matches the server's set log level.
@@ -136,6 +138,27 @@ func WriteReport(name string, buffer []string) {
 	if err != nil {
 		LogError(err.Error())
 		return
+	}
+}
+
+// WriteNetworkLog writes a packet log entry (HDID, IPID, direction, content) to the network log file.
+// Each entry includes a timestamp so that packet sequences can be reconstructed for incident review.
+func WriteNetworkLog(ipid, hdid, direction, content string) {
+	if !EnableNetworkLogging {
+		return
+	}
+	networkLogLock.Lock()
+	defer networkLogLock.Unlock()
+	f, err := os.OpenFile(LogPath+"/network.log", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
+	if err != nil {
+		LogError(err.Error())
+		return
+	}
+	defer f.Close()
+	timestamp := time.Now().UTC().Format("2006-01-02T15:04:05.000Z")
+	_, err = f.WriteString(fmt.Sprintf("[%v] %v | IPID:%v | HDID:%v | %v\n", timestamp, direction, ipid, hdid, content))
+	if err != nil {
+		LogError(err.Error())
 	}
 }
 
