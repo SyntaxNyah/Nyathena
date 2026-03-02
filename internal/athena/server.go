@@ -104,6 +104,14 @@ var (
 		times: make(map[string]time.Time),
 	}
 
+	// globalNewIPTracker records timestamps of new unique IPs connecting to the server.
+	// Used for the global new-connection rate limiter: if too many distinct new IPs arrive
+	// within the configured window, additional unknown IPs are rejected until the window clears.
+	globalNewIPTracker = struct {
+		mu         sync.Mutex
+		timestamps []time.Time
+	}{}
+
 	// areaLastOOCMsg stores the last OOC message body (raw, as received) sent in each area.
 	// Used to prevent consecutive identical OOC messages from different clients in the same area.
 	// Key: *area.Area, Value: string. sync.Map is zero-value ready; no initialisation required.
@@ -393,6 +401,11 @@ func (s *Server) ListenTCP() {
 			conn.Close()
 			continue
 		}
+		if checkGlobalNewIPRateLimit(ipid) {
+			logger.LogInfof("Connection from new IP %v rejected (global new IP rate limit exceeded)", ipid)
+			conn.Close()
+			continue
+		}
 		recordIPFirstSeen(ipid)
 		if logger.DebugNetwork {
 			logger.LogDebugf("Connection received from %v", ipid)
@@ -476,6 +489,11 @@ func HandleWS(w http.ResponseWriter, r *http.Request) {
 		if config.ConnFloodAutoban {
 			autoBanFlooder(ipid)
 		}
+		http.Error(w, "Too many connections", http.StatusTooManyRequests)
+		return
+	}
+	if checkGlobalNewIPRateLimit(ipid) {
+		logger.LogInfof("Connection from new IP %v rejected (global new IP rate limit exceeded)", ipid)
 		http.Error(w, "Too many connections", http.StatusTooManyRequests)
 		return
 	}
@@ -873,6 +891,22 @@ func startConnTrackerCleanup() {
 			}
 			ipPingTracker.mu.Unlock()
 		}
+
+		// Clean up stale global new-IP rate limit entries.
+		if config.GlobalNewIPRateLimitWindow > 0 {
+			globalWindow := time.Duration(config.GlobalNewIPRateLimitWindow) * time.Second
+			globalCutoff := time.Now().Add(-globalWindow)
+			globalNewIPTracker.mu.Lock()
+			times := globalNewIPTracker.timestamps
+			valid := make([]time.Time, 0, len(times))
+			for _, t := range times {
+				if t.After(globalCutoff) {
+					valid = append(valid, t)
+				}
+			}
+			globalNewIPTracker.timestamps = valid
+			globalNewIPTracker.mu.Unlock()
+		}
 	}
 }
 
@@ -964,12 +998,23 @@ func checkIPPingRateLimit(ipid string) bool {
 // recordIPFirstSeen records the first time an IPID connects to this server session.
 // If the IPID has already been seen, this is a no-op; entries are never removed so that
 // returning IPIDs are never mistakenly treated as new again.
+// When a genuinely new IPID is recorded, a timestamp is also pushed to globalNewIPTracker
+// for global new-connection rate limiting.
 func recordIPFirstSeen(ipid string) {
 	ipFirstSeenTracker.mu.Lock()
-	defer ipFirstSeenTracker.mu.Unlock()
-	if _, exists := ipFirstSeenTracker.times[ipid]; !exists {
-		ipFirstSeenTracker.times[ipid] = time.Now()
+	if _, exists := ipFirstSeenTracker.times[ipid]; exists {
+		ipFirstSeenTracker.mu.Unlock()
+		return
 	}
+	ipFirstSeenTracker.times[ipid] = time.Now()
+	ipFirstSeenTracker.mu.Unlock()
+
+	// Inform the global new-IP rate limiter that a new unique IP has arrived.
+	// globalNewIPTracker.mu is acquired only after ipFirstSeenTracker.mu is released
+	// to keep lock-acquisition order consistent and avoid potential deadlocks.
+	globalNewIPTracker.mu.Lock()
+	globalNewIPTracker.timestamps = append(globalNewIPTracker.timestamps, time.Now())
+	globalNewIPTracker.mu.Unlock()
 }
 
 // checkNewIPIDOOCCooldown checks whether a newly-seen IPID is still within the OOC chat cooldown.
@@ -1014,3 +1059,41 @@ func checkNewIPIDModcallCooldown(ipid string) (bool, int) {
 	return false, 0
 }
 
+
+// checkGlobalNewIPRateLimit checks whether too many new unique IPs have arrived within
+// the configured time window. If so, connections from IPs that have never been seen before
+// are rejected to protect the server against distributed floods using many unique IPs.
+// Already-known IPs (those with an entry in ipFirstSeenTracker) are always permitted.
+// Returns true if the connection should be rejected.
+func checkGlobalNewIPRateLimit(ipid string) bool {
+if config.GlobalNewIPRateLimit <= 0 {
+return false
+}
+
+// Known IPs are always allowed through; only new, unseen IPs can trigger this limit.
+ipFirstSeenTracker.mu.Lock()
+_, known := ipFirstSeenTracker.times[ipid]
+ipFirstSeenTracker.mu.Unlock()
+if known {
+return false
+}
+
+globalNewIPTracker.mu.Lock()
+defer globalNewIPTracker.mu.Unlock()
+
+now := time.Now()
+window := time.Duration(config.GlobalNewIPRateLimitWindow) * time.Second
+cutoff := now.Add(-window)
+
+// Prune timestamps outside the current window.
+times := globalNewIPTracker.timestamps
+valid := make([]time.Time, 0, len(times))
+for _, t := range times {
+if t.After(cutoff) {
+valid = append(valid, t)
+}
+}
+globalNewIPTracker.timestamps = valid
+
+return len(valid) >= config.GlobalNewIPRateLimit
+}
