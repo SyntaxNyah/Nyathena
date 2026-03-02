@@ -49,7 +49,7 @@ var db *sql.DB
 
 // Database version.
 // This should be incremented whenever changes are made to the DB that require existing databases to upgrade.
-const ver = 3
+const ver = 4
 
 // Persistent punishment kind constants.
 const (
@@ -121,7 +121,8 @@ func Open() error {
 	}
 	_, err = db.Exec(`CREATE TABLE IF NOT EXISTS KNOWN_IPS(
 		IPID       TEXT    PRIMARY KEY,
-		FIRST_SEEN INTEGER NOT NULL DEFAULT 0
+		FIRST_SEEN INTEGER NOT NULL DEFAULT 0,
+		LAST_SEEN  INTEGER NOT NULL DEFAULT 0
 	)`)
 	if err != nil {
 		return err
@@ -153,6 +154,22 @@ func upgradeDB(v int) error {
 			return err
 		}
 		_, err = db.Exec("PRAGMA user_version = 3")
+		if err != nil {
+			return err
+		}
+		fallthrough
+	case 3:
+		_, err := db.Exec("ALTER TABLE KNOWN_IPS ADD COLUMN LAST_SEEN INTEGER NOT NULL DEFAULT 0")
+		if err != nil {
+			return err
+		}
+		// Initialise LAST_SEEN to FIRST_SEEN for existing rows so that currently
+		// active players are not immediately pruned after upgrading.
+		_, err = db.Exec("UPDATE KNOWN_IPS SET LAST_SEEN = FIRST_SEEN WHERE LAST_SEEN = 0")
+		if err != nil {
+			return err
+		}
+		_, err = db.Exec("PRAGMA user_version = 4")
 		if err != nil {
 			return err
 		}
@@ -439,13 +456,18 @@ func GetAllBans() ([]BanInfo, error) {
 	return bans, nil
 }
 
-// MarkIPKnown records an IPID as known (i.e. it has connected to the server at least once).
-// If the IPID is already present, this is a no-op (INSERT OR IGNORE).
+// MarkIPKnown records an IPID as known and updates its last-seen timestamp.
+// For new IPIDs both FIRST_SEEN and LAST_SEEN are set to now.
+// For IPIDs already in the table FIRST_SEEN is preserved and only LAST_SEEN is updated.
 func MarkIPKnown(ipid string) error {
 	if db == nil {
 		return nil
 	}
-	_, err := db.Exec("INSERT OR IGNORE INTO KNOWN_IPS(IPID, FIRST_SEEN) VALUES(?, ?)", ipid, time.Now().Unix())
+	now := time.Now().Unix()
+	_, err := db.Exec(
+		`INSERT INTO KNOWN_IPS(IPID, FIRST_SEEN, LAST_SEEN) VALUES(?, ?, ?)
+		 ON CONFLICT(IPID) DO UPDATE SET LAST_SEEN = excluded.LAST_SEEN`,
+		ipid, now, now)
 	return err
 }
 
@@ -469,4 +491,30 @@ func LoadKnownIPs() ([]string, error) {
 		ipids = append(ipids, ipid)
 	}
 	return ipids, rows.Err()
+}
+
+// RemoveKnownIP deletes an IPID from the KNOWN_IPS table.
+// It is called when an IP is banned so that, once the ban expires, the IP is
+// treated as new again (subject to new-connection cooldowns and rate limits).
+func RemoveKnownIP(ipid string) error {
+	if db == nil {
+		return nil
+	}
+	_, err := db.Exec("DELETE FROM KNOWN_IPS WHERE IPID = ?", ipid)
+	return err
+}
+
+// PruneInactiveIPs deletes all KNOWN_IPS rows whose LAST_SEEN timestamp is
+// older than the provided Unix timestamp. It returns the number of rows removed.
+// Call this at startup (after loading known IPs) to keep the table lean.
+func PruneInactiveIPs(before int64) (int64, error) {
+	if db == nil {
+		return 0, nil
+	}
+	res, err := db.Exec("DELETE FROM KNOWN_IPS WHERE LAST_SEEN < ? AND LAST_SEEN != 0", before)
+	if err != nil {
+		return 0, err
+	}
+	n, _ := res.RowsAffected()
+	return n, nil
 }

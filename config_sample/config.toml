@@ -246,6 +246,15 @@ global_new_ip_rate_limit = 8
 # Default: 60 seconds.
 global_new_ip_rate_limit_window = 60
 
+# IP database retention: Number of days after which an IP that has not reconnected
+# is removed from the known-IP database. Removing stale IPs keeps the database lean
+# and ensures long-inactive addresses are subject to new-connection cooldowns if they
+# ever reconnect. IPs are also removed immediately whenever they are banned, so that
+# a re-connecting player whose ban has expired is treated as a new IP again.
+# Set to 0 to disable automatic pruning (IPs are kept forever).
+# Default: 0 (disabled)
+ip_retention_days = 0
+
 [Logging]
 # Sets the number of actions (IC chat messages, OOC chat messages, judge actions, etc.) each area should store.
 # When a user calls a mod, this buffer will be flushed to a report file for review.

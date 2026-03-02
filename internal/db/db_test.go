@@ -368,6 +368,137 @@ if err != nil {
 t.Fatalf("LoadKnownIPs failed: %v", err)
 }
 if len(ipids) != 1 {
-t.Fatalf("expected exactly 1 entry for dup.ip (INSERT OR IGNORE), got %d", len(ipids))
+t.Fatalf("expected exactly 1 entry for dup.ip (upsert), got %d", len(ipids))
 }
+}
+
+func TestMarkIPKnownUpdatesLastSeen(t *testing.T) {
+	teardown := setupTestDB(t)
+	defer teardown()
+
+	ipid := "lastseen.ip"
+	if err := MarkIPKnown(ipid); err != nil {
+		t.Fatalf("MarkIPKnown (insert) failed: %v", err)
+	}
+
+	// Read FIRST_SEEN and LAST_SEEN after first insert.
+	var firstSeen1, lastSeen1 int64
+	row := db.QueryRow("SELECT FIRST_SEEN, LAST_SEEN FROM KNOWN_IPS WHERE IPID = ?", ipid)
+	if err := row.Scan(&firstSeen1, &lastSeen1); err != nil {
+		t.Fatalf("scan after insert failed: %v", err)
+	}
+
+	// Wait at least 1 second so the LAST_SEEN Unix timestamp increments.
+	time.Sleep(1100 * time.Millisecond)
+
+	if err := MarkIPKnown(ipid); err != nil {
+		t.Fatalf("MarkIPKnown (update) failed: %v", err)
+	}
+
+	var firstSeen2, lastSeen2 int64
+	row = db.QueryRow("SELECT FIRST_SEEN, LAST_SEEN FROM KNOWN_IPS WHERE IPID = ?", ipid)
+	if err := row.Scan(&firstSeen2, &lastSeen2); err != nil {
+		t.Fatalf("scan after update failed: %v", err)
+	}
+
+	if firstSeen2 != firstSeen1 {
+		t.Errorf("FIRST_SEEN changed after second MarkIPKnown: was %d, now %d", firstSeen1, firstSeen2)
+	}
+	if lastSeen2 <= lastSeen1 {
+		t.Errorf("LAST_SEEN not updated: was %d, still %d", lastSeen1, lastSeen2)
+	}
+}
+
+func TestRemoveKnownIP(t *testing.T) {
+	teardown := setupTestDB(t)
+	defer teardown()
+
+	if err := MarkIPKnown("remove.me"); err != nil {
+		t.Fatalf("MarkIPKnown failed: %v", err)
+	}
+
+	ipids, _ := LoadKnownIPs()
+	if len(ipids) != 1 {
+		t.Fatalf("expected 1 IP before removal, got %d", len(ipids))
+	}
+
+	if err := RemoveKnownIP("remove.me"); err != nil {
+		t.Fatalf("RemoveKnownIP failed: %v", err)
+	}
+
+	ipids, _ = LoadKnownIPs()
+	if len(ipids) != 0 {
+		t.Fatalf("expected 0 IPs after removal, got %d", len(ipids))
+	}
+}
+
+func TestRemoveKnownIPNonExistent(t *testing.T) {
+	teardown := setupTestDB(t)
+	defer teardown()
+
+	// Removing an IP that does not exist must not return an error.
+	if err := RemoveKnownIP("no.such.ip"); err != nil {
+		t.Fatalf("RemoveKnownIP on non-existent IP returned error: %v", err)
+	}
+}
+
+func TestPruneInactiveIPs(t *testing.T) {
+	teardown := setupTestDB(t)
+	defer teardown()
+
+	// Insert two IPs with different LAST_SEEN values using raw SQL so we can
+	// control the timestamps precisely.
+	past := time.Now().Add(-48 * time.Hour).Unix()
+	recent := time.Now().Unix()
+	if _, err := db.Exec(
+		"INSERT INTO KNOWN_IPS(IPID, FIRST_SEEN, LAST_SEEN) VALUES(?, ?, ?)",
+		"old.ip", past, past); err != nil {
+		t.Fatalf("insert old.ip failed: %v", err)
+	}
+	if _, err := db.Exec(
+		"INSERT INTO KNOWN_IPS(IPID, FIRST_SEEN, LAST_SEEN) VALUES(?, ?, ?)",
+		"new.ip", recent, recent); err != nil {
+		t.Fatalf("insert new.ip failed: %v", err)
+	}
+
+	// Prune IPs not seen in the last 24 hours.
+	cutoff := time.Now().Add(-24 * time.Hour).Unix()
+	n, err := PruneInactiveIPs(cutoff)
+	if err != nil {
+		t.Fatalf("PruneInactiveIPs failed: %v", err)
+	}
+	if n != 1 {
+		t.Errorf("expected 1 row pruned, got %d", n)
+	}
+
+	ipids, _ := LoadKnownIPs()
+	if len(ipids) != 1 || ipids[0] != "new.ip" {
+		t.Errorf("expected only new.ip to remain, got %v", ipids)
+	}
+}
+
+func TestPruneInactiveIPsSkipsZeroLastSeen(t *testing.T) {
+	teardown := setupTestDB(t)
+	defer teardown()
+
+	// An IP with LAST_SEEN = 0 (legacy / just migrated) should not be pruned.
+	if _, err := db.Exec(
+		"INSERT INTO KNOWN_IPS(IPID, FIRST_SEEN, LAST_SEEN) VALUES(?, ?, ?)",
+		"legacy.ip", 0, 0); err != nil {
+		t.Fatalf("insert legacy.ip failed: %v", err)
+	}
+
+	cutoff := time.Now().Unix() // everything before now
+	n, err := PruneInactiveIPs(cutoff)
+	if err != nil {
+		t.Fatalf("PruneInactiveIPs failed: %v", err)
+	}
+	if n != 0 {
+		t.Errorf("expected 0 rows pruned (LAST_SEEN=0 is protected), got %d", n)
+	}
+
+	ipids, _ := LoadKnownIPs()
+	if len(ipids) != 1 {
+		t.Fatalf("expected legacy.ip to remain, got %v", ipids)
+	}
 }

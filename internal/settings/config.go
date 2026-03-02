@@ -79,6 +79,7 @@ type ServerConfig struct {
 	NewIPIDModcallCooldown    int    `toml:"new_ipid_modcall_cooldown"`
 	GlobalNewIPRateLimit      int    `toml:"global_new_ip_rate_limit"`
 	GlobalNewIPRateLimitWindow int   `toml:"global_new_ip_rate_limit_window"`
+	IPRetentionDays           int    `toml:"ip_retention_days"`
 }
 
 type LogConfig struct {
@@ -140,6 +141,7 @@ func defaultConfig() *Config {
 			NewIPIDModcallCooldown:    60,
 			GlobalNewIPRateLimit:      8,
 			GlobalNewIPRateLimitWindow: 60,
+			IPRetentionDays:           0,
 		},
 		LogConfig{
 			BufSize:              150,
