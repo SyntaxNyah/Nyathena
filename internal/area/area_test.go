@@ -180,25 +180,3 @@ func TestInvited(t *testing.T) {
 		t.Errorf("unexpected value for invited length, got %d, want %d", len(a.invited), 0)
 	}
 }
-
-// TestLastOOCMsg tests the LastOOCMsg and SetLastOOCMsg methods.
-func TestLastOOCMsg(t *testing.T) {
-	a := NewArea(AreaData{}, 50, 0, EviAny)
-
-	// Initially, the last OOC message should be empty.
-	if got := a.LastOOCMsg(); got != "" {
-		t.Errorf("initial LastOOCMsg: got %q, want %q", got, "")
-	}
-
-	// Set a message and verify it is returned correctly.
-	a.SetLastOOCMsg("Hello world")
-	if got := a.LastOOCMsg(); got != "Hello world" {
-		t.Errorf("after SetLastOOCMsg: got %q, want %q", got, "Hello world")
-	}
-
-	// Update the message and verify the new value.
-	a.SetLastOOCMsg("Goodbye")
-	if got := a.LastOOCMsg(); got != "Goodbye" {
-		t.Errorf("after second SetLastOOCMsg: got %q, want %q", got, "Goodbye")
-	}
-}

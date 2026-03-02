@@ -18,11 +18,9 @@ package main
 
 import (
 	"flag"
-	"fmt"
 	"os"
 	"os/signal"
 	"path"
-	"runtime/debug"
 	"syscall"
 
 	"github.com/MangosArentLiterature/Athena/internal/athena"
@@ -39,14 +37,6 @@ var (
 )
 
 func main() {
-	// Catch any panic on the main goroutine and log it before exiting.
-	defer func() {
-		if r := recover(); r != nil {
-			logger.WriteCrashLog(r, debug.Stack())
-			os.Exit(2)
-		}
-	}()
-
 	flag.Parse()
 	if *configFlag != "" {
 		settings.ConfigPath = path.Clean(*configFlag)
@@ -78,7 +68,6 @@ func main() {
 	logger.LogStdOut = sliceutil.ContainsString(config.LogMethods, "stdout")
 	logger.LogFile = sliceutil.ContainsString(config.LogMethods, "log_file")
 	logger.DebugNetwork = *netDebugFlag
-	logger.EnableNetworkLog = config.EnableNetworkLog
 	db.DBPath = settings.ConfigPath + "/athena.db"
 
 	err = athena.InitServer(config)
@@ -88,24 +77,24 @@ func main() {
 		os.Exit(1)
 	}
 	logger.LogInfo("Started server.")
-	goWithCrashLog("ListenTCP", athena.ListenTCP)
-	goWithCrashLog("StartDiscordBot", athena.StartDiscordBot)
-
+	go athena.ListenTCP()
+	go athena.StartDiscordBot()
+	
 	// When both WS and WSS are enabled with the same port (common in reverse proxy setups),
 	// only start one listener to avoid "address already in use" error
 	if config.EnableWS && config.EnableWSS && config.WSPort == config.WSSPort {
 		logger.LogDebugf("WS and WSS using same port %d, starting single listener", config.WSPort)
-		goWithCrashLog("ListenWS", athena.ListenWS)
+		go athena.ListenWS()
 	} else {
 		if config.EnableWS {
-			goWithCrashLog("ListenWS", athena.ListenWS)
+			go athena.ListenWS()
 		}
 		if config.EnableWSS {
-			goWithCrashLog("ListenWSS", athena.ListenWSS)
+			go athena.ListenWSS()
 		}
 	}
 	if !*cliFlag {
-		goWithCrashLog("ListenInput", athena.ListenInput)
+		go athena.ListenInput()
 	}
 	stop := make(chan (os.Signal), 2)
 	signal.Notify(stop, os.Interrupt, syscall.SIGINT, syscall.SIGTERM)
@@ -118,22 +107,4 @@ func main() {
 	}
 	athena.CleanupServer()
 	logger.LogInfo("Stopping server.")
-}
-
-// goWithCrashLog launches fn in a new goroutine.  If fn panics the crash is
-// logged to crash-<ts>.log and network.log, then a fatal error is sent so the
-// server shuts down cleanly.
-func goWithCrashLog(name string, fn func()) {
-	go func() {
-		defer func() {
-			if r := recover(); r != nil {
-				logger.WriteCrashLog(r, debug.Stack())
-				select {
-				case athena.FatalError <- fmt.Errorf("panic in %s: %v", name, r):
-				default:
-				}
-			}
-		}()
-		fn()
-	}()
 }

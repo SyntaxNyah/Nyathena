@@ -79,15 +79,6 @@ var (
 		times: make(map[string]time.Time),
 	}
 
-	// ipFirstJoinTracker records the first time each IPID completed joining the server.
-	// This ensures the modcall join-wait cannot be bypassed by reconnecting.
-	ipFirstJoinTracker = struct {
-		mu    sync.Mutex
-		times map[string]time.Time // ipid -> first join time
-	}{
-		times: make(map[string]time.Time),
-	}
-
 	// ipOOCTracker tracks OOC message timestamps per IP across connections.
 	ipOOCTracker = struct {
 		mu         sync.Mutex
@@ -742,22 +733,20 @@ func checkConnRateLimit(ipid string) bool {
 	window := time.Duration(config.ConnRateLimitWindow) * time.Second
 	cutoff := now.Add(-window)
 
-	// Prune timestamps outside the current window (in-place to avoid heap allocation).
+	// Prune timestamps outside the current window.
 	times := connTracker.timestamps[ipid]
-	n := 0
+	valid := make([]time.Time, 0, len(times))
 	for _, t := range times {
 		if t.After(cutoff) {
-			times[n] = t
-			n++
+			valid = append(valid, t)
 		}
 	}
-	times = times[:n]
 
 	// Record this attempt regardless of outcome, so floods are always counted.
-	times = append(times, now)
-	connTracker.timestamps[ipid] = times
+	valid = append(valid, now)
+	connTracker.timestamps[ipid] = valid
 
-	return len(times) > config.ConnRateLimit
+	return len(valid) > config.ConnRateLimit
 }
 
 // autoBanFlooder adds a temporary ban for an IP that has exceeded the connection rate limit.
@@ -778,26 +767,6 @@ func autoBanFlooder(ipid string) {
 		return
 	}
 	logger.LogInfof("Auto-banned %v for connection flooding", ipid)
-}
-
-// autoBanSpammer adds a temporary ban for an IP that has exceeded the packet rate limit.
-// If the IP is already banned, no additional ban is added.
-func autoBanSpammer(ipid string) {
-	banned, _, err := db.IsBanned(db.IPID, ipid)
-	if err != nil || banned {
-		return
-	}
-	dur, err := str2duration.ParseDuration(config.BanLen)
-	if err != nil {
-		return
-	}
-	expiry := time.Now().UTC().Add(dur).Unix()
-	_, err = db.AddBan(ipid, "", time.Now().UTC().Unix(), expiry, "Automatic ban: packet flooding", "Server")
-	if err != nil {
-		logger.LogErrorf("Failed to auto-ban packet spammer %v: %v", ipid, err)
-		return
-	}
-	logger.LogInfof("Auto-banned %v for packet flooding", ipid)
 }
 
 // startConnTrackerCleanup periodically removes stale entries from the connection tracker
@@ -839,21 +808,6 @@ func startConnTrackerCleanup() {
 				}
 			}
 			ipModcallTracker.mu.Unlock()
-		}
-
-		// Clean up first-join entries that are older than the modcall join-wait period.
-		// Once 60 seconds have elapsed the entry serves no purpose and can be discarded.
-		// !t.After(joinCutoff) is equivalent to t <= joinCutoff (before or equal).
-		{
-			const modcallJoinWait = 60 * time.Second
-			joinCutoff := time.Now().Add(-modcallJoinWait)
-			ipFirstJoinTracker.mu.Lock()
-			for ipid, t := range ipFirstJoinTracker.times {
-				if !t.After(joinCutoff) {
-					delete(ipFirstJoinTracker.times, ipid)
-				}
-			}
-			ipFirstJoinTracker.mu.Unlock()
 		}
 
 		// Clean up stale OOC rate limit entries.
@@ -929,40 +883,9 @@ func setIPModcallTime(ipid string) {
 	ipModcallTracker.mu.Unlock()
 }
 
-// recordIPFirstJoin stores the first time an IPID completed joining the server.
-// Subsequent calls for the same IPID are no-ops, preserving the original join time.
-func recordIPFirstJoin(ipid string) {
-	ipFirstJoinTracker.mu.Lock()
-	defer ipFirstJoinTracker.mu.Unlock()
-	if _, exists := ipFirstJoinTracker.times[ipid]; !exists {
-		ipFirstJoinTracker.times[ipid] = time.Now()
-	}
-}
-
-// checkIPJoinWait returns true (and the remaining seconds) if the IPID has not yet
-// waited 60 seconds since first joining the server.  This persists across reconnections
-// so that a client cannot bypass the wait by disconnecting and reconnecting.
-func checkIPJoinWait(ipid string) (bool, int) {
-	const modcallJoinWait = 60 * time.Second
-	ipFirstJoinTracker.mu.Lock()
-	defer ipFirstJoinTracker.mu.Unlock()
-	first, exists := ipFirstJoinTracker.times[ipid]
-	if !exists {
-		return false, 0
-	}
-	elapsed := time.Since(first)
-	if elapsed < modcallJoinWait {
-		remaining := int(math.Ceil((modcallJoinWait - elapsed).Seconds()))
-		return true, remaining
-	}
-	return false, 0
-}
-
 // checkIPOOCRateLimit checks if the given IPID has exceeded the OOC message rate limit.
 // Unlike the per-client check, this persists across connections, preventing bypass via reconnection.
 // Returns true if the packet should be dropped, false if allowed.
-// The slice is filtered in-place to reuse the backing array; append only allocates when the
-// slice capacity must grow (amortized), avoiding a guaranteed per-call allocation.
 func checkIPOOCRateLimit(ipid string) bool {
 	if config.OOCRateLimit <= 0 {
 		return false
@@ -973,26 +896,24 @@ func checkIPOOCRateLimit(ipid string) bool {
 	window := time.Duration(config.OOCRateLimitWindow) * time.Second
 	cutoff := now.Add(-window)
 	times := ipOOCTracker.timestamps[ipid]
-	n := 0
+	valid := make([]time.Time, 0, len(times))
 	for _, t := range times {
 		if t.After(cutoff) {
-			times[n] = t
-			n++
+			valid = append(valid, t)
 		}
 	}
-	times = times[:n]
-	if len(times) >= config.OOCRateLimit {
-		ipOOCTracker.timestamps[ipid] = times
+	if len(valid) >= config.OOCRateLimit {
+		ipOOCTracker.timestamps[ipid] = valid
 		return true
 	}
-	ipOOCTracker.timestamps[ipid] = append(times, now)
+	valid = append(valid, now)
+	ipOOCTracker.timestamps[ipid] = valid
 	return false
 }
 
 // checkIPPingRateLimit checks if the given IPID has exceeded the ping (CH) rate limit.
 // This persists across connections, preventing bypass via reconnection.
 // Returns true if the ping should be dropped, false if allowed.
-// The slice is filtered in-place; append only allocates on amortized capacity growth.
 func checkIPPingRateLimit(ipid string) bool {
 	if config.PingRateLimit <= 0 {
 		return false
@@ -1003,19 +924,18 @@ func checkIPPingRateLimit(ipid string) bool {
 	window := time.Duration(config.PingRateLimitWindow) * time.Second
 	cutoff := now.Add(-window)
 	times := ipPingTracker.timestamps[ipid]
-	n := 0
+	valid := make([]time.Time, 0, len(times))
 	for _, t := range times {
 		if t.After(cutoff) {
-			times[n] = t
-			n++
+			valid = append(valid, t)
 		}
 	}
-	times = times[:n]
-	if len(times) >= config.PingRateLimit {
-		ipPingTracker.timestamps[ipid] = times
+	if len(valid) >= config.PingRateLimit {
+		ipPingTracker.timestamps[ipid] = valid
 		return true
 	}
-	ipPingTracker.timestamps[ipid] = append(times, now)
+	valid = append(valid, now)
+	ipPingTracker.timestamps[ipid] = valid
 	return false
 }
 
