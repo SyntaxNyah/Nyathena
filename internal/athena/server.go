@@ -179,6 +179,27 @@ func NewServer(conf *settings.Config) (*Server, error) {
 		logger.LogErrorf("Failed to purge expired punishments: %v", err)
 	}
 
+	// Pre-populate the in-memory first-seen tracker with IPs that were seen in
+	// previous server sessions.  This ensures returning players are never treated
+	// as "new" by the global new-IP rate limiter after a restart.
+	if knownIPs, err := db.LoadKnownIPs(); err != nil {
+		logger.LogErrorf("Failed to load known IPs from database: %v", err)
+	} else {
+		// Use the zero time so that any per-IP cooldowns (OOC, modcall) are
+		// considered long-expired for these returning players.
+		epoch := time.Unix(0, 0)
+		ipFirstSeenTracker.mu.Lock()
+		for _, ipid := range knownIPs {
+			if _, exists := ipFirstSeenTracker.times[ipid]; !exists {
+				ipFirstSeenTracker.times[ipid] = epoch
+			}
+		}
+		ipFirstSeenTracker.mu.Unlock()
+		if len(knownIPs) > 0 {
+			logger.LogInfof("Loaded %d known IPs from database.", len(knownIPs))
+		}
+	}
+
 	s := &Server{
 		config:                 conf,
 		clients:                ClientList{list: make(map[*Client]struct{})},
@@ -999,7 +1020,8 @@ func checkIPPingRateLimit(ipid string) bool {
 // If the IPID has already been seen, this is a no-op; entries are never removed so that
 // returning IPIDs are never mistakenly treated as new again.
 // When a genuinely new IPID is recorded, a timestamp is also pushed to globalNewIPTracker
-// for global new-connection rate limiting.
+// for global new-connection rate limiting, and the IPID is persisted to the database so
+// that it survives server restarts and is never treated as new on reconnect.
 func recordIPFirstSeen(ipid string) {
 	ipFirstSeenTracker.mu.Lock()
 	if _, exists := ipFirstSeenTracker.times[ipid]; exists {
@@ -1015,6 +1037,14 @@ func recordIPFirstSeen(ipid string) {
 	globalNewIPTracker.mu.Lock()
 	globalNewIPTracker.timestamps = append(globalNewIPTracker.timestamps, time.Now())
 	globalNewIPTracker.mu.Unlock()
+
+	// Persist the new IP to the database asynchronously so the connection handler
+	// is not blocked by a disk write.  INSERT OR IGNORE means duplicate calls are safe.
+	go func() {
+		if err := db.MarkIPKnown(ipid); err != nil {
+			logger.LogErrorf("Failed to persist known IP %s: %v", ipid, err)
+		}
+	}()
 }
 
 // checkNewIPIDOOCCooldown checks whether a newly-seen IPID is still within the OOC chat cooldown.
