@@ -845,6 +845,94 @@ func TestModcallJoinWaitAllowed(t *testing.T) {
 	}
 }
 
+// TestIPJoinWaitBlockedOnFirstJoin verifies that a freshly-recorded IPID is blocked.
+func TestIPJoinWaitBlockedOnFirstJoin(t *testing.T) {
+	// Isolate tracker state.
+	old := ipFirstJoinTracker.times
+	ipFirstJoinTracker.times = make(map[string]time.Time)
+	defer func() { ipFirstJoinTracker.times = old }()
+
+	const ipid = "testipid-join-new"
+	recordIPFirstJoin(ipid)
+
+	limited, remaining := checkIPJoinWait(ipid)
+	if !limited {
+		t.Errorf("Expected new IPID to be blocked by join wait, but it was not")
+	}
+	if remaining <= 0 || remaining > 60 {
+		t.Errorf("Unexpected remaining seconds: %d", remaining)
+	}
+}
+
+// TestIPJoinWaitAllowedAfterWait verifies that an IPID recorded 61s ago is no longer blocked.
+func TestIPJoinWaitAllowedAfterWait(t *testing.T) {
+	old := ipFirstJoinTracker.times
+	ipFirstJoinTracker.times = make(map[string]time.Time)
+	defer func() { ipFirstJoinTracker.times = old }()
+
+	const ipid = "testipid-join-old"
+	ipFirstJoinTracker.mu.Lock()
+	ipFirstJoinTracker.times[ipid] = time.Now().Add(-61 * time.Second)
+	ipFirstJoinTracker.mu.Unlock()
+
+	limited, _ := checkIPJoinWait(ipid)
+	if limited {
+		t.Errorf("Expected IPID that joined 61s ago to be allowed, but it was blocked")
+	}
+}
+
+// TestIPJoinWaitReconnectBypassPrevented verifies that reconnecting does not reset the join timer.
+// A client records its first join, then "reconnects" (recordIPFirstJoin called again for same IPID).
+// The second call must not overwrite the original join time.
+func TestIPJoinWaitReconnectBypassPrevented(t *testing.T) {
+	old := ipFirstJoinTracker.times
+	ipFirstJoinTracker.times = make(map[string]time.Time)
+	defer func() { ipFirstJoinTracker.times = old }()
+
+	const ipid = "testipid-reconnect"
+
+	// Simulate initial join 30 seconds ago.
+	ipFirstJoinTracker.mu.Lock()
+	ipFirstJoinTracker.times[ipid] = time.Now().Add(-30 * time.Second)
+	ipFirstJoinTracker.mu.Unlock()
+
+	// Simulate a reconnect — should NOT update the stored time.
+	recordIPFirstJoin(ipid)
+
+	// The stored time must still reflect the original join 30s ago (not time.Now()).
+	ipFirstJoinTracker.mu.Lock()
+	stored := ipFirstJoinTracker.times[ipid]
+	ipFirstJoinTracker.mu.Unlock()
+
+	age := time.Since(stored)
+	// The stored time should be ~30s old.  A reset to "now" would give age ~0s.
+	// Using 25s as threshold gives ample tolerance for slow test machines.
+	if age < 25*time.Second {
+		t.Errorf("reconnect appears to have reset join time: stored age only %v (expected ~30s)", age)
+	}
+
+	// The client must still be blocked despite the reconnect.
+	limited, remaining := checkIPJoinWait(ipid)
+	if !limited {
+		t.Errorf("Expected client to still be blocked after reconnect, but was allowed")
+	}
+	if remaining <= 0 || remaining > 60 {
+		t.Errorf("Unexpected remaining seconds after reconnect: %d", remaining)
+	}
+}
+
+// TestIPJoinWaitUnknownIPID verifies that an unknown IPID (never joined) is not blocked.
+func TestIPJoinWaitUnknownIPID(t *testing.T) {
+	old := ipFirstJoinTracker.times
+	ipFirstJoinTracker.times = make(map[string]time.Time)
+	defer func() { ipFirstJoinTracker.times = old }()
+
+	limited, _ := checkIPJoinWait("unknown-ipid-xyz")
+	if limited {
+		t.Errorf("Unknown IPID should not be blocked by join wait")
+	}
+}
+
 // TestOOCJoinDelayBlocked tests that a client is blocked from speaking OOC within the join delay period.
 func TestOOCJoinDelayBlocked(t *testing.T) {
 	oldConfig := config

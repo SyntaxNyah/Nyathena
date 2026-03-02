@@ -134,6 +134,7 @@ func pktReqDone(client *Client, _ *packet.Packet) {
 	}
 	client.SetUid(uids.GetUid())
 	client.joinTime = time.Now()
+	recordIPFirstJoin(client.Ipid())
 	players.AddPlayer()
 	if config.Advertise {
 		updatePlayers <- players.GetPlayerCount()
@@ -816,9 +817,7 @@ func pktPing(client *Client, _ *packet.Packet) {
 
 // Handles ZZ#%
 func pktModcall(client *Client, p *packet.Packet) {
-	const modcallJoinWait = 60 * time.Second
-	if elapsed := time.Since(client.joinTime); elapsed < modcallJoinWait {
-		remaining := int(math.Ceil((modcallJoinWait - elapsed).Seconds()))
+	if limited, remaining := checkIPJoinWait(client.Ipid()); limited {
 		unit := "seconds"
 		if remaining == 1 {
 			unit = "second"

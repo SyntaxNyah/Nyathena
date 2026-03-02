@@ -79,6 +79,15 @@ var (
 		times: make(map[string]time.Time),
 	}
 
+	// ipFirstJoinTracker records the first time each IPID completed joining the server.
+	// This ensures the modcall join-wait cannot be bypassed by reconnecting.
+	ipFirstJoinTracker = struct {
+		mu    sync.Mutex
+		times map[string]time.Time // ipid -> first join time
+	}{
+		times: make(map[string]time.Time),
+	}
+
 	// ipOOCTracker tracks OOC message timestamps per IP across connections.
 	ipOOCTracker = struct {
 		mu         sync.Mutex
@@ -830,6 +839,21 @@ func startConnTrackerCleanup() {
 			ipModcallTracker.mu.Unlock()
 		}
 
+		// Clean up first-join entries that are older than the modcall join-wait period.
+		// Once 60 seconds have elapsed the entry serves no purpose and can be discarded.
+		// !t.After(joinCutoff) is equivalent to t <= joinCutoff (before or equal).
+		{
+			const modcallJoinWait = 60 * time.Second
+			joinCutoff := time.Now().Add(-modcallJoinWait)
+			ipFirstJoinTracker.mu.Lock()
+			for ipid, t := range ipFirstJoinTracker.times {
+				if !t.After(joinCutoff) {
+					delete(ipFirstJoinTracker.times, ipid)
+				}
+			}
+			ipFirstJoinTracker.mu.Unlock()
+		}
+
 		// Clean up stale OOC rate limit entries.
 		if config.OOCRateLimitWindow > 0 {
 			oocWindow := time.Duration(config.OOCRateLimitWindow) * time.Second
@@ -901,6 +925,35 @@ func setIPModcallTime(ipid string) {
 	ipModcallTracker.mu.Lock()
 	ipModcallTracker.times[ipid] = time.Now()
 	ipModcallTracker.mu.Unlock()
+}
+
+// recordIPFirstJoin stores the first time an IPID completed joining the server.
+// Subsequent calls for the same IPID are no-ops, preserving the original join time.
+func recordIPFirstJoin(ipid string) {
+	ipFirstJoinTracker.mu.Lock()
+	defer ipFirstJoinTracker.mu.Unlock()
+	if _, exists := ipFirstJoinTracker.times[ipid]; !exists {
+		ipFirstJoinTracker.times[ipid] = time.Now()
+	}
+}
+
+// checkIPJoinWait returns true (and the remaining seconds) if the IPID has not yet
+// waited 60 seconds since first joining the server.  This persists across reconnections
+// so that a client cannot bypass the wait by disconnecting and reconnecting.
+func checkIPJoinWait(ipid string) (bool, int) {
+	const modcallJoinWait = 60 * time.Second
+	ipFirstJoinTracker.mu.Lock()
+	defer ipFirstJoinTracker.mu.Unlock()
+	first, exists := ipFirstJoinTracker.times[ipid]
+	if !exists {
+		return false, 0
+	}
+	elapsed := time.Since(first)
+	if elapsed < modcallJoinWait {
+		remaining := int(math.Ceil((modcallJoinWait - elapsed).Seconds()))
+		return true, remaining
+	}
+	return false, 0
 }
 
 // checkIPOOCRateLimit checks if the given IPID has exceeded the OOC message rate limit.
