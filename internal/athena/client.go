@@ -313,9 +313,16 @@ func (client *Client) SendServerMessage(message string) {
 }
 
 // KickForRateLimit kicks the client for exceeding the rate limit.
+// If packet_flood_autoban is enabled, the client's IP is also banned.
 func (client *Client) KickForRateLimit() {
-	client.SendServerMessage("You have been kicked for spamming.")
-	logger.LogInfof("Client (IPID:%v UID:%v) kicked for exceeding rate limit", client.Ipid(), client.Uid())
+	if config.PacketFloodAutoban {
+		autoBanSpammer(client.Ipid())
+		client.SendPacket("BD", "You have been automatically banned for packet flooding.")
+		logger.LogInfof("Client (IPID:%v UID:%v) banned for exceeding rate limit", client.Ipid(), client.Uid())
+	} else {
+		client.SendServerMessage("You have been kicked for spamming.")
+		logger.LogInfof("Client (IPID:%v UID:%v) kicked for exceeding rate limit", client.Ipid(), client.Uid())
+	}
 	client.conn.Close()
 }
 

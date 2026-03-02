@@ -221,6 +221,18 @@ ping_rate_limit = 10
 # Default: 5 seconds
 ping_rate_limit_window = 5
 
+# Whether to automatically ban IPs that exceed the general packet rate limit (message_rate_limit).
+# When enabled, any client that triggers the packet rate limit is banned using the
+# default_ban_duration instead of just being kicked.
+# Default: false
+packet_flood_autoban = false
+
+# OOC join delay: Number of seconds a newly-joined client must wait before they can send
+# OOC chat messages. During this period they can still use commands (e.g. /help).
+# Set to 0 to disable the delay.
+# Default: 10 seconds
+ooc_join_delay = 10
+
 [Logging]
 # Sets the number of actions (IC chat messages, OOC chat messages, judge actions, etc.) each area should store.
 # When a user calls a mod, this buffer will be flushed to a report file for review.

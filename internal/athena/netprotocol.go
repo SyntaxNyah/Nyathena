@@ -740,6 +740,18 @@ func pktOOC(client *Client, p *packet.Packet) {
 		ParseCommand(client, command, args)
 		return
 	}
+	if config.OOCJoinDelay > 0 {
+		delay := time.Duration(config.OOCJoinDelay) * time.Second
+		if elapsed := time.Since(client.joinTime); elapsed < delay {
+			remaining := int(math.Ceil((delay - elapsed).Seconds()))
+			unit := "seconds"
+			if remaining == 1 {
+				unit = "second"
+			}
+			client.SendServerMessage(fmt.Sprintf("You must wait %d more %s before speaking in OOC.", remaining, unit))
+			return
+		}
+	}
 	if !client.CanSpeakOOC() {
 		client.SendServerMessage("You are muted from speaking in OOC.")
 		return

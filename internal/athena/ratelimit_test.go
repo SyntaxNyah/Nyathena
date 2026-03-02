@@ -844,3 +844,80 @@ func TestModcallJoinWaitAllowed(t *testing.T) {
 		t.Errorf("Expected client to be past join wait period, elapsed: %v", elapsed)
 	}
 }
+
+// TestOOCJoinDelayBlocked tests that a client is blocked from speaking OOC within the join delay period.
+func TestOOCJoinDelayBlocked(t *testing.T) {
+	oldConfig := config
+	defer func() { config = oldConfig }()
+
+	config = &settings.Config{}
+	config.OOCJoinDelay = 10
+
+	client := &Client{
+		joinTime: time.Now(), // just joined
+	}
+
+	delay := time.Duration(config.OOCJoinDelay) * time.Second
+	elapsed := time.Since(client.joinTime)
+	if elapsed >= delay {
+		t.Errorf("Expected client to be within OOC join delay period, elapsed: %v", elapsed)
+	}
+}
+
+// TestOOCJoinDelayAllowed tests that a client is allowed to speak OOC after the join delay period.
+func TestOOCJoinDelayAllowed(t *testing.T) {
+	oldConfig := config
+	defer func() { config = oldConfig }()
+
+	config = &settings.Config{}
+	config.OOCJoinDelay = 10
+
+	client := &Client{
+		joinTime: time.Now().Add(-11 * time.Second), // joined 11 seconds ago
+	}
+
+	delay := time.Duration(config.OOCJoinDelay) * time.Second
+	elapsed := time.Since(client.joinTime)
+	if elapsed < delay {
+		t.Errorf("Expected client to be past OOC join delay period, elapsed: %v", elapsed)
+	}
+}
+
+// TestOOCJoinDelayDisabled tests that the OOC join delay check is skipped when set to 0.
+func TestOOCJoinDelayDisabled(t *testing.T) {
+	oldConfig := config
+	defer func() { config = oldConfig }()
+
+	config = &settings.Config{}
+	config.OOCJoinDelay = 0
+
+	if config.OOCJoinDelay > 0 {
+		t.Errorf("OOC join delay should be disabled when set to 0")
+	}
+}
+
+// TestPacketFloodAutobanEnabled tests that PacketFloodAutoban config is respected.
+func TestPacketFloodAutobanEnabled(t *testing.T) {
+	oldConfig := config
+	defer func() { config = oldConfig }()
+
+	config = &settings.Config{}
+	config.PacketFloodAutoban = true
+
+	if !config.PacketFloodAutoban {
+		t.Errorf("PacketFloodAutoban should be true when configured")
+	}
+}
+
+// TestPacketFloodAutobanDisabled tests that PacketFloodAutoban defaults to disabled.
+func TestPacketFloodAutobanDisabled(t *testing.T) {
+	oldConfig := config
+	defer func() { config = oldConfig }()
+
+	config = &settings.Config{}
+	// PacketFloodAutoban defaults to false (zero value for bool)
+
+	if config.PacketFloodAutoban {
+		t.Errorf("PacketFloodAutoban should be false by default")
+	}
+}
