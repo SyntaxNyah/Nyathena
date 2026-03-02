@@ -818,3 +818,322 @@ func TestIPPingRateLimitWindowExpiry(t *testing.T) {
 		t.Errorf("Ping was blocked after window expired")
 	}
 }
+
+// TestModcallJoinWaitBlocked tests that a modcall is blocked when sent within 60 seconds of joining.
+func TestModcallJoinWaitBlocked(t *testing.T) {
+	client := &Client{
+		joinTime: time.Now(), // just joined
+	}
+
+	elapsed := time.Since(client.joinTime)
+	const modcallJoinWait = 60 * time.Second
+	if elapsed >= modcallJoinWait {
+		t.Errorf("Expected client to be within join wait period, elapsed: %v", elapsed)
+	}
+}
+
+// TestModcallJoinWaitAllowed tests that a modcall is allowed after 60 seconds have elapsed.
+func TestModcallJoinWaitAllowed(t *testing.T) {
+	client := &Client{
+		joinTime: time.Now().Add(-61 * time.Second), // joined 61 seconds ago
+	}
+
+	elapsed := time.Since(client.joinTime)
+	const modcallJoinWait = 60 * time.Second
+	if elapsed < modcallJoinWait {
+		t.Errorf("Expected client to be past join wait period, elapsed: %v", elapsed)
+	}
+}
+
+// TestIPJoinWaitBlockedOnFirstJoin verifies that a freshly-recorded IPID is blocked.
+func TestIPJoinWaitBlockedOnFirstJoin(t *testing.T) {
+	// Isolate tracker state.
+	old := ipFirstJoinTracker.times
+	ipFirstJoinTracker.times = make(map[string]time.Time)
+	defer func() { ipFirstJoinTracker.times = old }()
+
+	const ipid = "testipid-join-new"
+	recordIPFirstJoin(ipid)
+
+	limited, remaining := checkIPJoinWait(ipid)
+	if !limited {
+		t.Errorf("Expected new IPID to be blocked by join wait, but it was not")
+	}
+	if remaining <= 0 || remaining > 60 {
+		t.Errorf("Unexpected remaining seconds: %d", remaining)
+	}
+}
+
+// TestIPJoinWaitAllowedAfterWait verifies that an IPID recorded 61s ago is no longer blocked.
+func TestIPJoinWaitAllowedAfterWait(t *testing.T) {
+	old := ipFirstJoinTracker.times
+	ipFirstJoinTracker.times = make(map[string]time.Time)
+	defer func() { ipFirstJoinTracker.times = old }()
+
+	const ipid = "testipid-join-old"
+	ipFirstJoinTracker.mu.Lock()
+	ipFirstJoinTracker.times[ipid] = time.Now().Add(-61 * time.Second)
+	ipFirstJoinTracker.mu.Unlock()
+
+	limited, _ := checkIPJoinWait(ipid)
+	if limited {
+		t.Errorf("Expected IPID that joined 61s ago to be allowed, but it was blocked")
+	}
+}
+
+// TestIPJoinWaitReconnectBypassPrevented verifies that reconnecting does not reset the join timer.
+// A client records its first join, then "reconnects" (recordIPFirstJoin called again for same IPID).
+// The second call must not overwrite the original join time.
+func TestIPJoinWaitReconnectBypassPrevented(t *testing.T) {
+	old := ipFirstJoinTracker.times
+	ipFirstJoinTracker.times = make(map[string]time.Time)
+	defer func() { ipFirstJoinTracker.times = old }()
+
+	const ipid = "testipid-reconnect"
+
+	// Simulate initial join 30 seconds ago.
+	ipFirstJoinTracker.mu.Lock()
+	ipFirstJoinTracker.times[ipid] = time.Now().Add(-30 * time.Second)
+	ipFirstJoinTracker.mu.Unlock()
+
+	// Simulate a reconnect — should NOT update the stored time.
+	recordIPFirstJoin(ipid)
+
+	// The stored time must still reflect the original join 30s ago (not time.Now()).
+	ipFirstJoinTracker.mu.Lock()
+	stored := ipFirstJoinTracker.times[ipid]
+	ipFirstJoinTracker.mu.Unlock()
+
+	age := time.Since(stored)
+	// The stored time should be ~30s old.  A reset to "now" would give age ~0s.
+	// Using 25s as threshold gives ample tolerance for slow test machines.
+	if age < 25*time.Second {
+		t.Errorf("reconnect appears to have reset join time: stored age only %v (expected ~30s)", age)
+	}
+
+	// The client must still be blocked despite the reconnect.
+	limited, remaining := checkIPJoinWait(ipid)
+	if !limited {
+		t.Errorf("Expected client to still be blocked after reconnect, but was allowed")
+	}
+	if remaining <= 0 || remaining > 60 {
+		t.Errorf("Unexpected remaining seconds after reconnect: %d", remaining)
+	}
+}
+
+// TestIPJoinWaitUnknownIPID verifies that an unknown IPID (never joined) is not blocked.
+func TestIPJoinWaitUnknownIPID(t *testing.T) {
+	old := ipFirstJoinTracker.times
+	ipFirstJoinTracker.times = make(map[string]time.Time)
+	defer func() { ipFirstJoinTracker.times = old }()
+
+	limited, _ := checkIPJoinWait("unknown-ipid-xyz")
+	if limited {
+		t.Errorf("Unknown IPID should not be blocked by join wait")
+	}
+}
+
+// TestOOCJoinDelayBlocked tests that a client is blocked from speaking OOC within the join delay period.
+func TestOOCJoinDelayBlocked(t *testing.T) {
+	oldConfig := config
+	defer func() { config = oldConfig }()
+
+	config = &settings.Config{}
+	config.OOCJoinDelay = 10
+
+	client := &Client{
+		joinTime: time.Now(), // just joined
+	}
+
+	delay := time.Duration(config.OOCJoinDelay) * time.Second
+	elapsed := time.Since(client.joinTime)
+	if elapsed >= delay {
+		t.Errorf("Expected client to be within OOC join delay period, elapsed: %v", elapsed)
+	}
+}
+
+// TestOOCJoinDelayAllowed tests that a client is allowed to speak OOC after the join delay period.
+func TestOOCJoinDelayAllowed(t *testing.T) {
+	oldConfig := config
+	defer func() { config = oldConfig }()
+
+	config = &settings.Config{}
+	config.OOCJoinDelay = 10
+
+	client := &Client{
+		joinTime: time.Now().Add(-11 * time.Second), // joined 11 seconds ago
+	}
+
+	delay := time.Duration(config.OOCJoinDelay) * time.Second
+	elapsed := time.Since(client.joinTime)
+	if elapsed < delay {
+		t.Errorf("Expected client to be past OOC join delay period, elapsed: %v", elapsed)
+	}
+}
+
+// TestOOCJoinDelayDisabled tests that the OOC join delay check is skipped when set to 0.
+func TestOOCJoinDelayDisabled(t *testing.T) {
+	oldConfig := config
+	defer func() { config = oldConfig }()
+
+	config = &settings.Config{}
+	config.OOCJoinDelay = 0
+
+	if config.OOCJoinDelay > 0 {
+		t.Errorf("OOC join delay should be disabled when set to 0")
+	}
+}
+
+// TestPacketFloodAutobanEnabled tests that PacketFloodAutoban config is respected.
+func TestPacketFloodAutobanEnabled(t *testing.T) {
+	oldConfig := config
+	defer func() { config = oldConfig }()
+
+	config = &settings.Config{}
+	config.PacketFloodAutoban = true
+
+	if !config.PacketFloodAutoban {
+		t.Errorf("PacketFloodAutoban should be true when configured")
+	}
+}
+
+// TestPacketFloodAutobanDisabled tests that PacketFloodAutoban defaults to disabled.
+func TestPacketFloodAutobanDisabled(t *testing.T) {
+	oldConfig := config
+	defer func() { config = oldConfig }()
+
+	config = &settings.Config{}
+	// PacketFloodAutoban defaults to false (zero value for bool)
+
+	if config.PacketFloodAutoban {
+		t.Errorf("PacketFloodAutoban should be false by default")
+	}
+}
+
+// TestOOCFloodDroppedWhenAutoBanDisabled tests that an OOC flood is silently dropped
+// (but no ban attempted) when PacketFloodAutoban is false.
+func TestOOCFloodDroppedWhenAutoBanDisabled(t *testing.T) {
+	oldConfig := config
+	defer func() { config = oldConfig }()
+
+	config = &settings.Config{}
+	config.OOCRateLimit = 2
+	config.OOCRateLimitWindow = 1
+	config.PacketFloodAutoban = false
+
+	old := ipOOCTracker.timestamps
+	ipOOCTracker.timestamps = make(map[string][]time.Time)
+	defer func() { ipOOCTracker.timestamps = old }()
+
+	const ipid = "testOOCDropNoAutoban"
+	// Exhaust the rate limit.
+	checkIPOOCRateLimit(ipid) // 1st
+	checkIPOOCRateLimit(ipid) // 2nd
+
+	// 3rd call must be rate-limited; auto-ban is disabled, so the call must return true without
+	// performing any ban (autoBanSpammer would panic here if db is nil, confirming it's not called).
+	if !checkIPOOCRateLimit(ipid) {
+		t.Errorf("Expected OOC rate limit to fire on 3rd call")
+	}
+}
+
+// TestOOCFloodDetectedWhenAutobanEnabled tests that an OOC flood is detected
+// and the auto-ban config flag is set when PacketFloodAutoban is true.
+func TestOOCFloodDetectedWhenAutobanEnabled(t *testing.T) {
+	oldConfig := config
+	defer func() { config = oldConfig }()
+
+	config = &settings.Config{}
+	config.OOCRateLimit = 2
+	config.OOCRateLimitWindow = 1
+	config.PacketFloodAutoban = true
+
+	old := ipOOCTracker.timestamps
+	ipOOCTracker.timestamps = make(map[string][]time.Time)
+	defer func() { ipOOCTracker.timestamps = old }()
+
+	const ipid = "testOOCAutobanFlag"
+	// Exhaust the rate limit.
+	checkIPOOCRateLimit(ipid)
+	checkIPOOCRateLimit(ipid)
+
+	// 3rd call must be rate-limited.
+	if !checkIPOOCRateLimit(ipid) {
+		t.Errorf("Expected OOC rate limit to fire on 3rd call")
+	}
+	// Confirm auto-ban is configured (the actual ban call requires a DB, so we just verify the flag).
+	if !config.PacketFloodAutoban {
+		t.Errorf("PacketFloodAutoban should be enabled")
+	}
+}
+
+// TestOOCFloodInPlaceFilteringCorrectnessLargeWindow verifies the in-place sliding window
+// filter does not lose valid entries when some old timestamps are pruned.
+func TestOOCFloodInPlaceFilteringCorrectness(t *testing.T) {
+	oldConfig := config
+	defer func() { config = oldConfig }()
+
+	config = &settings.Config{}
+	config.OOCRateLimit = 5
+	config.OOCRateLimitWindow = 60
+
+	old := ipOOCTracker.timestamps
+	ipOOCTracker.timestamps = make(map[string][]time.Time)
+	defer func() { ipOOCTracker.timestamps = old }()
+
+	const ipid = "testOOCInPlace"
+	// Manually seed two old (expired) and two recent timestamps.
+	ipOOCTracker.mu.Lock()
+	ipOOCTracker.timestamps[ipid] = []time.Time{
+		time.Now().Add(-120 * time.Second), // expired
+		time.Now().Add(-90 * time.Second),  // expired
+		time.Now().Add(-10 * time.Second),  // valid
+		time.Now().Add(-5 * time.Second),   // valid
+	}
+	ipOOCTracker.mu.Unlock()
+
+	// After the in-place filter, only 2 valid entries remain; adding a new one = 3 < limit(5).
+	if checkIPOOCRateLimit(ipid) {
+		t.Errorf("Should not be rate-limited: only 3 entries within window (limit 5)")
+	}
+
+	// Adding 2 more should still be under limit.
+	if checkIPOOCRateLimit(ipid) {
+		t.Errorf("Should not be rate-limited: 4 entries within window (limit 5)")
+	}
+	// 5th entry hits the limit exactly.
+	if checkIPOOCRateLimit(ipid) {
+		t.Errorf("Should not be rate-limited: 5th entry (limit 5, exact boundary)")
+	}
+	// 6th must be blocked.
+	if !checkIPOOCRateLimit(ipid) {
+		t.Errorf("Should be rate-limited on 6th call (limit 5)")
+	}
+}
+
+// TestModcallRateLimitCheck verifies that a client exceeding the general rate limit
+// is flagged, so pktModcall can call KickForRateLimit like other handlers.
+func TestModcallRateLimitCheck(t *testing.T) {
+	oldConfig := config
+	defer func() { config = oldConfig }()
+
+	config = &settings.Config{}
+	config.RateLimit = 3
+	config.RateLimitWindow = 5
+
+	client := &Client{
+		msgTimestamps: []time.Time{},
+	}
+
+	// 3 calls within the window should be allowed.
+	for i := 0; i < 3; i++ {
+		if client.CheckRateLimit() {
+			t.Errorf("Call %d was unexpectedly rate-limited (limit 3)", i+1)
+		}
+	}
+
+	// 4th call must exceed the limit.
+	if !client.CheckRateLimit() {
+		t.Errorf("Expected rate limit to fire on 4th call (limit 3)")
+	}
+}

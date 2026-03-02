@@ -20,10 +20,12 @@ import (
 	"crypto/md5"
 	"encoding/base64"
 	"fmt"
+	"math"
 	"math/rand"
 	"regexp"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/MangosArentLiterature/Athena/internal/area"
 	"github.com/MangosArentLiterature/Athena/internal/db"
@@ -131,6 +133,8 @@ func pktReqDone(client *Client, _ *packet.Packet) {
 		return
 	}
 	client.SetUid(uids.GetUid())
+	client.joinTime = time.Now()
+	recordIPFirstJoin(client.Ipid())
 	players.AddPlayer()
 	if config.Advertise {
 		updatePlayers <- players.GetPlayerCount()
@@ -705,6 +709,12 @@ func pktOOC(client *Client, p *packet.Packet) {
 
 	// Check OOC-specific rate limit per IP; persists across connections to prevent bypass via reconnection.
 	if checkIPOOCRateLimit(client.Ipid()) {
+		if config.PacketFloodAutoban {
+			autoBanSpammer(client.Ipid())
+			client.SendPacket("BD", "You have been automatically banned for OOC flooding.")
+			logger.LogInfof("Client (IPID:%v UID:%v) banned for OOC flooding", client.Ipid(), client.Uid())
+			client.conn.Close()
+		}
 		return
 	}
 
@@ -737,11 +747,28 @@ func pktOOC(client *Client, p *packet.Packet) {
 		ParseCommand(client, command, args)
 		return
 	}
+	if config.OOCJoinDelay > 0 {
+		delay := time.Duration(config.OOCJoinDelay) * time.Second
+		if elapsed := time.Since(client.joinTime); elapsed < delay {
+			remaining := int(math.Ceil((delay - elapsed).Seconds()))
+			unit := "seconds"
+			if remaining == 1 {
+				unit = "second"
+			}
+			client.SendServerMessage(fmt.Sprintf("You must wait %d more %s before speaking in OOC.", remaining, unit))
+			return
+		}
+	}
 	if !client.CanSpeakOOC() {
 		client.SendServerMessage("You are muted from speaking in OOC.")
 		return
 	}
+	if strings.EqualFold(strings.TrimSpace(p.Body[1]), client.Area().LastOOCMsg()) {
+		client.SendServerMessage("Duplicate OOC messages are not allowed.")
+		return
+	}
 	writeToArea(client.Area(), "CT", encode(client.OOCName()), p.Body[1], "0")
+	client.Area().SetLastOOCMsg(strings.TrimSpace(p.Body[1]))
 	addToBuffer(client, "OOC", "\""+p.Body[1]+"\"", false)
 }
 
@@ -796,6 +823,18 @@ func pktPing(client *Client, _ *packet.Packet) {
 
 // Handles ZZ#%
 func pktModcall(client *Client, p *packet.Packet) {
+	if client.CheckRateLimit() {
+		client.KickForRateLimit()
+		return
+	}
+	if limited, remaining := checkIPJoinWait(client.Ipid()); limited {
+		unit := "seconds"
+		if remaining == 1 {
+			unit = "second"
+		}
+		client.SendServerMessage(fmt.Sprintf("You must wait %d %s after joining before sending a modcall.", remaining, unit))
+		return
+	}
 	if limited, remaining := checkIPModcallCooldown(client.Ipid()); limited {
 		unit := "seconds"
 		if remaining == 1 {

@@ -75,14 +75,17 @@ type ServerConfig struct {
 	OOCRateLimitWindow    int    `toml:"ooc_rate_limit_window"`
 	PingRateLimit         int    `toml:"ping_rate_limit"`
 	PingRateLimitWindow   int    `toml:"ping_rate_limit_window"`
+	PacketFloodAutoban    bool   `toml:"packet_flood_autoban"`
+	OOCJoinDelay          int    `toml:"ooc_join_delay"`
 }
 
 type LogConfig struct {
-	BufSize          int      `toml:"log_buffer_size"`
-	LogLevel         string   `toml:"log_level"`
-	LogDir           string   `toml:"log_directory"`
-	LogMethods       []string `toml:"log_methods"`
-	EnableAreaLogging bool    `toml:"enable_area_logging"`
+	BufSize           int      `toml:"log_buffer_size"`
+	LogLevel          string   `toml:"log_level"`
+	LogDir            string   `toml:"log_directory"`
+	LogMethods        []string `toml:"log_methods"`
+	EnableAreaLogging bool     `toml:"enable_area_logging"`
+	EnableNetworkLog  bool     `toml:"enable_network_logging"`
 }
 
 type MSConfig struct {
@@ -131,6 +134,8 @@ func defaultConfig() *Config {
 			OOCRateLimitWindow:    1,
 			PingRateLimit:         10,
 			PingRateLimitWindow:   5,
+			PacketFloodAutoban:    false,
+			OOCJoinDelay:          10,
 		},
 		LogConfig{
 			BufSize:           150,
@@ -138,6 +143,7 @@ func defaultConfig() *Config {
 			LogDir:            "logs",
 			LogMethods:        []string{"stdout"},
 			EnableAreaLogging: false,
+			EnableNetworkLog:  false,
 		},
 		MSConfig{
 			Advertise: false,

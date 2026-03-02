@@ -51,8 +51,10 @@ var (
 	CurrentLevel      LogLevel
 	outputLock        sync.Mutex
 	fileLock          sync.Mutex
+	networkLogLock    sync.Mutex
 	DebugNetwork      bool
 	EnableAreaLogging bool
+	EnableNetworkLog  bool
 	areaLogLocks      sync.Map // Map of area names to their respective locks
 )
 
@@ -154,6 +156,51 @@ func WriteAudit(s string) {
 		LogError(err.Error())
 		return
 	}
+}
+
+// WriteNetworkLog writes a network packet entry to the network log file.
+// direction should be "RECV" (incoming) or "SEND" (outgoing).
+// Set content to a panic message for crash log entries.
+func WriteNetworkLog(hdid, ipid, direction, content string) {
+	if !EnableNetworkLog {
+		return
+	}
+	networkLogLock.Lock()
+	defer networkLogLock.Unlock()
+	f, err := os.OpenFile(LogPath+"/network.log", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
+	if err != nil {
+		LogError(err.Error())
+		return
+	}
+	defer f.Close()
+	entry := fmt.Sprintf("[%v] %v | IPID:%v | HDID:%v | %v\n",
+		time.Now().UTC().Format(time.RFC3339), direction, ipid, hdid, content)
+	_, err = f.WriteString(entry)
+	if err != nil {
+		LogError(err.Error())
+	}
+}
+
+// WriteCrashLog writes a timestamped crash report file containing the panic value and
+// stack trace to the log directory.  The crash event is also appended to network.log.
+// If LogPath is empty the crash file is written to the current directory.
+func WriteCrashLog(val interface{}, stack []byte) {
+	msg := fmt.Sprintf("panic: %v\n\n%s", val, stack)
+	LogFatalf("Server crash: %v", val)
+
+	fname := fmt.Sprintf("crash-%v.log", time.Now().UTC().Format("2006-01-02T150405Z"))
+	fpath := filepath.Join(LogPath, fname)
+	if LogPath == "" {
+		fpath = fname
+	}
+	fileLock.Lock()
+	if err := os.WriteFile(fpath, []byte(msg), 0644); err != nil {
+		fmt.Fprintf(os.Stderr, "CRASH (could not write %s): %s\n", fpath, msg)
+	}
+	fileLock.Unlock()
+
+	// Also record the crash in network.log so operators have one unified place to look.
+	WriteNetworkLog("-", "-", "CRASH", fmt.Sprintf("panic: %v", val))
 }
 
 // WriteLog writes a line to the server's log file.

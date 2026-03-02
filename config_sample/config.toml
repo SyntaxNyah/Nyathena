@@ -221,6 +221,18 @@ ping_rate_limit = 10
 # Default: 5 seconds
 ping_rate_limit_window = 5
 
+# Whether to automatically ban IPs that exceed the general packet rate limit (message_rate_limit).
+# When enabled, any client that triggers the packet rate limit is banned using the
+# default_ban_duration instead of just being kicked.
+# Default: false
+packet_flood_autoban = false
+
+# OOC join delay: Number of seconds a newly-joined client must wait before they can send
+# OOC chat messages. During this period they can still use commands (e.g. /help).
+# Set to 0 to disable the delay.
+# Default: 10 seconds
+ooc_join_delay = 10
+
 [Logging]
 # Sets the number of actions (IC chat messages, OOC chat messages, judge actions, etc.) each area should store.
 # When a user calls a mod, this buffer will be flushed to a report file for review.
@@ -243,6 +255,13 @@ log_methods = [ "stdout" ]
 # Format: logs/AreaName/AreaName-YYYY-MM-DD.txt
 # Each log line includes: [HH:MM:SS] | ACTION | CHARACTER | IPID | HDID | SHOWNAME | OOC_NAME | MESSAGE
 enable_area_logging = false
+
+# Enable network packet logging to logs/network.log.
+# When enabled, every incoming and outgoing packet is recorded with timestamp, direction,
+# IPID, HDID, and packet content. Crash/panic events are also written to this log.
+# Format: [TIMESTAMP] RECV/SEND/CRASH | IPID:<ipid> | HDID:<hdid> | <packet>
+# Note: This can generate large log files on busy servers.
+enable_network_logging = false
 
 [MasterServer]
 

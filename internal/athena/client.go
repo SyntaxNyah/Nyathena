@@ -22,6 +22,7 @@ import (
 	"fmt"
 	"math"
 	"net"
+	"runtime/debug"
 	"strconv"
 	"strings"
 	"sync"
@@ -171,6 +172,7 @@ type Client struct {
 	forcePairUID    int         // UID of the client this client is force-paired with (-1 if none)
 	possessing      int         // UID of the client being possessed (-1 if not possessing anyone)
 	possessedPos    string      // Position of the possessed target (saved at time of possession)
+	joinTime        time.Time   // Time when the client completed joining the server
 }
 
 // NewClient returns a new client.
@@ -188,7 +190,12 @@ func NewClient(conn net.Conn, ipid string) *Client {
 
 // handleClient handles a client connection to the server.
 func (client *Client) HandleClient() {
-	defer client.clientCleanup()
+	defer func() {
+		if r := recover(); r != nil {
+			logger.WriteCrashLog(r, debug.Stack())
+		}
+		client.clientCleanup()
+	}()
 
 	client.CheckBanned(db.IPID)
 
@@ -227,10 +234,12 @@ func (client *Client) HandleClient() {
 	input.Split(splitfn) // Split input when a packet delimiter ('%') is found
 
 	for input.Scan() {
+		raw := strings.TrimSpace(input.Text())
 		if logger.DebugNetwork {
-			logger.LogDebugf("From %v: %v", client.ipid, strings.TrimSpace(input.Text()))
+			logger.LogDebugf("From %v: %v", client.ipid, raw)
 		}
-		packet, err := packet.NewPacket(strings.TrimSpace(input.Text()))
+		logger.WriteNetworkLog(client.Hdid(), client.Ipid(), "RECV", raw)
+		packet, err := packet.NewPacket(raw)
 		if err != nil {
 			continue // Discard invalid packets
 		}
@@ -252,6 +261,7 @@ func (client *Client) write(message string) {
 	if logger.DebugNetwork {
 		logger.LogDebugf("To %v: %v", client.ipid, message)
 	}
+	logger.WriteNetworkLog(client.Hdid(), client.Ipid(), "SEND", message)
 	client.mu.Unlock()
 }
 
@@ -312,9 +322,16 @@ func (client *Client) SendServerMessage(message string) {
 }
 
 // KickForRateLimit kicks the client for exceeding the rate limit.
+// If packet_flood_autoban is enabled, the client's IP is also banned.
 func (client *Client) KickForRateLimit() {
-	client.SendServerMessage("You have been kicked for spamming.")
-	logger.LogInfof("Client (IPID:%v UID:%v) kicked for exceeding rate limit", client.Ipid(), client.Uid())
+	if config.PacketFloodAutoban {
+		autoBanSpammer(client.Ipid())
+		client.SendPacket("BD", "You have been automatically banned for packet flooding.")
+		logger.LogInfof("Client (IPID:%v UID:%v) banned for exceeding rate limit", client.Ipid(), client.Uid())
+	} else {
+		client.SendServerMessage("You have been kicked for spamming.")
+		logger.LogInfof("Client (IPID:%v UID:%v) kicked for exceeding rate limit", client.Ipid(), client.Uid())
+	}
 	client.conn.Close()
 }
 
