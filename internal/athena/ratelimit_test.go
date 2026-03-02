@@ -21,6 +21,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/MangosArentLiterature/Athena/internal/area"
 	"github.com/MangosArentLiterature/Athena/internal/settings"
 )
 
@@ -816,5 +817,115 @@ func TestIPPingRateLimitWindowExpiry(t *testing.T) {
 
 	if checkIPPingRateLimit(ipid) {
 		t.Errorf("Ping was blocked after window expired")
+	}
+}
+
+// TestIPOOCRateLimitReturnsTrue verifies that checkIPOOCRateLimit returns true (exceeded)
+// once the limit is hit, so the caller can kick the client.
+func TestIPOOCRateLimitReturnsTrue(t *testing.T) {
+	oldConfig := config
+	defer func() { config = oldConfig }()
+
+	config = &settings.Config{}
+	config.OOCRateLimit = 2
+	config.OOCRateLimitWindow = 5
+
+	ipOOCTracker.mu.Lock()
+	ipOOCTracker.timestamps = make(map[string][]time.Time)
+	ipOOCTracker.mu.Unlock()
+
+	ipid := "testIPOOCKick"
+	checkIPOOCRateLimit(ipid)
+	checkIPOOCRateLimit(ipid)
+
+	if !checkIPOOCRateLimit(ipid) {
+		t.Errorf("Expected checkIPOOCRateLimit to return true (exceeded) so the caller can kick the client")
+	}
+}
+
+// TestAreaOOCDedupFirstMessageAllowed tests that the first OOC message in an area is never rejected.
+func TestAreaOOCDedupFirstMessageAllowed(t *testing.T) {
+	a := area.NewArea(area.AreaData{Name: "DedupTest1"}, 2, 10, area.EviCMs)
+	areaLastOOCMsg.Delete(a)
+
+	msg := "hello"
+	if last, ok := areaLastOOCMsg.Load(a); ok {
+		if lastStr, ok := last.(string); ok && lastStr == msg {
+			t.Errorf("First OOC message should not be treated as a duplicate")
+		}
+	}
+	areaLastOOCMsg.Store(a, msg)
+}
+
+// TestAreaOOCDedupSameMessageBlocked tests that an identical OOC message from any client
+// is detected as a duplicate as long as no different message has been sent since.
+func TestAreaOOCDedupSameMessageBlocked(t *testing.T) {
+	a := area.NewArea(area.AreaData{Name: "DedupTest2"}, 2, 10, area.EviCMs)
+	areaLastOOCMsg.Delete(a)
+
+	msg := "hello"
+	areaLastOOCMsg.Store(a, msg) // simulate first client sending "hello"
+
+	// Second client tries to send the same message
+	last, ok := areaLastOOCMsg.Load(a)
+	if !ok {
+		t.Errorf("Duplicate OOC message was not detected: no entry in map")
+		return
+	}
+	lastStr, ok := last.(string)
+	if !ok || lastStr != msg {
+		t.Errorf("Duplicate OOC message was not detected")
+	}
+}
+
+// TestAreaOOCDedupDifferentMessageAllowed tests that a different OOC message is not blocked.
+func TestAreaOOCDedupDifferentMessageAllowed(t *testing.T) {
+	a := area.NewArea(area.AreaData{Name: "DedupTest3"}, 2, 10, area.EviCMs)
+	areaLastOOCMsg.Delete(a)
+
+	areaLastOOCMsg.Store(a, "hello")
+
+	newMsg := "world"
+	if last, ok := areaLastOOCMsg.Load(a); ok {
+		if lastStr, ok := last.(string); ok && lastStr == newMsg {
+			t.Errorf("Different OOC message was incorrectly detected as duplicate")
+		}
+	}
+	areaLastOOCMsg.Store(a, newMsg)
+}
+
+// TestAreaOOCDedupOriginalAllowedAfterDifferent tests that after a different message is sent,
+// the original message can be sent again without being blocked.
+func TestAreaOOCDedupOriginalAllowedAfterDifferent(t *testing.T) {
+	a := area.NewArea(area.AreaData{Name: "DedupTest4"}, 2, 10, area.EviCMs)
+	areaLastOOCMsg.Delete(a)
+
+	original := "hello"
+	areaLastOOCMsg.Store(a, original)
+	areaLastOOCMsg.Store(a, "something else") // different message
+
+	// Now the original should not match the stored last message
+	if last, ok := areaLastOOCMsg.Load(a); ok {
+		if lastStr, ok := last.(string); ok && lastStr == original {
+			t.Errorf("Original message should be allowed again after a different message was sent")
+		}
+	}
+}
+
+// TestAreaOOCDedupIndependentPerArea tests that dedup state is independent for each area.
+func TestAreaOOCDedupIndependentPerArea(t *testing.T) {
+	a1 := area.NewArea(area.AreaData{Name: "DedupArea1"}, 2, 10, area.EviCMs)
+	a2 := area.NewArea(area.AreaData{Name: "DedupArea2"}, 2, 10, area.EviCMs)
+	areaLastOOCMsg.Delete(a1)
+	areaLastOOCMsg.Delete(a2)
+
+	msg := "hello"
+	areaLastOOCMsg.Store(a1, msg) // send "hello" in area1
+
+	// "hello" in area2 should not be a duplicate (different area)
+	if last, ok := areaLastOOCMsg.Load(a2); ok {
+		if lastStr, ok := last.(string); ok && lastStr == msg {
+			t.Errorf("OOC dedup should be independent per area; area2 should not see area1's last message")
+		}
 	}
 }

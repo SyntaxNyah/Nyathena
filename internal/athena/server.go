@@ -95,6 +95,20 @@ var (
 		timestamps: make(map[string][]time.Time),
 	}
 
+	// ipFirstSeenTracker records the first time each IPID connected to this server session.
+	// Entries are never deleted so that returning IPIDs are never treated as "new" again.
+	ipFirstSeenTracker = struct {
+		mu    sync.Mutex
+		times map[string]time.Time // ipid -> first seen time
+	}{
+		times: make(map[string]time.Time),
+	}
+
+	// areaLastOOCMsg stores the last OOC message body (raw, as received) sent in each area.
+	// Used to prevent consecutive identical OOC messages from different clients in the same area.
+	// Key: *area.Area, Value: string. sync.Map is zero-value ready; no initialisation required.
+	areaLastOOCMsg sync.Map
+
 	// Tournament mode state
 	tournamentActive       bool
 	tournamentMutex        sync.Mutex
@@ -267,6 +281,12 @@ func NewServer(conf *settings.Config) (*Server, error) {
 		}
 	}
 
+	// Initialize network logging if enabled.
+	logger.EnableNetworkLogging = conf.EnableNetworkLogging
+	if logger.EnableNetworkLogging {
+		logger.LogInfo("Network logging is enabled. All packets will be logged to network.log.")
+	}
+
 	if conf.Advertise {
 		advert := ms.Advertisement{
 			Port:    conf.Port,
@@ -373,8 +393,9 @@ func (s *Server) ListenTCP() {
 			conn.Close()
 			continue
 		}
+		recordIPFirstSeen(ipid)
 		if logger.DebugNetwork {
-			logger.LogDebugf("Connection recieved from %v", ipid)
+			logger.LogDebugf("Connection received from %v", ipid)
 		}
 		client := NewClient(conn, ipid)
 		go client.HandleClient()
@@ -458,6 +479,7 @@ func HandleWS(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Too many connections", http.StatusTooManyRequests)
 		return
 	}
+	recordIPFirstSeen(ipid)
 	c, err := websocket.Accept(w, r, &websocket.AcceptOptions{OriginPatterns: []string{"*"}})
 	if err != nil {
 		logger.LogError(err.Error())
@@ -937,5 +959,58 @@ func checkIPPingRateLimit(ipid string) bool {
 	valid = append(valid, now)
 	ipPingTracker.timestamps[ipid] = valid
 	return false
+}
+
+// recordIPFirstSeen records the first time an IPID connects to this server session.
+// If the IPID has already been seen, this is a no-op; entries are never removed so that
+// returning IPIDs are never mistakenly treated as new again.
+func recordIPFirstSeen(ipid string) {
+	ipFirstSeenTracker.mu.Lock()
+	defer ipFirstSeenTracker.mu.Unlock()
+	if _, exists := ipFirstSeenTracker.times[ipid]; !exists {
+		ipFirstSeenTracker.times[ipid] = time.Now()
+	}
+}
+
+// checkNewIPIDOOCCooldown checks whether a newly-seen IPID is still within the OOC chat cooldown.
+// Returns true (and remaining seconds, rounded up) if the IPID must wait, false otherwise.
+func checkNewIPIDOOCCooldown(ipid string) (bool, int) {
+	if config.NewIPIDOOCCooldown <= 0 {
+		return false, 0
+	}
+	ipFirstSeenTracker.mu.Lock()
+	defer ipFirstSeenTracker.mu.Unlock()
+	t, exists := ipFirstSeenTracker.times[ipid]
+	if !exists {
+		return false, 0
+	}
+	cooldown := time.Duration(config.NewIPIDOOCCooldown) * time.Second
+	elapsed := time.Since(t)
+	if elapsed < cooldown {
+		remaining := int(math.Ceil((cooldown - elapsed).Seconds()))
+		return true, remaining
+	}
+	return false, 0
+}
+
+// checkNewIPIDModcallCooldown checks whether a newly-seen IPID is still within the modcall cooldown.
+// Returns true (and remaining seconds, rounded up) if the IPID must wait, false otherwise.
+func checkNewIPIDModcallCooldown(ipid string) (bool, int) {
+	if config.NewIPIDModcallCooldown <= 0 {
+		return false, 0
+	}
+	ipFirstSeenTracker.mu.Lock()
+	defer ipFirstSeenTracker.mu.Unlock()
+	t, exists := ipFirstSeenTracker.times[ipid]
+	if !exists {
+		return false, 0
+	}
+	cooldown := time.Duration(config.NewIPIDModcallCooldown) * time.Second
+	elapsed := time.Since(t)
+	if elapsed < cooldown {
+		remaining := int(math.Ceil((cooldown - elapsed).Seconds()))
+		return true, remaining
+	}
+	return false, 0
 }
 

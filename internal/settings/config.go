@@ -73,16 +73,19 @@ type ServerConfig struct {
 	ConnFloodAutoban      bool   `toml:"connection_flood_autoban"`
 	OOCRateLimit          int    `toml:"ooc_rate_limit"`
 	OOCRateLimitWindow    int    `toml:"ooc_rate_limit_window"`
-	PingRateLimit         int    `toml:"ping_rate_limit"`
-	PingRateLimitWindow   int    `toml:"ping_rate_limit_window"`
+	PingRateLimit             int    `toml:"ping_rate_limit"`
+	PingRateLimitWindow       int    `toml:"ping_rate_limit_window"`
+	NewIPIDOOCCooldown        int    `toml:"new_ipid_ooc_cooldown"`
+	NewIPIDModcallCooldown    int    `toml:"new_ipid_modcall_cooldown"`
 }
 
 type LogConfig struct {
-	BufSize          int      `toml:"log_buffer_size"`
-	LogLevel         string   `toml:"log_level"`
-	LogDir           string   `toml:"log_directory"`
-	LogMethods       []string `toml:"log_methods"`
-	EnableAreaLogging bool    `toml:"enable_area_logging"`
+	BufSize              int      `toml:"log_buffer_size"`
+	LogLevel             string   `toml:"log_level"`
+	LogDir               string   `toml:"log_directory"`
+	LogMethods           []string `toml:"log_methods"`
+	EnableAreaLogging    bool     `toml:"enable_area_logging"`
+	EnableNetworkLogging bool     `toml:"enable_network_logging"`
 }
 
 type MSConfig struct {
@@ -129,15 +132,18 @@ func defaultConfig() *Config {
 			ConnFloodAutoban:      false,
 			OOCRateLimit:          4,
 			OOCRateLimitWindow:    1,
-			PingRateLimit:         10,
-			PingRateLimitWindow:   5,
+			PingRateLimit:             10,
+			PingRateLimitWindow:       5,
+			NewIPIDOOCCooldown:        10,
+			NewIPIDModcallCooldown:    60,
 		},
 		LogConfig{
-			BufSize:           150,
-			LogLevel:          "info",
-			LogDir:            "logs",
-			LogMethods:        []string{"stdout"},
-			EnableAreaLogging: false,
+			BufSize:              150,
+			LogLevel:             "info",
+			LogDir:               "logs",
+			LogMethods:           []string{"stdout"},
+			EnableAreaLogging:    false,
+			EnableNetworkLogging: false,
 		},
 		MSConfig{
 			Advertise: false,

@@ -227,10 +227,14 @@ func (client *Client) HandleClient() {
 	input.Split(splitfn) // Split input when a packet delimiter ('%') is found
 
 	for input.Scan() {
+		rawPacket := strings.TrimSpace(input.Text())
 		if logger.DebugNetwork {
-			logger.LogDebugf("From %v: %v", client.ipid, strings.TrimSpace(input.Text()))
+			logger.LogDebugf("From %v: %v", client.ipid, rawPacket)
 		}
-		packet, err := packet.NewPacket(strings.TrimSpace(input.Text()))
+		if logger.EnableNetworkLogging {
+			logger.WriteNetworkLog(client.ipid, client.Hdid(), "RECV", rawPacket)
+		}
+		packet, err := packet.NewPacket(rawPacket)
 		if err != nil {
 			continue // Discard invalid packets
 		}
@@ -251,6 +255,9 @@ func (client *Client) write(message string) {
 	fmt.Fprint(client.conn, message)
 	if logger.DebugNetwork {
 		logger.LogDebugf("To %v: %v", client.ipid, message)
+	}
+	if logger.EnableNetworkLogging {
+		logger.WriteNetworkLog(client.ipid, client.hdid, "SEND", message)
 	}
 	client.mu.Unlock()
 }
