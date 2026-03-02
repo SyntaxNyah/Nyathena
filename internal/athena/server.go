@@ -50,6 +50,7 @@ const version = "v1.0.2"
 
 var (
 	config                                 *settings.Config
+	configMu                               sync.RWMutex // guards runtime-mutable config fields (GlobalNewIPRateLimit, GlobalNewIPRateLimitWindow)
 	characters, music, backgrounds, parrot []string
 	areas                                  []*area.Area
 	areaNames                              string
@@ -956,8 +957,11 @@ func startConnTrackerCleanup() {
 		}
 
 		// Clean up stale global new-IP rate limit entries.
-		if config.GlobalNewIPRateLimitWindow > 0 {
-			globalWindow := time.Duration(config.GlobalNewIPRateLimitWindow) * time.Second
+		configMu.RLock()
+		globalWindowSec := config.GlobalNewIPRateLimitWindow
+		configMu.RUnlock()
+		if globalWindowSec > 0 {
+			globalWindow := time.Duration(globalWindowSec) * time.Second
 			globalCutoff := time.Now().Add(-globalWindow)
 			globalNewIPTracker.mu.Lock()
 			times := globalNewIPTracker.timestamps
@@ -1132,7 +1136,12 @@ func checkNewIPIDModcallCooldown(ipid string) (bool, int) {
 // Already-known IPs (those with an entry in ipFirstSeenTracker) are always permitted.
 // Returns true if the connection should be rejected.
 func checkGlobalNewIPRateLimit(ipid string) bool {
-if config.GlobalNewIPRateLimit <= 0 {
+configMu.RLock()
+limit := config.GlobalNewIPRateLimit
+windowSec := config.GlobalNewIPRateLimitWindow
+configMu.RUnlock()
+
+if limit <= 0 {
 return false
 }
 
@@ -1148,7 +1157,7 @@ globalNewIPTracker.mu.Lock()
 defer globalNewIPTracker.mu.Unlock()
 
 now := time.Now()
-window := time.Duration(config.GlobalNewIPRateLimitWindow) * time.Second
+window := time.Duration(windowSec) * time.Second
 cutoff := now.Add(-window)
 
 // Prune timestamps outside the current window.
@@ -1161,5 +1170,5 @@ valid = append(valid, t)
 }
 globalNewIPTracker.timestamps = valid
 
-return len(valid) >= config.GlobalNewIPRateLimit
+return len(valid) >= limit
 }

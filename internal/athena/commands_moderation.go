@@ -769,3 +769,53 @@ func cmdUnjail(client *Client, args []string, _ string) {
 
 // Handles /rps
 
+// cmdSetConfig updates one of the runtime-adjustable server configuration values without
+// requiring a server restart. Only the three IP-rate-limiting settings are exposed here.
+//
+//   global_new_ip_rate_limit        - max new unique IPs per window (0 = disabled)
+//   global_new_ip_rate_limit_window - window length in seconds
+//   ip_retention_days               - days before an inactive IP is pruned (0 = disabled)
+//
+// When ip_retention_days is set to a value > 0, inactive IPs are pruned immediately.
+func cmdSetConfig(client *Client, args []string, usage string) {
+	if len(args) < 2 {
+		client.SendServerMessage("Not enough arguments:\n" + usage)
+		return
+	}
+	setting := args[0]
+	val, err := strconv.Atoi(args[1])
+	if err != nil || val < 0 {
+		client.SendServerMessage("Value must be a non-negative integer.")
+		return
+	}
+
+	switch setting {
+	case "global_new_ip_rate_limit":
+		configMu.Lock()
+		config.GlobalNewIPRateLimit = val
+		configMu.Unlock()
+		client.SendServerMessage(fmt.Sprintf("global_new_ip_rate_limit set to %d.", val))
+	case "global_new_ip_rate_limit_window":
+		configMu.Lock()
+		config.GlobalNewIPRateLimitWindow = val
+		configMu.Unlock()
+		client.SendServerMessage(fmt.Sprintf("global_new_ip_rate_limit_window set to %d.", val))
+	case "ip_retention_days":
+		config.IPRetentionDays = val
+		if val > 0 {
+			cutoff := time.Now().AddDate(0, 0, -val).Unix()
+			if n, pruneErr := db.PruneInactiveIPs(cutoff); pruneErr != nil {
+				logger.LogErrorf("Failed to prune inactive IPs: %v", pruneErr)
+			} else if n > 0 {
+				logger.LogInfof("Pruned %d inactive IP(s) not seen in the last %d day(s).", n, val)
+			}
+		}
+		client.SendServerMessage(fmt.Sprintf("ip_retention_days set to %d.", val))
+	default:
+		client.SendServerMessage(fmt.Sprintf("Unknown setting %q. Valid settings: global_new_ip_rate_limit, global_new_ip_rate_limit_window, ip_retention_days.", setting))
+		return
+	}
+
+	addToBuffer(client, "CMD", fmt.Sprintf("Set config %v = %v.", setting, val), true)
+}
+

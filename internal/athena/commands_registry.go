@@ -416,6 +416,13 @@ func initCommands() {
 			desc:     "Changes a moderator user's role.",
 			reqPerms: permissions.PermissionField["ADMIN"],
 		},
+		"setconfig": {
+			handler:  cmdSetConfig,
+			minArgs:  2,
+			usage:    "Usage: /setconfig <setting> <value>\nSettings: global_new_ip_rate_limit, global_new_ip_rate_limit_window, ip_retention_days",
+			desc:     "Updates an IP rate-limiting config value at runtime without a server restart.",
+			reqPerms: permissions.PermissionField["ADMIN"],
+		},
 		"spectate": {
 			handler:  cmdSpectate,
 			minArgs:  0,

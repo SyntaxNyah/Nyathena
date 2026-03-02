@@ -1054,3 +1054,84 @@ if checkGlobalNewIPRateLimit("testGlobalExpiryFresh") {
 t.Errorf("New IP was rejected after window expired")
 }
 }
+
+// TestRuntimeConfigChangeGlobalNewIPRateLimit verifies that updating GlobalNewIPRateLimit
+// at runtime (as /setconfig does) is immediately respected by checkGlobalNewIPRateLimit.
+func TestRuntimeConfigChangeGlobalNewIPRateLimit(t *testing.T) {
+	oldConfig := config
+	defer func() { config = oldConfig }()
+
+	config = &settings.Config{}
+	config.GlobalNewIPRateLimit = 5
+	config.GlobalNewIPRateLimitWindow = 60
+
+	resetGlobalNewIPTracker()
+
+	// Fill the limit to 5.
+	for i := 0; i < 5; i++ {
+		ipid := fmt.Sprintf("testRTChange%d", i)
+		if checkGlobalNewIPRateLimit(ipid) {
+			t.Errorf("New IP %d was rejected prematurely", i)
+			return
+		}
+		recordIPFirstSeen(ipid)
+	}
+
+	// 6th new IP should be rejected.
+	if !checkGlobalNewIPRateLimit("testRTChangeExtra") {
+		t.Error("6th new IP was not rejected; expected rejection at limit=5")
+		return
+	}
+
+	// Lower the limit to 3 at runtime (simulating /setconfig global_new_ip_rate_limit 3).
+	// Reset so the tracker only contains 3 recent timestamps.
+	resetGlobalNewIPTracker()
+	config.GlobalNewIPRateLimit = 3
+	for i := 0; i < 3; i++ {
+		ipid := fmt.Sprintf("testRTChangeLow%d", i)
+		if checkGlobalNewIPRateLimit(ipid) {
+			t.Errorf("New IP %d was rejected prematurely after limit lowered", i)
+			return
+		}
+		recordIPFirstSeen(ipid)
+	}
+	if !checkGlobalNewIPRateLimit("testRTChangeLowExtra") {
+		t.Error("4th new IP was not rejected after limit was lowered to 3 at runtime")
+	}
+}
+
+// TestRuntimeConfigChangeGlobalNewIPRateWindow verifies that updating
+// GlobalNewIPRateLimitWindow at runtime is respected by checkGlobalNewIPRateLimit.
+func TestRuntimeConfigChangeGlobalNewIPRateWindow(t *testing.T) {
+	oldConfig := config
+	defer func() { config = oldConfig }()
+
+	config = &settings.Config{}
+	config.GlobalNewIPRateLimit = 2
+	config.GlobalNewIPRateLimitWindow = 1 // 1-second window
+
+	resetGlobalNewIPTracker()
+
+	// Fill the limit.
+	for i := 0; i < 2; i++ {
+		ipid := fmt.Sprintf("testRTWindow%d", i)
+		if checkGlobalNewIPRateLimit(ipid) {
+			t.Errorf("New IP %d was rejected prematurely", i)
+			return
+		}
+		recordIPFirstSeen(ipid)
+	}
+
+	// 3rd should be rejected.
+	if !checkGlobalNewIPRateLimit("testRTWindowExtra") {
+		t.Error("3rd new IP was not rejected; expected rejection at limit=2")
+		return
+	}
+
+	// Extend the window to 120 s at runtime (/setconfig global_new_ip_rate_limit_window 120).
+	config.GlobalNewIPRateLimitWindow = 120
+	// Entries already in tracker are still within 120 s, so a new IP is still rejected.
+	if !checkGlobalNewIPRateLimit("testRTWindowStillBlocked") {
+		t.Error("New IP should still be blocked because tracker entries are within the extended window")
+	}
+}
