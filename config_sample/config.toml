@@ -232,6 +232,20 @@ new_ipid_ooc_cooldown = 10
 # Set to 0 to disable. Default: 60 seconds.
 new_ipid_modcall_cooldown = 60
 
+# Global new-IP rate limit: Maximum number of distinct new IPs (IPIDs that have never
+# connected to this server session before) that can be accepted within the time window below.
+# When this limit is reached, connections from additional unknown IPs are immediately closed
+# until the window clears, protecting the server against floods using many unique source IPs.
+# IPs that have already connected at least once (returning players) are NEVER affected by
+# this limit. Set to 0 to disable. Default: 8 unique IPs.
+global_new_ip_rate_limit = 8
+
+# Global new-IP rate limit: Time window in seconds for counting new unique IPs.
+# For example, with global_new_ip_rate_limit=8 and global_new_ip_rate_limit_window=60,
+# the server accepts at most 8 brand-new IP addresses per minute.
+# Default: 60 seconds.
+global_new_ip_rate_limit_window = 60
+
 [Logging]
 # Sets the number of actions (IC chat messages, OOC chat messages, judge actions, etc.) each area should store.
 # When a user calls a mod, this buffer will be flushed to a report file for review.

@@ -49,7 +49,7 @@ var db *sql.DB
 
 // Database version.
 // This should be incremented whenever changes are made to the DB that require existing databases to upgrade.
-const ver = 2
+const ver = 3
 
 // Persistent punishment kind constants.
 const (
@@ -119,6 +119,13 @@ func Open() error {
 	if err != nil {
 		return err
 	}
+	_, err = db.Exec(`CREATE TABLE IF NOT EXISTS KNOWN_IPS(
+		IPID       TEXT    PRIMARY KEY,
+		FIRST_SEEN INTEGER NOT NULL DEFAULT 0
+	)`)
+	if err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -133,6 +140,19 @@ func upgradeDB(v int) error {
 		fallthrough
 	case 1:
 		_, err := db.Exec("PRAGMA user_version = 2")
+		if err != nil {
+			return err
+		}
+		fallthrough
+	case 2:
+		_, err := db.Exec(`CREATE TABLE IF NOT EXISTS KNOWN_IPS(
+			IPID       TEXT    PRIMARY KEY,
+			FIRST_SEEN INTEGER NOT NULL DEFAULT 0
+		)`)
+		if err != nil {
+			return err
+		}
+		_, err = db.Exec("PRAGMA user_version = 3")
 		if err != nil {
 			return err
 		}
@@ -417,4 +437,36 @@ func GetAllBans() ([]BanInfo, error) {
 		bans = append(bans, b)
 	}
 	return bans, nil
+}
+
+// MarkIPKnown records an IPID as known (i.e. it has connected to the server at least once).
+// If the IPID is already present, this is a no-op (INSERT OR IGNORE).
+func MarkIPKnown(ipid string) error {
+	if db == nil {
+		return nil
+	}
+	_, err := db.Exec("INSERT OR IGNORE INTO KNOWN_IPS(IPID, FIRST_SEEN) VALUES(?, ?)", ipid, time.Now().Unix())
+	return err
+}
+
+// LoadKnownIPs returns every IPID that has previously been recorded by MarkIPKnown.
+// It is called once at server startup to pre-populate the in-memory first-seen tracker.
+func LoadKnownIPs() ([]string, error) {
+	if db == nil {
+		return nil, nil
+	}
+	rows, err := db.Query("SELECT IPID FROM KNOWN_IPS")
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var ipids []string
+	for rows.Next() {
+		var ipid string
+		if err := rows.Scan(&ipid); err != nil {
+			return ipids, fmt.Errorf("LoadKnownIPs scan: %w", err)
+		}
+		ipids = append(ipids, ipid)
+	}
+	return ipids, rows.Err()
 }

@@ -77,6 +77,8 @@ type ServerConfig struct {
 	PingRateLimitWindow       int    `toml:"ping_rate_limit_window"`
 	NewIPIDOOCCooldown        int    `toml:"new_ipid_ooc_cooldown"`
 	NewIPIDModcallCooldown    int    `toml:"new_ipid_modcall_cooldown"`
+	GlobalNewIPRateLimit      int    `toml:"global_new_ip_rate_limit"`
+	GlobalNewIPRateLimitWindow int   `toml:"global_new_ip_rate_limit_window"`
 }
 
 type LogConfig struct {
@@ -136,6 +138,8 @@ func defaultConfig() *Config {
 			PingRateLimitWindow:       5,
 			NewIPIDOOCCooldown:        10,
 			NewIPIDModcallCooldown:    60,
+			GlobalNewIPRateLimit:      8,
+			GlobalNewIPRateLimitWindow: 60,
 		},
 		LogConfig{
 			BufSize:              150,

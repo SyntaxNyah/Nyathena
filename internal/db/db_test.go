@@ -320,3 +320,54 @@ func TestPurgeExpired(t *testing.T) {
 		}
 	}
 }
+
+func TestMarkIPKnownAndLoadKnownIPs(t *testing.T) {
+teardown := setupTestDB(t)
+defer teardown()
+
+// Initially there should be no known IPs.
+ipids, err := LoadKnownIPs()
+if err != nil {
+t.Fatalf("LoadKnownIPs (empty) failed: %v", err)
+}
+if len(ipids) != 0 {
+t.Fatalf("expected 0 known IPs initially, got %d", len(ipids))
+}
+
+// Mark two IPs as known.
+if err := MarkIPKnown("1.2.3.4"); err != nil {
+t.Fatalf("MarkIPKnown failed: %v", err)
+}
+if err := MarkIPKnown("5.6.7.8"); err != nil {
+t.Fatalf("MarkIPKnown failed: %v", err)
+}
+
+ipids, err = LoadKnownIPs()
+if err != nil {
+t.Fatalf("LoadKnownIPs failed: %v", err)
+}
+if len(ipids) != 2 {
+t.Fatalf("expected 2 known IPs, got %d", len(ipids))
+}
+}
+
+func TestMarkIPKnownIdempotent(t *testing.T) {
+teardown := setupTestDB(t)
+defer teardown()
+
+// Calling MarkIPKnown multiple times for the same IPID must not error
+// and must not create duplicate rows.
+for i := 0; i < 5; i++ {
+if err := MarkIPKnown("dup.ip"); err != nil {
+t.Fatalf("MarkIPKnown attempt %d failed: %v", i, err)
+}
+}
+
+ipids, err := LoadKnownIPs()
+if err != nil {
+t.Fatalf("LoadKnownIPs failed: %v", err)
+}
+if len(ipids) != 1 {
+t.Fatalf("expected exactly 1 entry for dup.ip (INSERT OR IGNORE), got %d", len(ipids))
+}
+}
