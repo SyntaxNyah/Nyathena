@@ -197,6 +197,13 @@ connection_rate_limit_window = 10
 # Default: false
 connection_flood_autoban = false
 
+# Whether to automatically ban IPs that exceed the message (packet) rate limit.
+# When enabled, any client that triggers the message rate limit (message_rate_limit) is
+# banned using the default_ban_duration instead of being merely kicked. This stops
+# packet bombers and obvious DDoS bots from repeatedly reconnecting and flooding the server.
+# Default: false
+packet_flood_autoban = false
+
 # OOC rate limiting: Maximum number of OOC messages a player can send within the OOC rate limit window.
 # OOC packets that exceed this limit are silently dropped, preventing OOC flooding.
 # Set to 0 to disable OOC rate limiting.

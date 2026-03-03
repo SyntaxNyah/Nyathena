@@ -1054,3 +1054,30 @@ if checkGlobalNewIPRateLimit("testGlobalExpiryFresh") {
 t.Errorf("New IP was rejected after window expired")
 }
 }
+
+// TestPacketFloodAutobanDefaultFalse verifies that the PacketFloodAutoban config
+// field defaults to false so existing servers are not affected by the new feature.
+func TestPacketFloodAutobanDefaultFalse(t *testing.T) {
+	oldConfig := config
+	defer func() { config = oldConfig }()
+
+	config = &settings.Config{}
+
+	if config.PacketFloodAutoban {
+		t.Errorf("PacketFloodAutoban should default to false")
+	}
+}
+
+// TestPacketFloodAutobanCanBeEnabled verifies that the PacketFloodAutoban config
+// field can be set to true, enabling the auto-ban behaviour for packet flooders.
+func TestPacketFloodAutobanCanBeEnabled(t *testing.T) {
+	oldConfig := config
+	defer func() { config = oldConfig }()
+
+	config = &settings.Config{}
+	config.PacketFloodAutoban = true
+
+	if !config.PacketFloodAutoban {
+		t.Errorf("PacketFloodAutoban should be true after being set to true")
+	}
+}

@@ -71,6 +71,7 @@ type ServerConfig struct {
 	ConnRateLimit         int    `toml:"connection_rate_limit"`
 	ConnRateLimitWindow   int    `toml:"connection_rate_limit_window"`
 	ConnFloodAutoban      bool   `toml:"connection_flood_autoban"`
+	PacketFloodAutoban    bool   `toml:"packet_flood_autoban"`
 	OOCRateLimit          int    `toml:"ooc_rate_limit"`
 	OOCRateLimitWindow    int    `toml:"ooc_rate_limit_window"`
 	PingRateLimit             int    `toml:"ping_rate_limit"`
@@ -133,6 +134,7 @@ func defaultConfig() *Config {
 			ConnRateLimit:         10,
 			ConnRateLimitWindow:   10,
 			ConnFloodAutoban:      false,
+			PacketFloodAutoban:    false,
 			OOCRateLimit:          4,
 			OOCRateLimitWindow:    1,
 			PingRateLimit:             10,

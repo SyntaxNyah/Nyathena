@@ -870,6 +870,27 @@ func autoBanFlooder(ipid string) {
 	logger.LogInfof("Auto-banned %v for connection flooding", ipid)
 }
 
+// autoBanPacketFlooder adds a temporary ban for an IP that has exceeded the packet (message) rate limit.
+// If the IP is already banned, no additional ban is added.
+func autoBanPacketFlooder(ipid string) {
+	banned, _, err := db.IsBanned(db.IPID, ipid)
+	if err != nil || banned {
+		return
+	}
+	dur, err := str2duration.ParseDuration(config.BanLen)
+	if err != nil {
+		return
+	}
+	expiry := time.Now().UTC().Add(dur).Unix()
+	_, err = db.AddBan(ipid, "", time.Now().UTC().Unix(), expiry, "Automatic ban: packet flooding", "Server")
+	if err != nil {
+		logger.LogErrorf("Failed to auto-ban packet flooder %v: %v", ipid, err)
+		return
+	}
+	forgetIP(ipid)
+	logger.LogInfof("Auto-banned %v for packet flooding", ipid)
+}
+
 // startConnTrackerCleanup periodically removes stale entries from the connection tracker
 // to prevent unbounded memory growth from unique IPs that no longer connect.
 // This goroutine runs for the lifetime of the server process; a graceful stop is not
