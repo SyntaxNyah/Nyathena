@@ -70,7 +70,6 @@ type ServerConfig struct {
 	ModcallCooldown       int    `toml:"modcall_cooldown"`
 	ConnRateLimit         int    `toml:"connection_rate_limit"`
 	ConnRateLimitWindow   int    `toml:"connection_rate_limit_window"`
-	ConnFloodAutoban           bool   `toml:"connection_flood_autoban"`
 	PacketFloodAutoban         bool   `toml:"packet_flood_autoban"`
 	RawPacketRateLimit         int    `toml:"raw_packet_rate_limit"`
 	RawPacketRateLimitWindow   int    `toml:"raw_packet_rate_limit_window"`
@@ -140,7 +139,6 @@ func DefaultConfig() *Config {
 			ModcallCooldown:       0,
 			ConnRateLimit:         10,
 			ConnRateLimitWindow:   10,
-			ConnFloodAutoban:           true,
 			PacketFloodAutoban:         true,
 			RawPacketRateLimit:         20,
 			RawPacketRateLimitWindow:   2,

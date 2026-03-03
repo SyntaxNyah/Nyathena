@@ -426,9 +426,6 @@ func (s *Server) ListenTCP() {
 		ipid := getIpid(conn.RemoteAddr().String())
 		if checkConnRateLimit(ipid) {
 			logger.LogInfof("Connection from %v rejected (connection rate limit exceeded)", ipid)
-			if config.ConnFloodAutoban {
-				autoBanFlooder(ipid)
-			}
 			conn.Close()
 			continue
 		}
@@ -524,9 +521,6 @@ func HandleWS(w http.ResponseWriter, r *http.Request) {
 	ipid := getIpid(getRealIP(r))
 	if checkConnRateLimit(ipid) {
 		logger.LogInfof("Connection from %v rejected (connection rate limit exceeded)", ipid)
-		if config.ConnFloodAutoban {
-			autoBanFlooder(ipid)
-		}
 		http.Error(w, "Too many connections", http.StatusTooManyRequests)
 		return
 	}
@@ -849,28 +843,10 @@ func forgetIP(ipid string) {
 	}()
 }
 
-// autoBanFlooder adds a temporary ban for an IP that has exceeded the connection rate limit.
-// If the IP is already banned, no additional ban is added.
-func autoBanFlooder(ipid string) {
-	banned, _, err := db.IsBanned(db.IPID, ipid)
-	if err != nil || banned {
-		return
-	}
-	dur, err := str2duration.ParseDuration(config.BanLen)
-	if err != nil {
-		return
-	}
-	expiry := time.Now().UTC().Add(dur).Unix()
-	_, err = db.AddBan(ipid, "", time.Now().UTC().Unix(), expiry, "Automatic ban: connection flooding", "Server")
-	if err != nil {
-		logger.LogErrorf("Failed to auto-ban flooder %v: %v", ipid, err)
-		return
-	}
-	forgetIP(ipid)
-	logger.LogInfof("Auto-banned %v for connection flooding", ipid)
-}
-
-// autoBanPacketFlooder adds a temporary ban for an IP that has exceeded the packet (message) rate limit.
+// autoBanPacketFlooder adds a temporary ban for an IP that has exceeded the raw packet rate limit.
+// This is only triggered by raw packet flooding (sending hundreds of packets per second),
+// which is characteristic of bots/DDoS tools. IC/OOC/music message rate limit violations
+// result in a kick, not a ban (see KickForRateLimit).
 // If the IP is already banned, no additional ban is added.
 func autoBanPacketFlooder(ipid string) {
 	banned, _, err := db.IsBanned(db.IPID, ipid)

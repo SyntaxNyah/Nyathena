@@ -191,16 +191,11 @@ connection_rate_limit = 10
 # Default: 10 seconds
 connection_rate_limit_window = 10
 
-# Whether to automatically ban IPs that exceed the connection rate limit.
-# When enabled, any IP that triggers the connection rate limit is banned using the
-# default_ban_duration and cannot reconnect until the ban expires.
-# Default: true
-connection_flood_autoban = true
-
-# Whether to automatically ban IPs that exceed the message (packet) rate limit.
-# When enabled, any client that triggers the message rate limit (message_rate_limit) is
-# banned using the default_ban_duration instead of being merely kicked. This stops
-# packet bombers and obvious DDoS bots from repeatedly reconnecting and flooding the server.
+# Whether to automatically ban IPs that exceed the raw packet rate limit.
+# Raw packet flooding (sending hundreds of packets per second) is a clear bot/DDoS
+# indicator. When enabled, such IPs are banned for default_ban_duration.
+# Connection rate limit violations (connect_rate_limit) only block the connection
+# temporarily and never result in a ban.
 # Default: true
 packet_flood_autoban = true
 

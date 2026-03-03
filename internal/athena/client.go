@@ -345,17 +345,12 @@ func (client *Client) SendServerMessage(message string) {
 	client.SendPacket("CT", encode(config.Name), encode(message), "1")
 }
 
-// KickForRateLimit kicks (or bans) the client for exceeding the packet rate limit.
-// If packet_flood_autoban is enabled in the config, the client's IP is also banned.
+// KickForRateLimit kicks the client for exceeding the message (IC/OOC/music) rate limit.
+// Message-based rate limits always result in a kick, not a ban. Only raw packet flooding
+// (handled separately) results in an automatic ban.
 func (client *Client) KickForRateLimit() {
-	if config.PacketFloodAutoban {
-		client.SendServerMessage("You have been banned for packet flooding.")
-		logger.LogInfof("Client (IPID:%v UID:%v) banned for exceeding packet rate limit", client.Ipid(), client.Uid())
-		go autoBanPacketFlooder(client.Ipid())
-	} else {
-		client.SendServerMessage("You have been kicked for spamming.")
-		logger.LogInfof("Client (IPID:%v UID:%v) kicked for exceeding rate limit", client.Ipid(), client.Uid())
-	}
+	client.SendServerMessage("You have been kicked for spamming.")
+	logger.LogInfof("Client (IPID:%v UID:%v) kicked for exceeding rate limit", client.Ipid(), client.Uid())
 	client.conn.Close()
 }
 
