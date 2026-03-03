@@ -204,6 +204,22 @@ connection_flood_autoban = false
 # Default: false
 packet_flood_autoban = false
 
+# Raw packet rate limiting: Maximum number of AO2 protocol packets (of any type) a single
+# client connection may send within the raw packet rate limit window.
+# Unlike message_rate_limit (which only counts IC/OOC/music packets), this counts EVERY
+# incoming packet — MS, CC, CH, PU, HP, RT, unknown headers, etc. Legitimate clients
+# will never come close to this limit. Bots that spray raw packets (e.g., sending
+# hundreds of PU or junk packets per second) will be caught and automatically banned.
+# Set to 0 to disable raw packet rate limiting.
+# Default: 100 packets
+raw_packet_rate_limit = 100
+
+# Raw packet rate limiting: Time window in seconds for counting all incoming packets.
+# For example, with raw_packet_rate_limit=100 and raw_packet_rate_limit_window=5,
+# a single connection that sends more than 100 packets in any 5-second window is banned.
+# Default: 5 seconds
+raw_packet_rate_limit_window = 5
+
 # OOC rate limiting: Maximum number of OOC messages a player can send within the OOC rate limit window.
 # OOC packets that exceed this limit are silently dropped, preventing OOC flooding.
 # Set to 0 to disable OOC rate limiting.

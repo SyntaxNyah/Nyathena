@@ -163,9 +163,10 @@ type Client struct {
 	narrator      bool
 	jailedUntil   time.Time
 	lastRpsTime   time.Time
-	punishments     []PunishmentState
-	msgTimestamps   []time.Time // Tracks message timestamps for rate limiting
-	oocMsgTimestamps []time.Time // Tracks OOC message timestamps for OOC rate limiting
+	punishments        []PunishmentState
+	msgTimestamps      []time.Time // Tracks message timestamps for rate limiting
+	oocMsgTimestamps   []time.Time // Tracks OOC message timestamps for OOC rate limiting
+	rawPktTimestamps   []time.Time // Tracks all packet timestamps for raw packet rate limiting
 	lastModcallTime    time.Time   // Tracks last modcall time for cooldown
 	lastRandomCharTime time.Time   // Tracks last /randomchar time for cooldown
 	forcePairUID    int         // UID of the client this client is force-paired with (-1 if none)
@@ -234,6 +235,17 @@ func (client *Client) HandleClient() {
 		}
 		if logger.EnableNetworkLogging {
 			logger.WriteNetworkLog(client.ipid, client.Hdid(), "RECV", rawPacket)
+		}
+		// Raw packet rate limit: counts every incoming AO2 packet regardless of type.
+		// A legitimate client will never send hundreds of packets per second; bots/flooders will.
+		// The ban is applied synchronously so it is committed before the connection closes,
+		// preventing the flooder from immediately reconnecting before the ban takes effect.
+		if client.CheckRawPacketRateLimit() {
+			client.SendServerMessage("You have been banned for packet flooding.")
+			logger.LogInfof("Client (IPID:%v UID:%v) banned for raw packet flooding", client.Ipid(), client.Uid())
+			autoBanPacketFlooder(client.Ipid())
+			client.conn.Close()
+			return
 		}
 		packet, err := packet.NewPacket(rawPacket)
 		if err != nil {
@@ -1321,6 +1333,45 @@ func (client *Client) CheckOOCRateLimit() bool {
 	}
 
 	client.oocMsgTimestamps = append(client.oocMsgTimestamps, now)
+	return false
+}
+
+// CheckRawPacketRateLimit checks if the client has exceeded the raw packet rate limit.
+// This counts every AO2 protocol packet regardless of type (PU, MS, CC, CH, etc.).
+// Returns true if the client is flooding (and should be immediately banned), false otherwise.
+// Uses a sliding window approach, mirroring CheckRateLimit.
+func (client *Client) CheckRawPacketRateLimit() bool {
+	if config.RawPacketRateLimit <= 0 {
+		return false
+	}
+
+	client.mu.Lock()
+	defer client.mu.Unlock()
+
+	now := time.Now()
+	window := time.Duration(config.RawPacketRateLimitWindow) * time.Second
+
+	cutoff := now.Add(-window)
+
+	validIdx := -1
+	for i, ts := range client.rawPktTimestamps {
+		if ts.After(cutoff) {
+			validIdx = i
+			break
+		}
+	}
+
+	if validIdx == -1 {
+		client.rawPktTimestamps = nil
+	} else if validIdx > 0 {
+		client.rawPktTimestamps = client.rawPktTimestamps[validIdx:]
+	}
+
+	if len(client.rawPktTimestamps) >= config.RawPacketRateLimit {
+		return true
+	}
+
+	client.rawPktTimestamps = append(client.rawPktTimestamps, now)
 	return false
 }
 

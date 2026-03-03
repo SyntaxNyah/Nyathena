@@ -1081,3 +1081,118 @@ func TestPacketFloodAutobanCanBeEnabled(t *testing.T) {
 		t.Errorf("PacketFloodAutoban should be true after being set to true")
 	}
 }
+
+// TestRawPacketRateLimitDisabled tests that raw packet rate limiting can be disabled.
+func TestRawPacketRateLimitDisabled(t *testing.T) {
+	oldConfig := config
+	defer func() { config = oldConfig }()
+
+	config = &settings.Config{}
+	config.RawPacketRateLimit = 0
+
+	client := &Client{
+		rawPktTimestamps: []time.Time{},
+	}
+
+	for i := 0; i < 1000; i++ {
+		if client.CheckRawPacketRateLimit() {
+			t.Errorf("Client was raw-packet rate limited when raw packet rate limiting is disabled")
+			return
+		}
+	}
+}
+
+// TestRawPacketRateLimitBasic tests that the raw packet rate limiter triggers after the limit.
+func TestRawPacketRateLimitBasic(t *testing.T) {
+	oldConfig := config
+	defer func() { config = oldConfig }()
+
+	config = &settings.Config{}
+	config.RawPacketRateLimit = 5
+	config.RawPacketRateLimitWindow = 1
+
+	client := &Client{
+		rawPktTimestamps: []time.Time{},
+	}
+
+	// First 5 packets should all pass.
+	for i := 0; i < 5; i++ {
+		if client.CheckRawPacketRateLimit() {
+			t.Errorf("Client was raw-packet rate limited on packet %d (limit is 5)", i+1)
+			return
+		}
+	}
+
+	// 6th packet should trigger the limit.
+	if !client.CheckRawPacketRateLimit() {
+		t.Errorf("Client was not raw-packet rate limited after exceeding limit")
+	}
+}
+
+// TestRawPacketRateLimitWindowExpiry tests that the sliding window resets correctly.
+func TestRawPacketRateLimitWindowExpiry(t *testing.T) {
+	oldConfig := config
+	defer func() { config = oldConfig }()
+
+	config = &settings.Config{}
+	config.RawPacketRateLimit = 3
+	config.RawPacketRateLimitWindow = 1
+
+	client := &Client{
+		rawPktTimestamps: []time.Time{},
+	}
+
+	// Exhaust the limit.
+	for i := 0; i < 3; i++ {
+		if client.CheckRawPacketRateLimit() {
+			t.Errorf("Client was raw-packet rate limited on packet %d (limit is 3)", i+1)
+			return
+		}
+	}
+
+	// Should be limited now.
+	if !client.CheckRawPacketRateLimit() {
+		t.Errorf("Client was not raw-packet rate limited after exceeding limit")
+		return
+	}
+
+	// Wait for the window to expire.
+	time.Sleep(time.Duration(config.RawPacketRateLimitWindow)*time.Second + 100*time.Millisecond)
+
+	// Should be allowed again.
+	if client.CheckRawPacketRateLimit() {
+		t.Errorf("Client was raw-packet rate limited after window expired")
+	}
+}
+
+// TestRawPacketRateLimitIndependentFromMessage verifies the raw packet rate limiter is
+// independent of the message rate limiter — each tracks its own sliding window.
+func TestRawPacketRateLimitIndependentFromMessage(t *testing.T) {
+	oldConfig := config
+	defer func() { config = oldConfig }()
+
+	config = &settings.Config{}
+	config.RateLimit = 2
+	config.RateLimitWindow = 10
+	config.RawPacketRateLimit = 10
+	config.RawPacketRateLimitWindow = 10
+
+	client := &Client{
+		msgTimestamps:    []time.Time{},
+		rawPktTimestamps: []time.Time{},
+	}
+
+	// Exhaust the message rate limit (2 messages).
+	for i := 0; i < 2; i++ {
+		client.CheckRateLimit()
+	}
+	if !client.CheckRateLimit() {
+		t.Errorf("Message rate limit should be exceeded after 3 calls with limit=2")
+		return
+	}
+
+	// Raw packet rate limit (10 packets) should not be exceeded yet.
+	if client.CheckRawPacketRateLimit() {
+		t.Errorf("Raw packet rate limit should not be exceeded just because message rate limit was")
+	}
+}
