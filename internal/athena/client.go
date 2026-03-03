@@ -163,14 +163,17 @@ type Client struct {
 	narrator      bool
 	jailedUntil   time.Time
 	lastRpsTime   time.Time
-	punishments     []PunishmentState
-	msgTimestamps   []time.Time // Tracks message timestamps for rate limiting
-	oocMsgTimestamps []time.Time // Tracks OOC message timestamps for OOC rate limiting
+	punishments        []PunishmentState
+	msgTimestamps      []time.Time // Tracks message timestamps for rate limiting
+	oocMsgTimestamps   []time.Time // Tracks OOC message timestamps for OOC rate limiting
+	rawPktCount        int         // Packet count in the current raw-rate-limit window
+	rawPktWindowStart  time.Time   // Start time of the current raw-rate-limit window
 	lastModcallTime    time.Time   // Tracks last modcall time for cooldown
 	lastRandomCharTime time.Time   // Tracks last /randomchar time for cooldown
 	forcePairUID    int         // UID of the client this client is force-paired with (-1 if none)
 	possessing      int         // UID of the client being possessed (-1 if not possessing anyone)
 	possessedPos    string      // Position of the possessed target (saved at time of possession)
+	connectedAt     time.Time   // Time the client joined the server (uid assigned); zero if not yet joined
 }
 
 // NewClient returns a new client.
@@ -234,6 +237,17 @@ func (client *Client) HandleClient() {
 		if logger.EnableNetworkLogging {
 			logger.WriteNetworkLog(client.ipid, client.Hdid(), "RECV", rawPacket)
 		}
+		// Raw packet rate limit: counts every incoming AO2 packet regardless of type.
+		// A legitimate client will never send hundreds of packets per second; bots/flooders will.
+		// The ban is applied synchronously so it is committed before the connection closes,
+		// preventing the flooder from immediately reconnecting before the ban takes effect.
+		if client.CheckRawPacketRateLimit() {
+			client.SendServerMessage("You have been banned for packet flooding.")
+			logger.LogInfof("Client (IPID:%v UID:%v) banned for raw packet flooding", client.Ipid(), client.Uid())
+			autoBanPacketFlooder(client.Ipid())
+			client.conn.Close()
+			return
+		}
 		packet, err := packet.NewPacket(rawPacket)
 		if err != nil {
 			continue // Discard invalid packets
@@ -271,6 +285,19 @@ func (client *Client) SendPacket(header string, contents ...string) {
 func (client *Client) clientCleanup() {
 	if client.Uid() != -1 {
 		logger.LogInfof("Client (IPID:%v UID:%v) left the server", client.ipid, client.Uid())
+
+		// Accumulate session playtime in the database.
+		if connAt := client.ConnectedAt(); !connAt.IsZero() {
+			sessionSecs := int64(time.Since(connAt).Seconds())
+			if sessionSecs > 0 {
+				ipid := client.Ipid()
+				go func() {
+					if err := db.AddPlaytime(ipid, sessionSecs); err != nil {
+						logger.LogErrorf("Failed to add playtime for %v: %v", ipid, err)
+					}
+				}()
+			}
+		}
 
 		// Clear possession links if this client was possessing someone
 		if client.Possessing() != -1 {
@@ -318,7 +345,9 @@ func (client *Client) SendServerMessage(message string) {
 	client.SendPacket("CT", encode(config.Name), encode(message), "1")
 }
 
-// KickForRateLimit kicks the client for exceeding the rate limit.
+// KickForRateLimit kicks the client for exceeding the message (IC/OOC/music) rate limit.
+// Message-based rate limits always result in a kick, not a ban. Only raw packet flooding
+// (handled separately) results in an automatic ban.
 func (client *Client) KickForRateLimit() {
 	client.SendServerMessage("You have been kicked for spamming.")
 	logger.LogInfof("Client (IPID:%v UID:%v) kicked for exceeding rate limit", client.Ipid(), client.Uid())
@@ -1303,6 +1332,37 @@ func (client *Client) CheckOOCRateLimit() bool {
 	return false
 }
 
+// CheckRawPacketRateLimit checks if the client has exceeded the raw packet rate limit.
+// This counts every AO2 protocol packet regardless of type (PU, MS, CC, CH, etc.).
+// Returns true if the client is flooding (and should be immediately banned), false otherwise.
+//
+// Uses a fixed-window counter: one int + one time.Time per client, zero heap allocations
+// per call. This is called on every single incoming packet, so O(1) cost matters.
+//
+// Limit semantics: exactly RawPacketRateLimit packets are allowed per window;
+// the (RawPacketRateLimit+1)th packet in the same window returns true.
+func (client *Client) CheckRawPacketRateLimit() bool {
+	if config.RawPacketRateLimit <= 0 {
+		return false
+	}
+
+	client.mu.Lock()
+	defer client.mu.Unlock()
+
+	now := time.Now()
+	window := time.Duration(config.RawPacketRateLimitWindow) * time.Second
+
+	// Reset the counter when the window has expired or on the very first packet
+	// (rawPktWindowStart is zero-valued for new clients).
+	if client.rawPktWindowStart.IsZero() || now.Sub(client.rawPktWindowStart) >= window {
+		client.rawPktWindowStart = now
+		client.rawPktCount = 0
+	}
+
+	client.rawPktCount++
+	return client.rawPktCount > config.RawPacketRateLimit
+}
+
 // Possessing returns the UID of the client being possessed, or -1 if not possessing anyone.
 func (client *Client) Possessing() int {
 	client.mu.Lock()
@@ -1329,4 +1389,19 @@ func (client *Client) SetPossessedPos(pos string) {
 	client.mu.Lock()
 	defer client.mu.Unlock()
 	client.possessedPos = pos
+}
+
+// ConnectedAt returns the time the client joined the server (was assigned a UID).
+// Returns a zero Time if the client has not yet joined.
+func (client *Client) ConnectedAt() time.Time {
+	client.mu.Lock()
+	defer client.mu.Unlock()
+	return client.connectedAt
+}
+
+// SetConnectedAt records the time the client joined the server.
+func (client *Client) SetConnectedAt(t time.Time) {
+	client.mu.Lock()
+	client.connectedAt = t
+	client.mu.Unlock()
 }

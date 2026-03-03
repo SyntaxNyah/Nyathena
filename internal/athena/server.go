@@ -179,16 +179,14 @@ func NewServer(conf *settings.Config) (*Server, error) {
 		logger.LogErrorf("Failed to purge expired punishments: %v", err)
 	}
 
-	// Prune KNOWN_IPS rows that have not been seen within the configured retention window.
-	// This keeps the table lean and ensures long-inactive IPs are subject to new-IP
-	// cooldowns if they ever reconnect.  A failure here is non-fatal.
-	if conf.IPRetentionDays > 0 {
-		cutoff := time.Now().AddDate(0, 0, -conf.IPRetentionDays).Unix()
-		if n, err := db.PruneInactiveIPs(cutoff); err != nil {
-			logger.LogErrorf("Failed to prune inactive IPs: %v", err)
-		} else if n > 0 {
-			logger.LogInfof("Pruned %d inactive IP(s) not seen in the last %d day(s).", n, conf.IPRetentionDays)
-		}
+	// Prune KNOWN_IPS rows with less than 1 hour of accumulated playtime.
+	// IPs that have played for at least an hour are retained permanently.
+	// This keeps bots and drive-by connections from polluting the known-IP list.
+	const minPlaytimeSeconds int64 = 3600
+	if n, err := db.PruneShortPlaytimeIPs(minPlaytimeSeconds); err != nil {
+		logger.LogErrorf("Failed to prune low-playtime IPs: %v", err)
+	} else if n > 0 {
+		logger.LogInfof("Pruned %d IP(s) with less than 1 hour of playtime.", n)
 	}
 
 	// Pre-populate the in-memory first-seen tracker with IPs that were seen in
@@ -428,9 +426,6 @@ func (s *Server) ListenTCP() {
 		ipid := getIpid(conn.RemoteAddr().String())
 		if checkConnRateLimit(ipid) {
 			logger.LogInfof("Connection from %v rejected (connection rate limit exceeded)", ipid)
-			if config.ConnFloodAutoban {
-				autoBanFlooder(ipid)
-			}
 			conn.Close()
 			continue
 		}
@@ -526,9 +521,6 @@ func HandleWS(w http.ResponseWriter, r *http.Request) {
 	ipid := getIpid(getRealIP(r))
 	if checkConnRateLimit(ipid) {
 		logger.LogInfof("Connection from %v rejected (connection rate limit exceeded)", ipid)
-		if config.ConnFloodAutoban {
-			autoBanFlooder(ipid)
-		}
 		http.Error(w, "Too many connections", http.StatusTooManyRequests)
 		return
 	}
@@ -851,9 +843,12 @@ func forgetIP(ipid string) {
 	}()
 }
 
-// autoBanFlooder adds a temporary ban for an IP that has exceeded the connection rate limit.
+// autoBanPacketFlooder adds a temporary ban for an IP that has exceeded the raw packet rate limit.
+// This is only triggered by raw packet flooding (sending hundreds of packets per second),
+// which is characteristic of bots/DDoS tools. IC/OOC/music message rate limit violations
+// result in a kick, not a ban (see KickForRateLimit).
 // If the IP is already banned, no additional ban is added.
-func autoBanFlooder(ipid string) {
+func autoBanPacketFlooder(ipid string) {
 	banned, _, err := db.IsBanned(db.IPID, ipid)
 	if err != nil || banned {
 		return
@@ -863,13 +858,13 @@ func autoBanFlooder(ipid string) {
 		return
 	}
 	expiry := time.Now().UTC().Add(dur).Unix()
-	_, err = db.AddBan(ipid, "", time.Now().UTC().Unix(), expiry, "Automatic ban: connection flooding", "Server")
+	_, err = db.AddBan(ipid, "", time.Now().UTC().Unix(), expiry, "Automatic ban: packet flooding", "Server")
 	if err != nil {
-		logger.LogErrorf("Failed to auto-ban flooder %v: %v", ipid, err)
+		logger.LogErrorf("Failed to auto-ban packet flooder %v: %v", ipid, err)
 		return
 	}
 	forgetIP(ipid)
-	logger.LogInfof("Auto-banned %v for connection flooding", ipid)
+	logger.LogInfof("Auto-banned %v for packet flooding", ipid)
 }
 
 // startConnTrackerCleanup periodically removes stale entries from the connection tracker

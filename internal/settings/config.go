@@ -70,7 +70,9 @@ type ServerConfig struct {
 	ModcallCooldown       int    `toml:"modcall_cooldown"`
 	ConnRateLimit         int    `toml:"connection_rate_limit"`
 	ConnRateLimitWindow   int    `toml:"connection_rate_limit_window"`
-	ConnFloodAutoban      bool   `toml:"connection_flood_autoban"`
+	PacketFloodAutoban         bool   `toml:"packet_flood_autoban"`
+	RawPacketRateLimit         int    `toml:"raw_packet_rate_limit"`
+	RawPacketRateLimitWindow   int    `toml:"raw_packet_rate_limit_window"`
 	OOCRateLimit          int    `toml:"ooc_rate_limit"`
 	OOCRateLimitWindow    int    `toml:"ooc_rate_limit_window"`
 	PingRateLimit             int    `toml:"ping_rate_limit"`
@@ -104,6 +106,11 @@ type DiscordConfig struct {
 
 // Returns a default configuration.
 func defaultConfig() *Config {
+	return DefaultConfig()
+}
+
+// DefaultConfig returns the default server configuration. Exported for testing.
+func DefaultConfig() *Config {
 	return &Config{
 		ServerConfig{
 			Addr:                  "",
@@ -132,15 +139,17 @@ func defaultConfig() *Config {
 			ModcallCooldown:       0,
 			ConnRateLimit:         10,
 			ConnRateLimitWindow:   10,
-			ConnFloodAutoban:      false,
+			PacketFloodAutoban:         true,
+			RawPacketRateLimit:         20,
+			RawPacketRateLimitWindow:   2,
 			OOCRateLimit:          4,
 			OOCRateLimitWindow:    1,
 			PingRateLimit:             10,
 			PingRateLimitWindow:       5,
 			NewIPIDOOCCooldown:        10,
 			NewIPIDModcallCooldown:    60,
-			GlobalNewIPRateLimit:      8,
-			GlobalNewIPRateLimitWindow: 60,
+			GlobalNewIPRateLimit:      5,
+			GlobalNewIPRateLimitWindow: 10,
 			IPRetentionDays:           0,
 		},
 		LogConfig{
