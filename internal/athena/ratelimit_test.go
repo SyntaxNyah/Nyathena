@@ -1055,16 +1055,16 @@ t.Errorf("New IP was rejected after window expired")
 }
 }
 
-// TestPacketFloodAutobanDefaultFalse verifies that the PacketFloodAutoban config
-// field defaults to false so existing servers are not affected by the new feature.
-func TestPacketFloodAutobanDefaultFalse(t *testing.T) {
+// TestPacketFloodAutobanDefaultTrue verifies that the PacketFloodAutoban config
+// field defaults to true so packet flooders are banned without any manual configuration.
+func TestPacketFloodAutobanDefaultTrue(t *testing.T) {
 	oldConfig := config
 	defer func() { config = oldConfig }()
 
-	config = &settings.Config{}
+	config = settings.DefaultConfig()
 
-	if config.PacketFloodAutoban {
-		t.Errorf("PacketFloodAutoban should default to false")
+	if !config.PacketFloodAutoban {
+		t.Errorf("PacketFloodAutoban should default to true")
 	}
 }
 

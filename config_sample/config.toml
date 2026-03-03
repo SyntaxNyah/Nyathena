@@ -194,15 +194,15 @@ connection_rate_limit_window = 10
 # Whether to automatically ban IPs that exceed the connection rate limit.
 # When enabled, any IP that triggers the connection rate limit is banned using the
 # default_ban_duration and cannot reconnect until the ban expires.
-# Default: false
-connection_flood_autoban = false
+# Default: true
+connection_flood_autoban = true
 
 # Whether to automatically ban IPs that exceed the message (packet) rate limit.
 # When enabled, any client that triggers the message rate limit (message_rate_limit) is
 # banned using the default_ban_duration instead of being merely kicked. This stops
 # packet bombers and obvious DDoS bots from repeatedly reconnecting and flooding the server.
-# Default: false
-packet_flood_autoban = false
+# Default: true
+packet_flood_autoban = true
 
 # Raw packet rate limiting: Maximum number of AO2 protocol packets (of any type) a single
 # client connection may send within the raw packet rate limit window.
@@ -267,14 +267,17 @@ new_ipid_modcall_cooldown = 60
 # When this limit is reached, connections from additional unknown IPs are immediately closed
 # until the window clears, protecting the server against floods using many unique source IPs.
 # IPs that have already connected at least once (returning players) are NEVER affected by
-# this limit. Set to 0 to disable. Default: 8 unique IPs.
-global_new_ip_rate_limit = 8
+# this limit. Set to 0 to disable. Default: 5 unique IPs.
+global_new_ip_rate_limit = 5
 
 # Global new-IP rate limit: Time window in seconds for counting new unique IPs.
-# For example, with global_new_ip_rate_limit=8 and global_new_ip_rate_limit_window=60,
-# the server accepts at most 8 brand-new IP addresses per minute.
-# Default: 60 seconds.
-global_new_ip_rate_limit_window = 60
+# For example, with global_new_ip_rate_limit=5 and global_new_ip_rate_limit_window=10,
+# the server accepts at most 5 brand-new IP addresses per 10 seconds.
+# A short window (10 s) catches fast bot bursts (dozens of unique IPs in milliseconds)
+# while still allowing a sustained rate of 30 new players per minute — far above any
+# legitimate server's intake rate. Returning players are unaffected.
+# Default: 10 seconds.
+global_new_ip_rate_limit_window = 10
 
 # IP database retention: Number of days after which an IP that has not reconnected
 # is removed from the known-IP database. Removing stale IPs keeps the database lean

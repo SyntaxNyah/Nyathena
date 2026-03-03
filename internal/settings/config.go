@@ -107,6 +107,11 @@ type DiscordConfig struct {
 
 // Returns a default configuration.
 func defaultConfig() *Config {
+	return DefaultConfig()
+}
+
+// DefaultConfig returns the default server configuration. Exported for testing.
+func DefaultConfig() *Config {
 	return &Config{
 		ServerConfig{
 			Addr:                  "",
@@ -135,8 +140,8 @@ func defaultConfig() *Config {
 			ModcallCooldown:       0,
 			ConnRateLimit:         10,
 			ConnRateLimitWindow:   10,
-			ConnFloodAutoban:           false,
-			PacketFloodAutoban:         false,
+			ConnFloodAutoban:           true,
+			PacketFloodAutoban:         true,
 			RawPacketRateLimit:         20,
 			RawPacketRateLimitWindow:   2,
 			OOCRateLimit:          4,
@@ -145,8 +150,8 @@ func defaultConfig() *Config {
 			PingRateLimitWindow:       5,
 			NewIPIDOOCCooldown:        10,
 			NewIPIDModcallCooldown:    60,
-			GlobalNewIPRateLimit:      8,
-			GlobalNewIPRateLimitWindow: 60,
+			GlobalNewIPRateLimit:      5,
+			GlobalNewIPRateLimitWindow: 10,
 			IPRetentionDays:           0,
 		},
 		LogConfig{
