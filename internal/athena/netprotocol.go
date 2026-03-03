@@ -727,11 +727,10 @@ func pktOOC(client *Client, p *packet.Packet) {
 	}
 	client.SetOocName(username)
 
-	if client.Uid() != -1 {
-		writeToAll("PU", strconv.Itoa(client.Uid()), "0", username)
-	}
-
 	if strings.HasPrefix(p.Body[1], "/") {
+		if client.Uid() != -1 {
+			writeToAll("PU", strconv.Itoa(client.Uid()), "0", username)
+		}
 		decoded := decode(p.Body[1])
 		command := strings.ToLower(strings.TrimPrefix(commandRegex.FindString(decoded), "/"))
 		args := strings.Split(strings.Join(commandRegex.Split(decoded, 1), ""), " ")[1:]
@@ -750,6 +749,11 @@ func pktOOC(client *Client, p *packet.Packet) {
 		}
 		client.SendServerMessage(fmt.Sprintf("New users must wait %d %s before using OOC chat.", remaining, unit))
 		return
+	}
+	// Only broadcast the OOC name update once all checks pass, to prevent amplification attacks
+	// where bots flood CT packets causing mass PU broadcasts to all connected clients.
+	if client.Uid() != -1 {
+		writeToAll("PU", strconv.Itoa(client.Uid()), "0", username)
 	}
 	msg := p.Body[1]
 	// Reject duplicate OOC: if the last message sent in this area is identical, drop silently.
