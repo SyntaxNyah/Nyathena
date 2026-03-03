@@ -166,7 +166,8 @@ type Client struct {
 	punishments        []PunishmentState
 	msgTimestamps      []time.Time // Tracks message timestamps for rate limiting
 	oocMsgTimestamps   []time.Time // Tracks OOC message timestamps for OOC rate limiting
-	rawPktTimestamps   []time.Time // Tracks all packet timestamps for raw packet rate limiting
+	rawPktCount        int         // Packet count in the current raw-rate-limit window
+	rawPktWindowStart  time.Time   // Start time of the current raw-rate-limit window
 	lastModcallTime    time.Time   // Tracks last modcall time for cooldown
 	lastRandomCharTime time.Time   // Tracks last /randomchar time for cooldown
 	forcePairUID    int         // UID of the client this client is force-paired with (-1 if none)
@@ -1339,7 +1340,12 @@ func (client *Client) CheckOOCRateLimit() bool {
 // CheckRawPacketRateLimit checks if the client has exceeded the raw packet rate limit.
 // This counts every AO2 protocol packet regardless of type (PU, MS, CC, CH, etc.).
 // Returns true if the client is flooding (and should be immediately banned), false otherwise.
-// Uses a sliding window approach, mirroring CheckRateLimit.
+//
+// Uses a fixed-window counter: one int + one time.Time per client, zero heap allocations
+// per call. This is called on every single incoming packet, so O(1) cost matters.
+//
+// Limit semantics: exactly RawPacketRateLimit packets are allowed per window;
+// the (RawPacketRateLimit+1)th packet in the same window returns true.
 func (client *Client) CheckRawPacketRateLimit() bool {
 	if config.RawPacketRateLimit <= 0 {
 		return false
@@ -1351,28 +1357,15 @@ func (client *Client) CheckRawPacketRateLimit() bool {
 	now := time.Now()
 	window := time.Duration(config.RawPacketRateLimitWindow) * time.Second
 
-	cutoff := now.Add(-window)
-
-	validIdx := -1
-	for i, ts := range client.rawPktTimestamps {
-		if ts.After(cutoff) {
-			validIdx = i
-			break
-		}
+	// Reset the counter when the window has expired or on the very first packet
+	// (rawPktWindowStart is zero-valued for new clients).
+	if client.rawPktWindowStart.IsZero() || now.Sub(client.rawPktWindowStart) >= window {
+		client.rawPktWindowStart = now
+		client.rawPktCount = 0
 	}
 
-	if validIdx == -1 {
-		client.rawPktTimestamps = nil
-	} else if validIdx > 0 {
-		client.rawPktTimestamps = client.rawPktTimestamps[validIdx:]
-	}
-
-	if len(client.rawPktTimestamps) >= config.RawPacketRateLimit {
-		return true
-	}
-
-	client.rawPktTimestamps = append(client.rawPktTimestamps, now)
-	return false
+	client.rawPktCount++
+	return client.rawPktCount > config.RawPacketRateLimit
 }
 
 // Possessing returns the UID of the client being possessed, or -1 if not possessing anyone.

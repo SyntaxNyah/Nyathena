@@ -1090,9 +1090,7 @@ func TestRawPacketRateLimitDisabled(t *testing.T) {
 	config = &settings.Config{}
 	config.RawPacketRateLimit = 0
 
-	client := &Client{
-		rawPktTimestamps: []time.Time{},
-	}
+	client := &Client{}
 
 	for i := 0; i < 1000; i++ {
 		if client.CheckRawPacketRateLimit() {
@@ -1111,9 +1109,7 @@ func TestRawPacketRateLimitBasic(t *testing.T) {
 	config.RawPacketRateLimit = 5
 	config.RawPacketRateLimitWindow = 1
 
-	client := &Client{
-		rawPktTimestamps: []time.Time{},
-	}
+	client := &Client{}
 
 	// First 5 packets should all pass.
 	for i := 0; i < 5; i++ {
@@ -1129,7 +1125,7 @@ func TestRawPacketRateLimitBasic(t *testing.T) {
 	}
 }
 
-// TestRawPacketRateLimitWindowExpiry tests that the sliding window resets correctly.
+// TestRawPacketRateLimitWindowExpiry tests that the window counter resets correctly.
 func TestRawPacketRateLimitWindowExpiry(t *testing.T) {
 	oldConfig := config
 	defer func() { config = oldConfig }()
@@ -1138,9 +1134,7 @@ func TestRawPacketRateLimitWindowExpiry(t *testing.T) {
 	config.RawPacketRateLimit = 3
 	config.RawPacketRateLimitWindow = 1
 
-	client := &Client{
-		rawPktTimestamps: []time.Time{},
-	}
+	client := &Client{}
 
 	// Exhaust the limit.
 	for i := 0; i < 3; i++ {
@@ -1159,14 +1153,14 @@ func TestRawPacketRateLimitWindowExpiry(t *testing.T) {
 	// Wait for the window to expire.
 	time.Sleep(time.Duration(config.RawPacketRateLimitWindow)*time.Second + 100*time.Millisecond)
 
-	// Should be allowed again.
+	// Should be allowed again after the window resets.
 	if client.CheckRawPacketRateLimit() {
 		t.Errorf("Client was raw-packet rate limited after window expired")
 	}
 }
 
 // TestRawPacketRateLimitIndependentFromMessage verifies the raw packet rate limiter is
-// independent of the message rate limiter — each tracks its own sliding window.
+// independent of the message rate limiter — each tracks its own counter.
 func TestRawPacketRateLimitIndependentFromMessage(t *testing.T) {
 	oldConfig := config
 	defer func() { config = oldConfig }()
@@ -1178,8 +1172,7 @@ func TestRawPacketRateLimitIndependentFromMessage(t *testing.T) {
 	config.RawPacketRateLimitWindow = 10
 
 	client := &Client{
-		msgTimestamps:    []time.Time{},
-		rawPktTimestamps: []time.Time{},
+		msgTimestamps: []time.Time{},
 	}
 
 	// Exhaust the message rate limit (2 messages).
