@@ -537,7 +537,7 @@ func HandleWS(w http.ResponseWriter, r *http.Request) {
 			logger.LogErrorf("Failed to update known IP %s: %v", id, err)
 		}
 	}(ipid)
-	c, err := websocket.Accept(w, r, &websocket.AcceptOptions{OriginPatterns: []string{"*"}})
+	c, err := websocket.Accept(w, r, &websocket.AcceptOptions{OriginPatterns: []string{config.WebAOAllowedOrigin}})
 	if err != nil {
 		logger.LogError(err.Error())
 		return

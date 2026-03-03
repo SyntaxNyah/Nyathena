@@ -283,6 +283,14 @@ global_new_ip_rate_limit_window = 10
 # Default: 0 (disabled)
 ip_retention_days = 0
 
+# Sets the allowed origin hostname for WebSocket (WebAO) connections.
+# Only connections whose Origin header hostname matches this value will be accepted.
+# This is matched against the hostname portion of the Origin header (e.g. "web.aceattorneyonline.com"
+# matches an Origin of "https://web.aceattorneyonline.com"). Glob patterns are supported.
+# Set to "*" to allow connections from any origin (disables enforcement).
+# Default: "web.aceattorneyonline.com"
+webao_allowed_origin = "web.aceattorneyonline.com"
+
 [Logging]
 # Sets the number of actions (IC chat messages, OOC chat messages, judge actions, etc.) each area should store.
 # When a user calls a mod, this buffer will be flushed to a report file for review.

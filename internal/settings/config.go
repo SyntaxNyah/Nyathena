@@ -82,6 +82,7 @@ type ServerConfig struct {
 	GlobalNewIPRateLimit      int    `toml:"global_new_ip_rate_limit"`
 	GlobalNewIPRateLimitWindow int   `toml:"global_new_ip_rate_limit_window"`
 	IPRetentionDays           int    `toml:"ip_retention_days"`
+	WebAOAllowedOrigin        string `toml:"webao_allowed_origin"`
 }
 
 type LogConfig struct {
@@ -151,6 +152,7 @@ func DefaultConfig() *Config {
 			GlobalNewIPRateLimit:      5,
 			GlobalNewIPRateLimitWindow: 10,
 			IPRetentionDays:           0,
+			WebAOAllowedOrigin:        "web.aceattorneyonline.com",
 		},
 		LogConfig{
 			BufSize:              150,
