@@ -150,3 +150,31 @@ func TestApplyMultiplePunishments(t *testing.T) {
 		t.Errorf("Sequential punishment application failed: got %s", step2)
 	}
 }
+
+// TestCanSpeakOOCMuteStates verifies that CanSpeakOOC returns false for OOC-muted clients,
+// ensuring /global and /pm respect the same OOC mute restrictions as regular OOC chat.
+func TestCanSpeakOOCMuteStates(t *testing.T) {
+	tests := []struct {
+		name      string
+		muteState MuteState
+		wantAllow bool
+	}{
+		{"unmuted", Unmuted, true},
+		{"IC muted only", ICMuted, true},
+		{"OOC muted", OOCMuted, false},
+		{"IC+OOC muted", ICOOCMuted, false},
+		{"music muted", MusicMuted, true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			client := &Client{}
+			client.muted = tt.muteState
+			// For OOC-muted states, CheckUnmute returns false when muteTime is zero (permanent).
+			got := client.CanSpeakOOC()
+			if got != tt.wantAllow {
+				t.Errorf("CanSpeakOOC() with mute state %v: expected %v, got %v", tt.muteState, tt.wantAllow, got)
+			}
+		})
+	}
+}
