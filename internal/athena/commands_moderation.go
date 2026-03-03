@@ -571,6 +571,10 @@ func cmdPlayers(client *Client, args []string, _ string) {
 // Handles /pm
 
 func cmdPM(client *Client, args []string, _ string) {
+	if !client.CanSpeakOOC() {
+		client.SendServerMessage("You are muted from sending OOC messages.")
+		return
+	}
 	if limited, remaining := checkNewIPIDOOCCooldown(client.Ipid()); limited {
 		unit := "seconds"
 		if remaining == 1 {
