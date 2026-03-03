@@ -24,6 +24,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/MangosArentLiterature/Athena/internal/area"
 	"github.com/MangosArentLiterature/Athena/internal/db"
@@ -131,6 +132,7 @@ func pktReqDone(client *Client, _ *packet.Packet) {
 		return
 	}
 	client.SetUid(uids.GetUid())
+	client.SetConnectedAt(time.Now())
 	players.AddPlayer()
 	if config.Advertise {
 		updatePlayers <- players.GetPlayerCount()

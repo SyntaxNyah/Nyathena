@@ -49,7 +49,7 @@ var db *sql.DB
 
 // Database version.
 // This should be incremented whenever changes are made to the DB that require existing databases to upgrade.
-const ver = 4
+const ver = 5
 
 // Persistent punishment kind constants.
 const (
@@ -122,7 +122,8 @@ func Open() error {
 	_, err = db.Exec(`CREATE TABLE IF NOT EXISTS KNOWN_IPS(
 		IPID       TEXT    PRIMARY KEY,
 		FIRST_SEEN INTEGER NOT NULL DEFAULT 0,
-		LAST_SEEN  INTEGER NOT NULL DEFAULT 0
+		LAST_SEEN  INTEGER NOT NULL DEFAULT 0,
+		PLAYTIME   INTEGER NOT NULL DEFAULT 0
 	)`)
 	if err != nil {
 		return err
@@ -170,6 +171,16 @@ func upgradeDB(v int) error {
 			return err
 		}
 		_, err = db.Exec("PRAGMA user_version = 4")
+		if err != nil {
+			return err
+		}
+		fallthrough
+	case 4:
+		_, err := db.Exec("ALTER TABLE KNOWN_IPS ADD COLUMN PLAYTIME INTEGER NOT NULL DEFAULT 0")
+		if err != nil {
+			return err
+		}
+		_, err = db.Exec("PRAGMA user_version = 5")
 		if err != nil {
 			return err
 		}
@@ -512,6 +523,31 @@ func PruneInactiveIPs(before int64) (int64, error) {
 		return 0, nil
 	}
 	res, err := db.Exec("DELETE FROM KNOWN_IPS WHERE LAST_SEEN < ? AND LAST_SEEN != 0", before)
+	if err != nil {
+		return 0, err
+	}
+	n, _ := res.RowsAffected()
+	return n, nil
+}
+
+// AddPlaytime increments the PLAYTIME counter for an IPID by the given number of seconds.
+// It is called when a client disconnects to accumulate their session duration.
+func AddPlaytime(ipid string, seconds int64) error {
+	if db == nil {
+		return nil
+	}
+	_, err := db.Exec("UPDATE KNOWN_IPS SET PLAYTIME = PLAYTIME + ? WHERE IPID = ?", seconds, ipid)
+	return err
+}
+
+// PruneShortPlaytimeIPs deletes all KNOWN_IPS rows whose accumulated PLAYTIME is
+// less than minSeconds. IPs that have played for at least minSeconds are retained.
+// It returns the number of rows removed.
+func PruneShortPlaytimeIPs(minSeconds int64) (int64, error) {
+	if db == nil {
+		return 0, nil
+	}
+	res, err := db.Exec("DELETE FROM KNOWN_IPS WHERE PLAYTIME < ?", minSeconds)
 	if err != nil {
 		return 0, err
 	}

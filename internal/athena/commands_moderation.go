@@ -266,6 +266,14 @@ func cmdGlobal(client *Client, args []string, _ string) {
 		client.SendServerMessage("You are muted from sending OOC messages.")
 		return
 	}
+	if limited, remaining := checkNewIPIDOOCCooldown(client.Ipid()); limited {
+		unit := "seconds"
+		if remaining == 1 {
+			unit = "second"
+		}
+		client.SendServerMessage(fmt.Sprintf("New users must wait %d %s before using OOC chat.", remaining, unit))
+		return
+	}
 	writeToAll("CT", fmt.Sprintf("[GLOBAL] %v", client.OOCName()), strings.Join(args, " "), "1")
 }
 
@@ -563,6 +571,14 @@ func cmdPlayers(client *Client, args []string, _ string) {
 // Handles /pm
 
 func cmdPM(client *Client, args []string, _ string) {
+	if limited, remaining := checkNewIPIDOOCCooldown(client.Ipid()); limited {
+		unit := "seconds"
+		if remaining == 1 {
+			unit = "second"
+		}
+		client.SendServerMessage(fmt.Sprintf("New users must wait %d %s before using OOC chat.", remaining, unit))
+		return
+	}
 	msg := strings.Join(args[1:], " ")
 	toPM := getUidList(strings.Split(args[0], ","))
 	for _, c := range toPM {

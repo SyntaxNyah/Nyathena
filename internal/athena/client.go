@@ -171,6 +171,7 @@ type Client struct {
 	forcePairUID    int         // UID of the client this client is force-paired with (-1 if none)
 	possessing      int         // UID of the client being possessed (-1 if not possessing anyone)
 	possessedPos    string      // Position of the possessed target (saved at time of possession)
+	connectedAt     time.Time   // Time the client joined the server (uid assigned); zero if not yet joined
 }
 
 // NewClient returns a new client.
@@ -271,6 +272,19 @@ func (client *Client) SendPacket(header string, contents ...string) {
 func (client *Client) clientCleanup() {
 	if client.Uid() != -1 {
 		logger.LogInfof("Client (IPID:%v UID:%v) left the server", client.ipid, client.Uid())
+
+		// Accumulate session playtime in the database.
+		if connAt := client.ConnectedAt(); !connAt.IsZero() {
+			sessionSecs := int64(time.Since(connAt).Seconds())
+			if sessionSecs > 0 {
+				ipid := client.Ipid()
+				go func() {
+					if err := db.AddPlaytime(ipid, sessionSecs); err != nil {
+						logger.LogErrorf("Failed to add playtime for %v: %v", ipid, err)
+					}
+				}()
+			}
+		}
 
 		// Clear possession links if this client was possessing someone
 		if client.Possessing() != -1 {
@@ -1329,4 +1343,19 @@ func (client *Client) SetPossessedPos(pos string) {
 	client.mu.Lock()
 	defer client.mu.Unlock()
 	client.possessedPos = pos
+}
+
+// ConnectedAt returns the time the client joined the server (was assigned a UID).
+// Returns a zero Time if the client has not yet joined.
+func (client *Client) ConnectedAt() time.Time {
+	client.mu.Lock()
+	defer client.mu.Unlock()
+	return client.connectedAt
+}
+
+// SetConnectedAt records the time the client joined the server.
+func (client *Client) SetConnectedAt(t time.Time) {
+	client.mu.Lock()
+	client.connectedAt = t
+	client.mu.Unlock()
 }

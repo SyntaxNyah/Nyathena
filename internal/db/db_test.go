@@ -502,3 +502,64 @@ func TestPruneInactiveIPsSkipsZeroLastSeen(t *testing.T) {
 		t.Fatalf("expected legacy.ip to remain, got %v", ipids)
 	}
 }
+
+func TestAddPlaytime(t *testing.T) {
+	teardown := setupTestDB(t)
+	defer teardown()
+
+	ipid := "playtime.ip"
+	if err := MarkIPKnown(ipid); err != nil {
+		t.Fatalf("MarkIPKnown failed: %v", err)
+	}
+
+	// Add 100 seconds and verify.
+	if err := AddPlaytime(ipid, 100); err != nil {
+		t.Fatalf("AddPlaytime (100s) failed: %v", err)
+	}
+	var pt int64
+	if err := db.QueryRow("SELECT PLAYTIME FROM KNOWN_IPS WHERE IPID = ?", ipid).Scan(&pt); err != nil {
+		t.Fatalf("scan playtime after 100s failed: %v", err)
+	}
+	if pt != 100 {
+		t.Errorf("expected PLAYTIME=100, got %d", pt)
+	}
+
+	// Add another 200 seconds; total should be 300.
+	if err := AddPlaytime(ipid, 200); err != nil {
+		t.Fatalf("AddPlaytime (200s) failed: %v", err)
+	}
+	if err := db.QueryRow("SELECT PLAYTIME FROM KNOWN_IPS WHERE IPID = ?", ipid).Scan(&pt); err != nil {
+		t.Fatalf("scan playtime after 300s failed: %v", err)
+	}
+	if pt != 300 {
+		t.Errorf("expected PLAYTIME=300, got %d", pt)
+	}
+}
+
+func TestPruneShortPlaytimeIPs(t *testing.T) {
+	teardown := setupTestDB(t)
+	defer teardown()
+
+	// Insert two IPs: one with >= 1h playtime, one without.
+	if _, err := db.Exec("INSERT INTO KNOWN_IPS(IPID, FIRST_SEEN, LAST_SEEN, PLAYTIME) VALUES(?, ?, ?, ?)",
+		"veteran.ip", 0, 0, 3600); err != nil {
+		t.Fatalf("insert veteran.ip failed: %v", err)
+	}
+	if _, err := db.Exec("INSERT INTO KNOWN_IPS(IPID, FIRST_SEEN, LAST_SEEN, PLAYTIME) VALUES(?, ?, ?, ?)",
+		"newbie.ip", 0, 0, 0); err != nil {
+		t.Fatalf("insert newbie.ip failed: %v", err)
+	}
+
+	n, err := PruneShortPlaytimeIPs(3600)
+	if err != nil {
+		t.Fatalf("PruneShortPlaytimeIPs failed: %v", err)
+	}
+	if n != 1 {
+		t.Errorf("expected 1 row pruned, got %d", n)
+	}
+
+	ipids, _ := LoadKnownIPs()
+	if len(ipids) != 1 || ipids[0] != "veteran.ip" {
+		t.Errorf("expected only veteran.ip to remain, got %v", ipids)
+	}
+}
