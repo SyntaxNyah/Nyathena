@@ -281,8 +281,9 @@ func applicationCommands() []*discordgo.ApplicationCommand {
 		},
 		// Server control
 		{
-			Name:        "restart",
-			Description: "Restart the server process.",
+			Name:                     "restart",
+			Description:              "Restart the server process.",
+			DefaultMemberPermissions: func() *int64 { p := int64(discordgo.PermissionAdministrator); return &p }(),
 		},
 	}
 }

@@ -63,7 +63,7 @@ var commandHelp = map[string]struct {
 	"logs":            {"/logs <player>", "View recent activity logs for a player.", "Moderator", "/logs 3", []string{"auditlog"}},
 	"auditlog":        {"/auditlog [filter]", "View the server audit log with an optional filter.", "Moderator", "/auditlog ban", []string{"logs"}},
 	"banlist":         {"/banlist", "View the full list of currently banned players.", "Moderator", "/banlist", []string{"ban", "unban"}},
-	"restart":         {"/restart", "Restart the server process.", "Moderator", "/restart", []string{"status"}},
+	"restart":         {"/restart", "Restart the server process.", "Administrator", "/restart", []string{"status"}},
 }
 
 // handleHelp handles the /help command.

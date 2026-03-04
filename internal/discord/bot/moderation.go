@@ -318,7 +318,7 @@ func (b *Bot) handleBanList(s *discordgo.Session, i *discordgo.InteractionCreate
 
 // handleRestart handles the /restart command.
 func (b *Bot) handleRestart(s *discordgo.Session, i *discordgo.InteractionCreate) {
-	if !b.requireMod(s, i) {
+	if !b.requireAdmin(s, i) {
 		return
 	}
 	if err := b.server.Restart(); err != nil {
