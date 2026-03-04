@@ -101,4 +101,7 @@ type ServerInterface interface {
 	GetServerName() string
 	GetPlayerCount() int
 	GetMaxPlayers() int
+
+	// Server control
+	Restart() error
 }

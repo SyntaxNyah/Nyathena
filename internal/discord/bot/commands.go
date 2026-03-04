@@ -279,6 +279,11 @@ func applicationCommands() []*discordgo.ApplicationCommand {
 			Name:        "banlist",
 			Description: "View the list of banned players.",
 		},
+		// Server control
+		{
+			Name:        "restart",
+			Description: "Restart the server process.",
+		},
 	}
 }
 
@@ -339,5 +344,7 @@ func (b *Bot) commandHandlers() map[string]func(*discordgo.Session, *discordgo.I
 		"logs":     b.handleLogs,
 		"auditlog": b.handleAuditLog,
 		"banlist":  b.handleBanList,
+		// Server control
+		"restart": b.handleRestart,
 	}
 }

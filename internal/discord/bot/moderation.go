@@ -315,3 +315,15 @@ func (b *Bot) handleBanList(s *discordgo.Session, i *discordgo.InteractionCreate
 	}
 	respondEmbed(s, i, embed)
 }
+
+// handleRestart handles the /restart command.
+func (b *Bot) handleRestart(s *discordgo.Session, i *discordgo.InteractionCreate) {
+	if !b.requireMod(s, i) {
+		return
+	}
+	if err := b.server.Restart(); err != nil {
+		respondEmbed(s, i, errorEmbed(fmt.Sprintf("Failed to restart server: %v", err)))
+		return
+	}
+	respondEmbed(s, i, infoEmbed("🔄 Server Restarting", "The server is restarting. It will be back online shortly."))
+}

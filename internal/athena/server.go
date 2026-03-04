@@ -62,6 +62,7 @@ var (
 	updatePlayers                                     = make(chan int)      // Updates the advertiser's player count.
 	advertDone                                        = make(chan struct{}) // Signals the advertiser to stop.
 	FatalError                                        = make(chan error)    // Signals that the server should stop after a fatal error.
+	RestartRequest                                    = make(chan struct{}) // Signals that the server should restart.
 
 	// connTracker tracks connection attempts per IP for connection-rate limiting.
 	connTracker = struct {
@@ -560,6 +561,11 @@ func (s *Server) CleanupServer() {
 // CleanupServer closes all connections on the active server instance.
 // Kept for backward compatibility; delegates to server.CleanupServer.
 func CleanupServer() { server.CleanupServer() }
+
+// RequestRestart signals the main process to restart the server.
+func RequestRestart() {
+	RestartRequest <- struct{}{}
+}
 
 // writeToAll sends a message to all connected clients.
 func writeToAll(header string, contents ...string) {

@@ -63,6 +63,7 @@ var commandHelp = map[string]struct {
 	"logs":            {"/logs <player>", "View recent activity logs for a player.", "Moderator", "/logs 3", []string{"auditlog"}},
 	"auditlog":        {"/auditlog [filter]", "View the server audit log with an optional filter.", "Moderator", "/auditlog ban", []string{"logs"}},
 	"banlist":         {"/banlist", "View the full list of currently banned players.", "Moderator", "/banlist", []string{"ban", "unban"}},
+	"restart":         {"/restart", "Restart the server process.", "Moderator", "/restart", []string{"status"}},
 }
 
 // handleHelp handles the /help command.
@@ -151,6 +152,11 @@ func (b *Bot) handleHelp(s *discordgo.Session, i *discordgo.InteractionCreate) {
 				Value: "`/logs` — Player activity logs\n" +
 					"`/auditlog` — Server audit log\n" +
 					"`/banlist` — List of banned players",
+				Inline: false,
+			},
+			{
+				Name:   "⚙️ Server Control",
+				Value:  "`/restart` — Restart the server",
 				Inline: false,
 			},
 		},
