@@ -98,13 +98,28 @@ func main() {
 	}
 	stop := make(chan (os.Signal), 2)
 	signal.Notify(stop, os.Interrupt, syscall.SIGINT, syscall.SIGTERM)
+	restart := false
 	select {
 	case <-stop:
 		break
 	case err := <-athena.FatalError:
 		logger.LogFatal(err.Error())
 		break
+	case <-athena.RestartRequest:
+		restart = true
 	}
 	athena.CleanupServer()
+	if restart {
+		logger.LogInfo("Restarting server...")
+		executable, err := os.Executable()
+		if err != nil {
+			logger.LogFatalf("Failed to get executable path for restart: %v", err)
+			os.Exit(1)
+		}
+		if err := syscall.Exec(executable, os.Args, os.Environ()); err != nil {
+			logger.LogFatalf("Failed to restart server: %v", err)
+			os.Exit(1)
+		}
+	}
 	logger.LogInfo("Stopping server.")
 }

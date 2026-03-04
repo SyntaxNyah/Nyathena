@@ -44,3 +44,27 @@ func (b *Bot) requireMod(s *discordgo.Session, i *discordgo.InteractionCreate) b
 	}
 	return true
 }
+
+// isAdmin returns true if the invoking Discord member has the server Administrator permission,
+// or if the interaction was initiated by the bot's own user account.
+func (b *Bot) isAdmin(i *discordgo.InteractionCreate) bool {
+	// Allow the bot's own user (e.g. internal triggers surfaced as interactions).
+	if b.session.State.User != nil && i.Member != nil && i.Member.User != nil &&
+		i.Member.User.ID == b.session.State.User.ID {
+		return true
+	}
+	if i.Member == nil {
+		return false
+	}
+	return i.Member.Permissions&discordgo.PermissionAdministrator != 0
+}
+
+// requireAdmin checks whether the invoking user has Administrator permissions and sends an
+// ephemeral error response if not. Returns true if the user is authorized, false otherwise.
+func (b *Bot) requireAdmin(s *discordgo.Session, i *discordgo.InteractionCreate) bool {
+	if !b.isAdmin(i) {
+		respondEmbedEphemeral(s, i, errorEmbed("This command requires server Administrator permissions."))
+		return false
+	}
+	return true
+}

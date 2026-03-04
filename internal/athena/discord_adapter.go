@@ -544,3 +544,9 @@ func (a *ServerAdapter) GetPlayerCount() int {
 func (a *ServerAdapter) GetMaxPlayers() int {
 	return config.MaxPlayers
 }
+
+// Restart signals the server process to restart itself.
+func (a *ServerAdapter) Restart() error {
+	go RequestRestart()
+	return nil
+}
