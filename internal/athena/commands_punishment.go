@@ -317,6 +317,10 @@ func cmdEmoticon(client *Client, args []string, usage string) {
 	cmdPunishment(client, args, usage, PunishmentEmoticon)
 }
 
+func cmdTourettes(client *Client, args []string, usage string) {
+	cmdPunishment(client, args, usage, PunishmentTourettes)
+}
+
 // cmdUnpunish removes all or specific punishments from users
 func cmdUnpunish(client *Client, args []string, usage string) {
 	flags := flag.NewFlagSet("", 0)
@@ -490,6 +494,8 @@ func parsePunishmentType(s string) PunishmentType {
 		return PunishmentLovebomb
 	case "degrade":
 		return PunishmentDegrade
+	case "tourettes":
+		return PunishmentTourettes
 	default:
 		return PunishmentNone
 	}

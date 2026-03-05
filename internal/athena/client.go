@@ -122,6 +122,8 @@ const (
 	// Social Torment Punishments
 	PunishmentLovebomb
 	PunishmentDegrade
+	// Tourettes Punishment
+	PunishmentTourettes
 )
 
 type PunishmentState struct {
@@ -1320,6 +1322,8 @@ func (p PunishmentType) String() string {
 		return "lovebomb"
 	case PunishmentDegrade:
 		return "degrade"
+	case PunishmentTourettes:
+		return "tourettes"
 	default:
 		return "none"
 	}

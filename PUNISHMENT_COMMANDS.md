@@ -1,6 +1,6 @@
 # Punishment Commands Documentation
 
-Athena now includes 35 fun, non-harmful punishment commands for moderators to use on players. These commands temporarily modify how player messages appear or behave, adding entertainment value while maintaining server control.
+Athena now includes 36 fun, non-harmful punishment commands for moderators to use on players. These commands temporarily modify how player messages appear or behave, adding entertainment value while maintaining server control.
 
 ## Overview
 
@@ -203,6 +203,24 @@ Intentionally "autocorrects" words incorrectly.
 - "the" → "teh"
 - "you" → "u"
 - "there" → "their"
+
+## Chaos & Outburst Commands (1)
+
+### `/tourettes`
+Randomly injects 1–3 uncontrollable capitalised outbursts mid-message, wrapped in em-dashes.
+- Input: `"I need to talk to you about something"`
+- Output: `"I need —SPATULA— to talk —WHAT THE HELL— to you about something"`
+
+Seven themed categories of outbursts are drawn from a single pool:
+- **Mild swearing** – DAMN IT, BLOODY HELL, OH SHIT, etc.
+- **Random objects** – SPATULA, REFRIGERATOR, SEVENTEEN STAPLERS, etc.
+- **Non-sequiturs** – THE MITOCHONDRIA IS THE POWERHOUSE OF THE CELL, I LOVE BREAD, etc.
+- **Sounds** – AAARGH, HONK HONK, *table flip*, *incoherent yelling*, etc.
+- **Confused phrases** – I FORGOT WHAT I WAS SAYING, DID I SAY THAT OUT LOUD, etc.
+- **Conspiracy** – BIRDS AREN'T REAL, THE SKY IS FAKE, TRUST NO ONE, etc.
+- **Wholesome chaos** – SOUP IS UNDERRATED, ROCKS HAVE FEELINGS, etc.
+
+IPID-persisted: punishment survives reconnects via the standard DB pipeline.
 
 ## Safety Features
 

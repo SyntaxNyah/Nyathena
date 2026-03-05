@@ -698,3 +698,54 @@ if len(seen) < 3 {
 t.Errorf("applyLovebombMessage: expected at least 3 distinct messages in 200 runs, got %d", len(seen))
 }
 }
+
+func TestApplyTourettes(t *testing.T) {
+	input := "hello world how are you doing today"
+	result := applyTourettes(input)
+	if result == "" {
+		t.Errorf("applyTourettes: returned empty string")
+	}
+	// Outbursts are wrapped in em-dashes; the result must contain at least one.
+	if !strings.Contains(result, "—") {
+		t.Errorf("applyTourettes: result %q contains no em-dash (no outburst injected)", result)
+	}
+	// The result must differ from the input.
+	if result == input {
+		t.Errorf("applyTourettes: result unchanged from input %q", input)
+	}
+}
+
+func TestApplyTourettesEmpty(t *testing.T) {
+	result := applyTourettes("")
+	if result == "" {
+		t.Errorf("applyTourettes(empty): expected a random outburst, got empty string")
+	}
+	// Empty input returns a bare outburst — no em-dashes
+	if strings.Contains(result, "—") {
+		t.Errorf("applyTourettes(empty): expected bare outburst without em-dashes, got %q", result)
+	}
+}
+
+func TestApplyTourettesVariety(t *testing.T) {
+	seen := make(map[string]struct{})
+	for i := 0; i < 100; i++ {
+		seen[applyTourettes("hello world test message")] = struct{}{}
+	}
+	if len(seen) < 3 {
+		t.Errorf("applyTourettes: expected at least 3 distinct results in 100 runs, got %d", len(seen))
+	}
+}
+
+func TestApplyTourettesViaApplyPunishmentToText(t *testing.T) {
+	input := "hello world"
+	result := ApplyPunishmentToText(input, PunishmentTourettes)
+	if result == input {
+		t.Errorf("ApplyPunishmentToText(tourettes): expected transformed output, got unchanged %q", result)
+	}
+}
+
+func TestPunishmentTourettesString(t *testing.T) {
+	if PunishmentTourettes.String() != "tourettes" {
+		t.Errorf("PunishmentTourettes.String(): expected %q, got %q", "tourettes", PunishmentTourettes.String())
+	}
+}

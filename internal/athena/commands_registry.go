@@ -928,6 +928,13 @@ func initCommands() {
 			desc:     "Forces user to speak only in emoticons (:P, :D, :3, etc.).",
 			reqPerms: permissions.PermissionField["MUTE"],
 		},
+		"tourettes": {
+			handler:  cmdTourettes,
+			minArgs:  1,
+			usage:    "Usage: /tourettes [-d duration] [-r reason] <uid1>,<uid2>...",
+			desc:     "Randomly injects uncontrollable outbursts of swearing and random nonsense mid-message.",
+			reqPerms: permissions.PermissionField["MUTE"],
+		},
 		// Social Torment Punishments
 		"lovebomb": {
 			handler:  cmdLovebomb,

@@ -695,6 +695,8 @@ func ApplyPunishmentToText(text string, pType PunishmentType) string {
 		return applyEmoticon(text)
 	case PunishmentDegrade:
 		return applyDegrade(text)
+	case PunishmentTourettes:
+		return applyTourettes(text)
 	default:
 		return text
 	}
@@ -1247,6 +1249,104 @@ var degradeMessages = []string{
 // applyDegrade replaces the message with a random degrading first-person statement.
 func applyDegrade(text string) string {
 	return degradeMessages[rand.Intn(len(degradeMessages))]
+}
+
+// tourettesOutbursts is the pool of random capitalised outbursts injected by /tourettes.
+// It is a single flat slice (allocated once at startup) covering 7 themed categories:
+// mild swearing, random objects, non-sequiturs, sounds, confused phrases,
+// conspiracy, and wholesome chaos. A flat slice keeps selection to a single
+// rand.Intn call with no extra indirection.
+var tourettesOutbursts = []string{
+	// Mild swearing / classic outbursts
+	"DAMN IT", "CRAP", "WHAT THE HELL", "OH SHIT", "FRICK", "BLOODY HELL",
+	"FOR THE LOVE OF GOD", "SWEET JESUS", "OH FOR F***'S SAKE", "HOLY CRAP",
+	"WHAT IN THE ACTUAL HELL", "MOTHERF***ER", "SON OF A BITCH", "BASTARD",
+	// Random objects / non-sequiturs
+	"SPATULA", "REFRIGERATOR", "WHEELBARROW", "SPAGHETTI", "BUCKET", "TOASTER",
+	"SEVENTEEN STAPLERS", "A SINGULAR SOCK", "GRANDMA'S DENTURES", "CARDBOARD BOX",
+	"LAMP", "OTTOMAN", "CUCUMBER", "A WET NEWSPAPER", "MICROWAVE", "SPOON",
+	// Weird exclamations
+	"BANANA PHONE", "CHEESE WHEELS", "THE MITOCHONDRIA IS THE POWERHOUSE OF THE CELL",
+	"I LOVE BREAD", "TAXATION IS THEFT", "FREE THE LIZARDS", "NOT THE BEES",
+	"MY SPOON IS TOO BIG", "THE FLOOR IS MADE OF FLOOR", "I HATE MONDAYS",
+	"WALUIGI TIME", "SEND ME TO THE MOON",
+	// Random sounds / noises
+	"AAARGH", "BLARGH", "HONK HONK", "SKRRT", "YEET", "OOF", "NYOOM",
+	"*table flip*", "*screaming internally*", "*sobbing noises*", "AAAAAAA",
+	"HELP", "WHEEZE", "*incoherent yelling*", "NOOOOOO",
+	// Confused/random phrases
+	"I FORGOT WHAT I WAS SAYING", "WAIT WHAT", "HOLD ON A SECOND",
+	"NEVER MIND THAT", "IGNORE THAT LAST PART", "SORRY THAT JUST CAME OUT",
+	"DID I SAY THAT OUT LOUD", "THAT WAS A MISTAKE",
+	// Conspiracy / dramatic
+	"THE ILLUMINATI KNOWS", "BIRDS AREN'T REAL", "WAKE UP SHEEPLE",
+	"THE SKY IS FAKE", "YOUR REFRIGERATOR IS REPORTING YOU", "TRUST NO ONE",
+	// Wholesome chaos
+	"I LOVE DOGS", "SOUP IS UNDERRATED", "ROCKS HAVE FEELINGS",
+	"PENGUINS ARE JUST BIRDS IN TUXEDOS", "AND THEN I FOUND FIVE DOLLARS",
+}
+
+// applyTourettes randomly inserts 1–3 capitalised outbursts into the message.
+// Outbursts are wrapped in em-dashes so they stand out clearly mid-sentence.
+//
+// Allocation profile (called on every IC message):
+//   - words slice: one allocation via strings.Fields (unavoidable)
+//   - positions:   stack-allocated [3]int — zero heap cost
+//   - dedup:       linear scan — O(1) for n ≤ 3, no map/set needed
+//   - strings.Builder: pre-grown to 2× input length
+func applyTourettes(text string) string {
+	words := strings.Fields(text)
+	if len(words) == 0 {
+		return tourettesOutbursts[rand.Intn(len(tourettesOutbursts))]
+	}
+
+	// Choose 1–3 injection points, capped by word count.
+	n := 1 + rand.Intn(3)
+	if n > len(words) {
+		n = len(words)
+	}
+
+	// Collect n unique word indices (after which an outburst is injected).
+	// Stack array avoids any heap allocation; linear dedup is O(1) for n ≤ 3.
+	// maxAttempts: n*8 gives at least 8 tries per desired position. For the
+	// worst case (n=3, len(words)=3) every candidate collides 2/3 of the time,
+	// so 24 attempts makes a miss astronomically unlikely.
+	var posArr [3]int
+	positions := posArr[:0]
+outer:
+	for attempts := 0; len(positions) < n && attempts < n*8; attempts++ {
+		pos := rand.Intn(len(words))
+		for _, p := range positions {
+			if p == pos {
+				continue outer
+			}
+		}
+		positions = append(positions, pos)
+	}
+
+	// Insertion-sort the (at most 3) positions — O(1).
+	for i := 1; i < len(positions); i++ {
+		for j := i; j > 0 && positions[j] < positions[j-1]; j-- {
+			positions[j], positions[j-1] = positions[j-1], positions[j]
+		}
+	}
+
+	var sb strings.Builder
+	sb.Grow(len(text) * 2)
+	pi := 0
+	for i, w := range words {
+		if i > 0 {
+			sb.WriteByte(' ')
+		}
+		sb.WriteString(w)
+		if pi < len(positions) && positions[pi] == i {
+			sb.WriteString(" —")
+			sb.WriteString(tourettesOutbursts[rand.Intn(len(tourettesOutbursts))])
+			sb.WriteString("—")
+			pi++
+		}
+	}
+	return truncateText(strings.TrimSpace(sb.String()))
 }
 
 // lovebombTemplates are silly love-bomb message templates.
