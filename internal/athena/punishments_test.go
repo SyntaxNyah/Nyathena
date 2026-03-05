@@ -662,3 +662,39 @@ func TestPunishmentLovebombString(t *testing.T) {
 		t.Errorf("PunishmentLovebomb.String(): expected %q, got %q", "lovebomb", PunishmentLovebomb.String())
 	}
 }
+
+func TestApplyLovebombMessageWithTarget(t *testing.T) {
+const target = "Phoenix"
+// Run enough times to hit multiple templates
+for i := 0; i < 100; i++ {
+result := applyLovebombMessage(target)
+if result == "" {
+t.Errorf("applyLovebombMessage(%q): returned empty string", target)
+}
+if !strings.Contains(result, target) {
+t.Errorf("applyLovebombMessage(%q): target name missing from result %q", target, result)
+}
+}
+}
+
+func TestApplyLovebombMessageEmptyTarget(t *testing.T) {
+result := applyLovebombMessage("")
+if result == "" {
+t.Errorf("applyLovebombMessage(empty): returned empty string")
+}
+// Empty target should return the fallback (no %s placeholder used)
+if strings.Contains(result, "%s") {
+t.Errorf("applyLovebombMessage(empty): result contains literal %%s: %q", result)
+}
+}
+
+func TestApplyLovebombMessageVariety(t *testing.T) {
+// With enough samples we should see at least 3 distinct messages.
+seen := make(map[string]struct{})
+for i := 0; i < 200; i++ {
+seen[applyLovebombMessage("Alice")] = struct{}{}
+}
+if len(seen) < 3 {
+t.Errorf("applyLovebombMessage: expected at least 3 distinct messages in 200 runs, got %d", len(seen))
+}
+}

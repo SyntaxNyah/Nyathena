@@ -75,3 +75,13 @@ func getCharacterID(charName string) int {
 	}
 	return -1
 }
+
+// clientDisplayName returns the client's effective showname, falling back to
+// their character name when the showname is blank.
+func clientDisplayName(c *Client) string {
+	name := c.EffectiveShowname()
+	if strings.TrimSpace(name) == "" && c.CharID() >= 0 && c.CharID() < len(characters) {
+		name = characters[c.CharID()]
+	}
+	return name
+}

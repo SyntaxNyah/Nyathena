@@ -340,38 +340,31 @@ func pktIC(client *Client, p *packet.Packet) {
 					modifiedMsg = ApplyPunishmentToTextWithState(decodedMsg, p.punishmentType, ps)
 				})
 			} else if p.punishmentType == PunishmentLovebomb {
-				// Resolve the target showname from the area context
-				targetUID := p.targetUID
+				// Resolve the target's display name.
 				var targetShowname string
-				if targetUID >= 0 {
-					if target, err := getClientByUid(targetUID); err == nil {
-						targetShowname = target.EffectiveShowname()
-						if strings.TrimSpace(targetShowname) == "" && target.CharID() >= 0 && target.CharID() < len(characters) {
-							targetShowname = characters[target.CharID()]
-						}
+				if p.targetUID >= 0 {
+					if target, err := getClientByUid(p.targetUID); err == nil {
+						targetShowname = clientDisplayName(target)
 					}
 				}
 				if targetShowname == "" {
-					// Pick a random person in the same area (not the punished client)
-					var areaClients []*Client
+					// Reservoir-sample one random area member (excluding self) without
+					// allocating a full slice — O(N) single pass, zero extra heap.
+					var chosen *Client
+					n := 0
 					for c := range clients.GetAllClients() {
 						if c.Area() == client.Area() && c.Uid() != client.Uid() {
-							areaClients = append(areaClients, c)
+							n++
+							if rand.Intn(n) == 0 {
+								chosen = c
+							}
 						}
 					}
-					if len(areaClients) > 0 {
-						target := areaClients[rand.Intn(len(areaClients))]
-						targetShowname = target.EffectiveShowname()
-						if strings.TrimSpace(targetShowname) == "" && target.CharID() >= 0 && target.CharID() < len(characters) {
-							targetShowname = characters[target.CharID()]
-						}
+					if chosen != nil {
+						targetShowname = clientDisplayName(chosen)
 					}
 				}
-				if targetShowname == "" {
-					modifiedMsg = "I LOVE YOU ♥"
-				} else {
-					modifiedMsg = "I LOVE YOU " + targetShowname
-				}
+				modifiedMsg = applyLovebombMessage(targetShowname)
 			} else {
 				modifiedMsg = ApplyPunishmentToText(decodedMsg, p.punishmentType)
 			}

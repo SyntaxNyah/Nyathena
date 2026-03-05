@@ -17,6 +17,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>. */
 package athena
 
 import (
+	"fmt"
 	"math/rand"
 	"regexp"
 	"strings"
@@ -1229,21 +1230,65 @@ func applyEmoticon(text string) string {
 
 // degradeMessages are first-person degrading statements used by the degrade punishment.
 var degradeMessages = []string{
-"I am pathetic",
-"I am powerless",
-"I am a bottomfeeder",
-"I am worthless",
-"I am nothing",
-"I am weak and pathetic",
-"I am beneath everyone here",
-"I am truly hopeless",
-"I am an absolute failure",
-"I am beyond pathetic",
-"I am completely powerless",
-"I am a worthless waste of space",
+	"I am pathetic",
+	"I am powerless",
+	"I am a bottomfeeder",
+	"I am worthless",
+	"I am nothing",
+	"I am weak and pathetic",
+	"I am beneath everyone here",
+	"I am truly hopeless",
+	"I am an absolute failure",
+	"I am beyond pathetic",
+	"I am completely powerless",
+	"I am a worthless waste of space",
 }
 
 // applyDegrade replaces the message with a random degrading first-person statement.
 func applyDegrade(text string) string {
-return degradeMessages[rand.Intn(len(degradeMessages))]
+	return degradeMessages[rand.Intn(len(degradeMessages))]
+}
+
+// lovebombTemplates are silly love-bomb message templates.
+// %s is replaced with the target's display name.
+var lovebombTemplates = []string{
+	"I LOVE YOU %s!! ♥",
+	"OH WOW %s, YOU ARE THE MOST AMAZING PERSON ALIVE!! 💕",
+	"%s I WOULD LITERALLY FIGHT A BEAR FOR YOU!! 😍",
+	"HAS ANYONE TOLD YOU TODAY THAT %s IS ABSOLUTELY STUNNING??",
+	"I CANNOT STOP THINKING ABOUT %s!!!!! 💘",
+	"NOTICE ME %s SENPAI!! 😳♥",
+	"%s IS THE LIGHT OF MY LIFE AND I NEED EVERYONE TO KNOW THIS",
+	"I WROTE A 40-PAGE ESSAY ABOUT WHY %s IS PERFECT",
+	"EVERY SONG I HEAR REMINDS ME OF %s 🎵💕",
+	"IF LOVING %s IS WRONG I DON'T WANT TO BE RIGHT",
+	"%s I BAKED YOU 47 CAKES PLEASE LOOK AT ME",
+	"I LOVE %s MORE THAN THE SUN LOVES THE SKY 🌞",
+	"%s YOUR SMILE MAKES THE FLOWERS GROW AND THE BIRDS SING",
+	"I WOULD CROSS THE GALAXY JUST TO WAVE HI TO %s 🌌",
+	"MY LOVE FOR %s IS BIGGER THAN THE ENTIRE UNIVERSE",
+	"GOOD MORNING AFTERNOON AND EVENING %s, I AM OBSESSED WITH YOU ♥",
+	"I NAMED MY HOUSEPLANT AFTER %s BECAUSE THEY BRING ME JOY",
+	"SCIENTISTS CANNOT EXPLAIN HOW MUCH I LOVE %s",
+	"%s I WROTE YOUR NAME IN THE STARS, LITERALLY, I OWN A STAR",
+	"MY HEART DOES A LITTLE DANCE EVERY TIME I SEE %s 💃",
+	"I HAVE LOVED %s SINCE BEFORE TIME ITSELF BEGAN",
+	"WHENEVER I CLOSE MY EYES I ONLY SEE %s, SEND HELP",
+	"%s IF YOU WERE A VEGETABLE YOU WOULD BE A CUTECUMBER",
+	"I COLLECT PHOTOS OF %s LIKE TRADING CARDS",
+	"DEAR DIARY: %s LOOKED AT ME TODAY. MY LIFE IS COMPLETE",
+	"I WOULD GIVE UP PIZZA FOREVER JUST TO HOLD %s'S HAND",
+	"%s IS SO WONDERFUL THAT PUPPIES ARE JEALOUS",
+	"ROSES ARE RED VIOLETS ARE BLUE %s IS PERFECT AND I LOVE THEM TOO",
+	"I SET %s AS MY PHONE WALLPAPER, SCREENSAVER, AND LOCKSCREEN",
+	"THEY SAY DIAMONDS ARE FOREVER BUT MY LOVE FOR %s IS EVEN MORE FOREVER",
+}
+
+// applyLovebombMessage returns a random lovebomb message for the given target display name.
+// If targetShowname is empty it falls back to a nameless declaration.
+func applyLovebombMessage(targetShowname string) string {
+	if targetShowname == "" {
+		return "I LOVE EVERYONE HERE SO MUCH!! ♥"
+	}
+	return fmt.Sprintf(lovebombTemplates[rand.Intn(len(lovebombTemplates))], targetShowname)
 }

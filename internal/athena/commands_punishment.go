@@ -27,6 +27,7 @@ import (
 
 	"github.com/MangosArentLiterature/Athena/internal/db"
 	"github.com/MangosArentLiterature/Athena/internal/logger"
+	"github.com/MangosArentLiterature/Athena/internal/permissions"
 	"github.com/xhit/go-str2duration/v2"
 )
 
@@ -579,10 +580,17 @@ func cmdStack(client *Client, args []string, usage string) {
 }
 
 // cmdLovebomb applies the lovebomb punishment.
-// Usage:
-//   /lovebomb                    – apply to everyone in the current area (random targets)
-//   /lovebomb <uid>              – apply to specific uid (random area target per message)
-//   /lovebomb <uid1> <uid2>      – uid1 will shower uid2 with "I LOVE YOU <showname>" messages
+//
+// Subcommands (evaluated before any UID arguments):
+//
+//	/lovebomb global           – apply to all non-moderators in the caster's area
+//	/lovebomb global off       – remove lovebomb from everyone in the caster's area
+//
+// UID-based forms (original behaviour):
+//
+//	/lovebomb                  – apply to everyone in the area (excluding issuer)
+//	/lovebomb <uid>            – apply to a specific uid (random area target per message)
+//	/lovebomb <uid1> <uid2>    – uid1 will love-bomb uid2 specifically
 func cmdLovebomb(client *Client, args []string, usage string) {
 	flags := flag.NewFlagSet("", 0)
 	flags.SetOutput(io.Discard)
@@ -596,13 +604,13 @@ func cmdLovebomb(client *Client, args []string, usage string) {
 		client.SendServerMessage("Invalid duration format. Use format like: 10m, 1h, 30s")
 		return
 	}
-	maxDuration := 24 * time.Hour
-	if duration > maxDuration {
-		duration = maxDuration
+	if duration > 24*time.Hour {
+		duration = 24 * time.Hour
 		client.SendServerMessage("Duration capped at 24 hours.")
 	}
 
-	applyLovebombToPunished := func(c *Client, targetUID int) {
+	// Helper: apply lovebomb to one client and persist it.
+	apply := func(c *Client, targetUID int) {
 		c.AddLovebombPunishment(targetUID, duration, *reason)
 		msg := "You have been love bombed!"
 		if duration > 0 {
@@ -619,41 +627,85 @@ func cmdLovebomb(client *Client, args []string, usage string) {
 	}
 
 	fargs := flags.Args()
+
+	// ── Global subcommands ────────────────────────────────────────────────────
+	if len(fargs) >= 1 && fargs[0] == "global" {
+		if len(fargs) >= 2 && fargs[1] == "off" {
+			// /lovebomb global off — remove from everyone in area
+			var count int
+			var report string
+			for c := range clients.GetAllClients() {
+				if c.Area() != client.Area() || !c.HasPunishment(PunishmentLovebomb) {
+					continue
+				}
+				c.RemovePunishment(PunishmentLovebomb)
+				if err := db.DeleteTextPunishment(c.Ipid(), int(PunishmentLovebomb)); err != nil {
+					logger.LogErrorf("Failed to remove lovebomb for %v: %v", c.Ipid(), err)
+				}
+				c.SendServerMessage("Love bomb punishment has been removed.")
+				count++
+				report += fmt.Sprintf("%v, ", c.Uid())
+			}
+			report = strings.TrimSuffix(report, ", ")
+			client.SendServerMessage(fmt.Sprintf("Removed lovebomb from %v clients in area.", count))
+			addToBuffer(client, "CMD", fmt.Sprintf("Removed area lovebomb from %v.", report), false)
+			return
+		}
+
+		// /lovebomb global — apply to all non-moderators in area (excluding issuer)
+		var count int
+		var report string
+		for c := range clients.GetAllClients() {
+			if c.Area() != client.Area() || c.Uid() == client.Uid() {
+				continue
+			}
+			if permissions.IsModerator(c.Perms()) {
+				continue
+			}
+			apply(c, -1)
+			count++
+			report += fmt.Sprintf("%v, ", c.Uid())
+		}
+		report = strings.TrimSuffix(report, ", ")
+		client.SendServerMessage(fmt.Sprintf("Applied lovebomb to %v non-moderator clients in area.", count))
+		addToBuffer(client, "CMD", fmt.Sprintf("Applied area lovebomb to %v.", report), false)
+		return
+	}
+
+	// ── UID-based forms ───────────────────────────────────────────────────────
 	var count int
 	var report string
 
 	switch len(fargs) {
 	case 0:
-		// Area-wide: apply to every client in the caster's area (excluding the issuer)
+		// Area-wide (excluding issuer)
 		for c := range clients.GetAllClients() {
 			if c.Area() == client.Area() && c.Uid() != client.Uid() {
-				applyLovebombToPunished(c, -1)
+				apply(c, -1)
 				count++
 				report += fmt.Sprintf("%v, ", c.Uid())
 			}
 		}
 	case 1:
-		// Specific uid, random area target
-		toPunish := getUidList(strings.Split(fargs[0], ","))
-		for _, c := range toPunish {
-			applyLovebombToPunished(c, -1)
+		// Specific uid(s), random area target
+		for _, c := range getUidList(strings.Split(fargs[0], ",")) {
+			apply(c, -1)
 			count++
 			report += fmt.Sprintf("%v, ", c.Uid())
 		}
 	case 2:
 		// uid1 targets uid2
-		toPunish := getUidList(strings.Split(fargs[0], ","))
-		targetUID, err := strconv.Atoi(fargs[1])
-		if err != nil {
+		targetUID, convErr := strconv.Atoi(fargs[1])
+		if convErr != nil {
 			client.SendServerMessage("Invalid target UID.")
 			return
 		}
-		if _, err := getClientByUid(targetUID); err != nil {
+		if _, lookupErr := getClientByUid(targetUID); lookupErr != nil {
 			client.SendServerMessage(fmt.Sprintf("Target UID %v not found.", targetUID))
 			return
 		}
-		for _, c := range toPunish {
-			applyLovebombToPunished(c, targetUID)
+		for _, c := range getUidList(strings.Split(fargs[0], ",")) {
+			apply(c, targetUID)
 			count++
 			report += fmt.Sprintf("%v, ", c.Uid())
 		}
