@@ -41,6 +41,9 @@ import (
 // commandRegex matches valid command names (e.g., /join, /join-tournament), case-insensitively.
 var commandRegex = regexp.MustCompile(`(?i)^/[a-z]+(-[a-z]+)*`)
 
+// maxShownameLength is the maximum number of characters allowed in a showname.
+const maxShownameLength = 30
+
 type pktMapValue struct {
 	Args     int
 	MustJoin bool
@@ -223,6 +226,13 @@ func pktIC(client *Client, p *packet.Packet) {
 	ownTextColor := args[14]
 	ownShowname := args[15]
 
+	// If a moderator has forced a showname for this client, override whatever
+	// name the client sent in the packet.
+	if forced := client.ForcedShowname(); forced != "" {
+		ownShowname = forced
+		args[15] = forced
+	}
+
 	// Track if we're in fullpossess mode for validation adjustments
 	isPossessing := false
 
@@ -291,8 +301,12 @@ func pktIC(client *Client, p *packet.Packet) {
 			}
 			args[14] = targetTextColor
 
-			// Use target's showname, falling back to displayed character name
-			targetShowname := target.Showname()
+			// Use target's showname, respecting any moderator-forced showname,
+			// and falling back to the displayed character name.
+			targetShowname := target.ForcedShowname()
+			if targetShowname == "" {
+				targetShowname = target.Showname()
+			}
 			if strings.TrimSpace(targetShowname) == "" {
 				targetShowname = targetCharName
 			}
@@ -411,7 +425,7 @@ func pktIC(client *Client, p *packet.Packet) {
 		return
 	case text < 0 || text > 8: // text color (0-8 per AO2 protocol)
 		return
-	case len(args[15]) > 30: // showname
+	case len(args[15]) > maxShownameLength: // showname
 		client.SendServerMessage("Your showname is too long!")
 		return
 	case args[22] != "0" && args[22] != "1": // non-interrupting preanim

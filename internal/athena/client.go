@@ -173,6 +173,7 @@ type Client struct {
 	forcePairUID    int         // UID of the client this client is force-paired with (-1 if none)
 	possessing      int         // UID of the client being possessed (-1 if not possessing anyone)
 	possessedPos    string      // Position of the possessed target (saved at time of possession)
+	forcedShowname  string      // Showname forced by a moderator ("" if none)
 	connectedAt     time.Time   // Time the client joined the server (uid assigned); zero if not yet joined
 }
 
@@ -899,6 +900,20 @@ func (client *Client) Showname() string {
 func (client *Client) SetShowname(s string) {
 	client.mu.Lock()
 	client.showname = s
+	client.mu.Unlock()
+}
+
+// ForcedShowname returns the showname forced by a moderator, or "" if none is set.
+func (client *Client) ForcedShowname() string {
+	client.mu.Lock()
+	defer client.mu.Unlock()
+	return client.forcedShowname
+}
+
+// SetForcedShowname sets the moderator-forced showname for the client.
+func (client *Client) SetForcedShowname(s string) {
+	client.mu.Lock()
+	client.forcedShowname = s
 	client.mu.Unlock()
 }
 
