@@ -1020,18 +1020,20 @@ func (client *Client) SetLastRandomCharTime(t time.Time) {
 	client.mu.Unlock()
 }
 
-// LastRandomBgTime returns the last time the client used /randombg.
-func (client *Client) LastRandomBgTime() time.Time {
+// CheckAndUpdateRandomBgCooldown atomically checks whether the /randombg cooldown
+// has elapsed and, if so, records the current time as the new last-use timestamp.
+// It returns (true, 0) when the command is allowed, or (false, remaining) when
+// the client is still in cooldown.
+func (client *Client) CheckAndUpdateRandomBgCooldown(cooldown time.Duration) (bool, time.Duration) {
 	client.mu.Lock()
 	defer client.mu.Unlock()
-	return client.lastRandomBgTime
-}
-
-// SetLastRandomBgTime records the current time as the client's last /randombg time.
-func (client *Client) SetLastRandomBgTime(t time.Time) {
-	client.mu.Lock()
-	client.lastRandomBgTime = t
-	client.mu.Unlock()
+	now := time.Now()
+	elapsed := now.Sub(client.lastRandomBgTime)
+	if !client.lastRandomBgTime.IsZero() && elapsed < cooldown {
+		return false, cooldown - elapsed
+	}
+	client.lastRandomBgTime = now
+	return true, 0
 }
 
 // String returns the string representation of a mute state.

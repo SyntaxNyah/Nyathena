@@ -163,26 +163,26 @@ func cmdRandomBg(client *Client, _ []string, _ string) {
 		client.SendServerMessage("No backgrounds are available.")
 		return
 	}
-	if client.Area().LockBG() && !permissions.HasPermission(client.Perms(), permissions.PermissionField["MODIFY_AREA"]) {
+	a := client.Area() // cache to avoid repeated mutex acquisitions
+	if a.LockBG() && !permissions.HasPermission(client.Perms(), permissions.PermissionField["MODIFY_AREA"]) {
 		client.SendServerMessage("You do not have permission to change the background in this area.")
 		return
 	}
-	// Enforce 5-second rate limit.
+	// Enforce 5-second rate limit with a single atomic check-and-update.
 	const cooldown = 5 * time.Second
-	if last := client.LastRandomBgTime(); !last.IsZero() && time.Since(last) < cooldown {
-		remaining := int(time.Until(last.Add(cooldown)).Seconds()) + 1
+	if ok, remaining := client.CheckAndUpdateRandomBgCooldown(cooldown); !ok {
+		secs := int(remaining.Seconds()) + 1
 		unit := "seconds"
-		if remaining == 1 {
+		if secs == 1 {
 			unit = "second"
 		}
-		client.SendServerMessage(fmt.Sprintf("Please wait %d %s before using /randombg again.", remaining, unit))
+		client.SendServerMessage(fmt.Sprintf("Please wait %d %s before using /randombg again.", secs, unit))
 		return
 	}
 	bg := backgrounds[rand.Intn(len(backgrounds))]
-	client.SetLastRandomBgTime(time.Now())
-	client.Area().SetBackground(bg)
-	writeToArea(client.Area(), "BN", bg)
-	sendAreaServerMessage(client.Area(), fmt.Sprintf("%v set the background to a random one (%v).", client.OOCName(), bg))
+	a.SetBackground(bg)
+	writeToArea(a, "BN", bg)
+	sendAreaServerMessage(a, fmt.Sprintf("%v set the background to a random one (%v).", client.OOCName(), bg))
 	addToBuffer(client, "CMD", fmt.Sprintf("Set BG to random (%v).", bg), false)
 }
 
