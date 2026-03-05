@@ -339,6 +339,32 @@ func pktIC(client *Client, p *packet.Packet) {
 				client.UpdatePunishmentState(p.punishmentType, func(ps *PunishmentState) {
 					modifiedMsg = ApplyPunishmentToTextWithState(decodedMsg, p.punishmentType, ps)
 				})
+			} else if p.punishmentType == PunishmentLovebomb {
+				// Resolve the target's display name.
+				var targetShowname string
+				if p.targetUID >= 0 {
+					if target, err := getClientByUid(p.targetUID); err == nil {
+						targetShowname = clientDisplayName(target)
+					}
+				}
+				if targetShowname == "" {
+					// Reservoir-sample one random area member (excluding self) without
+					// allocating a full slice — O(N) single pass, zero extra heap.
+					var chosen *Client
+					n := 0
+					for c := range clients.GetAllClients() {
+						if c.Area() == client.Area() && c.Uid() != client.Uid() {
+							n++
+							if rand.Intn(n) == 0 {
+								chosen = c
+							}
+						}
+					}
+					if chosen != nil {
+						targetShowname = clientDisplayName(chosen)
+					}
+				}
+				modifiedMsg = applyLovebombMessage(targetShowname)
 			} else {
 				modifiedMsg = ApplyPunishmentToText(decodedMsg, p.punishmentType)
 			}

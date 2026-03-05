@@ -928,6 +928,35 @@ func initCommands() {
 			desc:     "Forces user to speak only in emoticons (:P, :D, :3, etc.).",
 			reqPerms: permissions.PermissionField["MUTE"],
 		},
+		// Social Torment Punishments
+		"lovebomb": {
+			handler:  cmdLovebomb,
+			minArgs:  0,
+			usage:    "Usage: /lovebomb [global [off]] | /lovebomb [-d duration] [-r reason] [uid1 [uid2]]\n  global      – love-bomb all non-moderators in the area.\n  global off  – remove lovebomb from everyone in the area.\n  No args     – apply to everyone in the area (excluding issuer).\n  1 uid       – apply to that uid (random area target per message).\n  2 uids      – uid1 will love-bomb uid2 specifically.",
+			desc:     "Forces IC messages to be replaced with silly love declarations. Moderator only.",
+			reqPerms: permissions.PermissionField["MUTE"],
+		},
+		"unlovebomb": {
+			handler:  cmdUnlovebomb,
+			minArgs:  1,
+			usage:    "Usage: /unlovebomb <uid1>,<uid2>...",
+			desc:     "Removes lovebomb punishment from user(s). Moderator only.",
+			reqPerms: permissions.PermissionField["MUTE"],
+		},
+		"degrade": {
+			handler:  cmdDegrade,
+			minArgs:  1,
+			usage:    "Usage: /degrade [-d duration] [-r reason] <uid1>,<uid2>...",
+			desc:     "Forces IC messages to be replaced with degrading self-insults. Moderator only.",
+			reqPerms: permissions.PermissionField["MUTE"],
+		},
+		"undegrade": {
+			handler:  cmdUndegrade,
+			minArgs:  1,
+			usage:    "Usage: /undegrade <uid1>,<uid2>...",
+			desc:     "Removes degrade punishment from user(s). Moderator only.",
+			reqPerms: permissions.PermissionField["MUTE"],
+		},
 		"unpunish": {
 			handler:  cmdUnpunish,
 			minArgs:  1,

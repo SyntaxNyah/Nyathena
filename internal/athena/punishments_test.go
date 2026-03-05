@@ -601,3 +601,100 @@ t.Errorf("%v: expected transformed output, got unchanged %q", pt, result)
 })
 }
 }
+
+func TestApplyDegrade(t *testing.T) {
+	input := "hello world"
+	result := applyDegrade(input)
+	// Should be completely different from input (one of the degrading messages)
+	if result == input {
+		t.Errorf("applyDegrade: expected transformed output, got unchanged %q", result)
+	}
+	// Should be a non-empty string
+	if result == "" {
+		t.Errorf("applyDegrade: returned empty string")
+	}
+	// Should be one of the known degrading messages (covered more thoroughly by TestApplyDegradeIsOneDegradingMessage)
+	found := false
+	for _, msg := range degradeMessages {
+		if result == msg {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Errorf("applyDegrade: result %q is not a known degrading message", result)
+	}
+}
+
+func TestApplyDegradeIsOneDegradingMessage(t *testing.T) {
+	// Verify every call returns one of the known degrading messages
+	for i := 0; i < 50; i++ {
+		result := applyDegrade("test")
+		found := false
+		for _, msg := range degradeMessages {
+			if result == msg {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Errorf("applyDegrade: returned unexpected message %q", result)
+		}
+	}
+}
+
+func TestApplyDegradeViaApplyPunishmentToText(t *testing.T) {
+	input := "hello world"
+	result := ApplyPunishmentToText(input, PunishmentDegrade)
+	if result == input {
+		t.Errorf("ApplyPunishmentToText(degrade): expected transformed output, got unchanged %q", result)
+	}
+}
+
+func TestPunishmentDegradeString(t *testing.T) {
+	if PunishmentDegrade.String() != "degrade" {
+		t.Errorf("PunishmentDegrade.String(): expected %q, got %q", "degrade", PunishmentDegrade.String())
+	}
+}
+
+func TestPunishmentLovebombString(t *testing.T) {
+	if PunishmentLovebomb.String() != "lovebomb" {
+		t.Errorf("PunishmentLovebomb.String(): expected %q, got %q", "lovebomb", PunishmentLovebomb.String())
+	}
+}
+
+func TestApplyLovebombMessageWithTarget(t *testing.T) {
+const target = "Phoenix"
+// Run enough times to hit multiple templates
+for i := 0; i < 100; i++ {
+result := applyLovebombMessage(target)
+if result == "" {
+t.Errorf("applyLovebombMessage(%q): returned empty string", target)
+}
+if !strings.Contains(result, target) {
+t.Errorf("applyLovebombMessage(%q): target name missing from result %q", target, result)
+}
+}
+}
+
+func TestApplyLovebombMessageEmptyTarget(t *testing.T) {
+result := applyLovebombMessage("")
+if result == "" {
+t.Errorf("applyLovebombMessage(empty): returned empty string")
+}
+// Empty target should return the fallback (no %s placeholder used)
+if strings.Contains(result, "%s") {
+t.Errorf("applyLovebombMessage(empty): result contains literal %%s: %q", result)
+}
+}
+
+func TestApplyLovebombMessageVariety(t *testing.T) {
+// With enough samples we should see at least 3 distinct messages.
+seen := make(map[string]struct{})
+for i := 0; i < 200; i++ {
+seen[applyLovebombMessage("Alice")] = struct{}{}
+}
+if len(seen) < 3 {
+t.Errorf("applyLovebombMessage: expected at least 3 distinct messages in 200 runs, got %d", len(seen))
+}
+}
