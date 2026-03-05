@@ -176,6 +176,7 @@ type Client struct {
 	rawPktWindowStart  time.Time   // Start time of the current raw-rate-limit window
 	lastModcallTime    time.Time   // Tracks last modcall time for cooldown
 	lastRandomCharTime time.Time   // Tracks last /randomchar time for cooldown
+	lastRandomBgTime   time.Time   // Tracks last /randombg time for cooldown
 	forcePairUID    int         // UID of the client this client is force-paired with (-1 if none)
 	possessing      int         // UID of the client being possessed (-1 if not possessing anyone)
 	possessedPos    string      // Position of the possessed target (saved at time of possession)
@@ -1016,6 +1017,20 @@ func (client *Client) LastRandomCharTime() time.Time {
 func (client *Client) SetLastRandomCharTime(t time.Time) {
 	client.mu.Lock()
 	client.lastRandomCharTime = t
+	client.mu.Unlock()
+}
+
+// LastRandomBgTime returns the last time the client used /randombg.
+func (client *Client) LastRandomBgTime() time.Time {
+	client.mu.Lock()
+	defer client.mu.Unlock()
+	return client.lastRandomBgTime
+}
+
+// SetLastRandomBgTime records the current time as the client's last /randombg time.
+func (client *Client) SetLastRandomBgTime(t time.Time) {
+	client.mu.Lock()
+	client.lastRandomBgTime = t
 	client.mu.Unlock()
 }
 
