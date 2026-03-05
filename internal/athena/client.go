@@ -917,6 +917,32 @@ func (client *Client) SetForcedShowname(s string) {
 	client.mu.Unlock()
 }
 
+// EffectiveShowname returns the moderator-forced showname if one is set,
+// otherwise the client's own showname. Both fields are read under a single
+// mutex acquisition to avoid two separate lock/unlock cycles in callers.
+func (client *Client) EffectiveShowname() string {
+	client.mu.Lock()
+	defer client.mu.Unlock()
+	if client.forcedShowname != "" {
+		return client.forcedShowname
+	}
+	return client.showname
+}
+
+// UpdateShowname atomically updates the client's showname and returns true if
+// the stored value actually changed. Callers use the boolean to decide whether
+// to broadcast a PU packet, eliminating two extra lock/unlock pairs that a
+// read-then-write-then-read pattern would require.
+func (client *Client) UpdateShowname(s string) bool {
+	client.mu.Lock()
+	defer client.mu.Unlock()
+	if client.showname == s {
+		return false
+	}
+	client.showname = s
+	return true
+}
+
 // JailedUntil returns the time when the client's jail expires.
 func (client *Client) JailedUntil() time.Time {
 	client.mu.Lock()

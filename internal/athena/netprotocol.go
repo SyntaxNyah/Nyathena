@@ -303,10 +303,7 @@ func pktIC(client *Client, p *packet.Packet) {
 
 			// Use target's showname, respecting any moderator-forced showname,
 			// and falling back to the displayed character name.
-			targetShowname := target.ForcedShowname()
-			if targetShowname == "" {
-				targetShowname = target.Showname()
-			}
+			targetShowname := target.EffectiveShowname()
 			if strings.TrimSpace(targetShowname) == "" {
 				targetShowname = targetCharName
 			}
@@ -590,15 +587,13 @@ func pktIC(client *Client, p *packet.Packet) {
 	client.SetPairInfo(ownCharName, ownEmote, args[12], args[19])
 	client.SetLastMsg(args[4])
 	client.SetLastTextColor(ownTextColor)
-	prevShowname := client.Showname()
+	newShowname := ownShowname
 	if strings.TrimSpace(ownShowname) == "" {
-		client.SetShowname(characters[client.CharID()])
-	} else {
-		client.SetShowname(ownShowname)
+		newShowname = characters[client.CharID()]
 	}
 	// Only broadcast a PU showname update when the showname actually changed.
-	if client.Showname() != prevShowname {
-		writeToAll("PU", strconv.Itoa(client.Uid()), "2", decode(client.Showname()))
+	if client.UpdateShowname(newShowname) {
+		writeToAll("PU", strconv.Itoa(client.Uid()), "2", decode(newShowname))
 	}
 	client.Area().SetLastSpeaker(client.CharID())
 
