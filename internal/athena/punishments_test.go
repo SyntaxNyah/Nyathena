@@ -698,3 +698,50 @@ if len(seen) < 3 {
 t.Errorf("applyLovebombMessage: expected at least 3 distinct messages in 200 runs, got %d", len(seen))
 }
 }
+
+func TestApplyTourettes(t *testing.T) {
+// Original words must be preserved in the output
+input := "hello world"
+result := applyTourettes(input)
+if !strings.Contains(result, "hello") {
+t.Errorf("applyTourettes: expected original word 'hello' preserved in %q", result)
+}
+if !strings.Contains(result, "world") {
+t.Errorf("applyTourettes: expected original word 'world' preserved in %q", result)
+}
+
+// Empty input should not panic
+emptyResult := applyTourettes("")
+if emptyResult != "" {
+t.Errorf("applyTourettes: expected empty string for empty input, got %q", emptyResult)
+}
+
+// Output should not exceed maxTextLength
+long := strings.Repeat("word ", 500)
+longResult := applyTourettes(long)
+if len(longResult) > maxTextLength {
+t.Errorf("applyTourettes: result exceeds maxTextLength (%d > %d)", len(longResult), maxTextLength)
+}
+
+// Over many runs, outbursts should appear at least once (35% per-word chance)
+outburstFound := false
+for i := 0; i < 200 && !outburstFound; i++ {
+r := applyTourettes("one two three four five")
+// An outburst means there are more words than the original five
+if len(strings.Fields(r)) > 5 {
+outburstFound = true
+}
+}
+if !outburstFound {
+t.Error("applyTourettes: no outbursts detected in 200 runs (expected frequent outbursts)")
+}
+
+// Variety check: over many runs we should see multiple distinct outputs
+seen := make(map[string]struct{})
+for i := 0; i < 200; i++ {
+seen[applyTourettes("I like to talk")] = struct{}{}
+}
+if len(seen) < 2 {
+t.Errorf("applyTourettes: expected multiple distinct outputs in 200 runs, got %d", len(seen))
+}
+}

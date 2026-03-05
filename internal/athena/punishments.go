@@ -695,6 +695,8 @@ func ApplyPunishmentToText(text string, pType PunishmentType) string {
 		return applyEmoticon(text)
 	case PunishmentDegrade:
 		return applyDegrade(text)
+	case PunishmentTourettes:
+		return applyTourettes(text)
 	default:
 		return text
 	}
@@ -1247,6 +1249,72 @@ var degradeMessages = []string{
 // applyDegrade replaces the message with a random degrading first-person statement.
 func applyDegrade(text string) string {
 	return degradeMessages[rand.Intn(len(degradeMessages))]
+}
+
+// tourettesSwearing contains censored-style swear outbursts for the tourettes effect.
+var tourettesSwearing = []string{
+	"SHIT", "DAMN", "CRAP", "BALLS", "BLOODY HELL",
+	"FRICK", "HELL", "BASTARD", "DAMNIT", "CRUD",
+	"ASS", "BOLLOCKS", "BUGGER", "BLIMEY", "JACKASS",
+}
+
+// tourettesRandom contains random everyday objects blurted out.
+var tourettesRandom = []string{
+	"REFRIGERATOR", "BICYCLE", "PENGUIN", "TOASTER", "SPOON",
+	"BANANA", "CEILING", "CARPET", "STAPLER", "WINDOW",
+	"BROCCOLI", "SAUSAGE", "LAMPSHADE", "DASHBOARD", "PICKLE",
+	"DOORKNOB", "SPATULA", "PINEAPPLE", "BISCUIT", "FLAMINGO",
+	"OTTOMAN", "SOCKET", "CHEDDAR", "TRAMPOLINE", "KAZOO",
+}
+
+// tourettesExclamations contains nonsense exclamatory outbursts.
+var tourettesExclamations = []string{
+	"BLARGH!", "YOINK!", "ZOINKS!", "WHAMMY!", "BLORT!",
+	"FNURGLE!", "GADZOOKS!", "CRIKEY!", "YIKES!", "ZING!",
+	"KAPOW!", "BOING!", "ZOWEE!", "WHOOPSIE!", "BONKERS!",
+	"SNORKEL!", "WIBBLE!", "KERFUFFLE!", "HULLABALOO!", "GAZPACHO!",
+	"FLIBBERTIGIBBET!", "WUMBO!", "SKADOOSH!", "BAZINGA!", "HODOR!",
+}
+
+// tourettesAnimalSounds contains sudden animal noise outbursts.
+var tourettesAnimalSounds = []string{
+	"SQUAWK", "MEOW", "WOOF WOOF", "RIBBIT", "OINK",
+	"MOO", "NEIGH", "ROAR", "HISSSSS", "BAWK BAWK",
+	"BAAA", "COCK-A-DOODLE-DOO", "CHIRP CHIRP", "HOOOOT", "RUFF",
+}
+
+// applyTourettes inserts random outbursts in the middle of messages.
+// It randomly selects from several variant categories (swearing, random objects,
+// nonsense exclamations, and animal sounds) and injects them between words.
+func applyTourettes(text string) string {
+	words := strings.Fields(text)
+	if len(words) == 0 {
+		return text
+	}
+
+	allVariants := [][]string{
+		tourettesSwearing,
+		tourettesRandom,
+		tourettesExclamations,
+		tourettesAnimalSounds,
+	}
+
+	var result strings.Builder
+	for i, word := range words {
+		if i > 0 {
+			result.WriteString(" ")
+		}
+		result.WriteString(word)
+
+		// ~35% chance of an outburst after each word
+		if rand.Float32() < 0.35 {
+			category := allVariants[rand.Intn(len(allVariants))]
+			outburst := category[rand.Intn(len(category))]
+			result.WriteString(" ")
+			result.WriteString(outburst)
+		}
+	}
+	return truncateText(result.String())
 }
 
 // lovebombTemplates are silly love-bomb message templates.
