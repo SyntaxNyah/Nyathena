@@ -586,11 +586,12 @@ func cmdStack(client *Client, args []string, usage string) {
 //	/lovebomb global           – apply to all non-moderators in the caster's area
 //	/lovebomb global off       – remove lovebomb from everyone in the caster's area
 //
-// UID-based forms (original behaviour):
+// UID-based forms:
 //
-//	/lovebomb                  – apply to everyone in the area (excluding issuer)
 //	/lovebomb <uid>            – apply to a specific uid (random area target per message)
 //	/lovebomb <uid1> <uid2>    – uid1 will love-bomb uid2 specifically
+//
+// No arguments: displays usage information.
 func cmdLovebomb(client *Client, args []string, usage string) {
 	flags := flag.NewFlagSet("", 0)
 	flags.SetOutput(io.Discard)
@@ -678,14 +679,9 @@ func cmdLovebomb(client *Client, args []string, usage string) {
 
 	switch len(fargs) {
 	case 0:
-		// Area-wide (excluding issuer)
-		for c := range clients.GetAllClients() {
-			if c.Area() == client.Area() && c.Uid() != client.Uid() {
-				apply(c, -1)
-				count++
-				report += fmt.Sprintf("%v, ", c.Uid())
-			}
-		}
+		// No arguments — show usage description.
+		client.SendServerMessage(usage)
+		return
 	case 1:
 		// Specific uid(s), random area target
 		for _, c := range getUidList(strings.Split(fargs[0], ",")) {
