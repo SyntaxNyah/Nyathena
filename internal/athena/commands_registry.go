@@ -932,7 +932,7 @@ func initCommands() {
 		"lovebomb": {
 			handler:  cmdLovebomb,
 			minArgs:  0,
-			usage:    "Usage: /lovebomb [global [off]] | /lovebomb [-d duration] [-r reason] [uid1 [uid2]]\n  global      – love-bomb all non-moderators in the area.\n  global off  – remove lovebomb from everyone in the area.\n  No args     – apply to everyone in the area (excluding issuer).\n  1 uid       – apply to that uid (random area target per message).\n  2 uids      – uid1 will love-bomb uid2 specifically.",
+			usage:    "Usage: /lovebomb [global [off]] | /lovebomb [-d duration] [-r reason] [uid1 [uid2]]\n  global           – love-bomb all non-moderators in the area.\n  global off       – remove lovebomb from everyone in the area.\n  -d <duration>    – duration (e.g. 10m, 1h). Default: 10m. Max: 24h.\n  -r <reason>      – optional reason for the log.\n  1 uid            – apply to that uid (random area target per message).\n  2 uids           – uid1 will love-bomb uid2 specifically.",
 			desc:     "Forces IC messages to be replaced with silly love declarations. Moderator only.",
 			reqPerms: permissions.PermissionField["MUTE"],
 		},
