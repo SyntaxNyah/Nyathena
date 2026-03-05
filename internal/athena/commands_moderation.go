@@ -787,5 +787,53 @@ func cmdUnjail(client *Client, args []string, _ string) {
 	addToBuffer(client, "CMD", fmt.Sprintf("Released %v from jail.", report), false)
 }
 
-// Handles /rps
+// cmdForceName forces a client to use a specific showname in IC messages.
+func cmdForceName(client *Client, args []string, _ string) {
+	uid, err := strconv.Atoi(args[0])
+	if err != nil {
+		client.SendServerMessage("Invalid UID.")
+		return
+	}
+	target, err := getClientByUid(uid)
+	if err != nil {
+		client.SendServerMessage("Invalid UID.")
+		return
+	}
+	// Command args are already decoded (plain text); validate the visible length.
+	name := strings.Join(args[1:], " ")
+	if len(name) > maxShownameLength {
+		client.SendServerMessage(fmt.Sprintf("Forced showname is too long (max %d characters).", maxShownameLength))
+		return
+	}
+	// Store as AO2-encoded so it can be placed directly into the IC packet's
+	// showname field (args[15]) without an extra encode step on every message.
+	target.SetForcedShowname(encode(name))
+	// PU and in-server messages use the decoded (display) form.
+	writeToAll("PU", strconv.Itoa(target.Uid()), "2", name)
+	target.SendServerMessage(fmt.Sprintf("A moderator has forced your showname to \"%s\".", name))
+	client.SendServerMessage(fmt.Sprintf("Forced UID %v's showname to \"%s\".", uid, name))
+	addToBuffer(client, "CMD", fmt.Sprintf("forced showname of UID %v to \"%s\"", uid, name), true)
+}
+
+// cmdUnforceName removes a forced showname from a client.
+func cmdUnforceName(client *Client, args []string, _ string) {
+	uid, err := strconv.Atoi(args[0])
+	if err != nil {
+		client.SendServerMessage("Invalid UID.")
+		return
+	}
+	target, err := getClientByUid(uid)
+	if err != nil {
+		client.SendServerMessage("Invalid UID.")
+		return
+	}
+	if target.ForcedShowname() == "" {
+		client.SendServerMessage(fmt.Sprintf("UID %v does not have a forced showname.", uid))
+		return
+	}
+	target.SetForcedShowname("")
+	target.SendServerMessage("Your forced showname has been removed by a moderator.")
+	client.SendServerMessage(fmt.Sprintf("Removed forced showname from UID %v.", uid))
+	addToBuffer(client, "CMD", fmt.Sprintf("removed forced showname from UID %v", uid), true)
+}
 

@@ -311,6 +311,20 @@ func initCommands() {
 			desc:     "Forces two players to pair without requiring mutual consent.",
 			reqPerms: permissions.PermissionField["KICK"],
 		},
+		"forcename": {
+			handler:  cmdForceName,
+			minArgs:  2,
+			usage:    "Usage: /forcename <uid> <name>",
+			desc:     "Forces a player to use a specific showname in IC messages.",
+			reqPerms: permissions.PermissionField["KICK"],
+		},
+		"unforcename": {
+			handler:  cmdUnforceName,
+			minArgs:  1,
+			usage:    "Usage: /unforcename <uid>",
+			desc:     "Removes a forced showname from a player.",
+			reqPerms: permissions.PermissionField["KICK"],
+		},
 		"unpair": {
 			handler:  cmdUnpair,
 			minArgs:  0,

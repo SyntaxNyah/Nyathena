@@ -173,6 +173,7 @@ type Client struct {
 	forcePairUID    int         // UID of the client this client is force-paired with (-1 if none)
 	possessing      int         // UID of the client being possessed (-1 if not possessing anyone)
 	possessedPos    string      // Position of the possessed target (saved at time of possession)
+	forcedShowname  string      // Showname forced by a moderator ("" if none)
 	connectedAt     time.Time   // Time the client joined the server (uid assigned); zero if not yet joined
 }
 
@@ -900,6 +901,46 @@ func (client *Client) SetShowname(s string) {
 	client.mu.Lock()
 	client.showname = s
 	client.mu.Unlock()
+}
+
+// ForcedShowname returns the showname forced by a moderator, or "" if none is set.
+func (client *Client) ForcedShowname() string {
+	client.mu.Lock()
+	defer client.mu.Unlock()
+	return client.forcedShowname
+}
+
+// SetForcedShowname sets the moderator-forced showname for the client.
+func (client *Client) SetForcedShowname(s string) {
+	client.mu.Lock()
+	client.forcedShowname = s
+	client.mu.Unlock()
+}
+
+// EffectiveShowname returns the moderator-forced showname if one is set,
+// otherwise the client's own showname. Both fields are read under a single
+// mutex acquisition to avoid two separate lock/unlock cycles in callers.
+func (client *Client) EffectiveShowname() string {
+	client.mu.Lock()
+	defer client.mu.Unlock()
+	if client.forcedShowname != "" {
+		return client.forcedShowname
+	}
+	return client.showname
+}
+
+// UpdateShowname atomically updates the client's showname and returns true if
+// the stored value actually changed. Callers use the boolean to decide whether
+// to broadcast a PU packet, eliminating two extra lock/unlock pairs that a
+// read-then-write-then-read pattern would require.
+func (client *Client) UpdateShowname(s string) bool {
+	client.mu.Lock()
+	defer client.mu.Unlock()
+	if client.showname == s {
+		return false
+	}
+	client.showname = s
+	return true
 }
 
 // JailedUntil returns the time when the client's jail expires.
