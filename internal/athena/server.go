@@ -369,6 +369,7 @@ func NewServer(conf *settings.Config) (*Server, error) {
 	tournamentParticipants = s.tournamentParticipants
 
 	initCommands()
+	initAutoMod(conf)
 	go startConnTrackerCleanup()
 	return s, nil
 }
