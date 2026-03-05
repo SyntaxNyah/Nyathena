@@ -632,6 +632,11 @@ func pktIC(client *Client, p *packet.Packet) {
 		tournamentMutex.Unlock()
 	}
 
+	// Automod: check the decoded message for banned words before broadcasting.
+	if autoModCheck(client, decode(args[4])) {
+		return
+	}
+
 	writeToArea(client.Area(), "MS", args...)
 	addToBuffer(client, "IC", "\""+args[4]+"\"", false)
 }
@@ -800,6 +805,10 @@ func pktOOC(client *Client, p *packet.Packet) {
 		}
 	}
 	areaLastOOCMsg.Store(client.Area(), msg)
+	// Automod: check the OOC message for banned words before broadcasting.
+	if autoModCheck(client, decode(msg)) {
+		return
+	}
 	writeToArea(client.Area(), "CT", encode(client.OOCName()), msg, "0")
 	addToBuffer(client, "OOC", "\""+msg+"\"", false)
 }

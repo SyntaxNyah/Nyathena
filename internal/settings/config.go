@@ -83,6 +83,8 @@ type ServerConfig struct {
 	GlobalNewIPRateLimitWindow int   `toml:"global_new_ip_rate_limit_window"`
 	IPRetentionDays           int    `toml:"ip_retention_days"`
 	WebAOAllowedOrigin        string `toml:"webao_allowed_origin"`
+	AutoModEnabled            bool   `toml:"automod_enabled"`
+	AutoModWordlist           string `toml:"automod_wordlist"`
 }
 
 type LogConfig struct {
@@ -153,6 +155,8 @@ func DefaultConfig() *Config {
 			GlobalNewIPRateLimitWindow: 10,
 			IPRetentionDays:           0,
 			WebAOAllowedOrigin:        "web.aceattorneyonline.com",
+			AutoModEnabled:            false,
+			AutoModWordlist:           "banned_words.txt",
 		},
 		LogConfig{
 			BufSize:              150,

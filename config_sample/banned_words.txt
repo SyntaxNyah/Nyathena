@@ -1,0 +1,10 @@
+# Banned Words List for Athena AutoMod
+#
+# Add one word or phrase per line. Lines starting with '#' are comments.
+# Matching is case-insensitive. A player whose IC or OOC message contains
+# any entry here will be permanently banned automatically — no webhook is
+# posted for these bans to keep your punishment channel free from noise.
+#
+# Examples (fill in your own list below):
+# badword
+# offensive phrase

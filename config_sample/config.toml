@@ -291,6 +291,17 @@ ip_retention_days = 0
 # Default: "web.aceattorneyonline.com"
 webao_allowed_origin = "web.aceattorneyonline.com"
 
+# AutoMod: Automatically bans any player who sends a message (IC or OOC) that contains
+# a word from the banned-word list. The ban is permanent and silent — no entry is posted
+# to the punishment webhook, keeping your moderation channel free from noise.
+# Set to true to enable. Default: false.
+automod_enabled = false
+
+# Path to the banned-words file, relative to the config directory.
+# Each non-empty line is one word or phrase (case-insensitive). Lines beginning
+# with '#' are treated as comments. Default: "banned_words.txt".
+automod_wordlist = "banned_words.txt"
+
 [Logging]
 # Sets the number of actions (IC chat messages, OOC chat messages, judge actions, etc.) each area should store.
 # When a user calls a mod, this buffer will be flushed to a report file for review.
