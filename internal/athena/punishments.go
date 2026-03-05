@@ -692,6 +692,8 @@ func ApplyPunishmentToText(text string, pType PunishmentType) string {
 		return applyMayadere(text)
 	case PunishmentEmoticon:
 		return applyEmoticon(text)
+	case PunishmentDegrade:
+		return applyDegrade(text)
 	default:
 		return text
 	}
@@ -1223,4 +1225,25 @@ var emoticons = []string{
 // applyEmoticon replaces the message with a random emoticon.
 func applyEmoticon(text string) string {
 	return emoticons[rand.Intn(len(emoticons))]
+}
+
+// degradeMessages are first-person degrading statements used by the degrade punishment.
+var degradeMessages = []string{
+"I am pathetic",
+"I am powerless",
+"I am a bottomfeeder",
+"I am worthless",
+"I am nothing",
+"I am weak and pathetic",
+"I am beneath everyone here",
+"I am truly hopeless",
+"I am an absolute failure",
+"I am beyond pathetic",
+"I am completely powerless",
+"I am a worthless waste of space",
+}
+
+// applyDegrade replaces the message with a random degrading first-person statement.
+func applyDegrade(text string) string {
+return degradeMessages[rand.Intn(len(degradeMessages))]
 }

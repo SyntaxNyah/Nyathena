@@ -21,6 +21,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"strconv"
 	"strings"
 	"time"
 
@@ -484,6 +485,10 @@ func parsePunishmentType(s string) PunishmentType {
 		return PunishmentBakadere
 	case "mayadere":
 		return PunishmentMayadere
+	case "lovebomb":
+		return PunishmentLovebomb
+	case "degrade":
+		return PunishmentDegrade
 	default:
 		return PunishmentNone
 	}
@@ -571,6 +576,152 @@ func cmdStack(client *Client, args []string, usage string) {
 	punishmentList := strings.Join(punishmentNamesList, ", ")
 	client.SendServerMessage(fmt.Sprintf("Applied stacked punishments [%v] to %v clients.", punishmentList, count))
 	addToBuffer(client, "CMD", fmt.Sprintf("Applied stacked punishments [%v] to %v.", punishmentList, report), false)
+}
+
+// cmdLovebomb applies the lovebomb punishment.
+// Usage:
+//   /lovebomb                    – apply to everyone in the current area (random targets)
+//   /lovebomb <uid>              – apply to specific uid (random area target per message)
+//   /lovebomb <uid1> <uid2>      – uid1 will shower uid2 with "I LOVE YOU <showname>" messages
+func cmdLovebomb(client *Client, args []string, usage string) {
+	flags := flag.NewFlagSet("", 0)
+	flags.SetOutput(io.Discard)
+	reason := flags.String("r", "", "")
+	durationStr := flags.String("d", "10m", "")
+	flags.Parse(args)
+
+	// Parse duration
+	duration, err := str2duration.ParseDuration(*durationStr)
+	if err != nil {
+		client.SendServerMessage("Invalid duration format. Use format like: 10m, 1h, 30s")
+		return
+	}
+	maxDuration := 24 * time.Hour
+	if duration > maxDuration {
+		duration = maxDuration
+		client.SendServerMessage("Duration capped at 24 hours.")
+	}
+
+	applyLovebombToPunished := func(c *Client, targetUID int) {
+		c.AddLovebombPunishment(targetUID, duration, *reason)
+		msg := "You have been love bombed!"
+		if duration > 0 {
+			msg += fmt.Sprintf(" (for %v)", duration)
+		}
+		c.SendServerMessage(msg)
+		var expires int64
+		if duration > 0 {
+			expires = time.Now().UTC().Add(duration).Unix()
+		}
+		if err := db.UpsertTextPunishment(c.Ipid(), int(PunishmentLovebomb), expires, *reason); err != nil {
+			logger.LogErrorf("Failed to persist lovebomb for %v: %v", c.Ipid(), err)
+		}
+	}
+
+	fargs := flags.Args()
+	var count int
+	var report string
+
+	switch len(fargs) {
+	case 0:
+		// Area-wide: apply to every client in the caster's area (excluding the issuer)
+		for c := range clients.GetAllClients() {
+			if c.Area() == client.Area() && c.Uid() != client.Uid() {
+				applyLovebombToPunished(c, -1)
+				count++
+				report += fmt.Sprintf("%v, ", c.Uid())
+			}
+		}
+	case 1:
+		// Specific uid, random area target
+		toPunish := getUidList(strings.Split(fargs[0], ","))
+		for _, c := range toPunish {
+			applyLovebombToPunished(c, -1)
+			count++
+			report += fmt.Sprintf("%v, ", c.Uid())
+		}
+	case 2:
+		// uid1 targets uid2
+		toPunish := getUidList(strings.Split(fargs[0], ","))
+		targetUID, err := strconv.Atoi(fargs[1])
+		if err != nil {
+			client.SendServerMessage("Invalid target UID.")
+			return
+		}
+		if _, err := getClientByUid(targetUID); err != nil {
+			client.SendServerMessage(fmt.Sprintf("Target UID %v not found.", targetUID))
+			return
+		}
+		for _, c := range toPunish {
+			applyLovebombToPunished(c, targetUID)
+			count++
+			report += fmt.Sprintf("%v, ", c.Uid())
+		}
+	default:
+		client.SendServerMessage("Too many arguments:\n" + usage)
+		return
+	}
+
+	report = strings.TrimSuffix(report, ", ")
+	client.SendServerMessage(fmt.Sprintf("Applied lovebomb punishment to %v clients.", count))
+	addToBuffer(client, "CMD", fmt.Sprintf("Applied lovebomb punishment to %v.", report), false)
+}
+
+// cmdUnlovebomb removes the lovebomb punishment from user(s).
+func cmdUnlovebomb(client *Client, args []string, usage string) {
+	if len(args) == 0 {
+		client.SendServerMessage("Not enough arguments:\n" + usage)
+		return
+	}
+	toUnpunish := getUidList(strings.Split(args[0], ","))
+	var count int
+	var report string
+	for _, c := range toUnpunish {
+		if !c.HasPunishment(PunishmentLovebomb) {
+			continue
+		}
+		c.RemovePunishment(PunishmentLovebomb)
+		if err := db.DeleteTextPunishment(c.Ipid(), int(PunishmentLovebomb)); err != nil {
+			logger.LogErrorf("Failed to remove lovebomb for %v: %v", c.Ipid(), err)
+		}
+		c.SendServerMessage("Love bomb punishment has been removed.")
+		count++
+		report += fmt.Sprintf("%v, ", c.Uid())
+	}
+	report = strings.TrimSuffix(report, ", ")
+	client.SendServerMessage(fmt.Sprintf("Removed lovebomb punishment from %v clients.", count))
+	addToBuffer(client, "CMD", fmt.Sprintf("Removed lovebomb from %v.", report), false)
+}
+
+// cmdDegrade applies the degrade punishment.
+func cmdDegrade(client *Client, args []string, usage string) {
+	cmdPunishment(client, args, usage, PunishmentDegrade)
+}
+
+// cmdUndegrade removes the degrade punishment from user(s).
+func cmdUndegrade(client *Client, args []string, usage string) {
+	if len(args) == 0 {
+		client.SendServerMessage("Not enough arguments:\n" + usage)
+		return
+	}
+	toUnpunish := getUidList(strings.Split(args[0], ","))
+	var count int
+	var report string
+	for _, c := range toUnpunish {
+		if !c.HasPunishment(PunishmentDegrade) {
+			continue
+		}
+		c.RemovePunishment(PunishmentDegrade)
+		if err := db.DeleteTextPunishment(c.Ipid(), int(PunishmentDegrade)); err != nil {
+			logger.LogErrorf("Failed to remove degrade for %v: %v", c.Ipid(), err)
+		}
+		c.SendServerMessage("Degrade punishment has been removed.")
+		count++
+		report += fmt.Sprintf("%v, ", c.Uid())
+	}
+	report = strings.TrimSuffix(report, ", ")
+	client.SendServerMessage(fmt.Sprintf("Removed degrade punishment from %v clients.", count))
+	addToBuffer(client, "CMD", fmt.Sprintf("Removed degrade from %v.", report), false)
 }
 
 // cmdTournament manages punishment tournament mode

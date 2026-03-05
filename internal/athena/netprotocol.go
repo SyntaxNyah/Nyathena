@@ -339,6 +339,39 @@ func pktIC(client *Client, p *packet.Packet) {
 				client.UpdatePunishmentState(p.punishmentType, func(ps *PunishmentState) {
 					modifiedMsg = ApplyPunishmentToTextWithState(decodedMsg, p.punishmentType, ps)
 				})
+			} else if p.punishmentType == PunishmentLovebomb {
+				// Resolve the target showname from the area context
+				targetUID := p.targetUID
+				var targetShowname string
+				if targetUID >= 0 {
+					if target, err := getClientByUid(targetUID); err == nil {
+						targetShowname = target.EffectiveShowname()
+						if strings.TrimSpace(targetShowname) == "" && target.CharID() >= 0 && target.CharID() < len(characters) {
+							targetShowname = characters[target.CharID()]
+						}
+					}
+				}
+				if targetShowname == "" {
+					// Pick a random person in the same area (not the punished client)
+					var areaClients []*Client
+					for c := range clients.GetAllClients() {
+						if c.Area() == client.Area() && c.Uid() != client.Uid() {
+							areaClients = append(areaClients, c)
+						}
+					}
+					if len(areaClients) > 0 {
+						target := areaClients[rand.Intn(len(areaClients))]
+						targetShowname = target.EffectiveShowname()
+						if strings.TrimSpace(targetShowname) == "" && target.CharID() >= 0 && target.CharID() < len(characters) {
+							targetShowname = characters[target.CharID()]
+						}
+					}
+				}
+				if targetShowname == "" {
+					modifiedMsg = "I LOVE YOU ♥"
+				} else {
+					modifiedMsg = "I LOVE YOU " + targetShowname
+				}
 			} else {
 				modifiedMsg = ApplyPunishmentToText(decodedMsg, p.punishmentType)
 			}

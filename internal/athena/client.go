@@ -119,6 +119,9 @@ const (
 	PunishmentMayadere
 	// Text Emoticon Punishment
 	PunishmentEmoticon
+	// Social Torment Punishments
+	PunishmentLovebomb
+	PunishmentDegrade
 )
 
 type PunishmentState struct {
@@ -129,6 +132,7 @@ type PunishmentState struct {
 	msgDelay       time.Duration
 	msgCount       int
 	lastEffect     int
+	targetUID      int // For PunishmentLovebomb: UID of the lovebomb target (-1 = random area target)
 }
 
 type ClientPairInfo struct {
@@ -1057,6 +1061,7 @@ func (client *Client) AddPunishment(pType PunishmentType, duration time.Duration
 		msgDelay:       0,
 		msgCount:       0,
 		lastEffect:     0,
+		targetUID:      -1,
 	})
 }
 
@@ -1071,6 +1076,33 @@ func (client *Client) RemovePunishment(pType PunishmentType) {
 			return
 		}
 	}
+}
+
+// AddLovebombPunishment adds a lovebomb punishment with an optional specific target UID.
+// Use targetUID=-1 for a random area target on each message.
+func (client *Client) AddLovebombPunishment(targetUID int, duration time.Duration, reason string) {
+	client.mu.Lock()
+	defer client.mu.Unlock()
+
+	// Remove existing lovebomb (same-type deduplication)
+	for i := len(client.punishments) - 1; i >= 0; i-- {
+		if client.punishments[i].punishmentType == PunishmentLovebomb {
+			client.punishments = append(client.punishments[:i], client.punishments[i+1:]...)
+			break
+		}
+	}
+
+	expiresAt := time.Time{}
+	if duration > 0 {
+		expiresAt = time.Now().UTC().Add(duration)
+	}
+
+	client.punishments = append(client.punishments, PunishmentState{
+		punishmentType: PunishmentLovebomb,
+		expiresAt:      expiresAt,
+		reason:         reason,
+		targetUID:      targetUID,
+	})
 }
 
 // RemoveAllPunishments removes all punishments from the client.
@@ -1284,6 +1316,10 @@ func (p PunishmentType) String() string {
 		return "mayadere"
 	case PunishmentEmoticon:
 		return "emoticon"
+	case PunishmentLovebomb:
+		return "lovebomb"
+	case PunishmentDegrade:
+		return "degrade"
 	default:
 		return "none"
 	}
