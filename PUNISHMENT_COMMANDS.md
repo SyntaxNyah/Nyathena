@@ -133,6 +133,15 @@ Adds confusing subtitle annotations.
 - Input: "Hello"
 - Output: "Hello [ominous music playing]"
 
+### `/tourettes`
+Randomly inserts loud outburst words in the middle of messages. Picks from several variant categories each time for unpredictable results:
+- **Swearing** – censored-style expletives (SHIT, DAMN, BALLS, etc.)
+- **Random objects** – everyday nouns shouted out of nowhere (REFRIGERATOR, PICKLE, FLAMINGO, etc.)
+- **Nonsense exclamations** – absurd outbursts (BLARGH!, GADZOOKS!, KERFUFFLE!, etc.)
+- **Animal sounds** – sudden creature noises (SQUAWK, COCK-A-DOODLE-DOO, RIBBIT, etc.)
+- Input: "I think we should go"
+- Output: "I BLARGH! think REFRIGERATOR we should DAMN go"
+
 ### `/roulette`
 Random chance that each message doesn't send (message lottery).
 
@@ -205,7 +214,6 @@ Intentionally "autocorrects" words incorrectly.
 - "there" → "their"
 
 ## Safety Features
-
 - **Maximum duration:** 24 hours
 - **No stacking:** Same punishment type overwrites previous
 - **Text length limit:** 2000 characters maximum

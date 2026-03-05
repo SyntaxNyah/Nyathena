@@ -957,6 +957,13 @@ func initCommands() {
 			desc:     "Removes degrade punishment from user(s). Moderator only.",
 			reqPerms: permissions.PermissionField["MUTE"],
 		},
+		"tourettes": {
+			handler:  cmdTourettes,
+			minArgs:  1,
+			usage:    "Usage: /tourettes [-d duration] [-r reason] <uid1>,<uid2>...",
+			desc:     "Causes random outbursts to be inserted into IC messages (swearing, random objects, nonsense, animal noises). Moderator only.",
+			reqPerms: permissions.PermissionField["MUTE"],
+		},
 		"unpunish": {
 			handler:  cmdUnpunish,
 			minArgs:  1,

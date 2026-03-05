@@ -490,6 +490,8 @@ func parsePunishmentType(s string) PunishmentType {
 		return PunishmentLovebomb
 	case "degrade":
 		return PunishmentDegrade
+	case "tourettes":
+		return PunishmentTourettes
 	default:
 		return PunishmentNone
 	}
@@ -744,6 +746,11 @@ func cmdUnlovebomb(client *Client, args []string, usage string) {
 // cmdDegrade applies the degrade punishment.
 func cmdDegrade(client *Client, args []string, usage string) {
 	cmdPunishment(client, args, usage, PunishmentDegrade)
+}
+
+// cmdTourettes applies the tourettes punishment.
+func cmdTourettes(client *Client, args []string, usage string) {
+	cmdPunishment(client, args, usage, PunishmentTourettes)
 }
 
 // cmdUndegrade removes the degrade punishment from user(s).
