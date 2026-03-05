@@ -41,6 +41,10 @@ import (
 // commandRegex matches valid command names (e.g., /join, /join-tournament), case-insensitively.
 var commandRegex = regexp.MustCompile(`(?i)^/[a-z]+(-[a-z]+)*`)
 
+// tstNavRegex matches testimony navigation controls (<, >, >N) in IC messages.
+// Compiled once at package init to avoid repeated allocation during testimony playback.
+var tstNavRegex = regexp.MustCompile(`[<>]([[:digit:]]+)?`)
+
 // maxShownameLength is the maximum number of characters allowed in a showname.
 const maxShownameLength = 30
 
@@ -423,13 +427,16 @@ func pktIC(client *Client, p *packet.Packet) {
 		}
 	}
 
+	// Decode the message text once; reused for length validation, testimony navigation, and automod.
+	msgText := decode(args[4])
+
 	switch {
 	case !sliceutil.ContainsString([]string{"chat", "0", "1", "2", "3", "4", "5"}, args[0]): // desk_mod
 		return
 	case !isPossessing && !strings.EqualFold(characters[client.CharID()], args[2]) && !client.Area().IniswapAllowed(): // character name (skip check when possessing)
 		client.SendServerMessage("Iniswapping is not allowed in this area.")
 		return
-	case len(decode(args[4])) > config.MaxMsg: // message
+	case len(msgText) > config.MaxMsg: // message
 		client.SendServerMessage("Your message exceeds the maximum message length!")
 		return
 	case args[4] == client.LastMsg():
@@ -584,8 +591,7 @@ func pktIC(client *Client, p *packet.Packet) {
 		}
 	}
 	if client.Area().TstState() == area.TRPlayback {
-		regx := regexp.MustCompile("[<>]([[:digit:]]+)?")
-		s := regx.FindString(decode(args[4]))
+		s := tstNavRegex.FindString(msgText)
 		if s != "" {
 			if strings.ContainsRune(s, '<') {
 				client.Area().TstRewind()
@@ -633,7 +639,7 @@ func pktIC(client *Client, p *packet.Packet) {
 	}
 
 	// Automod: check the decoded message for banned words before broadcasting.
-	if autoModCheck(client, decode(args[4])) {
+	if autoModCheck(client, msgText) {
 		return
 	}
 
