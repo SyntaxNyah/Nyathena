@@ -54,6 +54,19 @@ var tormentMessages = []string{
 	"Ping timeout.",
 }
 
+// tormentWarnings are plausible-sounding server messages sent to a tormented
+// client before the final disconnect.  They mimic real network-health alerts so
+// the user wastes time blaming their ISP rather than the server.
+var tormentWarnings = []string{
+	"Warning: unstable connection detected.",
+	"Your connection is experiencing high latency.",
+	"Server is experiencing network instability.",
+	"Warning: packet loss detected on your connection.",
+	"Connection quality degraded. Please check your network.",
+	"Server load is high. You may experience interruptions.",
+	"Your session may be affected by current network conditions.",
+}
+
 // bannedWords holds the lowercased banned words loaded from the wordlist file.
 // Stored as a slice for O(n) substring scan; lists are typically small so the
 // overhead of a full scan per message is negligible compared to network I/O.
@@ -162,10 +175,26 @@ func autoModCheck(client *Client, msg string) bool {
 	}
 }
 
-// startTormentDisconnect waits a random interval (30–60 s) then disconnects the
-// client. Launched as a goroutine whenever a tormented IPID connects.
+// startTormentDisconnect harasses and disconnects a tormented client in three phases.
+//
+//  1. Initial wait: a random delay in the 5 s–4 min range so the user never
+//     learns the pattern (30–60 s was too predictable).
+//  2. Optional warnings: 0–3 plausible-sounding network-health messages, each
+//     separated by a short pause, to make them blame their ISP.
+//  3. Final kick: generic error message + connection close.
+//
+// Launched as a goroutine whenever a tormented IPID connects.
 func startTormentDisconnect(client *Client) {
-	time.Sleep(time.Duration(30+rand.Intn(31)) * time.Second)
+	// Phase 1 — unpredictable initial delay (5 s to 4 min).
+	time.Sleep(time.Duration(5+rand.Intn(235)) * time.Second)
+
+	// Phase 2 — zero to three pre-kick "network warning" messages.
+	for i, n := 0, rand.Intn(4); i < n; i++ {
+		client.SendServerMessage(tormentWarnings[rand.Intn(len(tormentWarnings))])
+		time.Sleep(time.Duration(3+rand.Intn(8)) * time.Second)
+	}
+
+	// Phase 3 — final disconnect with a plausible-sounding error.
 	client.SendPacket("KK", tormentMessages[rand.Intn(len(tormentMessages))])
 	client.conn.Close()
 }
