@@ -24,7 +24,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
-	"sync/atomic"
+	"sync"
 	"time"
 
 	"github.com/MangosArentLiterature/Athena/internal/db"
@@ -56,9 +56,20 @@ var tormentMessages = []string{
 	"Ping timeout.",
 }
 
-// tormentSeedSeq is incremented atomically for each new torment goroutine so
-// that two goroutines started within the same nanosecond get distinct RNG seeds.
-var tormentSeedSeq int64
+// tormentRng is a shared random source for all torment operations.
+// A single instance avoids per-call heap allocations; the mutex is held only
+// for the duration of one Intn call (nanoseconds), so contention is negligible.
+var (
+	tormentRng   = rand.New(rand.NewSource(time.Now().UnixNano())) //nolint:gosec
+	tormentRngMu sync.Mutex
+)
+
+// tormentIntn returns a non-negative random int in [0, n) using the shared RNG.
+func tormentIntn(n int) int {
+	tormentRngMu.Lock()
+	defer tormentRngMu.Unlock()
+	return tormentRng.Intn(n)
+}
 
 // bannedWords holds the lowercased banned words loaded from the wordlist file.
 // Stored as a slice for O(n) substring scan; lists are typically small so the
@@ -185,21 +196,13 @@ func autoModCheck(client *Client, msg string) bool {
 // startTormentDisconnect silently disconnects a tormented client after an
 // unpredictable delay (5 s–4 min) so the disconnect never feels predictable.
 // No pre-kick warnings are sent; that pattern was too recognisable.
-//
-// A goroutine-local *rand.Rand is used instead of the global source so this
-// goroutine never contends on the global rand mutex.
 // Launched as a goroutine whenever a tormented IPID connects.
 func startTormentDisconnect(client *Client) {
-	// XOR with an atomically incrementing counter so goroutines spawned within
-	// the same nanosecond still receive distinct seeds.
-	seed := time.Now().UnixNano() ^ atomic.AddInt64(&tormentSeedSeq, 1)
-	rng := rand.New(rand.NewSource(seed))
-
 	// Unpredictable initial delay (5 s to 4 min).
-	time.Sleep(time.Duration(5+rng.Intn(235)) * time.Second)
+	time.Sleep(time.Duration(5+tormentIntn(235)) * time.Second)
 
 	// Disconnect with a plausible-sounding error — no prior warnings.
-	client.SendPacket("KK", tormentMessages[rng.Intn(len(tormentMessages))])
+	client.SendPacket("KK", tormentMessages[tormentIntn(len(tormentMessages))])
 	client.conn.Close()
 }
 
@@ -209,36 +212,35 @@ func startTormentDisconnect(client *Client) {
 // ghost — silently dropped for everyone else and never logged.  Otherwise the
 // message is delivered to the rest of the area and logged after a 20-second
 // delay, making conversation effectively impossible without being obvious.
+//
+// time.AfterFunc is used instead of a goroutine+sleep so no goroutine stack is
+// parked during the wait; the callback runs in a fresh goroutine only when the
+// timer fires.
 func handleTormentedIC(client *Client, args []string) {
 	// Echo to sender immediately so it looks like it went through.
 	client.SendPacket("MS", args...)
 
-	seed := time.Now().UnixNano() ^ atomic.AddInt64(&tormentSeedSeq, 1)
-	rng := rand.New(rand.NewSource(seed))
-	if rng.Intn(3) == 0 {
+	if tormentIntn(3) == 0 {
 		// Ghost: nobody else sees it, nothing is logged.
 		return
 	}
 
-	// Capture state at dispatch time so the goroutine is unaffected by later
+	// Capture state at dispatch time so the callback is unaffected by later
 	// area changes or client disconnects.
 	targetArea := client.Area()
 	senderUID := client.Uid()
 	msgLabel := args[4]
-	argsCopy := make([]string, len(args))
-	copy(argsCopy, args)
+	argsCopy := append([]string(nil), args...)
 
-	go func() {
-		time.Sleep(20 * time.Second)
-		// Deliver to everyone currently in the original area except the sender,
-		// who already received the echo above.
+	time.AfterFunc(20*time.Second, func() {
+		// Deliver to everyone currently in the original area except the sender.
 		for c := range clients.GetAllClients() {
 			if c.Area() == targetArea && c.Uid() != senderUID {
 				c.SendPacket("MS", argsCopy...)
 			}
 		}
 		addToBuffer(client, "IC", "\""+msgLabel+"\"", false)
-	}()
+	})
 }
 
 // handleTormentedOOC applies the same ghost-or-delay logic as handleTormentedIC
@@ -247,9 +249,7 @@ func handleTormentedOOC(client *Client, name, msg string) {
 	// Echo to sender immediately.
 	client.SendPacket("CT", name, msg, "0")
 
-	seed := time.Now().UnixNano() ^ atomic.AddInt64(&tormentSeedSeq, 1)
-	rng := rand.New(rand.NewSource(seed))
-	if rng.Intn(3) == 0 {
+	if tormentIntn(3) == 0 {
 		// Ghost: silently dropped.
 		return
 	}
@@ -257,15 +257,14 @@ func handleTormentedOOC(client *Client, name, msg string) {
 	targetArea := client.Area()
 	senderUID := client.Uid()
 
-	go func() {
-		time.Sleep(20 * time.Second)
+	time.AfterFunc(20*time.Second, func() {
 		for c := range clients.GetAllClients() {
 			if c.Area() == targetArea && c.Uid() != senderUID {
 				c.SendPacket("CT", name, msg, "0")
 			}
 		}
 		addToBuffer(client, "OOC", "\""+msg+"\"", false)
-	}()
+	})
 }
 
 // matchBannedWord performs a case-insensitive substring search of s against
