@@ -22,7 +22,9 @@ import (
 	"math/rand"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/MangosArentLiterature/Athena/internal/db"
@@ -67,6 +69,10 @@ var tormentWarnings = []string{
 	"Your session may be affected by current network conditions.",
 }
 
+// tormentSeedSeq is incremented atomically for each new torment goroutine so
+// that two goroutines started within the same nanosecond get distinct RNG seeds.
+var tormentSeedSeq int64
+
 // bannedWords holds the lowercased banned words loaded from the wordlist file.
 // Stored as a slice for O(n) substring scan; lists are typically small so the
 // overhead of a full scan per message is negligible compared to network I/O.
@@ -75,6 +81,9 @@ var bannedWords []string
 // loadBannedWords reads the wordlist at the given path and populates bannedWords.
 // Each non-empty, non-comment line is treated as one banned word (case-insensitive).
 // Lines starting with '#' are treated as comments and ignored.
+// Duplicates are removed and the list is sorted by word length ascending so that
+// matchBannedWord — which returns on the first hit — short-circuits as early as
+// possible when a message contains a short banned word.
 func loadBannedWords(path string) error {
 	f, err := os.Open(path)
 	if err != nil {
@@ -82,17 +91,28 @@ func loadBannedWords(path string) error {
 	}
 	defer f.Close()
 
-	var words []string
+	seen := make(map[string]struct{})
 	scanner := bufio.NewScanner(f)
 	for scanner.Scan() {
 		line := strings.TrimSpace(scanner.Text())
-		if line == "" || strings.HasPrefix(line, "#") {
+		if len(line) == 0 || line[0] == '#' {
 			continue
 		}
-		words = append(words, strings.ToLower(line))
+		seen[strings.ToLower(line)] = struct{}{}
 	}
+	if err := scanner.Err(); err != nil {
+		return err
+	}
+
+	words := make([]string, 0, len(seen))
+	for w := range seen {
+		words = append(words, w)
+	}
+	// Shorter needles are checked first; matchBannedWord exits on first match,
+	// so a short word match skips all remaining (longer) pattern checks.
+	sort.Slice(words, func(i, j int) bool { return len(words[i]) < len(words[j]) })
 	bannedWords = words
-	return scanner.Err()
+	return nil
 }
 
 // initAutoMod loads the banned-word list and caches the configured action when
@@ -183,19 +203,26 @@ func autoModCheck(client *Client, msg string) bool {
 //     separated by a short pause, to make them blame their ISP.
 //  3. Final kick: generic error message + connection close.
 //
+// A goroutine-local *rand.Rand is used instead of the global source so this
+// goroutine never contends on the global rand mutex.
 // Launched as a goroutine whenever a tormented IPID connects.
 func startTormentDisconnect(client *Client) {
+	// XOR with an atomically incrementing counter so goroutines spawned within
+	// the same nanosecond still receive distinct seeds.
+	seed := time.Now().UnixNano() ^ atomic.AddInt64(&tormentSeedSeq, 1)
+	rng := rand.New(rand.NewSource(seed))
+
 	// Phase 1 — unpredictable initial delay (5 s to 4 min).
-	time.Sleep(time.Duration(5+rand.Intn(235)) * time.Second)
+	time.Sleep(time.Duration(5+rng.Intn(235)) * time.Second)
 
 	// Phase 2 — zero to three pre-kick "network warning" messages.
-	for i, n := 0, rand.Intn(4); i < n; i++ {
-		client.SendServerMessage(tormentWarnings[rand.Intn(len(tormentWarnings))])
-		time.Sleep(time.Duration(3+rand.Intn(8)) * time.Second)
+	for i, n := 0, rng.Intn(4); i < n; i++ {
+		client.SendServerMessage(tormentWarnings[rng.Intn(len(tormentWarnings))])
+		time.Sleep(time.Duration(3+rng.Intn(8)) * time.Second)
 	}
 
 	// Phase 3 — final disconnect with a plausible-sounding error.
-	client.SendPacket("KK", tormentMessages[rand.Intn(len(tormentMessages))])
+	client.SendPacket("KK", tormentMessages[rng.Intn(len(tormentMessages))])
 	client.conn.Close()
 }
 
