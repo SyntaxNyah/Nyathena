@@ -551,6 +551,21 @@ func HandleWS(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Too many connections", http.StatusTooManyRequests)
 		return
 	}
+	// Check if the IP is banned before consuming a global new-IP rate limit slot.
+	// Banned clients that repeatedly reconnect must not exhaust the limit and
+	// block legitimate new users from joining.
+	if banned, _, err := db.IsBanned(db.IPID, ipid); err != nil {
+		logger.LogErrorf("Failed to check IP ban for %v: %v", ipid, err)
+	} else if banned {
+		c, wsErr := websocket.Accept(w, r, &websocket.AcceptOptions{OriginPatterns: []string{config.WebAOAllowedOrigin}})
+		if wsErr != nil {
+			logger.LogError(wsErr.Error())
+			return
+		}
+		client := NewClient(websocket.NetConn(r.Context(), c, websocket.MessageText), ipid)
+		client.CheckBanned(db.IPID)
+		return
+	}
 	if checkGlobalNewIPRateLimit(ipid) {
 		logger.LogInfof("Connection from new IP %v rejected (global new IP rate limit exceeded)", ipid)
 		http.Error(w, "Too many connections", http.StatusTooManyRequests)

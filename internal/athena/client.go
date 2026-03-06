@@ -202,7 +202,9 @@ func NewClient(conn net.Conn, ipid string) *Client {
 func (client *Client) HandleClient() {
 	defer client.clientCleanup()
 
-	client.CheckBanned(db.IPID)
+	if client.CheckBanned(db.IPID) {
+		return
+	}
 
 	// If this IPID has been tormented by automod, schedule a random disconnect.
 	if isIPIDTormented(client.Ipid()) {
@@ -653,8 +655,10 @@ func (client *Client) restorePunishments() {
 	client.SendServerMessage("Your active punishments have been restored.")
 }
 
-// CheckBanned returns if a client is currently banned.
-func (client *Client) CheckBanned(by db.BanLookup) {
+// CheckBanned checks whether the client is currently banned.
+// If banned, it sends the BD packet, closes the connection, and returns true.
+// Callers must return immediately when CheckBanned returns true.
+func (client *Client) CheckBanned(by db.BanLookup) bool {
 	var banned bool
 	var baninfo db.BanInfo
 	var err error
@@ -680,8 +684,9 @@ func (client *Client) CheckBanned(by db.BanLookup) {
 		}
 		client.SendPacket("BD", fmt.Sprintf("%v\nUntil: %v\nID: %v", baninfo.Reason, duration, baninfo.Id))
 		client.conn.Close()
-		return
+		return true
 	}
+	return false
 }
 
 // JoinArea adds a client to an area.
