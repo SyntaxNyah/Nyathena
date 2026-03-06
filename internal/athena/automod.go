@@ -30,6 +30,30 @@ import (
 	"github.com/MangosArentLiterature/Athena/internal/settings"
 )
 
+// autoModActionKind is a pre-parsed integer representation of the configured
+// automod action. Computed once at startup so the hot path (autoModCheck) never
+// allocates or does string comparisons.
+type autoModActionKind int
+
+const (
+	autoModActionBan     autoModActionKind = iota // default
+	autoModActionKick
+	autoModActionMute
+	autoModActionTorment
+)
+
+// autoModAction caches the parsed action so autoModCheck is allocation-free.
+var autoModAction autoModActionKind
+
+// tormentMessages is allocated once and reused by every startTormentDisconnect call.
+var tormentMessages = []string{
+	"Connection timed out.",
+	"Server encountered an error.",
+	"Network instability detected.",
+	"Session expired.",
+	"Ping timeout.",
+}
+
 // bannedWords holds the lowercased banned words loaded from the wordlist file.
 // Stored as a slice for O(n) substring scan; lists are typically small so the
 // overhead of a full scan per message is negligible compared to network I/O.
@@ -58,8 +82,8 @@ func loadBannedWords(path string) error {
 	return scanner.Err()
 }
 
-// initAutoMod loads the banned-word list when automod is enabled.
-// Called once during server startup.
+// initAutoMod loads the banned-word list and caches the configured action when
+// automod is enabled. Called once during server startup.
 func initAutoMod(cfg *settings.Config) {
 	if !cfg.AutoModEnabled {
 		return
@@ -70,6 +94,18 @@ func initAutoMod(cfg *settings.Config) {
 		return
 	}
 	logger.LogInfof("automod: loaded %d banned word(s) from %q", len(bannedWords), path)
+
+	// Parse the action once so the hot path never allocates.
+	switch strings.ToLower(strings.TrimSpace(cfg.AutoModAction)) {
+	case "kick":
+		autoModAction = autoModActionKick
+	case "mute":
+		autoModAction = autoModActionMute
+	case "torment":
+		autoModAction = autoModActionTorment
+	default:
+		autoModAction = autoModActionBan
+	}
 }
 
 // autoModCheck tests msg for banned words. If one is found the configured action
@@ -86,19 +122,14 @@ func autoModCheck(client *Client, msg string) bool {
 		return false
 	}
 
-	action := strings.ToLower(config.AutoModAction)
-	if action == "" {
-		action = "ban"
-	}
-
-	switch action {
-	case "kick":
+	switch autoModAction {
+	case autoModActionKick:
 		client.SendPacket("KK", "Kicked for prohibited language.")
 		client.conn.Close()
 		logger.LogInfof("automod: kicked %v (uid %d) — matched word %q", client.Ipid(), client.Uid(), matched)
 		return true
 
-	case "mute":
+	case autoModActionMute:
 		// expires = 0 means permanent in the PUNISHMENTS table.
 		if err := db.UpsertMute(client.Ipid(), int(ICOOCMuted), 0); err != nil {
 			logger.LogErrorf("automod: failed to mute %v: %v", client.Ipid(), err)
@@ -110,14 +141,13 @@ func autoModCheck(client *Client, msg string) bool {
 		logger.LogInfof("automod: permanently muted %v (uid %d) — matched word %q", client.Ipid(), client.Uid(), matched)
 		return true
 
-	case "torment":
+	case autoModActionTorment:
 		addTormentedIP(client.Ipid())
-		// Disconnect them right away; future connections will be handled by the torment goroutine.
 		go startTormentDisconnect(client)
 		logger.LogInfof("automod: added %v (uid %d) to torment list — matched word %q", client.Ipid(), client.Uid(), matched)
 		return true
 
-	default: // "ban" or anything unrecognised
+	default: // autoModActionBan
 		banTime := time.Now().UTC().Unix()
 		id, err := db.AddBan(client.Ipid(), client.Hdid(), banTime, -1, "Automatic ban: prohibited language", "Server")
 		if err != nil {
@@ -132,20 +162,11 @@ func autoModCheck(client *Client, msg string) bool {
 	}
 }
 
-// startTormentDisconnect waits a random interval (30–60 s) then disconnects the client.
-// This is launched as a goroutine whenever a tormented IPID connects.
+// startTormentDisconnect waits a random interval (30–60 s) then disconnects the
+// client. Launched as a goroutine whenever a tormented IPID connects.
 func startTormentDisconnect(client *Client) {
-	delay := time.Duration(30+rand.Intn(31)) * time.Second
-	time.Sleep(delay)
-	// Use generic-sounding error messages so the cause is not obvious to the user.
-	messages := []string{
-		"Connection timed out.",
-		"Server encountered an error.",
-		"Network instability detected.",
-		"Session expired.",
-		"Ping timeout.",
-	}
-	client.SendPacket("KK", messages[rand.Intn(len(messages))])
+	time.Sleep(time.Duration(30+rand.Intn(31)) * time.Second)
+	client.SendPacket("KK", tormentMessages[rand.Intn(len(tormentMessages))])
 	client.conn.Close()
 }
 

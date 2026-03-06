@@ -120,11 +120,13 @@ var (
 
 	// tormentedIPIDs holds the set of IPIDs that should be periodically disconnected.
 	// Populated at startup from the database and updated at runtime by automod.
+	// RWMutex is used so that the frequent read path (isIPIDTormented, called per
+	// connection) never blocks other concurrent readers.
 	tormentedIPIDs = struct {
-		mu  sync.Mutex
-		set map[string]bool
+		mu  sync.RWMutex
+		set map[string]struct{}
 	}{
-		set: make(map[string]bool),
+		set: make(map[string]struct{}),
 	}
 
 	// Tournament mode state
@@ -226,7 +228,7 @@ func NewServer(conf *settings.Config) (*Server, error) {
 	} else {
 		tormentedIPIDs.mu.Lock()
 		for _, ipid := range tormentedIPs {
-			tormentedIPIDs.set[ipid] = true
+			tormentedIPIDs.set[ipid] = struct{}{}
 		}
 		tormentedIPIDs.mu.Unlock()
 		if len(tormentedIPs) > 0 {
@@ -876,7 +878,7 @@ func forgetIP(ipid string) {
 // addTormentedIP adds an IPID to the in-memory torment set and persists it to the database.
 func addTormentedIP(ipid string) {
 	tormentedIPIDs.mu.Lock()
-	tormentedIPIDs.set[ipid] = true
+	tormentedIPIDs.set[ipid] = struct{}{}
 	tormentedIPIDs.mu.Unlock()
 
 	go func() {
@@ -901,9 +903,10 @@ func removeTormentedIP(ipid string) {
 
 // isIPIDTormented returns true if the IPID is in the tormented set.
 func isIPIDTormented(ipid string) bool {
-	tormentedIPIDs.mu.Lock()
-	defer tormentedIPIDs.mu.Unlock()
-	return tormentedIPIDs.set[ipid]
+	tormentedIPIDs.mu.RLock()
+	_, ok := tormentedIPIDs.set[ipid]
+	tormentedIPIDs.mu.RUnlock()
+	return ok
 }
 
 // autoBanPacketFlooder adds a temporary ban for an IP that has exceeded the raw packet rate limit.
