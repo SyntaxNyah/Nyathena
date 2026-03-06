@@ -51,7 +51,6 @@ const version = "v1.0.2"
 var (
 	config                                 *settings.Config
 	characters, music, backgrounds, parrot []string
-	songs                                  []string // pre-filtered playable songs (music entries with a file extension)
 	areas                                  []*area.Area
 	areaNames                              string
 	areaIndexMap                           map[*area.Area]int // pre-computed index lookup for O(1) getAreaIndex
@@ -160,7 +159,6 @@ type Server struct {
 	config                 *settings.Config
 	characters             []string
 	music                  []string
-	songs                  []string // pre-filtered playable songs (music entries with a file extension)
 	backgrounds            []string
 	parrot                 []string
 	areas                  []*area.Area
@@ -253,13 +251,6 @@ func NewServer(conf *settings.Config) (*Server, error) {
 	s.music, err = settings.LoadMusic()
 	if err != nil {
 		return nil, err
-	}
-	// Pre-filter playable songs (entries with a file extension) for O(1) /randomsong selection.
-	s.songs = make([]string, 0, len(s.music))
-	for _, entry := range s.music {
-		if strings.ContainsRune(entry, '.') {
-			s.songs = append(s.songs, entry)
-		}
 	}
 	s.characters, err = settings.LoadFile("/characters.txt")
 	if err != nil {
@@ -392,7 +383,6 @@ func NewServer(conf *settings.Config) (*Server, error) {
 	config = s.config
 	characters = s.characters
 	music = s.music
-	songs = s.songs
 	backgrounds = s.backgrounds
 	parrot = s.parrot
 	areas = s.areas

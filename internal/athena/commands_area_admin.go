@@ -662,10 +662,6 @@ func cmdPlay(client *Client, args []string, _ string) {
 // Handles /randomsong
 
 func cmdRandomSong(client *Client, _ []string, _ string) {
-	if len(songs) == 0 {
-		client.SendServerMessage("No songs are available.")
-		return
-	}
 	if !client.CanChangeMusic() {
 		client.SendServerMessage("You are not allowed to change the music in this area.")
 		return
@@ -683,7 +679,19 @@ func cmdRandomSong(client *Client, _ []string, _ string) {
 			return
 		}
 	}
-	song := songs[rand.Intn(len(songs))]
+	// Collect playable songs from the jukebox list (music.txt).
+	// Category headers in music.txt have no '.'; skip them just as pktAM does.
+	playable := make([]string, 0, len(music))
+	for _, entry := range music {
+		if strings.ContainsRune(entry, '.') {
+			playable = append(playable, entry)
+		}
+	}
+	if len(playable) == 0 {
+		client.SendServerMessage("No songs are available.")
+		return
+	}
+	song := playable[rand.Intn(len(playable))]
 	writeToArea(client.Area(), "MC", song, fmt.Sprint(client.CharID()), client.Showname(), "1", "0")
 	addToBuffer(client, "CMD", fmt.Sprintf("Played random song (%v).", song), false)
 }
