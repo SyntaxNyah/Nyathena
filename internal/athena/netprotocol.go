@@ -88,7 +88,9 @@ func pktHdid(client *Client, p *packet.Packet) {
 	client.SetHdid(base64.StdEncoding.EncodeToString(hash[:]))
 	client.SetHdid(client.Hdid()[:len(client.Hdid())-2]) // Removes the trailing padding.
 
-	client.CheckBanned(db.HDID)
+	if client.CheckBanned(db.HDID) {
+		return
+	}
 
 	client.SendPacket("ID", "0", "Athena", encode(version)) // Why does the client need this? Nobody knows.
 }
