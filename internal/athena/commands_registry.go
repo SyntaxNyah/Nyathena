@@ -409,6 +409,13 @@ func initCommands() {
 			desc:     "Selects a random free character.",
 			reqPerms: permissions.PermissionField["NONE"],
 		},
+		"randombg": {
+			handler:  cmdRandomBg,
+			minArgs:  0,
+			usage:    "Usage: /randombg",
+			desc:     "Sets the area's background to a random one from the server list. Usable once every 5 seconds.",
+			reqPerms: permissions.PermissionField["CM"],
+		},
 		"rps": {
 			handler:  cmdRps,
 			minArgs:  1,

@@ -21,6 +21,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"math/rand"
 	"net/url"
 	"strconv"
 	"strings"
@@ -153,6 +154,36 @@ func cmdRandomChar(client *Client, _ []string, _ string) {
 	}
 	client.SetLastRandomCharTime(time.Now())
 	client.ChangeCharacter(newid)
+}
+
+// Handles /randombg
+
+func cmdRandomBg(client *Client, _ []string, _ string) {
+	if len(backgrounds) == 0 {
+		client.SendServerMessage("No backgrounds are available.")
+		return
+	}
+	a := client.Area() // cache to avoid repeated mutex acquisitions
+	if a.LockBG() && !permissions.HasPermission(client.Perms(), permissions.PermissionField["MODIFY_AREA"]) {
+		client.SendServerMessage("You do not have permission to change the background in this area.")
+		return
+	}
+	// Enforce 5-second rate limit with a single atomic check-and-update.
+	const cooldown = 5 * time.Second
+	if ok, remaining := client.CheckAndUpdateRandomBgCooldown(cooldown); !ok {
+		secs := int(remaining.Seconds()) + 1
+		unit := "seconds"
+		if secs == 1 {
+			unit = "second"
+		}
+		client.SendServerMessage(fmt.Sprintf("Please wait %d %s before using /randombg again.", secs, unit))
+		return
+	}
+	bg := backgrounds[rand.Intn(len(backgrounds))]
+	a.SetBackground(bg)
+	writeToArea(a, "BN", bg)
+	sendAreaServerMessage(a, fmt.Sprintf("%v set the background to a random one (%v).", client.OOCName(), bg))
+	addToBuffer(client, "CMD", fmt.Sprintf("Set BG to random (%v).", bg), false)
 }
 
 // Handles /forcerandomchar [uid]

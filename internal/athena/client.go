@@ -176,6 +176,7 @@ type Client struct {
 	rawPktWindowStart  time.Time   // Start time of the current raw-rate-limit window
 	lastModcallTime    time.Time   // Tracks last modcall time for cooldown
 	lastRandomCharTime time.Time   // Tracks last /randomchar time for cooldown
+	lastRandomBgTime   time.Time   // Tracks last /randombg time for cooldown
 	forcePairUID    int         // UID of the client this client is force-paired with (-1 if none)
 	possessing      int         // UID of the client being possessed (-1 if not possessing anyone)
 	possessedPos    string      // Position of the possessed target (saved at time of possession)
@@ -1017,6 +1018,22 @@ func (client *Client) SetLastRandomCharTime(t time.Time) {
 	client.mu.Lock()
 	client.lastRandomCharTime = t
 	client.mu.Unlock()
+}
+
+// CheckAndUpdateRandomBgCooldown atomically checks whether the /randombg cooldown
+// has elapsed and, if so, records the current time as the new last-use timestamp.
+// It returns (true, 0) when the command is allowed, or (false, remaining) when
+// the client is still in cooldown.
+func (client *Client) CheckAndUpdateRandomBgCooldown(cooldown time.Duration) (bool, time.Duration) {
+	client.mu.Lock()
+	defer client.mu.Unlock()
+	now := time.Now()
+	elapsed := now.Sub(client.lastRandomBgTime)
+	if !client.lastRandomBgTime.IsZero() && elapsed < cooldown {
+		return false, cooldown - elapsed
+	}
+	client.lastRandomBgTime = now
+	return true, 0
 }
 
 // String returns the string representation of a mute state.
