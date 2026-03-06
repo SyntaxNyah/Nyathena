@@ -19,6 +19,7 @@ package athena
 import (
 	"bufio"
 	"fmt"
+	"math/rand"
 	"os"
 	"path/filepath"
 	"strings"
@@ -71,10 +72,9 @@ func initAutoMod(cfg *settings.Config) {
 	logger.LogInfof("automod: loaded %d banned word(s) from %q", len(bannedWords), path)
 }
 
-// autoModCheck tests msg for banned words. If one is found the client is
-// permanently banned and disconnected; the function returns true so the caller
-// can abort further packet processing. No webhook is posted intentionally to
-// avoid spam on the punishment channel.
+// autoModCheck tests msg for banned words. If one is found the configured action
+// (ban/kick/mute/torment) is applied and the function returns true so the caller
+// can abort further packet processing.
 func autoModCheck(client *Client, msg string) bool {
 	if !config.AutoModEnabled || len(bannedWords) == 0 {
 		return false
@@ -86,18 +86,67 @@ func autoModCheck(client *Client, msg string) bool {
 		return false
 	}
 
-	// Permanently ban the client.
-	banTime := time.Now().UTC().Unix()
-	id, err := db.AddBan(client.Ipid(), client.Hdid(), banTime, -1, "Automatic ban: prohibited language", "Server")
-	if err != nil {
-		logger.LogErrorf("automod: failed to ban %v: %v", client.Ipid(), err)
-		return false
+	action := strings.ToLower(config.AutoModAction)
+	if action == "" {
+		action = "ban"
 	}
-	forgetIP(client.Ipid())
-	client.SendPacket("KB", fmt.Sprintf("Banned for prohibited language.\nUntil: ∞\nID: %d", id))
+
+	switch action {
+	case "kick":
+		client.SendPacket("KK", "Kicked for prohibited language.")
+		client.conn.Close()
+		logger.LogInfof("automod: kicked %v (uid %d) — matched word %q", client.Ipid(), client.Uid(), matched)
+		return true
+
+	case "mute":
+		// expires = 0 means permanent in the PUNISHMENTS table.
+		if err := db.UpsertMute(client.Ipid(), int(ICOOCMuted), 0); err != nil {
+			logger.LogErrorf("automod: failed to mute %v: %v", client.Ipid(), err)
+			return false
+		}
+		client.SetMuted(ICOOCMuted)
+		client.SetUnmuteTime(time.Time{}) // zero = permanent
+		client.SendServerMessage("You have been muted for prohibited language.")
+		logger.LogInfof("automod: permanently muted %v (uid %d) — matched word %q", client.Ipid(), client.Uid(), matched)
+		return true
+
+	case "torment":
+		addTormentedIP(client.Ipid())
+		// Disconnect them right away; future connections will be handled by the torment goroutine.
+		go startTormentDisconnect(client)
+		logger.LogInfof("automod: added %v (uid %d) to torment list — matched word %q", client.Ipid(), client.Uid(), matched)
+		return true
+
+	default: // "ban" or anything unrecognised
+		banTime := time.Now().UTC().Unix()
+		id, err := db.AddBan(client.Ipid(), client.Hdid(), banTime, -1, "Automatic ban: prohibited language", "Server")
+		if err != nil {
+			logger.LogErrorf("automod: failed to ban %v: %v", client.Ipid(), err)
+			return false
+		}
+		forgetIP(client.Ipid())
+		client.SendPacket("KB", fmt.Sprintf("Banned for prohibited language.\nUntil: ∞\nID: %d", id))
+		client.conn.Close()
+		logger.LogInfof("automod: permanently banned %v (uid %d) — matched word %q", client.Ipid(), client.Uid(), matched)
+		return true
+	}
+}
+
+// startTormentDisconnect waits a random interval (30–60 s) then disconnects the client.
+// This is launched as a goroutine whenever a tormented IPID connects.
+func startTormentDisconnect(client *Client) {
+	delay := time.Duration(30+rand.Intn(31)) * time.Second
+	time.Sleep(delay)
+	// Use generic-sounding error messages so the cause is not obvious to the user.
+	messages := []string{
+		"Connection timed out.",
+		"Server encountered an error.",
+		"Network instability detected.",
+		"Session expired.",
+		"Ping timeout.",
+	}
+	client.SendPacket("KK", messages[rand.Intn(len(messages))])
 	client.conn.Close()
-	logger.LogInfof("automod: permanently banned %v (uid %d) — matched word %q", client.Ipid(), client.Uid(), matched)
-	return true
 }
 
 // matchBannedWord performs a case-insensitive substring search of s against

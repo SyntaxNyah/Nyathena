@@ -49,7 +49,7 @@ var db *sql.DB
 
 // Database version.
 // This should be incremented whenever changes are made to the DB that require existing databases to upgrade.
-const ver = 5
+const ver = 6
 
 // Persistent punishment kind constants.
 const (
@@ -128,6 +128,12 @@ func Open() error {
 	if err != nil {
 		return err
 	}
+	_, err = db.Exec(`CREATE TABLE IF NOT EXISTS TORMENTED_IPS(
+		IPID TEXT PRIMARY KEY
+	)`)
+	if err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -181,6 +187,18 @@ func upgradeDB(v int) error {
 			return err
 		}
 		_, err = db.Exec("PRAGMA user_version = 5")
+		if err != nil {
+			return err
+		}
+		fallthrough
+	case 5:
+		_, err := db.Exec(`CREATE TABLE IF NOT EXISTS TORMENTED_IPS(
+			IPID TEXT PRIMARY KEY
+		)`)
+		if err != nil {
+			return err
+		}
+		_, err = db.Exec("PRAGMA user_version = 6")
 		if err != nil {
 			return err
 		}
@@ -553,4 +571,45 @@ func PruneShortPlaytimeIPs(minSeconds int64) (int64, error) {
 	}
 	n, _ := res.RowsAffected()
 	return n, nil
+}
+
+// AddTormentedIP adds an IPID to the TORMENTED_IPS table.
+// Tormented IPIDs experience random disconnects every 30–60 seconds instead of being banned.
+func AddTormentedIP(ipid string) error {
+	if db == nil {
+		return nil
+	}
+	_, err := db.Exec("INSERT OR IGNORE INTO TORMENTED_IPS(IPID) VALUES(?)", ipid)
+	return err
+}
+
+// RemoveTormentedIP deletes an IPID from the TORMENTED_IPS table.
+func RemoveTormentedIP(ipid string) error {
+	if db == nil {
+		return nil
+	}
+	_, err := db.Exec("DELETE FROM TORMENTED_IPS WHERE IPID = ?", ipid)
+	return err
+}
+
+// LoadTormentedIPs returns every IPID currently in the TORMENTED_IPS table.
+// Called once at server startup to pre-populate the in-memory torment set.
+func LoadTormentedIPs() ([]string, error) {
+	if db == nil {
+		return nil, nil
+	}
+	rows, err := db.Query("SELECT IPID FROM TORMENTED_IPS")
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var ipids []string
+	for rows.Next() {
+		var ipid string
+		if err := rows.Scan(&ipid); err != nil {
+			return ipids, fmt.Errorf("LoadTormentedIPs scan: %w", err)
+		}
+		ipids = append(ipids, ipid)
+	}
+	return ipids, rows.Err()
 }

@@ -514,6 +514,13 @@ func initCommands() {
 			desc:     "Unmutes user(s).",
 			reqPerms: permissions.PermissionField["MUTE"],
 		},
+		"untorment": {
+			handler:  cmdUntorment,
+			minArgs:  1,
+			usage:    "Usage: /untorment <ipid>",
+			desc:     "Removes an IPID from the automod torment list.",
+			reqPerms: permissions.PermissionField["BAN"],
+		},
 		"vote": {
 			handler:  cmdVote,
 			minArgs:  1,

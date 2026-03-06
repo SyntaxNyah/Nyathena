@@ -302,6 +302,17 @@ automod_enabled = false
 # with '#' are treated as comments. Default: "banned_words.txt".
 automod_wordlist = "banned_words.txt"
 
+# Action to take when the AutoMod detects a banned word in a player's message.
+# Accepted values:
+#   "ban"     — Permanently ban the player (default).
+#   "kick"    — Kick the player from the server without a ban.
+#   "mute"    — Permanently mute the player's IC and OOC chat.
+#   "torment" — Add the player's IPID to a torment list. Tormented players are
+#               randomly disconnected every 30–60 seconds every time they connect,
+#               making the experience deeply unpleasant without a hard ban.
+#               Use /untorment <ipid> to remove an IPID from the torment list.
+automod_action = "ban"
+
 [Logging]
 # Sets the number of actions (IC chat messages, OOC chat messages, judge actions, etc.) each area should store.
 # When a user calls a mod, this buffer will be flushed to a report file for review.
