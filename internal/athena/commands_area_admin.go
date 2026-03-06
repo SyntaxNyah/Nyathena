@@ -639,7 +639,7 @@ func cmdNoIntPres(client *Client, args []string, _ string) {
 	addToBuffer(client, "CMD", fmt.Sprintf("Set non-interrupting preanims to %v.", args[0]), false)
 }
 
-// Handles /parrot
+// Handles /play
 
 func cmdPlay(client *Client, args []string, _ string) {
 	if !client.CanChangeMusic() {
@@ -657,6 +657,43 @@ func cmdPlay(client *Client, args []string, _ string) {
 		}
 	}
 	writeToArea(client.Area(), "MC", s, fmt.Sprint(client.CharID()), client.Showname(), "1", "0")
+}
+
+// Handles /randomsong
+
+func cmdRandomSong(client *Client, _ []string, _ string) {
+	if !client.CanChangeMusic() {
+		client.SendServerMessage("You are not allowed to change the music in this area.")
+		return
+	}
+	// Enforce configurable cooldown with a single atomic check-and-update.
+	if cd := config.RandomSongCooldown; cd > 0 {
+		cooldown := time.Duration(cd) * time.Second
+		if ok, remaining := client.CheckAndUpdateRandomSongCooldown(cooldown); !ok {
+			secs := int(remaining.Seconds()) + 1
+			unit := "seconds"
+			if secs == 1 {
+				unit = "second"
+			}
+			client.SendServerMessage(fmt.Sprintf("Please wait %d %s before using /randomsong again.", secs, unit))
+			return
+		}
+	}
+	// Collect playable songs from the jukebox list (music.txt).
+	// Category headers in music.txt have no '.'; skip them just as pktAM does.
+	playable := make([]string, 0, len(music))
+	for _, entry := range music {
+		if strings.ContainsRune(entry, '.') {
+			playable = append(playable, entry)
+		}
+	}
+	if len(playable) == 0 {
+		client.SendServerMessage("No songs are available.")
+		return
+	}
+	song := playable[rand.Intn(len(playable))]
+	writeToArea(client.Area(), "MC", song, fmt.Sprint(client.CharID()), client.Showname(), "1", "0")
+	addToBuffer(client, "CMD", fmt.Sprintf("Played random song (%v).", song), false)
 }
 
 // Handles /players

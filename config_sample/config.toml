@@ -313,6 +313,11 @@ automod_wordlist = "banned_words.txt"
 #               Use /untorment <ipid> to remove an IPID from the torment list.
 automod_action = "ban"
 
+# /randomsong cooldown: Minimum number of seconds a CM must wait between uses of /randomsong.
+# Set to 0 to disable the cooldown (allow unlimited uses).
+# Default: 5 seconds.
+random_song_cooldown = 5
+
 [Logging]
 # Sets the number of actions (IC chat messages, OOC chat messages, judge actions, etc.) each area should store.
 # When a user calls a mod, this buffer will be flushed to a report file for review.
