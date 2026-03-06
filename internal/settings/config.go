@@ -86,6 +86,7 @@ type ServerConfig struct {
 	AutoModEnabled            bool   `toml:"automod_enabled"`
 	AutoModWordlist           string `toml:"automod_wordlist"`
 	AutoModAction             string `toml:"automod_action"`
+	RandomSongCooldown        int    `toml:"random_song_cooldown"`
 }
 
 type LogConfig struct {
@@ -159,6 +160,7 @@ func DefaultConfig() *Config {
 			AutoModEnabled:            false,
 			AutoModWordlist:           "banned_words.txt",
 			AutoModAction:             "ban",
+			RandomSongCooldown:        5,
 		},
 		LogConfig{
 			BufSize:              150,

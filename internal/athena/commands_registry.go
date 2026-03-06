@@ -416,6 +416,13 @@ func initCommands() {
 			desc:     "Sets the area's background to a random one from the server list. Usable once every 5 seconds.",
 			reqPerms: permissions.PermissionField["CM"],
 		},
+		"randomsong": {
+			handler:  cmdRandomSong,
+			minArgs:  0,
+			usage:    "Usage: /randomsong",
+			desc:     "Plays a random song from the server music list. Cooldown is configurable via random_song_cooldown.",
+			reqPerms: permissions.PermissionField["CM"],
+		},
 		"rps": {
 			handler:  cmdRps,
 			minArgs:  1,
