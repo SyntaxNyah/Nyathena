@@ -47,15 +47,6 @@ const (
 // autoModAction caches the parsed action so autoModCheck is allocation-free.
 var autoModAction autoModActionKind
 
-// tormentMessages is allocated once and reused by every startTormentDisconnect call.
-var tormentMessages = []string{
-	"Connection timed out.",
-	"Server encountered an error.",
-	"Network instability detected.",
-	"Session expired.",
-	"Ping timeout.",
-}
-
 // tormentRng is a shared random source for all torment operations.
 // A single instance avoids per-call heap allocations; the mutex is held only
 // for the duration of one Intn call (nanoseconds), so contention is negligible.
@@ -193,16 +184,16 @@ func autoModCheck(client *Client, msg string) bool {
 	}
 }
 
-// startTormentDisconnect silently disconnects a tormented client after an
-// unpredictable delay (5 s–4 min) so the disconnect never feels predictable.
-// No pre-kick warnings are sent; that pattern was too recognisable.
+// startTormentDisconnect silently drops the connection of a tormented client
+// after an unpredictable delay (5 s–4 min). No packet is sent before closing
+// so the client sees a plain connection drop rather than a kick or error message.
 // Launched as a goroutine whenever a tormented IPID connects.
 func startTormentDisconnect(client *Client) {
 	// Unpredictable initial delay (5 s to 4 min).
 	time.Sleep(time.Duration(5+tormentIntn(235)) * time.Second)
 
-	// Disconnect with a plausible-sounding error — no prior warnings.
-	client.SendPacket("KK", tormentMessages[tormentIntn(len(tormentMessages))])
+	// Close the underlying connection directly — no prior packet — so the
+	// disconnect appears as natural causes rather than a visible kick.
 	client.conn.Close()
 }
 
