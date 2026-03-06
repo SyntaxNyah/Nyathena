@@ -118,6 +118,17 @@ var (
 	// Key: *area.Area, Value: string. sync.Map is zero-value ready; no initialisation required.
 	areaLastOOCMsg sync.Map
 
+	// tormentedIPIDs holds the set of IPIDs that should be periodically disconnected.
+	// Populated at startup from the database and updated at runtime by automod.
+	// RWMutex is used so that the frequent read path (isIPIDTormented, called per
+	// connection) never blocks other concurrent readers.
+	tormentedIPIDs = struct {
+		mu  sync.RWMutex
+		set map[string]struct{}
+	}{
+		set: make(map[string]struct{}),
+	}
+
 	// Tournament mode state
 	tournamentActive       bool
 	tournamentMutex        sync.Mutex
@@ -208,6 +219,20 @@ func NewServer(conf *settings.Config) (*Server, error) {
 		ipFirstSeenTracker.mu.Unlock()
 		if len(knownIPs) > 0 {
 			logger.LogInfof("Loaded %d known IPs from database.", len(knownIPs))
+		}
+	}
+
+	// Pre-populate the in-memory tormented IPID set from the database.
+	if tormentedIPs, err := db.LoadTormentedIPs(); err != nil {
+		logger.LogErrorf("Failed to load tormented IPs from database: %v", err)
+	} else {
+		tormentedIPIDs.mu.Lock()
+		for _, ipid := range tormentedIPs {
+			tormentedIPIDs.set[ipid] = struct{}{}
+		}
+		tormentedIPIDs.mu.Unlock()
+		if len(tormentedIPs) > 0 {
+			logger.LogInfof("Loaded %d tormented IP(s) from database.", len(tormentedIPs))
 		}
 	}
 
@@ -848,6 +873,40 @@ func forgetIP(ipid string) {
 			logger.LogErrorf("Failed to remove banned IP %s from known IPs: %v", ipid, err)
 		}
 	}()
+}
+
+// addTormentedIP adds an IPID to the in-memory torment set and persists it to the database.
+func addTormentedIP(ipid string) {
+	tormentedIPIDs.mu.Lock()
+	tormentedIPIDs.set[ipid] = struct{}{}
+	tormentedIPIDs.mu.Unlock()
+
+	go func() {
+		if err := db.AddTormentedIP(ipid); err != nil {
+			logger.LogErrorf("Failed to persist tormented IP %s: %v", ipid, err)
+		}
+	}()
+}
+
+// removeTormentedIP removes an IPID from the in-memory torment set and from the database.
+func removeTormentedIP(ipid string) {
+	tormentedIPIDs.mu.Lock()
+	delete(tormentedIPIDs.set, ipid)
+	tormentedIPIDs.mu.Unlock()
+
+	go func() {
+		if err := db.RemoveTormentedIP(ipid); err != nil {
+			logger.LogErrorf("Failed to remove tormented IP %s from database: %v", ipid, err)
+		}
+	}()
+}
+
+// isIPIDTormented returns true if the IPID is in the tormented set.
+func isIPIDTormented(ipid string) bool {
+	tormentedIPIDs.mu.RLock()
+	_, ok := tormentedIPIDs.set[ipid]
+	tormentedIPIDs.mu.RUnlock()
+	return ok
 }
 
 // autoBanPacketFlooder adds a temporary ban for an IP that has exceeded the raw packet rate limit.

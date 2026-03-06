@@ -85,6 +85,7 @@ type ServerConfig struct {
 	WebAOAllowedOrigin        string `toml:"webao_allowed_origin"`
 	AutoModEnabled            bool   `toml:"automod_enabled"`
 	AutoModWordlist           string `toml:"automod_wordlist"`
+	AutoModAction             string `toml:"automod_action"`
 }
 
 type LogConfig struct {
@@ -157,6 +158,7 @@ func DefaultConfig() *Config {
 			WebAOAllowedOrigin:        "web.aceattorneyonline.com",
 			AutoModEnabled:            false,
 			AutoModWordlist:           "banned_words.txt",
+			AutoModAction:             "ban",
 		},
 		LogConfig{
 			BufSize:              150,

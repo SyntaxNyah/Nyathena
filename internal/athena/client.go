@@ -203,6 +203,11 @@ func (client *Client) HandleClient() {
 
 	client.CheckBanned(db.IPID)
 
+	// If this IPID has been tormented by automod, schedule a random disconnect.
+	if isIPIDTormented(client.Ipid()) {
+		go startTormentDisconnect(client)
+	}
+
 	var mc int
 	for c := range clients.GetAllClients() {
 		if c.Ipid() == client.Ipid() {

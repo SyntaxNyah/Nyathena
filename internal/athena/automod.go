@@ -19,15 +19,57 @@ package athena
 import (
 	"bufio"
 	"fmt"
+	"math/rand"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/MangosArentLiterature/Athena/internal/db"
 	"github.com/MangosArentLiterature/Athena/internal/logger"
 	"github.com/MangosArentLiterature/Athena/internal/settings"
 )
+
+// autoModActionKind is a pre-parsed integer representation of the configured
+// automod action. Computed once at startup so the hot path (autoModCheck) never
+// allocates or does string comparisons.
+type autoModActionKind int
+
+const (
+	autoModActionBan     autoModActionKind = iota // default
+	autoModActionKick
+	autoModActionMute
+	autoModActionTorment
+)
+
+// autoModAction caches the parsed action so autoModCheck is allocation-free.
+var autoModAction autoModActionKind
+
+// tormentMessages is allocated once and reused by every startTormentDisconnect call.
+var tormentMessages = []string{
+	"Connection timed out.",
+	"Server encountered an error.",
+	"Network instability detected.",
+	"Session expired.",
+	"Ping timeout.",
+}
+
+// tormentRng is a shared random source for all torment operations.
+// A single instance avoids per-call heap allocations; the mutex is held only
+// for the duration of one Intn call (nanoseconds), so contention is negligible.
+var (
+	tormentRng   = rand.New(rand.NewSource(time.Now().UnixNano())) //nolint:gosec
+	tormentRngMu sync.Mutex
+)
+
+// tormentIntn returns a non-negative random int in [0, n) using the shared RNG.
+func tormentIntn(n int) int {
+	tormentRngMu.Lock()
+	defer tormentRngMu.Unlock()
+	return tormentRng.Intn(n)
+}
 
 // bannedWords holds the lowercased banned words loaded from the wordlist file.
 // Stored as a slice for O(n) substring scan; lists are typically small so the
@@ -37,6 +79,9 @@ var bannedWords []string
 // loadBannedWords reads the wordlist at the given path and populates bannedWords.
 // Each non-empty, non-comment line is treated as one banned word (case-insensitive).
 // Lines starting with '#' are treated as comments and ignored.
+// Duplicates are removed and the list is sorted by word length ascending so that
+// matchBannedWord — which returns on the first hit — short-circuits as early as
+// possible when a message contains a short banned word.
 func loadBannedWords(path string) error {
 	f, err := os.Open(path)
 	if err != nil {
@@ -44,21 +89,32 @@ func loadBannedWords(path string) error {
 	}
 	defer f.Close()
 
-	var words []string
+	seen := make(map[string]struct{})
 	scanner := bufio.NewScanner(f)
 	for scanner.Scan() {
 		line := strings.TrimSpace(scanner.Text())
-		if line == "" || strings.HasPrefix(line, "#") {
+		if len(line) == 0 || line[0] == '#' {
 			continue
 		}
-		words = append(words, strings.ToLower(line))
+		seen[strings.ToLower(line)] = struct{}{}
 	}
+	if err := scanner.Err(); err != nil {
+		return err
+	}
+
+	words := make([]string, 0, len(seen))
+	for w := range seen {
+		words = append(words, w)
+	}
+	// Shorter needles are checked first; matchBannedWord exits on first match,
+	// so a short word match skips all remaining (longer) pattern checks.
+	sort.Slice(words, func(i, j int) bool { return len(words[i]) < len(words[j]) })
 	bannedWords = words
-	return scanner.Err()
+	return nil
 }
 
-// initAutoMod loads the banned-word list when automod is enabled.
-// Called once during server startup.
+// initAutoMod loads the banned-word list and caches the configured action when
+// automod is enabled. Called once during server startup.
 func initAutoMod(cfg *settings.Config) {
 	if !cfg.AutoModEnabled {
 		return
@@ -69,12 +125,23 @@ func initAutoMod(cfg *settings.Config) {
 		return
 	}
 	logger.LogInfof("automod: loaded %d banned word(s) from %q", len(bannedWords), path)
+
+	// Parse the action once so the hot path never allocates.
+	switch strings.ToLower(strings.TrimSpace(cfg.AutoModAction)) {
+	case "kick":
+		autoModAction = autoModActionKick
+	case "mute":
+		autoModAction = autoModActionMute
+	case "torment":
+		autoModAction = autoModActionTorment
+	default:
+		autoModAction = autoModActionBan
+	}
 }
 
-// autoModCheck tests msg for banned words. If one is found the client is
-// permanently banned and disconnected; the function returns true so the caller
-// can abort further packet processing. No webhook is posted intentionally to
-// avoid spam on the punishment channel.
+// autoModCheck tests msg for banned words. If one is found the configured action
+// (ban/kick/mute/torment) is applied and the function returns true so the caller
+// can abort further packet processing.
 func autoModCheck(client *Client, msg string) bool {
 	if !config.AutoModEnabled || len(bannedWords) == 0 {
 		return false
@@ -86,18 +153,118 @@ func autoModCheck(client *Client, msg string) bool {
 		return false
 	}
 
-	// Permanently ban the client.
-	banTime := time.Now().UTC().Unix()
-	id, err := db.AddBan(client.Ipid(), client.Hdid(), banTime, -1, "Automatic ban: prohibited language", "Server")
-	if err != nil {
-		logger.LogErrorf("automod: failed to ban %v: %v", client.Ipid(), err)
-		return false
+	switch autoModAction {
+	case autoModActionKick:
+		client.SendPacket("KK", "Kicked for prohibited language.")
+		client.conn.Close()
+		logger.LogInfof("automod: kicked %v (uid %d) — matched word %q", client.Ipid(), client.Uid(), matched)
+		return true
+
+	case autoModActionMute:
+		// expires = 0 means permanent in the PUNISHMENTS table.
+		if err := db.UpsertMute(client.Ipid(), int(ICOOCMuted), 0); err != nil {
+			logger.LogErrorf("automod: failed to mute %v: %v", client.Ipid(), err)
+			return false
+		}
+		client.SetMuted(ICOOCMuted)
+		client.SetUnmuteTime(time.Time{}) // zero = permanent
+		client.SendServerMessage("You have been muted for prohibited language.")
+		logger.LogInfof("automod: permanently muted %v (uid %d) — matched word %q", client.Ipid(), client.Uid(), matched)
+		return true
+
+	case autoModActionTorment:
+		addTormentedIP(client.Ipid())
+		go startTormentDisconnect(client)
+		logger.LogInfof("automod: added %v (uid %d) to torment list — matched word %q", client.Ipid(), client.Uid(), matched)
+		return true
+
+	default: // autoModActionBan
+		banTime := time.Now().UTC().Unix()
+		id, err := db.AddBan(client.Ipid(), client.Hdid(), banTime, -1, "Automatic ban: prohibited language", "Server")
+		if err != nil {
+			logger.LogErrorf("automod: failed to ban %v: %v", client.Ipid(), err)
+			return false
+		}
+		forgetIP(client.Ipid())
+		client.SendPacket("KB", fmt.Sprintf("Banned for prohibited language.\nUntil: ∞\nID: %d", id))
+		client.conn.Close()
+		logger.LogInfof("automod: permanently banned %v (uid %d) — matched word %q", client.Ipid(), client.Uid(), matched)
+		return true
 	}
-	forgetIP(client.Ipid())
-	client.SendPacket("KB", fmt.Sprintf("Banned for prohibited language.\nUntil: ∞\nID: %d", id))
+}
+
+// startTormentDisconnect silently disconnects a tormented client after an
+// unpredictable delay (5 s–4 min) so the disconnect never feels predictable.
+// No pre-kick warnings are sent; that pattern was too recognisable.
+// Launched as a goroutine whenever a tormented IPID connects.
+func startTormentDisconnect(client *Client) {
+	// Unpredictable initial delay (5 s to 4 min).
+	time.Sleep(time.Duration(5+tormentIntn(235)) * time.Second)
+
+	// Disconnect with a plausible-sounding error — no prior warnings.
+	client.SendPacket("KK", tormentMessages[tormentIntn(len(tormentMessages))])
 	client.conn.Close()
-	logger.LogInfof("automod: permanently banned %v (uid %d) — matched word %q", client.Ipid(), client.Uid(), matched)
-	return true
+}
+
+// handleTormentedIC intercepts an IC message from a tormented client.
+// The message is always echoed back to the sender immediately so it appears
+// to have been sent successfully.  With ~30% probability the message is a
+// ghost — silently dropped for everyone else and never logged.  Otherwise the
+// message is delivered to the rest of the area and logged after a 20-second
+// delay, making conversation effectively impossible without being obvious.
+//
+// time.AfterFunc is used instead of a goroutine+sleep so no goroutine stack is
+// parked during the wait; the callback runs in a fresh goroutine only when the
+// timer fires.
+func handleTormentedIC(client *Client, args []string) {
+	// Echo to sender immediately so it looks like it went through.
+	client.SendPacket("MS", args...)
+
+	if tormentIntn(3) == 0 {
+		// Ghost: nobody else sees it, nothing is logged.
+		return
+	}
+
+	// Capture state at dispatch time so the callback is unaffected by later
+	// area changes or client disconnects.
+	targetArea := client.Area()
+	senderUID := client.Uid()
+	msgLabel := args[4]
+	argsCopy := append([]string(nil), args...)
+
+	time.AfterFunc(20*time.Second, func() {
+		// Deliver to everyone currently in the original area except the sender.
+		for c := range clients.GetAllClients() {
+			if c.Area() == targetArea && c.Uid() != senderUID {
+				c.SendPacket("MS", argsCopy...)
+			}
+		}
+		addToBuffer(client, "IC", "\""+msgLabel+"\"", false)
+	})
+}
+
+// handleTormentedOOC applies the same ghost-or-delay logic as handleTormentedIC
+// for OOC (CT) messages from a tormented client.
+func handleTormentedOOC(client *Client, name, msg string) {
+	// Echo to sender immediately.
+	client.SendPacket("CT", name, msg, "0")
+
+	if tormentIntn(3) == 0 {
+		// Ghost: silently dropped.
+		return
+	}
+
+	targetArea := client.Area()
+	senderUID := client.Uid()
+
+	time.AfterFunc(20*time.Second, func() {
+		for c := range clients.GetAllClients() {
+			if c.Area() == targetArea && c.Uid() != senderUID {
+				c.SendPacket("CT", name, msg, "0")
+			}
+		}
+		addToBuffer(client, "OOC", "\""+msg+"\"", false)
+	})
 }
 
 // matchBannedWord performs a case-insensitive substring search of s against

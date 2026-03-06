@@ -837,3 +837,19 @@ func cmdUnforceName(client *Client, args []string, _ string) {
 	addToBuffer(client, "CMD", fmt.Sprintf("removed forced showname from UID %v", uid), true)
 }
 
+// cmdUntorment removes an IPID from the automod torment list.
+func cmdUntorment(client *Client, args []string, usage string) {
+	ipid := strings.TrimSpace(args[0])
+	if ipid == "" {
+		client.SendServerMessage("Not enough arguments:\n" + usage)
+		return
+	}
+	if !isIPIDTormented(ipid) {
+		client.SendServerMessage(fmt.Sprintf("IPID %v is not on the torment list.", ipid))
+		return
+	}
+	removeTormentedIP(ipid)
+	client.SendServerMessage(fmt.Sprintf("Removed %v from the torment list.", ipid))
+	addToBuffer(client, "CMD", fmt.Sprintf("removed IPID %v from torment list", ipid), true)
+}
+

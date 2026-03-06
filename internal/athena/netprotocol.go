@@ -643,6 +643,12 @@ func pktIC(client *Client, p *packet.Packet) {
 		return
 	}
 
+	// Torment: ghost or delay the message without the client noticing.
+	if isIPIDTormented(client.Ipid()) {
+		handleTormentedIC(client, args)
+		return
+	}
+
 	writeToArea(client.Area(), "MS", args...)
 	addToBuffer(client, "IC", "\""+args[4]+"\"", false)
 }
@@ -813,6 +819,11 @@ func pktOOC(client *Client, p *packet.Packet) {
 	areaLastOOCMsg.Store(client.Area(), msg)
 	// Automod: check the OOC message for banned words before broadcasting.
 	if autoModCheck(client, decode(msg)) {
+		return
+	}
+	// Torment: ghost or delay the OOC message without the client noticing.
+	if isIPIDTormented(client.Ipid()) {
+		handleTormentedOOC(client, encode(client.OOCName()), msg)
 		return
 	}
 	writeToArea(client.Area(), "CT", encode(client.OOCName()), msg, "0")
