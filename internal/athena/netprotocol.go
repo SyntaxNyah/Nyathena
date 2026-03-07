@@ -640,6 +640,9 @@ func pktIC(client *Client, p *packet.Packet) {
 		tournamentMutex.Unlock()
 	}
 
+	// Quickdraw: record the reaction for any active duel.
+	quickdrawOnIC(client)
+
 	// Automod: check the decoded message for banned words before broadcasting.
 	if autoModCheck(client, msgText) {
 		return
