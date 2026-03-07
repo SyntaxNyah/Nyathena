@@ -1076,6 +1076,13 @@ func initCommands() {
 			desc:     "Start a giveaway or enter an active one.",
 			reqPerms: permissions.PermissionField["NONE"],
 		},
+		"quickdraw": {
+			handler:  cmdQuickdraw,
+			minArgs:  1,
+			usage:    "Usage: /quickdraw <uid> | /quickdraw accept | /quickdraw decline",
+			desc:     "Challenge another player to a quickdraw duel. The loser gets a random punishment.",
+			reqPerms: permissions.PermissionField["NONE"],
+		},
 	}
 }
 
