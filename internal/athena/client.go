@@ -267,7 +267,6 @@ func (client *Client) HandleClient() {
 			logger.LogInfof("Client (IPID:%v UID:%v) banned for raw packet flooding", client.Ipid(), client.Uid())
 			logger.WriteAudit(fmt.Sprintf("%v | PACKET_FLOOD | IPID:%v | UID:%v | Auto-banned for packet flooding", time.Now().UTC().Format("15:04:05"), client.Ipid(), client.Uid()))
 			autoBanPacketFlooder(client.Ipid())
-			notifyModsPacketFlood(client)
 			if enableDiscord {
 				ipid, uid := client.Ipid(), client.Uid()
 				go func() {
