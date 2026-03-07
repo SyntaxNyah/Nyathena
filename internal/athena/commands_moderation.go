@@ -262,12 +262,12 @@ func cmdGetBan(client *Client, args []string, _ string) {
 // Handles /global
 
 func cmdGlobal(client *Client, args []string, _ string) {
+	if client.IsJailed() {
+		client.SendServerMessage("You are jailed and cannot send OOC messages.")
+		return
+	}
 	if !client.CanSpeakOOC() {
-		if client.IsJailed() {
-			client.SendServerMessage("You are jailed and cannot send OOC messages.")
-		} else {
-			client.SendServerMessage("You are muted from sending OOC messages.")
-		}
+		client.SendServerMessage("You are muted from sending OOC messages.")
 		return
 	}
 	if limited, remaining := checkNewIPIDOOCCooldown(client.Ipid()); limited {
@@ -575,12 +575,12 @@ func cmdPlayers(client *Client, args []string, _ string) {
 // Handles /pm
 
 func cmdPM(client *Client, args []string, _ string) {
+	if client.IsJailed() {
+		client.SendServerMessage("You are jailed and cannot send OOC messages.")
+		return
+	}
 	if !client.CanSpeakOOC() {
-		if client.IsJailed() {
-			client.SendServerMessage("You are jailed and cannot send OOC messages.")
-		} else {
-			client.SendServerMessage("You are muted from sending OOC messages.")
-		}
+		client.SendServerMessage("You are muted from sending OOC messages.")
 		return
 	}
 	if limited, remaining := checkNewIPIDOOCCooldown(client.Ipid()); limited {
@@ -759,8 +759,9 @@ func cmdJail(client *Client, args []string, usage string) {
 		jailAreaID = id
 	}
 
+	isPerma := strings.ToLower(*duration) == "perma"
 	var jailUntil time.Time
-	if strings.ToLower(*duration) == "perma" {
+	if isPerma {
 		jailUntil = time.Date(2099, 12, 31, 23, 59, 59, 0, time.UTC)
 	} else {
 		parsedDur, err := str2duration.ParseDuration(*duration)
@@ -791,7 +792,7 @@ func cmdJail(client *Client, args []string, usage string) {
 	}
 
 	msg := fmt.Sprintf("You have been jailed in %v.", areaName)
-	if strings.ToLower(*duration) != "perma" {
+	if !isPerma {
 		msg = fmt.Sprintf("You have been jailed in %v for %v.", areaName, *duration)
 	}
 	if *reason != "" {
@@ -808,7 +809,7 @@ func cmdJail(client *Client, args []string, usage string) {
 	addToBuffer(client, "CMD", logMsg, false)
 
 	durationDisplay := *duration
-	if strings.ToLower(*duration) == "perma" {
+	if isPerma {
 		durationDisplay = "Permanent"
 	}
 	if err := webhook.PostJail(target.CurrentCharacter(), target.Showname(), target.OOCName(),
@@ -824,7 +825,7 @@ func cmdUnjail(client *Client, args []string, _ string) {
 	var count int
 	var report string
 	for _, c := range toUnjail {
-		if c.JailedUntil().IsZero() || time.Now().UTC().After(c.JailedUntil()) {
+		if !c.IsJailed() {
 			continue
 		}
 		c.SetJailedUntil(time.Time{})

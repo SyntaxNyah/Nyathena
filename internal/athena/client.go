@@ -792,7 +792,8 @@ func (client *Client) CanSpeakOOC() bool {
 	if client.IsJailed() {
 		return false
 	}
-	if client.Muted() == OOCMuted || client.Muted() == ICOOCMuted {
+	m := client.Muted()
+	if m == OOCMuted || m == ICOOCMuted {
 		return client.CheckUnmute()
 	}
 	return true
