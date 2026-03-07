@@ -66,6 +66,33 @@ func postToURL(url string, content discord.PostOptions) error {
 	return nil
 }
 
+// PostJail sends a jail notification embed to the punishment webhook.
+func PostJail(icName, showname, oocName, ipid, areaName, duration, reason, moderator string, uid int) error {
+	if PunishmentWebhookURL == "" {
+		return nil
+	}
+	e := discord.Embed{
+		Title: "🔒 Player Jailed",
+		Color: 0x8e44ad,
+		Fields: []discord.Field{
+			{Name: "IC Name", Value: nonEmpty(icName), Inline: true},
+			{Name: "Showname", Value: nonEmpty(showname), Inline: true},
+			{Name: "OOC Name", Value: nonEmpty(oocName), Inline: true},
+			{Name: "IPID", Value: nonEmpty(ipid), Inline: true},
+			{Name: "UID", Value: fmt.Sprintf("%d", uid), Inline: true},
+			{Name: "Jail Area", Value: nonEmpty(areaName), Inline: true},
+			{Name: "Duration", Value: nonEmpty(duration), Inline: true},
+			{Name: "Reason", Value: nonEmpty(reason), Inline: false},
+			{Name: "Moderator", Value: nonEmpty(moderator), Inline: true},
+		},
+	}
+	p := discord.PostOptions{
+		Username: ServerName,
+		Embeds:   []discord.Embed{e},
+	}
+	return postToURL(PunishmentWebhookURL, p)
+}
+
 // PostBan sends a ban notification embed to the punishment webhook.
 func PostBan(icName, showname, oocName, ipid string, uid, banID int, duration, reason, moderator string) error {
 	if PunishmentWebhookURL == "" {

@@ -184,6 +184,7 @@ type Client struct {
 	possessedPos    string      // Position of the possessed target (saved at time of possession)
 	forcedShowname  string      // Showname forced by a moderator ("" if none)
 	connectedAt     time.Time   // Time the client joined the server (uid assigned); zero if not yet joined
+	jailAreaID      int         // Area index where this client is jailed; -1 = no specific jail area
 }
 
 // NewClient returns a new client.
@@ -196,6 +197,7 @@ func NewClient(conn net.Conn, ipid string) *Client {
 		ipid:       ipid,
 		forcePairUID: -1,
 		possessing: -1,
+		jailAreaID: -1,
 	}
 }
 
@@ -652,6 +654,7 @@ func (client *Client) restorePunishments() {
 			client.SetUnmuteTime(expiresAt)
 		case db.PunishKindJail:
 			client.SetJailedUntil(expiresAt)
+			client.SetJailAreaID(p.Value)
 		case db.PunishKindText:
 			pType := PunishmentType(p.Subtype)
 			var remaining time.Duration
@@ -662,6 +665,16 @@ func (client *Client) restorePunishments() {
 		}
 	}
 	client.SendServerMessage("Your active punishments have been restored.")
+	// If the client is jailed to a specific area, force-move them there on reconnect.
+	jailArea := client.JailAreaID()
+	if jailArea >= 0 {
+		if jailArea < len(areas) && areas[jailArea] != client.Area() {
+			client.forceChangeArea(areas[jailArea])
+			client.SendServerMessage(fmt.Sprintf("You have been returned to your jail area: %v.", areas[jailArea].Name()))
+		} else if jailArea >= len(areas) {
+			logger.LogErrorf("Jailed IPID %v has out-of-range jail area ID %d; skipping force-move.", client.Ipid(), jailArea)
+		}
+	}
 }
 
 // CheckBanned checks whether the client is currently banned.
@@ -776,10 +789,20 @@ func (client *Client) CanSpeakIC() bool {
 
 // CanSpeakOOC returns whether the client can send OOC messages.
 func (client *Client) CanSpeakOOC() bool {
-	if client.Muted() == OOCMuted || client.Muted() == ICOOCMuted {
+	if client.IsJailed() {
+		return false
+	}
+	m := client.Muted()
+	if m == OOCMuted || m == ICOOCMuted {
 		return client.CheckUnmute()
 	}
 	return true
+}
+
+// IsJailed returns true if the client is currently serving an active jail sentence.
+func (client *Client) IsJailed() bool {
+	t := client.JailedUntil()
+	return !t.IsZero() && time.Now().UTC().Before(t)
 }
 
 // CanChangeMusic returns whether the client can change the music.
@@ -982,6 +1005,48 @@ func (client *Client) SetJailedUntil(t time.Time) {
 	client.mu.Lock()
 	client.jailedUntil = t
 	client.mu.Unlock()
+}
+
+// JailAreaID returns the area index where this client is jailed (-1 = no specific area).
+func (client *Client) JailAreaID() int {
+	client.mu.Lock()
+	defer client.mu.Unlock()
+	return client.jailAreaID
+}
+
+// SetJailAreaID sets the area index where this client is jailed.
+func (client *Client) SetJailAreaID(id int) {
+	client.mu.Lock()
+	client.jailAreaID = id
+	client.mu.Unlock()
+}
+
+// forceChangeArea moves the client to the given area unconditionally, bypassing
+// the jailed-player area-lock and area invitation checks that ChangeArea enforces.
+// Used to place a jailed player into their designated cell (both at jail time and on reconnect).
+func (client *Client) forceChangeArea(a *area.Area) {
+	addToBuffer(client, "AREA", "Left area.", false)
+	if client.Area().PlayerCount() <= 1 {
+		client.Area().Reset()
+		sendLockArup()
+		sendStatusArup()
+		sendCMArup()
+	} else if client.Area().HasCM(client.Uid()) {
+		client.Area().RemoveCM(client.Uid())
+		sendCMArup()
+	}
+	client.Area().RemoveChar(client.CharID())
+	if a.IsTaken(client.CharID()) {
+		client.SetCharID(-1)
+	}
+	client.JoinArea(a)
+	writeToAll("PU", strconv.Itoa(client.Uid()), "3", strconv.Itoa(getAreaIndex(a)))
+	if client.CharID() == -1 {
+		client.SendPacket("DONE")
+	} else {
+		writeToArea(a, "CharsCheck", a.Taken()...)
+	}
+	addToBuffer(client, "AREA", "Joined area.", false)
 }
 
 // LastRpsTime returns the last time the client played RPS.

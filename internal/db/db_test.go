@@ -103,7 +103,7 @@ func TestUpsertAndDeleteJail(t *testing.T) {
 	ipid := "testipid2"
 	future := time.Now().Add(1 * time.Hour).Unix()
 
-	if err := UpsertJail(ipid, future, "test jail"); err != nil {
+	if err := UpsertJail(ipid, future, "test jail", -1); err != nil {
 		t.Fatalf("UpsertJail failed: %v", err)
 	}
 
@@ -255,7 +255,7 @@ func TestDeleteAllPunishments(t *testing.T) {
 	if err := UpsertMute(ipid, 1, 0); err != nil {
 		t.Fatalf("UpsertMute failed: %v", err)
 	}
-	if err := UpsertJail(ipid, time.Now().Add(1*time.Hour).Unix(), ""); err != nil {
+	if err := UpsertJail(ipid, time.Now().Add(1*time.Hour).Unix(), "", -1); err != nil {
 		t.Fatalf("UpsertJail failed: %v", err)
 	}
 	if err := UpsertTextPunishment(ipid, 5, 0, ""); err != nil {

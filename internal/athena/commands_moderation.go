@@ -262,6 +262,10 @@ func cmdGetBan(client *Client, args []string, _ string) {
 // Handles /global
 
 func cmdGlobal(client *Client, args []string, _ string) {
+	if client.IsJailed() {
+		client.SendServerMessage("You are jailed and cannot send OOC messages.")
+		return
+	}
 	if !client.CanSpeakOOC() {
 		client.SendServerMessage("You are muted from sending OOC messages.")
 		return
@@ -571,6 +575,10 @@ func cmdPlayers(client *Client, args []string, _ string) {
 // Handles /pm
 
 func cmdPM(client *Client, args []string, _ string) {
+	if client.IsJailed() {
+		client.SendServerMessage("You are jailed and cannot send OOC messages.")
+		return
+	}
 	if !client.CanSpeakOOC() {
 		client.SendServerMessage("You are muted from sending OOC messages.")
 		return
@@ -736,8 +744,24 @@ func cmdJail(client *Client, args []string, usage string) {
 		return
 	}
 
+	// Optional area argument: /jail <uid> <area_id> [-d ...] [-r ...]
+	jailAreaID := -1
+	if flags.NArg() >= 2 {
+		id, err := strconv.Atoi(flags.Arg(1))
+		if err != nil {
+			client.SendServerMessage("Invalid area ID: must be a number.")
+			return
+		}
+		if id < 0 || id >= len(areas) {
+			client.SendServerMessage(fmt.Sprintf("Area ID %d is out of range (0–%d).", id, len(areas)-1))
+			return
+		}
+		jailAreaID = id
+	}
+
+	isPerma := strings.ToLower(*duration) == "perma"
 	var jailUntil time.Time
-	if strings.ToLower(*duration) == "perma" {
+	if isPerma {
 		jailUntil = time.Date(2099, 12, 31, 23, 59, 59, 0, time.UTC)
 	} else {
 		parsedDur, err := str2duration.ParseDuration(*duration)
@@ -748,26 +772,50 @@ func cmdJail(client *Client, args []string, usage string) {
 		jailUntil = time.Now().UTC().Add(parsedDur)
 	}
 
+	// Force-move the target to the jail area first (before setting jailed state so
+	// any existing jail doesn't block the move), then apply the jail.
+	if jailAreaID >= 0 {
+		target.forceChangeArea(areas[jailAreaID])
+	}
+
 	target.SetJailedUntil(jailUntil)
-	if err := db.UpsertJail(target.Ipid(), jailUntil.Unix(), *reason); err != nil {
+	target.SetJailAreaID(jailAreaID)
+	if err := db.UpsertJail(target.Ipid(), jailUntil.Unix(), *reason, jailAreaID); err != nil {
 		logger.LogErrorf("Failed to persist jail for %v: %v", target.Ipid(), err)
 	}
-	msg := fmt.Sprintf("You have been jailed in %v.", target.Area().Name())
-	if strings.ToLower(*duration) != "perma" {
-		msg = fmt.Sprintf("You have been jailed in %v for %v.", target.Area().Name(), *duration)
+
+	var areaName string
+	if jailAreaID >= 0 {
+		areaName = areas[jailAreaID].Name()
+	} else {
+		areaName = target.Area().Name()
+	}
+
+	msg := fmt.Sprintf("You have been jailed in %v.", areaName)
+	if !isPerma {
+		msg = fmt.Sprintf("You have been jailed in %v for %v.", areaName, *duration)
 	}
 	if *reason != "" {
 		msg += " Reason: " + *reason
 	}
 	target.SendServerMessage(msg)
-	
-	client.SendServerMessage(fmt.Sprintf("Jailed [%v] %v in %v.", uid, target.OOCName(), target.Area().Name()))
-	
-	logMsg := fmt.Sprintf("Jailed [%v] %v", uid, target.OOCName())
+
+	client.SendServerMessage(fmt.Sprintf("Jailed [%v] %v in %v.", uid, target.OOCName(), areaName))
+
+	logMsg := fmt.Sprintf("Jailed [%v] %v in %v", uid, target.OOCName(), areaName)
 	if *reason != "" {
 		logMsg += " for reason: " + *reason
 	}
 	addToBuffer(client, "CMD", logMsg, false)
+
+	durationDisplay := *duration
+	if isPerma {
+		durationDisplay = "Permanent"
+	}
+	if err := webhook.PostJail(target.CurrentCharacter(), target.Showname(), target.OOCName(),
+		target.Ipid(), areaName, durationDisplay, *reason, client.OOCName(), uid); err != nil {
+		logger.LogErrorf("Failed to post jail webhook: %v", err)
+	}
 }
 
 // Handles /unjail
@@ -777,10 +825,11 @@ func cmdUnjail(client *Client, args []string, _ string) {
 	var count int
 	var report string
 	for _, c := range toUnjail {
-		if c.JailedUntil().IsZero() || time.Now().UTC().After(c.JailedUntil()) {
+		if !c.IsJailed() {
 			continue
 		}
 		c.SetJailedUntil(time.Time{})
+		c.SetJailAreaID(-1)
 		if err := db.DeleteJail(c.Ipid()); err != nil {
 			logger.LogErrorf("Failed to remove persistent jail for %v: %v", c.Ipid(), err)
 		}

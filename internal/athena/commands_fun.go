@@ -28,6 +28,7 @@ import (
 	"time"
 
 	"github.com/MangosArentLiterature/Athena/internal/area"
+	"github.com/MangosArentLiterature/Athena/internal/db"
 )
 
 func cmdPos(client *Client, args []string, _ string) {
@@ -712,3 +713,40 @@ func cmdWhisper(client *Client, args []string, usage string) {
 }
 
 
+
+// Handles /erp
+
+var erpMessages = []string{
+"Get out of here, you dirty little ERPer. Nobody wants you.",
+"Ewww, an ERPer?! Get off this server immediately!",
+"Pathetic. Absolutely pathetic. Go ERP somewhere else.",
+"The AO ERP police have arrived. You're being escorted OUT.",
+"Did you really just try to ERP here? Disgusting. Goodbye.",
+"This server is an ERP-free zone. Enforcing policy NOW.",
+"Oh sweetie, no. Just... no. Take your cringe and leave.",
+"Your ERP license has been revoked. Please see yourself out.",
+"ERROR 404: Dignity not found. Kicking user for gross misconduct.",
+"The council has spoken. ERPers are NOT welcome. Bye-bye!",
+}
+
+func cmdErp(client *Client, _ []string, _ string) {
+msg := erpMessages[rand.Intn(len(erpMessages))]
+client.SendPacket("KK", msg)
+client.conn.Close()
+}
+
+// Handles /suicide
+
+func cmdSuicide(client *Client, _ []string, _ string) {
+banTime := time.Now().UTC().Unix()
+until := time.Now().UTC().Add(10 * time.Minute).Unix()
+untilS := time.Unix(until, 0).UTC().Format("02 Jan 2006 15:04 MST")
+reason := "You chose this. See you in 10 minutes."
+id, err := db.AddBan(client.Ipid(), client.Hdid(), banTime, until, reason, "Server")
+if err == nil {
+client.SendPacket("KB", fmt.Sprintf("%v\nUntil: %v\nID: %v", reason, untilS, id))
+} else {
+client.SendPacket("KB", fmt.Sprintf("%v\nUntil: %v", reason, untilS))
+}
+client.conn.Close()
+}

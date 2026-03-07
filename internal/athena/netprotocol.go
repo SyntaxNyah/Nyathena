@@ -793,6 +793,10 @@ func pktOOC(client *Client, p *packet.Packet) {
 		ParseCommand(client, command, args)
 		return
 	}
+	if client.IsJailed() {
+		client.SendServerMessage("You are jailed and cannot speak in OOC.")
+		return
+	}
 	if !client.CanSpeakOOC() {
 		client.SendServerMessage("You are muted from speaking in OOC.")
 		return

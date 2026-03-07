@@ -402,10 +402,11 @@ func DeleteMute(ipid string) error {
 
 // UpsertJail stores (or replaces) the jail state for an IPID.
 // expires is a Unix timestamp of when the jail ends.
-func UpsertJail(ipid string, expires int64, reason string) error {
+// areaID is the area index the player is jailed in; use -1 for "current area" (no forced move on reconnect).
+func UpsertJail(ipid string, expires int64, reason string, areaID int) error {
 	_, err := db.Exec(
-		"INSERT OR REPLACE INTO PUNISHMENTS(IPID, KIND, SUBTYPE, VALUE, EXPIRES, REASON) VALUES(?, ?, 0, 0, ?, ?)",
-		ipid, PunishKindJail, expires, reason)
+		"INSERT OR REPLACE INTO PUNISHMENTS(IPID, KIND, SUBTYPE, VALUE, EXPIRES, REASON) VALUES(?, ?, 0, ?, ?, ?)",
+		ipid, PunishKindJail, areaID, expires, reason)
 	return err
 }
 
