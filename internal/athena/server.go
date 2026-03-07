@@ -966,6 +966,17 @@ func autoBanPacketFlooder(ipid string) {
 	logger.LogInfof("Auto-banned %v for packet flooding", ipid)
 }
 
+// notifyModsPacketFlood alerts all online moderators about a detected packet flood event
+// by sending a ZZ notification packet, mirroring the modcall alert mechanism.
+func notifyModsPacketFlood(client *Client) {
+	msg := fmt.Sprintf("⚠️ PACKET FLOOD DETECTED\n----------\nIPID: %v\nUID: %v\nAction: Auto-banned", client.Ipid(), client.Uid())
+	for c := range clients.GetAllClients() {
+		if c.Authenticated() && permissions.IsModerator(c.Perms()) {
+			c.SendPacket("ZZ", msg)
+		}
+	}
+}
+
 // startConnTrackerCleanup periodically removes stale entries from the connection tracker
 // to prevent unbounded memory growth from unique IPs that no longer connect.
 // This goroutine runs for the lifetime of the server process; a graceful stop is not

@@ -174,6 +174,33 @@ func PostBotBan(count int, ipids, moderator string) error {
 	return postToURL(PunishmentWebhookURL, p)
 }
 
+// PostPacketFlood sends a packet flood alert embed to the punishment webhook.
+// This is called automatically when a client exceeds the raw packet rate limit
+// and is banned by the server.
+func PostPacketFlood(ipid string, uid int) error {
+	if PunishmentWebhookURL == "" {
+		return nil
+	}
+	uidVal := fmt.Sprintf("%d", uid)
+	if uid < 0 {
+		uidVal = "N/A"
+	}
+	e := discord.Embed{
+		Title: "🚨 Packet Flood Detected",
+		Color: 0xe74c3c,
+		Fields: []discord.Field{
+			{Name: "IPID", Value: nonEmpty(ipid), Inline: true},
+			{Name: "UID", Value: uidVal, Inline: true},
+			{Name: "Action", Value: "Auto-banned", Inline: true},
+		},
+	}
+	p := discord.PostOptions{
+		Username: ServerName,
+		Embeds:   []discord.Embed{e},
+	}
+	return postToURL(PunishmentWebhookURL, p)
+}
+
 // PostModcall sends a modcall to the discord webhook.
 func PostModcall(character string, area string, reason string) error {
 	e := discord.Embed{

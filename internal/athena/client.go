@@ -33,6 +33,7 @@ import (
 	"github.com/MangosArentLiterature/Athena/internal/packet"
 	"github.com/MangosArentLiterature/Athena/internal/permissions"
 	"github.com/MangosArentLiterature/Athena/internal/sliceutil"
+	"github.com/MangosArentLiterature/Athena/internal/webhook"
 )
 
 type MuteState int
@@ -258,9 +259,23 @@ func (client *Client) HandleClient() {
 		// The ban is applied synchronously so it is committed before the connection closes,
 		// preventing the flooder from immediately reconnecting before the ban takes effect.
 		if client.CheckRawPacketRateLimit() {
+			// Set an already-expired read deadline so the OS immediately rejects any
+			// further incoming data on this socket, preventing stale buffered packets
+			// from being read.
+			client.conn.SetReadDeadline(time.Now().Add(-time.Second))
 			client.SendServerMessage("You have been banned for packet flooding.")
 			logger.LogInfof("Client (IPID:%v UID:%v) banned for raw packet flooding", client.Ipid(), client.Uid())
+			logger.WriteAudit(fmt.Sprintf("%v | PACKET_FLOOD | IPID:%v | UID:%v | Auto-banned for packet flooding", time.Now().UTC().Format("15:04:05"), client.Ipid(), client.Uid()))
 			autoBanPacketFlooder(client.Ipid())
+			notifyModsPacketFlood(client)
+			if enableDiscord {
+				ipid, uid := client.Ipid(), client.Uid()
+				go func() {
+					if err := webhook.PostPacketFlood(ipid, uid); err != nil {
+						logger.LogErrorf("while posting packet flood webhook: %v", err)
+					}
+				}()
+			}
 			client.conn.Close()
 			return
 		}
