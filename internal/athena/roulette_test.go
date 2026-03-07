@@ -27,9 +27,6 @@ func resetRRState() {
 	rr.joinActive = false
 	rr.gameActive = false
 	rr.players = nil
-	rr.remaining = 0
-	rr.bullets = 0
-	rr.turnIdx = 0
 	rr.lastEnd = time.Time{}
 	rr.mu.Unlock()
 }

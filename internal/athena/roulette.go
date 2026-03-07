@@ -38,6 +38,7 @@ const (
 	rrDoublePunishP   = 12               // % chance the victim receives two punishments
 	rrReSpinP         = 10               // % chance the cylinder re-spins after a safe CLICK
 	rrSurvivorCurseP  = 15               // % chance all survivors receive a minor curse after game ends
+	rrCurseDuration   = 5 * time.Minute  // duration of survivor-curse punishments
 )
 
 // rrRules is broadcast when the join window opens.
@@ -252,9 +253,6 @@ type rrState struct {
 	joinActive bool
 	gameActive bool
 	players    []int     // UIDs in shuffled turn order
-	remaining  int       // unfired chambers left
-	bullets    int       // bullets remaining in cylinder
-	turnIdx    int       // index of the current shooter
 	lastEnd    time.Time // when the last game ended (drives cooldown)
 }
 
@@ -395,9 +393,6 @@ func rrJoinTimer(starterName string) {
 	bullets := rrInitialBullets()
 	rr.joinActive = false
 	rr.gameActive = true
-	rr.remaining = rrChambers
-	rr.bullets = bullets
-	rr.turnIdx = 0
 	players := make([]int, n)
 	copy(players, rr.players)
 	rr.mu.Unlock()
@@ -462,19 +457,13 @@ func rrRun(players []int, bullets int) {
 		victim := shooterUID
 		victimName := shooterName
 		if hit && rand.Intn(100) < rrRicochetP && len(players) > 1 {
-			// Pick any player other than the shooter.
-			j := rand.Intn(len(players) - 1)
-			others := players
-			k := 0
-			for _, p := range others {
+			eligible := make([]int, 0, len(players)-1)
+			for _, p := range players {
 				if p != shooterUID {
-					if k == j {
-						victim = p
-						break
-					}
-					k++
+					eligible = append(eligible, p)
 				}
 			}
+			victim = eligible[rand.Intn(len(eligible))]
 			if vc, verr := getClientByUid(victim); verr == nil {
 				victimName = vc.OOCName()
 			}
@@ -584,10 +573,9 @@ func rrRun(players []int, bullets int) {
 				for _, sUID := range survivorUIDs {
 					if sc, scerr := getClientByUid(sUID); scerr == nil {
 						cursePType := randomRRCursePunishment()
-						curseDur := 5 * time.Minute
-						sc.AddPunishment(cursePType, curseDur, "Russian Roulette: survivor curse")
+						sc.AddPunishment(cursePType, rrCurseDuration, "Russian Roulette: survivor curse")
 						sc.SendServerMessage(fmt.Sprintf(
-							"👻 Survivor curse! Punished with '%v' for %v.", cursePType, curseDur))
+							"👻 Survivor curse! Punished with '%v' for %v.", cursePType, rrCurseDuration))
 					}
 				}
 			}
@@ -631,18 +619,18 @@ func rrRun(players []int, bullets int) {
 		// remaining after decrement), pick a random victim anyway.
 		if remaining == 0 {
 			time.Sleep(rrShotPause)
-			victimIdx := rand.Intn(len(players))
-			victim = players[victimIdx]
-			if vc, verr := getClientByUid(victim); verr == nil {
+			victim = players[rand.Intn(len(players))]
+			pType := randomRRPunishment()
+			vc, verr := getClientByUid(victim)
+			if verr == nil {
 				victimName = vc.OOCName()
 			}
-			pType := randomRRPunishment()
 			sendGlobalServerMessage(fmt.Sprintf(
 				"😱 ALL CHAMBERS CLEARED... but wait — the gun fires on its own!\n"+
 					"💥 MISFIRE! %v is claimed by fate! Punished with '%v'!",
 				victimName, pType,
 			))
-			if vc, verr := getClientByUid(victim); verr == nil {
+			if verr == nil {
 				vc.AddPunishment(pType, rrPunishDuration, "Russian Roulette: misfire")
 				vc.SendServerMessage(fmt.Sprintf(
 					"💀 The misfire got YOU! Punished with '%v' for %v.", pType, rrPunishDuration))
