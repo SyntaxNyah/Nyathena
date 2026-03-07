@@ -17,302 +17,288 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>. */
 package athena
 
 import (
-	"testing"
+"testing"
 )
 
 // resetQuickdrawState resets the global quickdraw state between tests.
 func resetQuickdrawState() {
-	qdState.mu.Lock()
-	qdState.pendingChallenges = make(map[int]int)
-	qdState.activeDuels = make(map[int]*quickdrawDuel)
-	qdState.mu.Unlock()
+qdState.mu.Lock()
+qdState.challengerBusy = make(map[int]struct{})
+qdState.pendingChallenges = make(map[int]int)
+qdState.activeDuels = make(map[int]*quickdrawDuel)
+qdState.mu.Unlock()
 }
 
-// TestRandomQuickdrawPunishment verifies that every returned type belongs to
-// the punishment pool.
+// TestRandomQuickdrawPunishment verifies that every returned type belongs to the shared pool.
+// quickdraw intentionally reuses hotPotatoPunishmentPool to avoid duplication.
 func TestRandomQuickdrawPunishment(t *testing.T) {
-	valid := make(map[PunishmentType]bool, len(quickdrawPunishmentPool))
-	for _, p := range quickdrawPunishmentPool {
-		valid[p] = true
-	}
-
-	const draws = 100
-	for i := 0; i < draws; i++ {
-		if p := randomQuickdrawPunishment(); !valid[p] {
-			t.Errorf("randomQuickdrawPunishment returned unexpected type: %v", p)
-		}
-	}
+valid := make(map[PunishmentType]bool, len(hotPotatoPunishmentPool))
+for _, p := range hotPotatoPunishmentPool {
+valid[p] = true
+}
+const draws = 100
+for i := 0; i < draws; i++ {
+if p := randomQuickdrawPunishment(); !valid[p] {
+t.Errorf("randomQuickdrawPunishment returned unexpected type: %v", p)
+}
+}
 }
 
 // TestQuickdrawPendingChallenge verifies that a challenge is stored correctly.
 func TestQuickdrawPendingChallenge(t *testing.T) {
-	resetQuickdrawState()
+resetQuickdrawState()
 
-	const challengerUID = 1
-	const challengedUID = 2
+const challengerUID = 1
+const challengedUID = 2
 
-	qdState.mu.Lock()
-	qdState.pendingChallenges[challengedUID] = challengerUID
-	qdState.mu.Unlock()
+qdState.mu.Lock()
+qdState.pendingChallenges[challengedUID] = challengerUID
+qdState.challengerBusy[challengerUID] = struct{}{}
+qdState.mu.Unlock()
 
-	qdState.mu.Lock()
-	stored, ok := qdState.pendingChallenges[challengedUID]
-	qdState.mu.Unlock()
+qdState.mu.Lock()
+stored, ok := qdState.pendingChallenges[challengedUID]
+_, busy := qdState.challengerBusy[challengerUID]
+qdState.mu.Unlock()
 
-	if !ok {
-		t.Fatal("expected pending challenge to be stored")
-	}
-	if stored != challengerUID {
-		t.Errorf("expected challenger UID %d, got %d", challengerUID, stored)
-	}
+if !ok {
+t.Fatal("expected pending challenge to be stored")
+}
+if stored != challengerUID {
+t.Errorf("expected challenger UID %d, got %d", challengerUID, stored)
+}
+if !busy {
+t.Error("expected challenger to be marked busy")
+}
 }
 
-// TestQuickdrawNoDuplicateChallenge verifies that a player cannot have two
-// simultaneous pending challenges as the challenger.
+// TestQuickdrawNoDuplicateChallenge verifies the O(1) busy check blocks a second
+// outgoing challenge from the same player.
 func TestQuickdrawNoDuplicateChallenge(t *testing.T) {
-	resetQuickdrawState()
+resetQuickdrawState()
 
-	const challengerUID = 10
-	// Record a pending challenge from challengerUID to target 20.
-	qdState.mu.Lock()
-	qdState.pendingChallenges[20] = challengerUID
-	qdState.mu.Unlock()
+const challengerUID = 10
 
-	// Simulate the check performed before accepting a new challenge.
-	alreadyChallenging := false
-	qdState.mu.Lock()
-	for _, cUID := range qdState.pendingChallenges {
-		if cUID == challengerUID {
-			alreadyChallenging = true
-			break
-		}
-	}
-	qdState.mu.Unlock()
+qdState.mu.Lock()
+qdState.pendingChallenges[20] = challengerUID
+qdState.challengerBusy[challengerUID] = struct{}{}
+qdState.mu.Unlock()
 
-	if !alreadyChallenging {
-		t.Error("expected duplicate challenge to be detected")
-	}
+qdState.mu.Lock()
+_, alreadyChallenging := qdState.challengerBusy[challengerUID]
+qdState.mu.Unlock()
+
+if !alreadyChallenging {
+t.Error("expected duplicate challenge to be detected via challengerBusy")
+}
 }
 
 // TestQuickdrawActiveDuel verifies that both duelist UIDs are present in
 // activeDuels and point to the same duel object after acceptance.
 func TestQuickdrawActiveDuel(t *testing.T) {
-	resetQuickdrawState()
+resetQuickdrawState()
 
-	const challengerUID = 3
-	const challengedUID = 4
+const challengerUID = 3
+const challengedUID = 4
 
-	duel := &quickdrawDuel{
-		challengerUID: challengerUID,
-		challengedUID: challengedUID,
-		winnerUID:     -1,
-	}
+duel := &quickdrawDuel{challengerUID: challengerUID, challengedUID: challengedUID}
 
-	qdState.mu.Lock()
-	qdState.activeDuels[challengerUID] = duel
-	qdState.activeDuels[challengedUID] = duel
-	qdState.mu.Unlock()
+qdState.mu.Lock()
+qdState.activeDuels[challengerUID] = duel
+qdState.activeDuels[challengedUID] = duel
+qdState.mu.Unlock()
 
-	qdState.mu.Lock()
-	d1 := qdState.activeDuels[challengerUID]
-	d2 := qdState.activeDuels[challengedUID]
-	qdState.mu.Unlock()
+qdState.mu.Lock()
+d1 := qdState.activeDuels[challengerUID]
+d2 := qdState.activeDuels[challengedUID]
+qdState.mu.Unlock()
 
-	if d1 == nil || d2 == nil {
-		t.Fatal("expected both UIDs to be in activeDuels")
-	}
-	if d1 != d2 {
-		t.Error("expected both UIDs to share the same duel pointer")
-	}
+if d1 == nil || d2 == nil {
+t.Fatal("expected both UIDs to be in activeDuels")
+}
+if d1 != d2 {
+t.Error("expected both UIDs to share the same duel pointer")
+}
 }
 
 // TestQuickdrawOnICBeforeDraw verifies that an IC message before the DRAW
 // signal does not resolve the duel.
 func TestQuickdrawOnICBeforeDraw(t *testing.T) {
-	resetQuickdrawState()
+resetQuickdrawState()
 
-	const challengerUID = 5
-	const challengedUID = 6
+const challengerUID = 5
+const challengedUID = 6
 
-	duel := &quickdrawDuel{
-		challengerUID: challengerUID,
-		challengedUID: challengedUID,
-		drawSignaled:  false, // DRAW! not yet signaled
-		winnerUID:     -1,
-	}
+duel := &quickdrawDuel{
+challengerUID: challengerUID,
+challengedUID: challengedUID,
+drawSignaled:  false,
+}
 
-	qdState.mu.Lock()
-	qdState.activeDuels[challengerUID] = duel
-	qdState.activeDuels[challengedUID] = duel
-	qdState.mu.Unlock()
+qdState.mu.Lock()
+qdState.activeDuels[challengerUID] = duel
+qdState.activeDuels[challengedUID] = duel
+qdState.mu.Unlock()
 
-	// Simulate what quickdrawOnIC does when drawSignaled is false.
-	qdState.mu.Lock()
-	shouldReact := duel.drawSignaled && !duel.resolved
-	qdState.mu.Unlock()
+qdState.mu.Lock()
+shouldReact := duel.drawSignaled && !duel.resolved
+qdState.mu.Unlock()
 
-	if shouldReact {
-		t.Error("expected IC message before DRAW to be ignored")
-	}
-	if duel.resolved {
-		t.Error("duel should not be resolved before DRAW signal")
-	}
+if shouldReact {
+t.Error("expected IC message before DRAW to be ignored")
+}
+if duel.resolved {
+t.Error("duel should not be resolved before DRAW signal")
+}
 }
 
 // TestQuickdrawOnICFirstResponder verifies that the first IC message after
-// DRAW! marks that player as the winner and resolves the duel.
+// DRAW! resolves the duel and removes both UIDs from activeDuels.
 func TestQuickdrawOnICFirstResponder(t *testing.T) {
-	resetQuickdrawState()
+resetQuickdrawState()
 
-	const challengerUID = 7
-	const challengedUID = 8
+const challengerUID = 7
+const challengedUID = 8
 
-	duel := &quickdrawDuel{
-		challengerUID: challengerUID,
-		challengedUID: challengedUID,
-		drawSignaled:  true, // DRAW! already signaled
-		winnerUID:     -1,
-	}
+duel := &quickdrawDuel{
+challengerUID: challengerUID,
+challengedUID: challengedUID,
+drawSignaled:  true,
+}
 
-	qdState.mu.Lock()
-	qdState.activeDuels[challengerUID] = duel
-	qdState.activeDuels[challengedUID] = duel
-	qdState.mu.Unlock()
+qdState.mu.Lock()
+qdState.activeDuels[challengerUID] = duel
+qdState.activeDuels[challengedUID] = duel
+qdState.mu.Unlock()
 
-	// Simulate quickdrawOnIC for the challenged player reacting first.
-	uid := challengedUID
-	qdState.mu.Lock()
-	d, ok := qdState.activeDuels[uid]
-	if ok && d.drawSignaled && !d.resolved {
-		d.resolved = true
-		d.winnerUID = uid
-		delete(qdState.activeDuels, d.challengerUID)
-		delete(qdState.activeDuels, d.challengedUID)
-	}
-	qdState.mu.Unlock()
+// Simulate quickdrawOnIC for the challenged player reacting first.
+uid := challengedUID
+qdState.mu.Lock()
+d, ok := qdState.activeDuels[uid]
+if ok && d.drawSignaled && !d.resolved {
+d.resolved = true
+delete(qdState.activeDuels, d.challengerUID)
+delete(qdState.activeDuels, d.challengedUID)
+}
+qdState.mu.Unlock()
 
-	if !duel.resolved {
-		t.Error("duel should be resolved after first IC message post-DRAW")
-	}
-	if duel.winnerUID != challengedUID {
-		t.Errorf("expected winner UID %d, got %d", challengedUID, duel.winnerUID)
-	}
+if !duel.resolved {
+t.Error("duel should be resolved after first IC message post-DRAW")
+}
 
-	qdState.mu.Lock()
-	_, stillActive1 := qdState.activeDuels[challengerUID]
-	_, stillActive2 := qdState.activeDuels[challengedUID]
-	qdState.mu.Unlock()
+qdState.mu.Lock()
+_, stillActive1 := qdState.activeDuels[challengerUID]
+_, stillActive2 := qdState.activeDuels[challengedUID]
+qdState.mu.Unlock()
 
-	if stillActive1 || stillActive2 {
-		t.Error("expected both UIDs to be removed from activeDuels after resolution")
-	}
+if stillActive1 || stillActive2 {
+t.Error("expected both UIDs to be removed from activeDuels after resolution")
+}
 }
 
 // TestQuickdrawOnICSecondResponderIgnored verifies that a second IC message
 // does not change the already-resolved duel.
 func TestQuickdrawOnICSecondResponderIgnored(t *testing.T) {
-	resetQuickdrawState()
+resetQuickdrawState()
 
-	const challengerUID = 9
-	const challengedUID = 10
-	const firstWinnerUID = challengedUID
+const challengerUID = 9
+const challengedUID = 10
 
-	duel := &quickdrawDuel{
-		challengerUID: challengerUID,
-		challengedUID: challengedUID,
-		drawSignaled:  true,
-		resolved:      true, // already resolved
-		winnerUID:     firstWinnerUID,
-	}
+duel := &quickdrawDuel{
+challengerUID: challengerUID,
+challengedUID: challengedUID,
+drawSignaled:  true,
+resolved:      true, // already resolved — both UIDs already removed
+}
 
-	// activeDuels should already have been cleaned up by resolution; simulate that.
-	// (Both UIDs deleted from map.)
+// Simulate quickdrawOnIC for the late challenger.
+uid := challengerUID
+qdState.mu.Lock()
+d, ok := qdState.activeDuels[uid]
+if ok && d.drawSignaled && !d.resolved {
+d.resolved = true
+}
+qdState.mu.Unlock()
 
-	// Simulate quickdrawOnIC for the challenger arriving late.
-	uid := challengerUID
-	qdState.mu.Lock()
-	d, ok := qdState.activeDuels[uid]
-	if ok && d.drawSignaled && !d.resolved {
-		d.resolved = true
-		d.winnerUID = uid
-	}
-	qdState.mu.Unlock()
-
-	// The winner should still be the first responder.
-	if !ok {
-		// Not in activeDuels — correct behaviour.
-	}
-	if duel.winnerUID != firstWinnerUID {
-		t.Errorf("expected winner to remain UID %d, got %d", firstWinnerUID, duel.winnerUID)
-	}
+// Not in activeDuels (already cleaned up) — correct behaviour.
+if ok {
+t.Error("expected UID to not be in activeDuels after resolution")
+}
+if !duel.resolved {
+t.Error("expected duel to remain resolved")
+}
 }
 
 // TestQuickdrawDeclineRemovesChallenge verifies that declining a challenge
-// removes it from pendingChallenges.
+// removes it from both pendingChallenges and challengerBusy.
 func TestQuickdrawDeclineRemovesChallenge(t *testing.T) {
-	resetQuickdrawState()
+resetQuickdrawState()
 
-	const challengerUID = 11
-	const challengedUID = 12
+const challengerUID = 11
+const challengedUID = 12
 
-	qdState.mu.Lock()
-	qdState.pendingChallenges[challengedUID] = challengerUID
-	qdState.mu.Unlock()
+qdState.mu.Lock()
+qdState.pendingChallenges[challengedUID] = challengerUID
+qdState.challengerBusy[challengerUID] = struct{}{}
+qdState.mu.Unlock()
 
-	// Simulate quickdrawDecline.
-	qdState.mu.Lock()
-	_, ok := qdState.pendingChallenges[challengedUID]
-	if ok {
-		delete(qdState.pendingChallenges, challengedUID)
-	}
-	qdState.mu.Unlock()
+// Simulate quickdrawDecline.
+qdState.mu.Lock()
+if _, ok := qdState.pendingChallenges[challengedUID]; ok {
+delete(qdState.pendingChallenges, challengedUID)
+delete(qdState.challengerBusy, challengerUID)
+}
+qdState.mu.Unlock()
 
-	qdState.mu.Lock()
-	_, stillPending := qdState.pendingChallenges[challengedUID]
-	qdState.mu.Unlock()
+qdState.mu.Lock()
+_, stillPending := qdState.pendingChallenges[challengedUID]
+_, stillBusy := qdState.challengerBusy[challengerUID]
+qdState.mu.Unlock()
 
-	if stillPending {
-		t.Error("expected challenge to be removed after decline")
-	}
+if stillPending {
+t.Error("expected challenge to be removed from pendingChallenges after decline")
+}
+if stillBusy {
+t.Error("expected challenger to be removed from challengerBusy after decline")
+}
 }
 
 // TestQuickdrawReactionTimerResolvesIfUnresolved verifies that when the reaction
-// timer fires and the duel is unresolved it marks it as resolved.
+// timer fires and the duel is unresolved, it marks it as resolved.
 func TestQuickdrawReactionTimerResolvesIfUnresolved(t *testing.T) {
-	resetQuickdrawState()
+resetQuickdrawState()
 
-	duel := &quickdrawDuel{
-		challengerUID: 13,
-		challengedUID: 14,
-		drawSignaled:  true,
-		resolved:      false,
-		winnerUID:     -1,
-	}
+duel := &quickdrawDuel{
+challengerUID: 13,
+challengedUID: 14,
+drawSignaled:  true,
+resolved:      false,
+}
 
-	qdState.mu.Lock()
-	qdState.activeDuels[13] = duel
-	qdState.activeDuels[14] = duel
-	qdState.mu.Unlock()
+qdState.mu.Lock()
+qdState.activeDuels[13] = duel
+qdState.activeDuels[14] = duel
+qdState.mu.Unlock()
 
-	// Simulate the timeout resolving the duel (as quickdrawReactionTimer does).
-	qdState.mu.Lock()
-	if !duel.resolved {
-		duel.resolved = true
-		delete(qdState.activeDuels, duel.challengerUID)
-		delete(qdState.activeDuels, duel.challengedUID)
-	}
-	qdState.mu.Unlock()
+// Simulate the timeout path in quickdrawRun.
+qdState.mu.Lock()
+if !duel.resolved {
+duel.resolved = true
+delete(qdState.activeDuels, duel.challengerUID)
+delete(qdState.activeDuels, duel.challengedUID)
+}
+qdState.mu.Unlock()
 
-	if !duel.resolved {
-		t.Error("expected duel to be resolved after timeout")
-	}
+if !duel.resolved {
+t.Error("expected duel to be resolved after timeout")
+}
 
-	qdState.mu.Lock()
-	_, a := qdState.activeDuels[13]
-	_, b := qdState.activeDuels[14]
-	qdState.mu.Unlock()
+qdState.mu.Lock()
+_, a := qdState.activeDuels[13]
+_, b := qdState.activeDuels[14]
+qdState.mu.Unlock()
 
-	if a || b {
-		t.Error("expected both UIDs to be removed from activeDuels after timeout")
-	}
+if a || b {
+t.Error("expected both UIDs to be removed from activeDuels after timeout")
+}
 }
