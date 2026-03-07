@@ -200,6 +200,11 @@ func NewClient(conn net.Conn, ipid string) *Client {
 
 // handleClient handles a client connection to the server.
 func (client *Client) HandleClient() {
+	defer func() {
+		if r := recover(); r != nil {
+			logger.LogErrorf("Panic in HandleClient for IPID:%v UID:%v: %v", client.Ipid(), client.Uid(), r)
+		}
+	}()
 	defer client.clientCleanup()
 
 	if client.CheckBanned(db.IPID) {

@@ -449,6 +449,7 @@ func (s *Server) ListenTCP() {
 		conn, err := listener.Accept()
 		if err != nil {
 			logger.LogError(err.Error())
+			continue
 		}
 		ipid := getIpid(conn.RemoteAddr().String())
 		if checkConnRateLimit(ipid) {
