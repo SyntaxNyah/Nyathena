@@ -108,6 +108,13 @@ func initCommands() {
 			desc:     "Changes the reason of ban(s).",
 			reqPerms: permissions.PermissionField["BAN"],
 		},
+		"erp": {
+			handler:  cmdErp,
+			minArgs:  0,
+			usage:    "Usage: /erp",
+			desc:     "The AO ERP command. Super fun!",
+			reqPerms: permissions.PermissionField["NONE"],
+		},
 		"evimode": {
 			handler:  cmdSetEviMod,
 			minArgs:  1,
@@ -492,6 +499,13 @@ func initCommands() {
 			usage:    "Usage: /status <status>",
 			desc:     "Sets the current area's status.",
 			reqPerms: permissions.PermissionField["CM"],
+		},
+		"suicide": {
+			handler:  cmdSuicide,
+			minArgs:  0,
+			usage:    "Usage: /suicide",
+			desc:     "If you want to die.",
+			reqPerms: permissions.PermissionField["NONE"],
 		},
 		"summon": {
 			handler:  cmdSummon,
