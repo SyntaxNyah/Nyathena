@@ -254,15 +254,10 @@ func (client *Client) HandleClient() {
 		if logger.EnableNetworkLogging {
 			logger.WriteNetworkLog(client.ipid, client.Hdid(), "RECV", rawPacket)
 		}
-		// Raw packet rate limit: counts every incoming AO2 packet regardless of type.
-		// A legitimate client will never send hundreds of packets per second; bots/flooders will.
-		// The ban is applied synchronously so it is committed before the connection closes,
-		// preventing the flooder from immediately reconnecting before the ban takes effect.
+		// Raw packet rate limit: ban bots/flooders that send far more packets per second
+		// than any legitimate client ever would. The ban is committed synchronously before
+		// the connection closes so the flooder cannot immediately reconnect.
 		if client.CheckRawPacketRateLimit() {
-			// Set an already-expired read deadline so the OS immediately rejects any
-			// further incoming data on this socket, preventing stale buffered packets
-			// from being read.
-			client.conn.SetReadDeadline(time.Now().Add(-time.Second))
 			client.SendServerMessage("You have been banned for packet flooding.")
 			logger.LogInfof("Client (IPID:%v UID:%v) banned for raw packet flooding", client.Ipid(), client.Uid())
 			logger.WriteAudit(fmt.Sprintf("%v | PACKET_FLOOD | IPID:%v | UID:%v | Auto-banned for packet flooding", time.Now().UTC().Format("15:04:05"), client.Ipid(), client.Uid()))
