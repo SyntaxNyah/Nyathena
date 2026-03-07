@@ -736,6 +736,21 @@ func cmdJail(client *Client, args []string, usage string) {
 		return
 	}
 
+	// Optional area argument: /jail <uid> <area_id> [-d ...] [-r ...]
+	jailAreaID := -1
+	if flags.NArg() >= 2 {
+		id, err := strconv.Atoi(flags.Arg(1))
+		if err != nil {
+			client.SendServerMessage("Invalid area ID: must be a number.")
+			return
+		}
+		if id < 0 || id >= len(areas) {
+			client.SendServerMessage(fmt.Sprintf("Area ID %d is out of range (0–%d).", id, len(areas)-1))
+			return
+		}
+		jailAreaID = id
+	}
+
 	var jailUntil time.Time
 	if strings.ToLower(*duration) == "perma" {
 		jailUntil = time.Date(2099, 12, 31, 23, 59, 59, 0, time.UTC)
@@ -748,22 +763,37 @@ func cmdJail(client *Client, args []string, usage string) {
 		jailUntil = time.Now().UTC().Add(parsedDur)
 	}
 
+	// Force-move the target to the jail area first (before setting jailed state so
+	// any existing jail doesn't block the move), then apply the jail.
+	if jailAreaID >= 0 {
+		target.forceChangeArea(areas[jailAreaID])
+	}
+
 	target.SetJailedUntil(jailUntil)
-	if err := db.UpsertJail(target.Ipid(), jailUntil.Unix(), *reason); err != nil {
+	target.SetJailAreaID(jailAreaID)
+	if err := db.UpsertJail(target.Ipid(), jailUntil.Unix(), *reason, jailAreaID); err != nil {
 		logger.LogErrorf("Failed to persist jail for %v: %v", target.Ipid(), err)
 	}
-	msg := fmt.Sprintf("You have been jailed in %v.", target.Area().Name())
+
+	var areaName string
+	if jailAreaID >= 0 {
+		areaName = areas[jailAreaID].Name()
+	} else {
+		areaName = target.Area().Name()
+	}
+
+	msg := fmt.Sprintf("You have been jailed in %v.", areaName)
 	if strings.ToLower(*duration) != "perma" {
-		msg = fmt.Sprintf("You have been jailed in %v for %v.", target.Area().Name(), *duration)
+		msg = fmt.Sprintf("You have been jailed in %v for %v.", areaName, *duration)
 	}
 	if *reason != "" {
 		msg += " Reason: " + *reason
 	}
 	target.SendServerMessage(msg)
-	
-	client.SendServerMessage(fmt.Sprintf("Jailed [%v] %v in %v.", uid, target.OOCName(), target.Area().Name()))
-	
-	logMsg := fmt.Sprintf("Jailed [%v] %v", uid, target.OOCName())
+
+	client.SendServerMessage(fmt.Sprintf("Jailed [%v] %v in %v.", uid, target.OOCName(), areaName))
+
+	logMsg := fmt.Sprintf("Jailed [%v] %v in %v", uid, target.OOCName(), areaName)
 	if *reason != "" {
 		logMsg += " for reason: " + *reason
 	}
@@ -781,6 +811,7 @@ func cmdUnjail(client *Client, args []string, _ string) {
 			continue
 		}
 		c.SetJailedUntil(time.Time{})
+		c.SetJailAreaID(-1)
 		if err := db.DeleteJail(c.Ipid()); err != nil {
 			logger.LogErrorf("Failed to remove persistent jail for %v: %v", c.Ipid(), err)
 		}

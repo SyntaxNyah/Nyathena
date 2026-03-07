@@ -160,8 +160,8 @@ func initCommands() {
 		"jail": {
 			handler:  cmdJail,
 			minArgs:  1,
-			usage:    "Usage: /jail <uid> [-d duration] [-r reason]",
-			desc:     "Jails a player in their current area.",
+			usage:    "Usage: /jail <uid> [area_id] [-d duration] [-r reason]",
+			desc:     "Jails a player in the given area (or their current area). They cannot leave and are returned there on reconnect.",
 			reqPerms: permissions.PermissionField["BAN"],
 		},
 		"kick": {
