@@ -276,7 +276,7 @@ func isRRCoolingDown() (bool, int) {
 
 // ── Command entry point ───────────────────────────────────────────────────────
 
-// cmdRoulette handles /roulette and /roulette join.
+// cmdRussianRoulette handles /russianroulette and /russianroulette join.
 func cmdRussianRoulette(client *Client, args []string, usage string) {
 	if len(args) > 0 && args[0] == "join" {
 		rrJoin(client)

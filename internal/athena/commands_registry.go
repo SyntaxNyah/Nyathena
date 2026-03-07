@@ -730,10 +730,10 @@ func initCommands() {
 		},
 		"roulette": {
 			handler:  cmdRoulette,
-			minArgs:  1,
-			usage:    "Usage: /roulette [-d duration] [-r reason] <uid1>,<uid2>...",
-			desc:     "Random chance message doesn't send.",
-			reqPerms: permissions.PermissionField["MUTE"],
+			minArgs:  0,
+			usage:    "Usage: /roulette join | /roulette [-d duration] [-r reason] <uid1>,<uid2>...",
+			desc:     "Join Russian Roulette game, or apply roulette punishment to user(s) (requires MUTE permission).",
+			reqPerms: permissions.PermissionField["NONE"],
 		},
 		"spotlight": {
 			handler:  cmdSpotlight,

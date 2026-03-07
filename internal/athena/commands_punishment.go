@@ -166,6 +166,14 @@ func cmdSubtitles(client *Client, args []string, usage string) {
 }
 
 func cmdRoulette(client *Client, args []string, usage string) {
+	if len(args) > 0 && args[0] == "join" {
+		rrJoin(client)
+		return
+	}
+	if !permissions.HasPermission(client.Perms(), permissions.PermissionField["MUTE"]) {
+		client.SendServerMessage("You do not have permission to use that command.")
+		return
+	}
 	cmdPunishment(client, args, usage, PunishmentRoulette)
 }
 
