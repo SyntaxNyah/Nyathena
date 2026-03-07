@@ -736,17 +736,19 @@ func (client *Client) ChangeArea(a *area.Area) bool {
 		!permissions.HasPermission(client.Perms(), permissions.PermissionField["BYPASS_LOCK"]) {
 		return false
 	}
-	addToBuffer(client, "AREA", "Left area.", false)
-	if client.Area().PlayerCount() <= 1 {
-		client.Area().Reset()
-		sendLockArup()
-		sendStatusArup()
-		sendCMArup()
-	} else if client.Area().HasCM(client.Uid()) {
-		client.Area().RemoveCM(client.Uid())
-		sendCMArup()
+	if client.Area() != nil {
+		addToBuffer(client, "AREA", "Left area.", false)
+		if client.Area().PlayerCount() <= 1 {
+			client.Area().Reset()
+			sendLockArup()
+			sendStatusArup()
+			sendCMArup()
+		} else if client.Area().HasCM(client.Uid()) {
+			client.Area().RemoveCM(client.Uid())
+			sendCMArup()
+		}
+		client.Area().RemoveChar(client.CharID())
 	}
-	client.Area().RemoveChar(client.CharID())
 	if a.IsTaken(client.CharID()) {
 		client.SetCharID(-1)
 	}
