@@ -879,9 +879,10 @@ func cmdLockdown(client *Client, _ []string, _ string) {
 
 // cmdBotBan bans all currently-connected spectators whose total playtime
 // (accumulated from previous sessions plus the current session) is less than
-// two minutes (120 seconds).  This is intended as a rapid response to bot floods.
+// the configured botban_playtime_threshold (default 120 seconds).
+// This is intended as a rapid response to bot floods.
 func cmdBotBan(client *Client, _ []string, _ string) {
-	const botPlaytimeThreshold = 120 // seconds
+	threshold := int64(config.BotBanPlaytimeThreshold)
 	banTime := time.Now().UTC().Unix()
 	var count int
 	bannedIPIDs := make(map[string]struct{})
@@ -903,7 +904,7 @@ func cmdBotBan(client *Client, _ []string, _ string) {
 		}
 		totalPlaytime := dbPlaytime + sessionSecs
 
-		if totalPlaytime >= botPlaytimeThreshold {
+		if totalPlaytime >= threshold {
 			continue
 		}
 

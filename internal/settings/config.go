@@ -83,10 +83,11 @@ type ServerConfig struct {
 	GlobalNewIPRateLimitWindow int   `toml:"global_new_ip_rate_limit_window"`
 	IPRetentionDays           int    `toml:"ip_retention_days"`
 	WebAOAllowedOrigin        string `toml:"webao_allowed_origin"`
-	AutoModEnabled            bool   `toml:"automod_enabled"`
-	AutoModWordlist           string `toml:"automod_wordlist"`
-	AutoModAction             string `toml:"automod_action"`
-	RandomSongCooldown        int    `toml:"random_song_cooldown"`
+	AutoModEnabled             bool   `toml:"automod_enabled"`
+	AutoModWordlist            string `toml:"automod_wordlist"`
+	AutoModAction              string `toml:"automod_action"`
+	RandomSongCooldown         int    `toml:"random_song_cooldown"`
+	BotBanPlaytimeThreshold    int    `toml:"botban_playtime_threshold"`
 }
 
 type LogConfig struct {
@@ -157,10 +158,11 @@ func DefaultConfig() *Config {
 			GlobalNewIPRateLimitWindow: 10,
 			IPRetentionDays:           0,
 			WebAOAllowedOrigin:        "web.aceattorneyonline.com",
-			AutoModEnabled:            false,
-			AutoModWordlist:           "banned_words.txt",
-			AutoModAction:             "ban",
-			RandomSongCooldown:        5,
+			AutoModEnabled:             false,
+			AutoModWordlist:            "banned_words.txt",
+			AutoModAction:              "ban",
+			RandomSongCooldown:         5,
+			BotBanPlaytimeThreshold:    120,
 		},
 		LogConfig{
 			BufSize:              150,
