@@ -864,20 +864,24 @@ func checkConnRateLimit(ipid string) bool {
 	window := time.Duration(config.ConnRateLimitWindow) * time.Second
 	cutoff := now.Add(-window)
 
-	// Prune timestamps outside the current window.
+	// Prune timestamps outside the current window (zero-allocation pivot trim;
+	// timestamps are always appended in order so expired entries are at the front).
 	times := connTracker.timestamps[ipid]
-	valid := make([]time.Time, 0, len(times))
-	for _, t := range times {
-		if t.After(cutoff) {
-			valid = append(valid, t)
-		}
+	i := 0
+	for i < len(times) && !times[i].After(cutoff) {
+		i++
+	}
+	if i == len(times) {
+		times = nil
+	} else if i > 0 {
+		times = times[i:]
 	}
 
 	// Record this attempt regardless of outcome, so floods are always counted.
-	valid = append(valid, now)
-	connTracker.timestamps[ipid] = valid
+	times = append(times, now)
+	connTracker.timestamps[ipid] = times
 
-	return len(valid) > config.ConnRateLimit
+	return len(times) > config.ConnRateLimit
 }
 
 // forgetIP removes an IPID from the in-memory first-seen tracker and from the
@@ -976,16 +980,14 @@ func startConnTrackerCleanup() {
 		cutoff := time.Now().Add(-window)
 		connTracker.mu.Lock()
 		for ipid, times := range connTracker.timestamps {
-			valid := make([]time.Time, 0, len(times))
-			for _, t := range times {
-				if t.After(cutoff) {
-					valid = append(valid, t)
-				}
+			i := 0
+			for i < len(times) && !times[i].After(cutoff) {
+				i++
 			}
-			if len(valid) == 0 {
+			if i == len(times) {
 				delete(connTracker.timestamps, ipid)
-			} else {
-				connTracker.timestamps[ipid] = valid
+			} else if i > 0 {
+				connTracker.timestamps[ipid] = times[i:]
 			}
 		}
 		connTracker.mu.Unlock()
@@ -1009,16 +1011,14 @@ func startConnTrackerCleanup() {
 			oocCutoff := time.Now().Add(-oocWindow)
 			ipOOCTracker.mu.Lock()
 			for ipid, times := range ipOOCTracker.timestamps {
-				valid := make([]time.Time, 0, len(times))
-				for _, t := range times {
-					if t.After(oocCutoff) {
-						valid = append(valid, t)
-					}
+				i := 0
+				for i < len(times) && !times[i].After(oocCutoff) {
+					i++
 				}
-				if len(valid) == 0 {
+				if i == len(times) {
 					delete(ipOOCTracker.timestamps, ipid)
-				} else {
-					ipOOCTracker.timestamps[ipid] = valid
+				} else if i > 0 {
+					ipOOCTracker.timestamps[ipid] = times[i:]
 				}
 			}
 			ipOOCTracker.mu.Unlock()
@@ -1030,16 +1030,14 @@ func startConnTrackerCleanup() {
 			pingCutoff := time.Now().Add(-pingWindow)
 			ipPingTracker.mu.Lock()
 			for ipid, times := range ipPingTracker.timestamps {
-				valid := make([]time.Time, 0, len(times))
-				for _, t := range times {
-					if t.After(pingCutoff) {
-						valid = append(valid, t)
-					}
+				i := 0
+				for i < len(times) && !times[i].After(pingCutoff) {
+					i++
 				}
-				if len(valid) == 0 {
+				if i == len(times) {
 					delete(ipPingTracker.timestamps, ipid)
-				} else {
-					ipPingTracker.timestamps[ipid] = valid
+				} else if i > 0 {
+					ipPingTracker.timestamps[ipid] = times[i:]
 				}
 			}
 			ipPingTracker.mu.Unlock()
@@ -1051,13 +1049,15 @@ func startConnTrackerCleanup() {
 			globalCutoff := time.Now().Add(-globalWindow)
 			globalNewIPTracker.mu.Lock()
 			times := globalNewIPTracker.timestamps
-			valid := make([]time.Time, 0, len(times))
-			for _, t := range times {
-				if t.After(globalCutoff) {
-					valid = append(valid, t)
-				}
+			i := 0
+			for i < len(times) && !times[i].After(globalCutoff) {
+				i++
 			}
-			globalNewIPTracker.timestamps = valid
+			if i == len(times) {
+				globalNewIPTracker.timestamps = nil
+			} else if i > 0 {
+				globalNewIPTracker.timestamps = times[i:]
+			}
 			globalNewIPTracker.mu.Unlock()
 		}
 	}
@@ -1105,18 +1105,20 @@ func checkIPOOCRateLimit(ipid string) bool {
 	window := time.Duration(config.OOCRateLimitWindow) * time.Second
 	cutoff := now.Add(-window)
 	times := ipOOCTracker.timestamps[ipid]
-	valid := make([]time.Time, 0, len(times))
-	for _, t := range times {
-		if t.After(cutoff) {
-			valid = append(valid, t)
-		}
+	i := 0
+	for i < len(times) && !times[i].After(cutoff) {
+		i++
 	}
-	if len(valid) >= config.OOCRateLimit {
-		ipOOCTracker.timestamps[ipid] = valid
+	if i == len(times) {
+		times = nil
+	} else if i > 0 {
+		times = times[i:]
+	}
+	if len(times) >= config.OOCRateLimit {
+		ipOOCTracker.timestamps[ipid] = times
 		return true
 	}
-	valid = append(valid, now)
-	ipOOCTracker.timestamps[ipid] = valid
+	ipOOCTracker.timestamps[ipid] = append(times, now)
 	return false
 }
 
@@ -1133,18 +1135,20 @@ func checkIPPingRateLimit(ipid string) bool {
 	window := time.Duration(config.PingRateLimitWindow) * time.Second
 	cutoff := now.Add(-window)
 	times := ipPingTracker.timestamps[ipid]
-	valid := make([]time.Time, 0, len(times))
-	for _, t := range times {
-		if t.After(cutoff) {
-			valid = append(valid, t)
-		}
+	i := 0
+	for i < len(times) && !times[i].After(cutoff) {
+		i++
 	}
-	if len(valid) >= config.PingRateLimit {
-		ipPingTracker.timestamps[ipid] = valid
+	if i == len(times) {
+		times = nil
+	} else if i > 0 {
+		times = times[i:]
+	}
+	if len(times) >= config.PingRateLimit {
+		ipPingTracker.timestamps[ipid] = times
 		return true
 	}
-	valid = append(valid, now)
-	ipPingTracker.timestamps[ipid] = valid
+	ipPingTracker.timestamps[ipid] = append(times, now)
 	return false
 }
 
@@ -1223,39 +1227,41 @@ func checkNewIPIDModcallCooldown(ipid string) (bool, int) {
 // Also enforces lockdown mode: while lockdown is active, all new (unseen) IPs are rejected.
 // Returns true if the connection should be rejected.
 func checkGlobalNewIPRateLimit(ipid string) bool {
-// Known IPs are always allowed through; only new, unseen IPs can trigger this limit.
-ipFirstSeenTracker.mu.Lock()
-_, known := ipFirstSeenTracker.times[ipid]
-ipFirstSeenTracker.mu.Unlock()
-if known {
-return false
-}
+	// Known IPs are always allowed through; only new, unseen IPs can trigger this limit.
+	ipFirstSeenTracker.mu.Lock()
+	_, known := ipFirstSeenTracker.times[ipid]
+	ipFirstSeenTracker.mu.Unlock()
+	if known {
+		return false
+	}
 
-// Lockdown mode: block all new IPIDs regardless of the configured rate limit.
-if serverLockdown.Load() {
-return true
-}
+	// Lockdown mode: block all new IPIDs regardless of the configured rate limit.
+	if serverLockdown.Load() {
+		return true
+	}
 
-if config.GlobalNewIPRateLimit <= 0 {
-return false
-}
+	if config.GlobalNewIPRateLimit <= 0 {
+		return false
+	}
 
-globalNewIPTracker.mu.Lock()
-defer globalNewIPTracker.mu.Unlock()
+	globalNewIPTracker.mu.Lock()
+	defer globalNewIPTracker.mu.Unlock()
 
-now := time.Now()
-window := time.Duration(config.GlobalNewIPRateLimitWindow) * time.Second
-cutoff := now.Add(-window)
+	cutoff := time.Now().Add(-time.Duration(config.GlobalNewIPRateLimitWindow) * time.Second)
 
-// Prune timestamps outside the current window.
-times := globalNewIPTracker.timestamps
-valid := make([]time.Time, 0, len(times))
-for _, t := range times {
-if t.After(cutoff) {
-valid = append(valid, t)
-}
-}
-globalNewIPTracker.timestamps = valid
+	// Prune timestamps outside the current window (zero-allocation pivot trim;
+	// timestamps are always appended in order so expired entries are at the front).
+	times := globalNewIPTracker.timestamps
+	i := 0
+	for i < len(times) && !times[i].After(cutoff) {
+		i++
+	}
+	if i == len(times) {
+		times = nil
+	} else if i > 0 {
+		times = times[i:]
+	}
+	globalNewIPTracker.timestamps = times
 
-return len(valid) >= config.GlobalNewIPRateLimit
+	return len(times) >= config.GlobalNewIPRateLimit
 }
