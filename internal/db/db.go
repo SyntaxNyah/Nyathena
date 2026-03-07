@@ -573,6 +573,37 @@ func PruneShortPlaytimeIPs(minSeconds int64) (int64, error) {
 	return n, nil
 }
 
+// GetPlaytime returns the accumulated playtime in seconds for an IPID from the KNOWN_IPS table.
+// Returns 0, nil if the IPID is not found.
+func GetPlaytime(ipid string) (int64, error) {
+	if db == nil {
+		return 0, nil
+	}
+	row := db.QueryRow("SELECT PLAYTIME FROM KNOWN_IPS WHERE IPID = ?", ipid)
+	var playtime int64
+	if err := row.Scan(&playtime); err != nil {
+		if err == sql.ErrNoRows {
+			return 0, nil
+		}
+		return 0, err
+	}
+	return playtime, nil
+}
+
+// PurgeKnownIPs deletes all rows from the KNOWN_IPS table.
+// It returns the number of rows removed.
+func PurgeKnownIPs() (int64, error) {
+	if db == nil {
+		return 0, nil
+	}
+	res, err := db.Exec("DELETE FROM KNOWN_IPS")
+	if err != nil {
+		return 0, err
+	}
+	n, _ := res.RowsAffected()
+	return n, nil
+}
+
 // AddTormentedIP adds an IPID to the TORMENTED_IPS table.
 // Tormented IPIDs experience random disconnects every 30–60 seconds instead of being banned.
 func AddTormentedIP(ipid string) error {

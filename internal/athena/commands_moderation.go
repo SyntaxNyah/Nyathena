@@ -585,8 +585,14 @@ func cmdPM(client *Client, args []string, _ string) {
 	}
 	msg := strings.Join(args[1:], " ")
 	toPM := getUidList(strings.Split(args[0], ","))
+	var recipientNames []string
 	for _, c := range toPM {
 		c.SendPacket("CT", fmt.Sprintf("[PM] %v", client.OOCName()), msg, "1")
+		recipientNames = append(recipientNames, c.OOCName())
+	}
+	// Echo the message back to the sender so they can see what they sent.
+	if len(recipientNames) > 0 {
+		client.SendPacket("CT", fmt.Sprintf("[PM → %v] %v", strings.Join(recipientNames, ", "), client.OOCName()), msg, "1")
 	}
 }
 
@@ -853,3 +859,121 @@ func cmdUntorment(client *Client, args []string, usage string) {
 	addToBuffer(client, "CMD", fmt.Sprintf("removed IPID %v from torment list", ipid), true)
 }
 
+
+// cmdLockdown toggles server lockdown mode.
+// While active, only previously-known IPIDs (those already in the server's
+// first-seen tracker) are allowed to connect; all new IPIDs are rejected.
+func cmdLockdown(client *Client, _ []string, _ string) {
+	active := !serverLockdown.Load()
+	serverLockdown.Store(active)
+	if active {
+		writeToAll("CT", "OOC", "🔒 Server lockdown is now ACTIVE. New connections are restricted to known players.", "1")
+		client.SendServerMessage("Lockdown enabled. New IPIDs will be rejected.")
+		addToBuffer(client, "CMD", "Enabled server lockdown.", true)
+	} else {
+		writeToAll("CT", "OOC", "🔓 Server lockdown has been LIFTED. New connections are now allowed.", "1")
+		client.SendServerMessage("Lockdown disabled. New IPIDs are now allowed.")
+		addToBuffer(client, "CMD", "Disabled server lockdown.", true)
+	}
+}
+
+// cmdBotBan bans all currently-connected spectators whose total playtime
+// (accumulated from previous sessions plus the current session) is less than
+// the configured botban_playtime_threshold (default 120 seconds).
+// This is intended as a rapid response to bot floods.
+func cmdBotBan(client *Client, _ []string, _ string) {
+	threshold := int64(config.BotBanPlaytimeThreshold)
+	banTime := time.Now().UTC().Unix()
+	var count int
+	bannedIPIDs := make(map[string]struct{})
+
+	for c := range clients.GetAllClients() {
+		if c.CharID() != -1 {
+			// Not a spectator – skip.
+			continue
+		}
+
+		// Accumulate DB playtime + current session time.
+		dbPlaytime, err := db.GetPlaytime(c.Ipid())
+		if err != nil {
+			logger.LogErrorf("botban: failed to get playtime for IPID %v: %v", c.Ipid(), err)
+		}
+		var sessionSecs int64
+		if connAt := c.ConnectedAt(); !connAt.IsZero() {
+			sessionSecs = int64(time.Since(connAt).Seconds())
+		}
+		totalPlaytime := dbPlaytime + sessionSecs
+
+		if totalPlaytime >= threshold {
+			continue
+		}
+
+		id, err := db.AddBan(c.Ipid(), c.Hdid(), banTime, -1, "Botban: spectator with insufficient playtime.", client.ModName())
+		if err != nil {
+			logger.LogErrorf("botban: failed to ban IPID %v: %v", c.Ipid(), err)
+			continue
+		}
+		c.SendPacket("KB", fmt.Sprintf("Botban: spectator with insufficient playtime.\nUntil: ∞\nID: %v", id))
+		c.conn.Close()
+		forgetIP(c.Ipid())
+		count++
+		bannedIPIDs[c.Ipid()] = struct{}{}
+	}
+
+	// Build the report string from unique IPIDs.
+	var reportParts []string
+	for ipid := range bannedIPIDs {
+		reportParts = append(reportParts, ipid)
+	}
+	report := strings.Join(reportParts, ", ")
+
+	client.SendServerMessage(fmt.Sprintf("Botban complete. Banned %v spectator(s).", count))
+	if count > 0 {
+		addToBuffer(client, "CMD", fmt.Sprintf("Botbanned %v spectator(s): %v", count, report), true)
+		if err := webhook.PostBotBan(count, report, client.ModName()); err != nil {
+			logger.LogErrorf("while posting botban webhook: %v", err)
+		}
+	}
+	sendPlayerArup()
+}
+
+// cmdSetGlobalNewIPLimit updates the global new-IP rate limit at runtime.
+// The new value takes effect immediately for all subsequent connections.
+func cmdSetGlobalNewIPLimit(client *Client, args []string, usage string) {
+	val, err := strconv.Atoi(args[0])
+	if err != nil || val < 0 {
+		client.SendServerMessage("Invalid value. Must be a non-negative integer (0 = disabled).\n" + usage)
+		return
+	}
+	config.GlobalNewIPRateLimit = val
+	client.SendServerMessage(fmt.Sprintf("Global new-IP rate limit set to %v.", val))
+	addToBuffer(client, "CMD", fmt.Sprintf("Set global new-IP rate limit to %v.", val), true)
+}
+
+// cmdSetGlobalIPWindow updates the global new-IP rate limit time window at runtime.
+// The new value takes effect immediately for all subsequent connections.
+func cmdSetGlobalIPWindow(client *Client, args []string, usage string) {
+	val, err := strconv.Atoi(args[0])
+	if err != nil || val <= 0 {
+		client.SendServerMessage("Invalid value. Must be a positive integer (seconds).\n" + usage)
+		return
+	}
+	config.GlobalNewIPRateLimitWindow = val
+	client.SendServerMessage(fmt.Sprintf("Global new-IP rate limit window set to %v second(s).", val))
+	addToBuffer(client, "CMD", fmt.Sprintf("Set global new-IP rate limit window to %v seconds.", val), true)
+}
+
+// cmdPurgeDB purges all entries from the KNOWN_IPS table and clears the
+// in-memory first-seen tracker.  After this command every IPID will be treated
+// as completely new on its next connection.
+func cmdPurgeDB(client *Client, _ []string, _ string) {
+	n, err := db.PurgeKnownIPs()
+	if err != nil {
+		client.SendServerMessage(fmt.Sprintf("Failed to purge KNOWN_IPS: %v", err))
+		logger.LogErrorf("purgedb: %v", err)
+		return
+	}
+	resetKnownIPTracker()
+	client.SendServerMessage(fmt.Sprintf("Purged %v known IP record(s) from the database.", n))
+	addToBuffer(client, "CMD", fmt.Sprintf("Purged %v known IP record(s) from the database.", n), true)
+}

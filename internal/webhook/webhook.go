@@ -151,6 +151,29 @@ func PostUnban(banID int, ipid, originalReason, originalDuration, originalModera
 	return postToURL(PunishmentWebhookURL, p)
 }
 
+// PostBotBan sends a single summary embed to the punishment webhook after a /botban sweep.
+// count is the total number of clients banned, ipids is the comma-separated list of unique
+// banned IPIDs, and moderator is the OOC name of the mod who ran the command.
+func PostBotBan(count int, ipids, moderator string) error {
+	if PunishmentWebhookURL == "" {
+		return nil
+	}
+	e := discord.Embed{
+		Title: "🤖 Botban Executed",
+		Color: 0xe74c3c,
+		Fields: []discord.Field{
+			{Name: "Bots Banned", Value: fmt.Sprintf("%d", count), Inline: true},
+			{Name: "Moderator", Value: nonEmpty(moderator), Inline: true},
+			{Name: "Banned IPIDs", Value: nonEmpty(ipids), Inline: false},
+		},
+	}
+	p := discord.PostOptions{
+		Username: ServerName,
+		Embeds:   []discord.Embed{e},
+	}
+	return postToURL(PunishmentWebhookURL, p)
+}
+
 // PostModcall sends a modcall to the discord webhook.
 func PostModcall(character string, area string, reason string) error {
 	e := discord.Embed{

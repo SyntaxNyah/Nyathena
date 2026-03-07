@@ -318,6 +318,13 @@ automod_action = "ban"
 # Default: 5 seconds.
 random_song_cooldown = 5
 
+# /botban playtime threshold: Minimum total playtime in seconds a spectator must have
+# accumulated (across all past sessions plus the current session) to be exempt from /botban.
+# Spectators whose total playtime is below this value will be permanently banned by /botban.
+# Raise this value to catch longer-lived bots; lower it to be more conservative.
+# Default: 120 seconds (2 minutes).
+botban_playtime_threshold = 120
+
 [Logging]
 # Sets the number of actions (IC chat messages, OOC chat messages, judge actions, etc.) each area should store.
 # When a user calls a mod, this buffer will be flushed to a report file for review.
