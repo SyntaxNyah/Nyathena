@@ -585,8 +585,14 @@ func cmdPM(client *Client, args []string, _ string) {
 	}
 	msg := strings.Join(args[1:], " ")
 	toPM := getUidList(strings.Split(args[0], ","))
+	var recipientNames []string
 	for _, c := range toPM {
 		c.SendPacket("CT", fmt.Sprintf("[PM] %v", client.OOCName()), msg, "1")
+		recipientNames = append(recipientNames, c.OOCName())
+	}
+	// Echo the message back to the sender so they can see what they sent.
+	if len(recipientNames) > 0 {
+		client.SendPacket("CT", fmt.Sprintf("[PM → %v] %v", strings.Join(recipientNames, ", "), client.OOCName()), msg, "1")
 	}
 }
 
@@ -923,6 +929,9 @@ func cmdBotBan(client *Client, _ []string, _ string) {
 	client.SendServerMessage(fmt.Sprintf("Botban complete. Banned %v spectator(s).", count))
 	if count > 0 {
 		addToBuffer(client, "CMD", fmt.Sprintf("Botbanned %v spectator(s): %v", count, report), true)
+		if err := webhook.PostBotBan(count, report, client.ModName()); err != nil {
+			logger.LogErrorf("while posting botban webhook: %v", err)
+		}
 	}
 	sendPlayerArup()
 }
