@@ -237,3 +237,50 @@ func TestRRRicochetChance(t *testing.T) {
 		t.Errorf("rrRicochetP must be 0–100, got %d", rrRicochetP)
 	}
 }
+
+// TestRRNewChaosConstants verifies the new chaos event constants are valid percentages.
+func TestRRNewChaosConstants(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		val  int
+	}{
+		{"rrChainShotP", rrChainShotP},
+		{"rrDoublePunishP", rrDoublePunishP},
+		{"rrReSpinP", rrReSpinP},
+		{"rrSurvivorCurseP", rrSurvivorCurseP},
+	} {
+		if tc.val < 0 || tc.val > 100 {
+			t.Errorf("%s must be 0–100, got %d", tc.name, tc.val)
+		}
+	}
+}
+
+// TestRRCursePunishmentPool verifies every curse pool type is a valid punishment.
+func TestRRCursePunishmentPool(t *testing.T) {
+	if len(rrCursePunishmentPool) == 0 {
+		t.Fatal("rrCursePunishmentPool must not be empty")
+	}
+	valid := make(map[PunishmentType]bool, len(rrPunishmentPool))
+	for _, p := range rrPunishmentPool {
+		valid[p] = true
+	}
+	for _, p := range rrCursePunishmentPool {
+		if !valid[p] {
+			t.Errorf("rrCursePunishmentPool contains type %v not in main pool", p)
+		}
+	}
+}
+
+// TestRRRandomExclusion verifies randomRRPunishmentExcluding never returns the excluded type.
+func TestRRRandomExclusion(t *testing.T) {
+	if len(rrPunishmentPool) < 2 {
+		t.Skip("pool too small to test exclusion")
+	}
+	exclude := rrPunishmentPool[0]
+	for i := 0; i < 200; i++ {
+		p := randomRRPunishmentExcluding(exclude)
+		if p == exclude {
+			t.Errorf("randomRRPunishmentExcluding returned excluded type %v", p)
+		}
+	}
+}

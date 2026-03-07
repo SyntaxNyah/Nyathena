@@ -26,14 +26,18 @@ import (
 // ── Constants ────────────────────────────────────────────────────────────────
 
 const (
-	rrJoinWindow     = 30 * time.Second // opt-in window duration
-	rrCooldown       = 5 * time.Minute  // global delay between games
-	rrChambers       = 6                // standard revolver chambers
-	rrMinPlayers     = 2                // minimum players to start
-	rrPunishDuration = 15 * time.Minute // how long the loser's punishment lasts
-	rrShotPause      = 3 * time.Second  // dramatic pause between shots
-	rrDoubleBulletP  = 15               // % chance of 2-bullet game (integer 0–100)
-	rrRicochetP      = 5                // % chance the shot ricochets to a random player
+	rrJoinWindow      = 30 * time.Second // opt-in window duration
+	rrCooldown        = 5 * time.Minute  // global delay between games
+	rrChambers        = 6                // standard revolver chambers
+	rrMinPlayers      = 2                // minimum players to start
+	rrPunishDuration  = 15 * time.Minute // how long the loser's punishment lasts
+	rrShotPause       = 3 * time.Second  // dramatic pause between shots
+	rrDoubleBulletP   = 20               // % chance of 2-bullet game (integer 0–100)
+	rrRicochetP       = 8                // % chance the shot ricochets to a random player
+	rrChainShotP      = 8                // % chance a second player is also hit on BANG
+	rrDoublePunishP   = 12               // % chance the victim receives two punishments
+	rrReSpinP         = 10               // % chance the cylinder re-spins after a safe CLICK
+	rrSurvivorCurseP  = 15               // % chance all survivors receive a minor curse after game ends
 )
 
 // rrRules is broadcast when the join window opens.
@@ -44,7 +48,13 @@ Type /roulette join within 30 seconds to take a seat at the table.
 • Players sit in a circle; the cylinder is spun once and the game begins.
 • Each turn one chamber is fired — safe chambers go CLICK; the bullet goes BANG.
 • The player hit receives a wild random punishment lasting 15 minutes.
-• Rare chaos events: double-bullet loads and ricochets can strike at any time.
+• 🎰 CHAOS EVENTS that may strike at any time:
+    – Double Bullet: 20% chance two bullets are loaded instead of one.
+    – Ricochet: 8% chance the shot deflects onto a different player.
+    – Chain Shot: 8% chance BANG hits a second random victim too!
+    – Double Punishment: 12% chance the victim earns TWO punishments at once.
+    – Cylinder Re-Spin: 10% chance the cylinder re-spins after a safe click!
+    – Survivor Curse: 15% chance all survivors receive a parting gift too...
 • A minimum of 2 players is required. May the odds be ever in your favour. 🎲`
 
 // ── Punishment pool ──────────────────────────────────────────────────────────
@@ -61,6 +71,7 @@ var rrPunishmentPool = []PunishmentType{
 	PunishmentAlternating,
 	PunishmentUwu,
 	PunishmentPirate,
+	PunishmentShakespearean,
 	PunishmentCaveman,
 	PunishmentDrunk,
 	PunishmentHiccup,
@@ -71,11 +82,14 @@ var rrPunishmentPool = []PunishmentType{
 	PunishmentFancy,
 	PunishmentEmoji,
 	PunishmentSlowpoke,
+	PunishmentFastspammer,
+	PunishmentLag,
 	PunishmentCensor,
 	PunishmentSpaghetti,
 	PunishmentTorment,
 	PunishmentRng,
 	PunishmentHaiku,
+	PunishmentAutospell,
 	PunishmentMonkey,
 	PunishmentSnake,
 	PunishmentDog,
@@ -85,6 +99,7 @@ var rrPunishmentPool = []PunishmentType{
 	PunishmentFrog,
 	PunishmentDuck,
 	PunishmentHorse,
+	PunishmentLion,
 	PunishmentZoo,
 	PunishmentBunny,
 	PunishmentTsundere,
@@ -92,7 +107,35 @@ var rrPunishmentPool = []PunishmentType{
 	PunishmentKuudere,
 	PunishmentDandere,
 	PunishmentDeredere,
+	PunishmentHimedere,
+	PunishmentKamidere,
+	PunishmentUndere,
+	PunishmentBakadere,
+	PunishmentMayadere,
 	PunishmentEmoticon,
+	PunishmentLovebomb,
+	PunishmentDegrade,
+	PunishmentTourettes,
+	PunishmentSpotlight,
+	PunishmentInvisible,
+	PunishmentWhistle,
+	PunishmentWhisper,
+}
+
+// rrCursePunishmentPool is a lighter pool used for survivor curses.
+var rrCursePunishmentPool = []PunishmentType{
+	PunishmentStutterstep,
+	PunishmentUppercase,
+	PunishmentLowercase,
+	PunishmentUwu,
+	PunishmentHiccup,
+	PunishmentConfused,
+	PunishmentMumble,
+	PunishmentSubtitles,
+	PunishmentFancy,
+	PunishmentEmoji,
+	PunishmentEmoticon,
+	PunishmentWhistle,
 	PunishmentWhisper,
 }
 
@@ -100,11 +143,27 @@ func randomRRPunishment() PunishmentType {
 	return rrPunishmentPool[rand.Intn(len(rrPunishmentPool))]
 }
 
+// randomRRPunishmentExcluding returns a random punishment that differs from the excluded one.
+func randomRRPunishmentExcluding(exclude PunishmentType) PunishmentType {
+	for {
+		p := randomRRPunishment()
+		if p != exclude {
+			return p
+		}
+	}
+}
+
+func randomRRCursePunishment() PunishmentType {
+	return rrCursePunishmentPool[rand.Intn(len(rrCursePunishmentPool))]
+}
+
 // ── Flavour text ─────────────────────────────────────────────────────────────
 
 var rrGunNames = []string{
 	"Old Betsy", "The Equaliser", "Lady Luck", "The Grim Revolver",
 	"Madame Six", "The Iron Dice", "Widow-Maker", "The Philosopher's Gun",
+	"The Cursed Revenant", "Fate's Last Word", "The Thunderclap",
+	"Doom's Finger", "Madame Misfortune", "The Silver Gamble",
 }
 
 var rrClickMessages = []string{
@@ -115,6 +174,11 @@ var rrClickMessages = []string{
 	"*click* — the room exhales... 💨",
 	"*CLICK* — luck favours you today! 🍀",
 	"*click* — your heart skips a beat... 💓",
+	"*click* — you dodged the reaper! 💀",
+	"*CLICK* — another chamber survives! 🫀",
+	"*click* — the odds grow against you... 📉",
+	"*click* — the table holds its breath 😶",
+	"*CLICK* — a hollow victory... for now. 🕯️",
 }
 
 var rrBangMessages = []string{
@@ -125,6 +189,11 @@ var rrBangMessages = []string{
 	"🎆 **BANG!!** The house always wins!",
 	"☠️  B-B-BANG! Nobody saw that coming!",
 	"🔫 BANG! The game is over!",
+	"💣 **BANG!!** The walls shake!",
+	"🌋 BANG! Chaos reigns!",
+	"⚡ BANG! The room goes white!",
+	"🎯 BANG! Bullseye of doom!",
+	"🩸 **BANG!!** Fate sealed with iron!",
 }
 
 var rrTensionMessages = []string{
@@ -133,6 +202,47 @@ var rrTensionMessages = []string{
 	"🤐 Nobody dares to breathe...",
 	"👀 All eyes are on the barrel...",
 	"⏳ The moment of truth approaches...",
+	"🫀 Hearts pound like war drums...",
+	"🌡️  The temperature drops three degrees...",
+	"🕯️  A candle flickers... then steadies...",
+	"👁️  Something watches from the shadows...",
+	"🦗 Even the crickets fall silent...",
+}
+
+var rrCriticalMessages = []string{
+	"😱 CRITICAL MOMENT — the odds are harrowing now!",
+	"💀 The final chambers loom... someone will fall!",
+	"🩸 Blood runs cold as the last shots approach...",
+	"🔥 Fate can only be delayed so long...",
+	"⚠️  DANGER ZONE — the bullet is still out there!",
+}
+
+var rrChainMessages = []string{
+	"💥⛓️  CHAIN SHOT! The shrapnel finds a second target!",
+	"🔗 CHAIN REACTION! Two victims fall to one bullet!",
+	"💥💥 DOUBLE TAP! The chaos doesn't stop at one!",
+	"🌊 RICOCHET CHAIN! The destruction spreads!",
+}
+
+var rrReSpinMessages = []string{
+	"🌀 CHAOS EVENT: Someone nudged the cylinder — IT SPINS AGAIN!",
+	"😈 A mischievous hand re-spins the cylinder mid-game!",
+	"🎰 WILD RESPIN! The odds reset... or do they get worse?",
+	"🌪️  CHAOS RESPIN! The cylinder whirls with renewed menace!",
+}
+
+var rrDoublePunishMessages = []string{
+	"💀💀 DOUBLE CURSED! Fate was not satisfied with one punishment!",
+	"🎭 TWO FOR ONE! The universe piles on!",
+	"⚡⚡ DOUBLE TROUBLE! Two punishments hit at once!",
+	"🌪️  CHAOS COMBO! The loser earns a bonus curse!",
+}
+
+var rrSurvivorCurseMessages = []string{
+	"😈 Surviving was never truly free... the curse spreads!",
+	"🦠 SURVIVOR TAX! Nobody escapes the table unscathed!",
+	"👻 The ghost of the bullet curses the survivors!",
+	"🌑 DARK FORTUNE! Even the lucky pay a price today...",
 }
 
 // ── State ────────────────────────────────────────────────────────────────────
@@ -282,10 +392,7 @@ func rrJoinTimer(starterName string) {
 	// Shuffle player order and load the cylinder.
 	rand.Shuffle(n, func(i, j int) { rr.players[i], rr.players[j] = rr.players[j], rr.players[i] })
 
-	bullets := 1
-	if rand.Intn(100) < rrDoubleBulletP {
-		bullets = 2
-	}
+	bullets := rrInitialBullets()
 	rr.joinActive = false
 	rr.gameActive = true
 	rr.remaining = rrChambers
@@ -311,6 +418,14 @@ func rrJoinTimer(starterName string) {
 
 // ── Game loop ─────────────────────────────────────────────────────────────────
 
+// rrInitialBullets returns the number of bullets to load for a new cylinder spin.
+func rrInitialBullets() int {
+	if rand.Intn(100) < rrDoubleBulletP {
+		return 2
+	}
+	return 1
+}
+
 // rrRun executes the full game loop in its own goroutine.
 // It cycles through players in order; each turn a chamber is fired.
 // The bullet probability is recalculated per shot (authentic RR mechanics).
@@ -329,10 +444,15 @@ func rrRun(players []int, bullets int) {
 			shooterName = shooter.OOCName()
 		}
 
-		// Tension flavour every other round.
-		if i > 0 && i%2 == 0 {
-			sendGlobalServerMessage(rrTensionMessages[rand.Intn(len(rrTensionMessages))])
-			time.Sleep(time.Second)
+		// Tension flavour: regular tension every other round; critical messages when ≤2 remain.
+		if i > 0 {
+			if remaining <= 2 {
+				sendGlobalServerMessage(rrCriticalMessages[rand.Intn(len(rrCriticalMessages))])
+				time.Sleep(time.Second)
+			} else if i%2 == 0 {
+				sendGlobalServerMessage(rrTensionMessages[rand.Intn(len(rrTensionMessages))])
+				time.Sleep(time.Second)
+			}
 		}
 
 		// Probability of hitting a bullet this chamber.
@@ -371,37 +491,104 @@ func rrRun(players []int, bullets int) {
 			sendGlobalServerMessage(fmt.Sprintf("%s\n%v takes the hit!", bangMsg, victimName))
 
 			pType := randomRRPunishment()
-			if victim == shooterUID {
-				if err == nil {
-					shooter.AddPunishment(pType, rrPunishDuration, "Russian Roulette: shot")
-					shooter.SendServerMessage(fmt.Sprintf(
-						"💀 The bullet was yours! Punished with '%v' for %v. Good game!", pType, rrPunishDuration))
+
+			// Double Punishment: victim earns two punishments at once.
+			doubleHit := rand.Intn(100) < rrDoublePunishP
+			var pType2 PunishmentType
+			if doubleHit {
+				pType2 = randomRRPunishmentExcluding(pType)
+				sendGlobalServerMessage(rrDoublePunishMessages[rand.Intn(len(rrDoublePunishMessages))])
+				time.Sleep(time.Second)
+			}
+
+			applyVictimPunishment := func(uid int, reason string) {
+				vc, verr := getClientByUid(uid)
+				if verr != nil {
+					return
 				}
-			} else {
-				if vc, verr := getClientByUid(victim); verr == nil {
-					vc.AddPunishment(pType, rrPunishDuration, "Russian Roulette: ricochet")
+				vc.AddPunishment(pType, rrPunishDuration, reason)
+				if doubleHit {
+					vc.AddPunishment(pType2, rrPunishDuration, reason+" (bonus)")
 					vc.SendServerMessage(fmt.Sprintf(
-						"💀 The ricochet found YOU! Punished with '%v' for %v. Unlucky!", pType, rrPunishDuration))
+						"💀 Doubly cursed! Punished with '%v' AND '%v' for %v. Brutal!", pType, pType2, rrPunishDuration))
+				} else {
+					vc.SendServerMessage(fmt.Sprintf(
+						"💀 You took the hit! Punished with '%v' for %v.", pType, rrPunishDuration))
 				}
 			}
 
+			if victim == shooterUID {
+				if err == nil {
+					applyVictimPunishment(victim, "Russian Roulette: shot")
+				}
+			} else {
+				applyVictimPunishment(victim, "Russian Roulette: ricochet")
+			}
+
+			// Chain Shot: a second random player also takes a (different) punishment.
+			if rand.Intn(100) < rrChainShotP && len(players) > 1 {
+				chainMsg := rrChainMessages[rand.Intn(len(rrChainMessages))]
+				sendGlobalServerMessage(chainMsg)
+				time.Sleep(time.Second)
+				// Build an explicit list of eligible players (everyone except the current victim).
+				eligible := make([]int, 0, len(players)-1)
+				for _, p := range players {
+					if p != victim {
+						eligible = append(eligible, p)
+					}
+				}
+				if len(eligible) > 0 {
+					chainUID := eligible[rand.Intn(len(eligible))]
+					chainPType := randomRRPunishmentExcluding(pType)
+					if chainC, cerr := getClientByUid(chainUID); cerr == nil {
+						chainC.AddPunishment(chainPType, rrPunishDuration, "Russian Roulette: chain shot")
+						chainC.SendServerMessage(fmt.Sprintf(
+							"⛓️  The chain shot caught YOU! Punished with '%v' for %v.", chainPType, rrPunishDuration))
+						sendGlobalServerMessage(fmt.Sprintf(
+							"⛓️  Chain shot claims %v — punished with '%v'!", chainC.OOCName(), chainPType))
+						addToBuffer(chainC, "ROULETTE",
+							fmt.Sprintf("Chain-shot victim in Russian Roulette; punished with %v", chainPType), false)
+					}
+				}
+			}
+
+			pLabel := fmt.Sprintf("'%v'", pType)
+			if doubleHit {
+				pLabel = fmt.Sprintf("'%v' & '%v'", pType, pType2)
+			}
 			sendGlobalServerMessage(fmt.Sprintf(
-				"☠️  ROULETTE OVER! %v drew the short straw and received '%v'. Better luck next life!",
-				victimName, pType,
+				"☠️  ROULETTE OVER! %v drew the short straw and received %v. Better luck next life!",
+				victimName, pLabel,
 			))
 
 			// Announce the survivors.
-			if len(players) > 1 {
-				survivors := make([]string, 0, len(players)-1)
-				for _, p := range players {
-					if p != victim {
-						if c, cerr := getClientByUid(p); cerr == nil {
-							survivors = append(survivors, c.OOCName())
-						}
+			survivors := make([]string, 0, len(players)-1)
+			survivorUIDs := make([]int, 0, len(players)-1)
+			for _, p := range players {
+				if p != victim {
+					if c, cerr := getClientByUid(p); cerr == nil {
+						survivors = append(survivors, c.OOCName())
+						survivorUIDs = append(survivorUIDs, p)
 					}
 				}
-				if len(survivors) > 0 {
-					sendGlobalServerMessage(fmt.Sprintf("🏆 Survivors: %v — well played!", joinNames(survivors)))
+			}
+			if len(survivors) > 0 {
+				sendGlobalServerMessage(fmt.Sprintf("🏆 Survivors: %v — well played!", joinNames(survivors)))
+			}
+
+			// Survivor Curse: rare chance all survivors also get a minor punishment.
+			if len(survivorUIDs) > 0 && rand.Intn(100) < rrSurvivorCurseP {
+				time.Sleep(time.Second)
+				sendGlobalServerMessage(rrSurvivorCurseMessages[rand.Intn(len(rrSurvivorCurseMessages))])
+				time.Sleep(time.Second)
+				for _, sUID := range survivorUIDs {
+					if sc, scerr := getClientByUid(sUID); scerr == nil {
+						cursePType := randomRRCursePunishment()
+						curseDur := 5 * time.Minute
+						sc.AddPunishment(cursePType, curseDur, "Russian Roulette: survivor curse")
+						sc.SendServerMessage(fmt.Sprintf(
+							"👻 Survivor curse! Punished with '%v' for %v.", cursePType, curseDur))
+					}
 				}
 			}
 
@@ -428,6 +615,17 @@ func rrRun(players []int, bullets int) {
 			rrClickMessages[rand.Intn(len(rrClickMessages))],
 			remaining, rrChambers,
 		))
+
+		// Cylinder Re-Spin: rare chance the cylinder resets mid-game.
+		if remaining > 0 && rand.Intn(100) < rrReSpinP {
+			time.Sleep(time.Second)
+			sendGlobalServerMessage(rrReSpinMessages[rand.Intn(len(rrReSpinMessages))])
+			remaining = rrChambers
+			alive = rrInitialBullets()
+			time.Sleep(time.Second)
+			sendGlobalServerMessage(fmt.Sprintf(
+				"🔄 Cylinder reset: %d bullet(s) lurk in %d fresh chambers!", alive, remaining))
+		}
 
 		// If all chambers exhausted without a hit (only possible with 0 bullets
 		// remaining after decrement), pick a random victim anyway.
