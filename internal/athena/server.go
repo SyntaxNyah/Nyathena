@@ -28,6 +28,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/MangosArentLiterature/Athena/internal/area"
@@ -112,6 +113,10 @@ var (
 		mu         sync.Mutex
 		timestamps []time.Time
 	}{}
+
+	// serverLockdown, when set to true, prevents all new (previously-unseen) IPIDs from
+	// connecting. Known IPIDs (those in ipFirstSeenTracker) are still allowed through.
+	serverLockdown atomic.Bool
 
 	// areaLastOOCMsg stores the last OOC message body (raw, as received) sent in each area.
 	// Used to prevent consecutive identical OOC messages from different clients in the same area.
@@ -890,6 +895,15 @@ func forgetIP(ipid string) {
 	}()
 }
 
+// resetKnownIPTracker clears the in-memory first-seen tracker entirely.
+// Called after a full database purge so that all IPIDs are treated as new on
+// their next connection.
+func resetKnownIPTracker() {
+	ipFirstSeenTracker.mu.Lock()
+	ipFirstSeenTracker.times = make(map[string]time.Time)
+	ipFirstSeenTracker.mu.Unlock()
+}
+
 // addTormentedIP adds an IPID to the in-memory torment set and persists it to the database.
 func addTormentedIP(ipid string) {
 	tormentedIPIDs.mu.Lock()
@@ -1206,17 +1220,23 @@ func checkNewIPIDModcallCooldown(ipid string) (bool, int) {
 // the configured time window. If so, connections from IPs that have never been seen before
 // are rejected to protect the server against distributed floods using many unique IPs.
 // Already-known IPs (those with an entry in ipFirstSeenTracker) are always permitted.
+// Also enforces lockdown mode: while lockdown is active, all new (unseen) IPs are rejected.
 // Returns true if the connection should be rejected.
 func checkGlobalNewIPRateLimit(ipid string) bool {
-if config.GlobalNewIPRateLimit <= 0 {
-return false
-}
-
 // Known IPs are always allowed through; only new, unseen IPs can trigger this limit.
 ipFirstSeenTracker.mu.Lock()
 _, known := ipFirstSeenTracker.times[ipid]
 ipFirstSeenTracker.mu.Unlock()
 if known {
+return false
+}
+
+// Lockdown mode: block all new IPIDs regardless of the configured rate limit.
+if serverLockdown.Load() {
+return true
+}
+
+if config.GlobalNewIPRateLimit <= 0 {
 return false
 }
 
