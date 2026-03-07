@@ -1484,7 +1484,7 @@ func (client *Client) CheckRawPacketRateLimit() bool {
 	defer client.mu.Unlock()
 
 	now := time.Now()
-	window := time.Duration(config.RawPacketRateLimitWindow) * time.Second
+	window := time.Duration(float64(time.Second) * config.RawPacketRateLimitWindow)
 
 	// Reset the counter when the window has expired or on the very first packet
 	// (rawPktWindowStart is zero-valued for new clients).
