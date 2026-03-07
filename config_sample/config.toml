@@ -217,8 +217,9 @@ packet_flood_autoban = true
 raw_packet_rate_limit = 20
 
 # Raw packet rate limiting: Time window in seconds for counting all incoming packets.
-# For example, with raw_packet_rate_limit=20 and raw_packet_rate_limit_window=2,
-# a single connection that sends more than 20 packets in a 2-second window is banned.
+# Decimal values are supported, e.g. 0.05 means a 50-millisecond window.
+# For example, with raw_packet_rate_limit=10 and raw_packet_rate_limit_window=0.05,
+# a connection that sends more than 10 packets in 50ms is banned.
 # Default: 2 seconds
 raw_packet_rate_limit_window = 2
 

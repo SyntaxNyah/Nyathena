@@ -1151,11 +1151,45 @@ func TestRawPacketRateLimitWindowExpiry(t *testing.T) {
 	}
 
 	// Wait for the window to expire.
-	time.Sleep(time.Duration(config.RawPacketRateLimitWindow)*time.Second + 100*time.Millisecond)
+	time.Sleep(time.Duration(float64(time.Second)*config.RawPacketRateLimitWindow) + 100*time.Millisecond)
 
 	// Should be allowed again after the window resets.
 	if client.CheckRawPacketRateLimit() {
 		t.Errorf("Client was raw-packet rate limited after window expired")
+	}
+}
+
+// TestRawPacketRateLimitSubSecondWindow verifies that a fractional-second window (e.g. 0.1s)
+// works correctly: the limit is enforced within the window and resets after it expires.
+func TestRawPacketRateLimitSubSecondWindow(t *testing.T) {
+	oldConfig := config
+	defer func() { config = oldConfig }()
+
+	config = &settings.Config{}
+	config.RawPacketRateLimit = 5
+	config.RawPacketRateLimitWindow = 0.1 // 100 ms
+
+	client := &Client{}
+
+	// First 5 packets should pass.
+	for i := 0; i < 5; i++ {
+		if client.CheckRawPacketRateLimit() {
+			t.Errorf("Client was raw-packet rate limited on packet %d (limit is 5)", i+1)
+			return
+		}
+	}
+
+	// 6th packet should trip the limit within the 100 ms window.
+	if !client.CheckRawPacketRateLimit() {
+		t.Errorf("Client was not raw-packet rate limited after exceeding limit in sub-second window")
+		return
+	}
+
+	// After the 100 ms window expires the counter resets and traffic is allowed again.
+	time.Sleep(time.Duration(float64(time.Second)*config.RawPacketRateLimitWindow) + 20*time.Millisecond)
+
+	if client.CheckRawPacketRateLimit() {
+		t.Errorf("Client was raw-packet rate limited after sub-second window expired")
 	}
 }
 

@@ -72,7 +72,7 @@ type ServerConfig struct {
 	ConnRateLimitWindow   int    `toml:"connection_rate_limit_window"`
 	PacketFloodAutoban         bool   `toml:"packet_flood_autoban"`
 	RawPacketRateLimit         int    `toml:"raw_packet_rate_limit"`
-	RawPacketRateLimitWindow   int    `toml:"raw_packet_rate_limit_window"`
+	RawPacketRateLimitWindow   float64 `toml:"raw_packet_rate_limit_window"`
 	OOCRateLimit          int    `toml:"ooc_rate_limit"`
 	OOCRateLimitWindow    int    `toml:"ooc_rate_limit_window"`
 	PingRateLimit             int    `toml:"ping_rate_limit"`
