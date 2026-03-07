@@ -263,7 +263,11 @@ func cmdGetBan(client *Client, args []string, _ string) {
 
 func cmdGlobal(client *Client, args []string, _ string) {
 	if !client.CanSpeakOOC() {
-		client.SendServerMessage("You are muted from sending OOC messages.")
+		if client.IsJailed() {
+			client.SendServerMessage("You are jailed and cannot send OOC messages.")
+		} else {
+			client.SendServerMessage("You are muted from sending OOC messages.")
+		}
 		return
 	}
 	if limited, remaining := checkNewIPIDOOCCooldown(client.Ipid()); limited {
@@ -572,7 +576,11 @@ func cmdPlayers(client *Client, args []string, _ string) {
 
 func cmdPM(client *Client, args []string, _ string) {
 	if !client.CanSpeakOOC() {
-		client.SendServerMessage("You are muted from sending OOC messages.")
+		if client.IsJailed() {
+			client.SendServerMessage("You are jailed and cannot send OOC messages.")
+		} else {
+			client.SendServerMessage("You are muted from sending OOC messages.")
+		}
 		return
 	}
 	if limited, remaining := checkNewIPIDOOCCooldown(client.Ipid()); limited {
@@ -798,6 +806,15 @@ func cmdJail(client *Client, args []string, usage string) {
 		logMsg += " for reason: " + *reason
 	}
 	addToBuffer(client, "CMD", logMsg, false)
+
+	durationDisplay := *duration
+	if strings.ToLower(*duration) == "perma" {
+		durationDisplay = "Permanent"
+	}
+	if err := webhook.PostJail(target.CurrentCharacter(), target.Showname(), target.OOCName(),
+		target.Ipid(), areaName, durationDisplay, *reason, client.OOCName(), uid); err != nil {
+		logger.LogErrorf("Failed to post jail webhook: %v", err)
+	}
 }
 
 // Handles /unjail

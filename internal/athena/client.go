@@ -789,10 +789,19 @@ func (client *Client) CanSpeakIC() bool {
 
 // CanSpeakOOC returns whether the client can send OOC messages.
 func (client *Client) CanSpeakOOC() bool {
+	if client.IsJailed() {
+		return false
+	}
 	if client.Muted() == OOCMuted || client.Muted() == ICOOCMuted {
 		return client.CheckUnmute()
 	}
 	return true
+}
+
+// IsJailed returns true if the client is currently serving an active jail sentence.
+func (client *Client) IsJailed() bool {
+	t := client.JailedUntil()
+	return !t.IsZero() && time.Now().UTC().Before(t)
 }
 
 // CanChangeMusic returns whether the client can change the music.
