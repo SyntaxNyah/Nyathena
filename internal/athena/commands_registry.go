@@ -1090,6 +1090,13 @@ func initCommands() {
 			desc:     "Start or join a Russian Roulette game. The unlucky loser receives a wild random punishment.",
 			reqPerms: permissions.PermissionField["NONE"],
 		},
+		"insultsim": {
+			handler:  cmdInsultSim,
+			minArgs:  1,
+			usage:    "Usage: /insultsim <uid> | /insultsim accept | /insultsim decline | /insultsim pick <numbers>",
+			desc:     "Challenge another player to an Insult Duel! Pick fragments each round to build insults. The loser gets a random punishment.",
+			reqPerms: permissions.PermissionField["NONE"],
+		},
 	}
 }
 
