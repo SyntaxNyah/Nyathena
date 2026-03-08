@@ -545,8 +545,8 @@ func initCommands() {
 		"testimony": {
 			handler:  cmdTestimony,
 			minArgs:  0,
-			usage:    "Usage /testimony <record|stop|play|update|insert|delete>",
-			desc:     "Updates the current area's testimony recorder, or prints current testimony.",
+			usage:    "Usage: /testimony <record|stop|play|update|insert|delete>\nUse /testimony record to start recording. Witnesses must be in /pos wit for their IC messages to be recorded.",
+			desc:     "Manages the area's testimony recorder. Use /testimony record to start recording. Witnesses must be in /pos wit for their IC messages to be captured.",
 			reqPerms: permissions.PermissionField["NONE"],
 		},
 		"testify": {
