@@ -45,6 +45,13 @@ func initCommands() {
 			desc:     "Prints Athena version information.",
 			reqPerms: permissions.PermissionField["NONE"],
 		},
+		"add": {
+			handler:  cmdAdd,
+			minArgs:  0,
+			usage:    "Usage: /add",
+			desc:     "Inserts the next IC message from the witness into the testimony after the current statement.",
+			reqPerms: permissions.PermissionField["CM"],
+		},
 		"allowcms": {
 			handler:  cmdAllowCMs,
 			minArgs:  1,
@@ -101,6 +108,13 @@ func initCommands() {
 			desc:     "Prints or sets the area's document.",
 			reqPerms: permissions.PermissionField["NONE"],
 		},
+		"delete": {
+			handler:  cmdDelete,
+			minArgs:  0,
+			usage:    "Usage: /delete",
+			desc:     "Deletes the current testimony statement.",
+			reqPerms: permissions.PermissionField["CM"],
+		},
 		"editban": {
 			handler:  cmdEditBan,
 			minArgs:  2,
@@ -113,6 +127,13 @@ func initCommands() {
 			minArgs:  0,
 			usage:    "Usage: /erp",
 			desc:     "The AO ERP command. Super fun!",
+			reqPerms: permissions.PermissionField["NONE"],
+		},
+		"examine": {
+			handler:  cmdExamine,
+			minArgs:  0,
+			usage:    "Usage: /examine",
+			desc:     "Starts cross-examination playback.",
 			reqPerms: permissions.PermissionField["NONE"],
 		},
 		"evimode": {
@@ -528,6 +549,13 @@ func initCommands() {
 			desc:     "Updates the current area's testimony recorder, or prints current testimony.",
 			reqPerms: permissions.PermissionField["NONE"],
 		},
+		"testify": {
+			handler:  cmdTestify,
+			minArgs:  0,
+			usage:    "Usage: /testify",
+			desc:     "Starts recording IC messages as testimony.",
+			reqPerms: permissions.PermissionField["CM"],
+		},
 		"unban": {
 			handler:  cmdUnban,
 			minArgs:  1,
@@ -540,6 +568,13 @@ func initCommands() {
 			minArgs:  0,
 			usage:    "Usage: /uncm [uid1],[uid2]...",
 			desc:     "Removes CM(s) from the current area.",
+			reqPerms: permissions.PermissionField["CM"],
+		},
+		"update": {
+			handler:  cmdUpdate,
+			minArgs:  0,
+			usage:    "Usage: /update",
+			desc:     "Updates the current testimony statement with the next IC message from the witness.",
 			reqPerms: permissions.PermissionField["CM"],
 		},
 		"uninvite": {
@@ -708,10 +743,10 @@ func initCommands() {
 		},
 		"pause": {
 			handler:  cmdPause,
-			minArgs:  1,
-			usage:    "Usage: /pause [-d duration] [-r reason] <uid1>,<uid2>...",
-			desc:     "Forces wait between messages.",
-			reqPerms: permissions.PermissionField["MUTE"],
+			minArgs:  0,
+			usage:    "Usage: /pause",
+			desc:     "Stops testimony recording.",
+			reqPerms: permissions.PermissionField["CM"],
 		},
 		"lag": {
 			handler:  cmdLag,

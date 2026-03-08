@@ -745,6 +745,99 @@ func cmdSwapEvi(client *Client, args []string, _ string) {
 	}
 }
 
+// Handles /testify
+
+func cmdTestify(client *Client, _ []string, _ string) {
+	if !client.HasCMPermission() {
+		client.SendServerMessage("You do not have permission to use that command.")
+		return
+	}
+	if client.Area().TstState() != area.TRIdle {
+		client.SendServerMessage("The recorder is currently active.")
+		return
+	}
+	client.Area().TstClear()
+	client.Area().SetTstState(area.TRRecording)
+	client.SendServerMessage("Recording testimony.")
+}
+
+// Handles /pause (stops testimony recording)
+
+func cmdPause(client *Client, _ []string, _ string) {
+	if !client.HasCMPermission() {
+		client.SendServerMessage("You do not have permission to use that command.")
+		return
+	}
+	client.Area().SetTstState(area.TRIdle)
+	client.SendServerMessage("Recorder stopped.")
+	client.Area().TstJump(0)
+	writeToArea(client.Area(), "RT", "testimony1#1")
+}
+
+// Handles /examine
+
+func cmdExamine(client *Client, _ []string, _ string) {
+	if !client.Area().HasTestimony() {
+		client.SendServerMessage("No testimony recorded.")
+		return
+	}
+	client.Area().SetTstState(area.TRPlayback)
+	client.SendServerMessage("Starting cross-examination.")
+	writeToArea(client.Area(), "RT", "testimony2")
+	writeToArea(client.Area(), "MS", client.Area().CurrentTstStatement())
+}
+
+// Handles /update
+
+func cmdUpdate(client *Client, _ []string, _ string) {
+	if !client.HasCMPermission() {
+		client.SendServerMessage("You do not have permission to use that command.")
+		return
+	}
+	if client.Area().TstState() != area.TRPlayback {
+		client.SendServerMessage("The recorder is not in playback mode.")
+		return
+	}
+	client.Area().SetTstState(area.TRUpdating)
+	client.SendServerMessage("Send the new statement in IC to update the current one.")
+}
+
+// Handles /add
+
+func cmdAdd(client *Client, _ []string, _ string) {
+	if !client.HasCMPermission() {
+		client.SendServerMessage("You do not have permission to use that command.")
+		return
+	}
+	if client.Area().TstState() != area.TRPlayback {
+		client.SendServerMessage("The recorder is not in playback mode.")
+		return
+	}
+	client.Area().SetTstState(area.TRInserting)
+	client.SendServerMessage("Send the new statement in IC to add it to the testimony.")
+}
+
+// Handles /delete
+
+func cmdDelete(client *Client, _ []string, _ string) {
+	if !client.HasCMPermission() {
+		client.SendServerMessage("You do not have permission to use that command.")
+		return
+	}
+	if client.Area().TstState() != area.TRPlayback {
+		client.SendServerMessage("The recorder is not in playback mode.")
+		return
+	}
+	if client.Area().CurrentTstIndex() > 0 {
+		err := client.Area().TstRemove()
+		if err != nil {
+			client.SendServerMessage("Failed to delete statement.")
+		}
+	} else {
+		client.SendServerMessage("Cannot delete the testimony title.")
+	}
+}
+
 // Handles /testimony
 
 func cmdTestimony(client *Client, args []string, _ string) {
