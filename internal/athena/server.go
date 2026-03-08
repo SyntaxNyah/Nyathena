@@ -707,20 +707,12 @@ func broadcastPlayerJoin(client *Client) {
 }
 
 // sendPlayerArup sends a player ARUP to all connected clients.
-// Hidden players are excluded from per-area counts.
+// Visible (non-hidden) player counts are read from each area's pre-maintained counter.
 func sendPlayerArup() {
-	// Build a visible count per area by iterating over connected clients,
-	// excluding any client that is currently hidden.
-	visibleCounts := make(map[*area.Area]int, len(areas))
-	for c := range clients.GetAllClients() {
-		if c.Uid() != -1 && !c.Hidden() {
-			visibleCounts[c.Area()]++
-		}
-	}
 	plCounts := make([]string, 1, 1+len(areas))
 	plCounts[0] = "0"
 	for _, a := range areas {
-		plCounts = append(plCounts, strconv.Itoa(visibleCounts[a]))
+		plCounts = append(plCounts, strconv.Itoa(a.VisiblePlayerCount()))
 	}
 	writeToAll("ARUP", plCounts...)
 }

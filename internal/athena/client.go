@@ -361,6 +361,9 @@ func (client *Client) clientCleanup() {
 			updatePlayers <- players.GetPlayerCount()
 		}
 		client.Area().RemoveChar(client.CharID())
+		if !client.Hidden() {
+			client.Area().RemoveVisiblePlayer()
+		}
 		writeToAll("PR", strconv.Itoa(client.Uid()), "1")
 		sendPlayerArup()
 	}
@@ -716,6 +719,9 @@ func (client *Client) CheckBanned(by db.BanLookup) bool {
 func (client *Client) JoinArea(area *area.Area) {
 	client.SetArea(area)
 	area.AddChar(client.CharID())
+	if !client.Hidden() {
+		area.AddVisiblePlayer()
+	}
 	def, pro := area.HP()
 	client.SendPacket("LE", areas[0].Evidence()...)
 	client.SendPacket("CharsCheck", area.Taken()...)
@@ -749,6 +755,9 @@ func (client *Client) ChangeArea(a *area.Area) bool {
 			sendCMArup()
 		}
 		client.Area().RemoveChar(client.CharID())
+		if !client.Hidden() {
+			client.Area().RemoveVisiblePlayer()
+		}
 	}
 	if a.IsTaken(client.CharID()) {
 		client.SetCharID(-1)
@@ -1053,6 +1062,9 @@ func (client *Client) forceChangeArea(a *area.Area) {
 		sendCMArup()
 	}
 	client.Area().RemoveChar(client.CharID())
+	if !client.Hidden() {
+		client.Area().RemoveVisiblePlayer()
+	}
 	if a.IsTaken(client.CharID()) {
 		client.SetCharID(-1)
 	}

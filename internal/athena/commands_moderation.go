@@ -286,12 +286,14 @@ func cmdGlobal(client *Client, args []string, _ string) {
 
 func cmdHide(client *Client, _ []string, _ string) {
 	if client.Hidden() {
+		client.Area().AddVisiblePlayer()
 		client.SetHidden(false)
 		broadcastPlayerJoin(client)
 		sendPlayerArup()
 		client.SendServerMessage("You are now visible.")
 		addToBuffer(client, "CMD", "Disabled hide mode.", false)
 	} else {
+		client.Area().RemoveVisiblePlayer()
 		client.SetHidden(true)
 		writeToAll("PR", strconv.Itoa(client.Uid()), "1")
 		sendPlayerArup()
@@ -556,62 +558,71 @@ func cmdPlayers(client *Client, args []string, _ string) {
 	flags.SetOutput(io.Discard)
 	all := flags.Bool("a", false, "")
 	flags.Parse(args)
-	isAdmin := permissions.HasPermission(client.Perms(), permissions.PermissionField["ADMIN"])
-	out := "\nPlayers\n----------\n"
-	entry := func(c *Client, auth bool) string {
-		prefix := ""
+
+	isAdmin   := permissions.HasPermission(client.Perms(), permissions.PermissionField["ADMIN"])
+	hasBanInfo := permissions.HasPermission(client.Perms(), permissions.PermissionField["BAN_INFO"])
+	targetArea := client.Area()
+
+	// Group clients by area in a single snapshot pass.
+	type areaClients struct {
+		list []*Client
+	}
+	grouped := make(map[*area.Area]*areaClients, len(areas))
+	for c := range clients.GetAllClients() {
+		a := c.Area()
+		if !*all && a != targetArea {
+			continue
+		}
+		if !isAdmin && c.Hidden() {
+			continue
+		}
+		ac := grouped[a]
+		if ac == nil {
+			ac = &areaClients{}
+			grouped[a] = ac
+		}
+		ac.list = append(ac.list, c)
+	}
+
+	// writeEntry appends a single client's info to the builder.
+	writeEntry := func(b *strings.Builder, c *Client) {
 		if c.Hidden() {
-			prefix = "[HIDDEN] "
+			b.WriteString("[HIDDEN] ")
 		}
-		s := fmt.Sprintf("%v[%v] %v\n", prefix, c.Uid(), c.CurrentCharacter())
-		if auth {
+		fmt.Fprintf(b, "[%v] %v\n", c.Uid(), c.CurrentCharacter())
+		if hasBanInfo {
 			if permissions.IsModerator(c.Perms()) {
-				s += fmt.Sprintf("Mod: %v\n", c.ModName())
+				fmt.Fprintf(b, "Mod: %v\n", c.ModName())
 			}
-			s += fmt.Sprintf("IPID: %v\n", c.Ipid())
+			fmt.Fprintf(b, "IPID: %v\n", c.Ipid())
 		}
-		if c.OOCName() != "" {
-			s += fmt.Sprintf("OOC: %v\n", c.OOCName())
+		if ooc := c.OOCName(); ooc != "" {
+			fmt.Fprintf(b, "OOC: %v\n", ooc)
 		}
-		return s
 	}
-	visibleCount := func(a *area.Area) int {
-		if isAdmin {
-			return a.PlayerCount()
-		}
-		count := 0
-		for c := range clients.GetAllClients() {
-			if c.Area() == a && !c.Hidden() {
-				count++
+
+	// printArea appends one area's section to the builder.
+	printArea := func(b *strings.Builder, a *area.Area) {
+		count := a.VisiblePlayerCount()
+		fmt.Fprintf(b, "%v:\n%v players online.\n", a.Name(), count)
+		if ac := grouped[a]; ac != nil {
+			for _, c := range ac.list {
+				writeEntry(b, c)
 			}
 		}
-		return count
 	}
+
+	var out strings.Builder
+	out.WriteString("\nPlayers\n----------\n")
 	if *all {
 		for _, a := range areas {
-			out += fmt.Sprintf("%v:\n%v players online.\n", a.Name(), visibleCount(a))
-			for c := range clients.GetAllClients() {
-				if c.Area() == a {
-					if c.Hidden() && !isAdmin {
-						continue
-					}
-					out += entry(c, permissions.HasPermission(client.Perms(), permissions.PermissionField["BAN_INFO"]))
-				}
-			}
-			out += "----------\n"
+			printArea(&out, a)
+			out.WriteString("----------\n")
 		}
 	} else {
-		out += fmt.Sprintf("%v:\n%v players online.\n", client.Area().Name(), visibleCount(client.Area()))
-		for c := range clients.GetAllClients() {
-			if c.Area() == client.Area() {
-				if c.Hidden() && !isAdmin {
-					continue
-				}
-				out += entry(c, permissions.HasPermission(client.Perms(), permissions.PermissionField["BAN_INFO"]))
-			}
-		}
+		printArea(&out, targetArea)
 	}
-	client.SendServerMessage(out)
+	client.SendServerMessage(out.String())
 }
 
 // Handles /pm
