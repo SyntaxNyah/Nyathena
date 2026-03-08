@@ -78,11 +78,12 @@ type CoinflipChallenge struct {
 }
 
 type Area struct {
-	data         AreaData
-	defaults     defaults
-	mu           sync.Mutex
-	taken        []bool
-	players      int
+	data           AreaData
+	defaults       defaults
+	mu             sync.Mutex
+	taken          []bool
+	players        int
+	visiblePlayers int
 	defhp        int
 	prohp        int
 	evidence     []string
@@ -252,6 +253,27 @@ func (a *Area) PlayerCount() int {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	return a.players
+}
+
+// VisiblePlayerCount returns the number of non-hidden players in the area.
+func (a *Area) VisiblePlayerCount() int {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return a.visiblePlayers
+}
+
+// AddVisiblePlayer increments the visible player count by one.
+func (a *Area) AddVisiblePlayer() {
+	a.mu.Lock()
+	a.visiblePlayers++
+	a.mu.Unlock()
+}
+
+// RemoveVisiblePlayer decrements the visible player count by one.
+func (a *Area) RemoveVisiblePlayer() {
+	a.mu.Lock()
+	a.visiblePlayers--
+	a.mu.Unlock()
 }
 
 // Evidence returns a list of evidence in the area.

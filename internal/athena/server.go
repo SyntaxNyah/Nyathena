@@ -676,7 +676,7 @@ func getAreaIndex(a *area.Area) int {
 // sendPlayerListToClient sends PR and PU packets for all currently joined players to a new client.
 func sendPlayerListToClient(newClient *Client) {
 	for c := range clients.GetAllClients() {
-		if c.Uid() == -1 || c == newClient {
+		if c.Uid() == -1 || c == newClient || c.Hidden() {
 			continue
 		}
 		uid := strconv.Itoa(c.Uid())
@@ -691,7 +691,11 @@ func sendPlayerListToClient(newClient *Client) {
 }
 
 // broadcastPlayerJoin sends PR and PU packets to all clients when a new player joins.
+// Hidden players are not broadcast.
 func broadcastPlayerJoin(client *Client) {
+	if client.Hidden() {
+		return
+	}
 	uid := strconv.Itoa(client.Uid())
 	writeToAll("PR", uid, "0")
 	if client.OOCName() != "" {
@@ -703,11 +707,12 @@ func broadcastPlayerJoin(client *Client) {
 }
 
 // sendPlayerArup sends a player ARUP to all connected clients.
+// Visible (non-hidden) player counts are read from each area's pre-maintained counter.
 func sendPlayerArup() {
 	plCounts := make([]string, 1, 1+len(areas))
 	plCounts[0] = "0"
 	for _, a := range areas {
-		plCounts = append(plCounts, strconv.Itoa(a.PlayerCount()))
+		plCounts = append(plCounts, strconv.Itoa(a.VisiblePlayerCount()))
 	}
 	writeToAll("ARUP", plCounts...)
 }

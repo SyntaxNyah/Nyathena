@@ -185,6 +185,7 @@ type Client struct {
 	forcedShowname  string      // Showname forced by a moderator ("" if none)
 	connectedAt     time.Time   // Time the client joined the server (uid assigned); zero if not yet joined
 	jailAreaID      int         // Area index where this client is jailed; -1 = no specific jail area
+	hidden          bool        // Whether the client is hidden from the player list and area counts
 }
 
 // NewClient returns a new client.
@@ -360,6 +361,9 @@ func (client *Client) clientCleanup() {
 			updatePlayers <- players.GetPlayerCount()
 		}
 		client.Area().RemoveChar(client.CharID())
+		if !client.Hidden() {
+			client.Area().RemoveVisiblePlayer()
+		}
 		writeToAll("PR", strconv.Itoa(client.Uid()), "1")
 		sendPlayerArup()
 	}
@@ -715,6 +719,9 @@ func (client *Client) CheckBanned(by db.BanLookup) bool {
 func (client *Client) JoinArea(area *area.Area) {
 	client.SetArea(area)
 	area.AddChar(client.CharID())
+	if !client.Hidden() {
+		area.AddVisiblePlayer()
+	}
 	def, pro := area.HP()
 	client.SendPacket("LE", areas[0].Evidence()...)
 	client.SendPacket("CharsCheck", area.Taken()...)
@@ -748,6 +755,9 @@ func (client *Client) ChangeArea(a *area.Area) bool {
 			sendCMArup()
 		}
 		client.Area().RemoveChar(client.CharID())
+		if !client.Hidden() {
+			client.Area().RemoveVisiblePlayer()
+		}
 	}
 	if a.IsTaken(client.CharID()) {
 		client.SetCharID(-1)
@@ -1023,6 +1033,20 @@ func (client *Client) SetJailAreaID(id int) {
 	client.mu.Unlock()
 }
 
+// Hidden returns whether the client is hidden from the player list and area counts.
+func (client *Client) Hidden() bool {
+	client.mu.Lock()
+	defer client.mu.Unlock()
+	return client.hidden
+}
+
+// SetHidden sets whether the client is hidden from the player list and area counts.
+func (client *Client) SetHidden(h bool) {
+	client.mu.Lock()
+	client.hidden = h
+	client.mu.Unlock()
+}
+
 // forceChangeArea moves the client to the given area unconditionally, bypassing
 // the jailed-player area-lock and area invitation checks that ChangeArea enforces.
 // Used to place a jailed player into their designated cell (both at jail time and on reconnect).
@@ -1038,6 +1062,9 @@ func (client *Client) forceChangeArea(a *area.Area) {
 		sendCMArup()
 	}
 	client.Area().RemoveChar(client.CharID())
+	if !client.Hidden() {
+		client.Area().RemoveVisiblePlayer()
+	}
 	if a.IsTaken(client.CharID()) {
 		client.SetCharID(-1)
 	}
