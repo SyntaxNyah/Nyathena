@@ -69,8 +69,10 @@ var (
 	connTracker = struct {
 		mu         sync.Mutex
 		timestamps map[string][]time.Time // ipid -> connection attempt timestamps
+		rejections map[string]int         // ipid -> consecutive rejection count
 	}{
 		timestamps: make(map[string][]time.Time),
+		rejections: make(map[string]int),
 	}
 
 	// ipModcallTracker tracks the last modcall time per IP across connections.
@@ -456,8 +458,11 @@ func (s *Server) ListenTCP() {
 			logger.LogError(err.Error())
 		}
 		ipid := getIpid(conn.RemoteAddr().String())
-		if checkConnRateLimit(ipid) {
+		if reject, autoban := checkConnRateLimit(ipid); reject {
 			logger.LogInfof("Connection from %v rejected (connection rate limit exceeded)", ipid)
+			if autoban {
+				go autobanFlooder(ipid, "connection flooding")
+			}
 			conn.Close()
 			continue
 		}
@@ -551,8 +556,11 @@ func ListenWSS() { server.ListenWSS() }
 // HandleWS handles a websocket connection.
 func HandleWS(w http.ResponseWriter, r *http.Request) {
 	ipid := getIpid(getRealIP(r))
-	if checkConnRateLimit(ipid) {
+	if reject, autoban := checkConnRateLimit(ipid); reject {
 		logger.LogInfof("Connection from %v rejected (connection rate limit exceeded)", ipid)
+		if autoban {
+			go autobanFlooder(ipid, "connection flooding")
+		}
 		http.Error(w, "Too many connections", http.StatusTooManyRequests)
 		return
 	}
@@ -856,10 +864,13 @@ func getParrotMsg() string {
 
 // checkConnRateLimit checks whether the given ipid has exceeded the connection rate limit.
 // It records every connection attempt (including rejected ones) in the sliding window.
-// Returns true if the connection should be rejected.
-func checkConnRateLimit(ipid string) bool {
+// Returns rejected=true if the connection should be rejected.
+// Returns autoban=true when conn_flood_autoban is enabled and the rejection count hits
+// the threshold exactly this call — the caller should ban the IP asynchronously.
+// Both values are determined under a single lock acquisition.
+func checkConnRateLimit(ipid string) (rejected, autoban bool) {
 	if config.ConnRateLimit <= 0 {
-		return false
+		return false, false
 	}
 
 	connTracker.mu.Lock()
@@ -886,7 +897,17 @@ func checkConnRateLimit(ipid string) bool {
 	times = append(times, now)
 	connTracker.timestamps[ipid] = times
 
-	return len(times) > config.ConnRateLimit
+	if len(times) <= config.ConnRateLimit {
+		return false, false
+	}
+
+	// Connection is rejected. Check whether the auto-ban threshold has been reached.
+	// Use == (not >=) so the autoban goroutine is spawned exactly once per flood.
+	if config.ConnFloodAutoban && config.ConnFloodAutobanThreshold > 0 {
+		connTracker.rejections[ipid]++
+		autoban = connTracker.rejections[ipid] == config.ConnFloodAutobanThreshold
+	}
+	return true, autoban
 }
 
 // forgetIP removes an IPID from the in-memory first-seen tracker and from the
@@ -896,6 +917,10 @@ func forgetIP(ipid string) {
 	ipFirstSeenTracker.mu.Lock()
 	delete(ipFirstSeenTracker.times, ipid)
 	ipFirstSeenTracker.mu.Unlock()
+
+	connTracker.mu.Lock()
+	delete(connTracker.rejections, ipid)
+	connTracker.mu.Unlock()
 
 	go func() {
 		if err := db.RemoveKnownIP(ipid); err != nil {
@@ -947,12 +972,10 @@ func isIPIDTormented(ipid string) bool {
 	return ok
 }
 
-// autoBanPacketFlooder adds a temporary ban for an IP that has exceeded the raw packet rate limit.
-// This is only triggered by raw packet flooding (sending hundreds of packets per second),
-// which is characteristic of bots/DDoS tools. IC/OOC/music message rate limit violations
-// result in a kick, not a ban (see KickForRateLimit).
-// If the IP is already banned, no additional ban is added.
-func autoBanPacketFlooder(ipid string) {
+// autobanFlooder bans an IP for the given flood reason using the configured default ban
+// duration. reason should be a short description, e.g. "packet flooding".
+// No-op if the IP is already banned or the ban cannot be recorded.
+func autobanFlooder(ipid, reason string) {
 	banned, _, err := db.IsBanned(db.IPID, ipid)
 	if err != nil || banned {
 		return
@@ -961,14 +984,23 @@ func autoBanPacketFlooder(ipid string) {
 	if err != nil {
 		return
 	}
-	expiry := time.Now().UTC().Add(dur).Unix()
-	_, err = db.AddBan(ipid, "", time.Now().UTC().Unix(), expiry, "Automatic ban: packet flooding", "Server")
+	now := time.Now().UTC()
+	_, err = db.AddBan(ipid, "", now.Unix(), now.Add(dur).Unix(), "Automatic ban: "+reason, "Server")
 	if err != nil {
-		logger.LogErrorf("Failed to auto-ban packet flooder %v: %v", ipid, err)
+		logger.LogErrorf("Failed to auto-ban %v (%s): %v", ipid, reason, err)
 		return
 	}
 	forgetIP(ipid)
-	logger.LogInfof("Auto-banned %v for packet flooding", ipid)
+	logger.LogInfof("Auto-banned %v for %s", ipid, reason)
+}
+
+// autoBanPacketFlooder bans an IP that exceeded the raw packet rate limit.
+// This is only triggered by raw packet flooding (sending hundreds of packets per second),
+// which is characteristic of bots/DDoS tools. IC/OOC/music message rate limit violations
+// result in a kick, not a ban (see KickForRateLimit).
+// If the IP is already banned, no additional ban is added.
+func autoBanPacketFlooder(ipid string) {
+	autobanFlooder(ipid, "packet flooding")
 }
 
 // startConnTrackerCleanup periodically removes stale entries from the connection tracker
@@ -991,6 +1023,9 @@ func startConnTrackerCleanup() {
 			}
 			if i == len(times) {
 				delete(connTracker.timestamps, ipid)
+				// Also clear rejection counts for IPs with no recent connection attempts,
+				// so short-lived flooders that stop connecting don't accumulate forever.
+				delete(connTracker.rejections, ipid)
 			} else if i > 0 {
 				connTracker.timestamps[ipid] = times[i:]
 			}
