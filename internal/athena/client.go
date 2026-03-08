@@ -185,6 +185,7 @@ type Client struct {
 	forcedShowname  string      // Showname forced by a moderator ("" if none)
 	connectedAt     time.Time   // Time the client joined the server (uid assigned); zero if not yet joined
 	jailAreaID      int         // Area index where this client is jailed; -1 = no specific jail area
+	hidden          bool        // Whether the client is hidden from the player list and area counts
 }
 
 // NewClient returns a new client.
@@ -1020,6 +1021,20 @@ func (client *Client) JailAreaID() int {
 func (client *Client) SetJailAreaID(id int) {
 	client.mu.Lock()
 	client.jailAreaID = id
+	client.mu.Unlock()
+}
+
+// Hidden returns whether the client is hidden from the player list and area counts.
+func (client *Client) Hidden() bool {
+	client.mu.Lock()
+	defer client.mu.Unlock()
+	return client.hidden
+}
+
+// SetHidden sets whether the client is hidden from the player list and area counts.
+func (client *Client) SetHidden(h bool) {
+	client.mu.Lock()
+	client.hidden = h
 	client.mu.Unlock()
 }
 

@@ -25,6 +25,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/MangosArentLiterature/Athena/internal/area"
 	"github.com/MangosArentLiterature/Athena/internal/db"
 	"github.com/MangosArentLiterature/Athena/internal/logger"
 	"github.com/MangosArentLiterature/Athena/internal/permissions"
@@ -279,6 +280,24 @@ func cmdGlobal(client *Client, args []string, _ string) {
 		return
 	}
 	writeToAll("CT", fmt.Sprintf("[GLOBAL] %v", client.OOCName()), strings.Join(args, " "), "1")
+}
+
+// Handles /hide
+
+func cmdHide(client *Client, _ []string, _ string) {
+	if client.Hidden() {
+		client.SetHidden(false)
+		broadcastPlayerJoin(client)
+		sendPlayerArup()
+		client.SendServerMessage("You are now visible.")
+		addToBuffer(client, "CMD", "Disabled hide mode.", false)
+	} else {
+		client.SetHidden(true)
+		writeToAll("PR", strconv.Itoa(client.Uid()), "1")
+		sendPlayerArup()
+		client.SendServerMessage("You are now hidden from the player list and room counts.")
+		addToBuffer(client, "CMD", "Enabled hide mode.", false)
+	}
 }
 
 // Handles /invite
@@ -537,9 +556,14 @@ func cmdPlayers(client *Client, args []string, _ string) {
 	flags.SetOutput(io.Discard)
 	all := flags.Bool("a", false, "")
 	flags.Parse(args)
+	isAdmin := permissions.HasPermission(client.Perms(), permissions.PermissionField["ADMIN"])
 	out := "\nPlayers\n----------\n"
 	entry := func(c *Client, auth bool) string {
-		s := fmt.Sprintf("[%v] %v\n", c.Uid(), c.CurrentCharacter())
+		prefix := ""
+		if c.Hidden() {
+			prefix = "[HIDDEN] "
+		}
+		s := fmt.Sprintf("%v[%v] %v\n", prefix, c.Uid(), c.CurrentCharacter())
 		if auth {
 			if permissions.IsModerator(c.Perms()) {
 				s += fmt.Sprintf("Mod: %v\n", c.ModName())
@@ -551,20 +575,38 @@ func cmdPlayers(client *Client, args []string, _ string) {
 		}
 		return s
 	}
+	visibleCount := func(a *area.Area) int {
+		if isAdmin {
+			return a.PlayerCount()
+		}
+		count := 0
+		for c := range clients.GetAllClients() {
+			if c.Area() == a && !c.Hidden() {
+				count++
+			}
+		}
+		return count
+	}
 	if *all {
 		for _, a := range areas {
-			out += fmt.Sprintf("%v:\n%v players online.\n", a.Name(), a.PlayerCount())
+			out += fmt.Sprintf("%v:\n%v players online.\n", a.Name(), visibleCount(a))
 			for c := range clients.GetAllClients() {
 				if c.Area() == a {
+					if c.Hidden() && !isAdmin {
+						continue
+					}
 					out += entry(c, permissions.HasPermission(client.Perms(), permissions.PermissionField["BAN_INFO"]))
 				}
 			}
 			out += "----------\n"
 		}
 	} else {
-		out += fmt.Sprintf("%v:\n%v players online.\n", client.Area().Name(), client.Area().PlayerCount())
+		out += fmt.Sprintf("%v:\n%v players online.\n", client.Area().Name(), visibleCount(client.Area()))
 		for c := range clients.GetAllClients() {
 			if c.Area() == client.Area() {
+				if c.Hidden() && !isAdmin {
+					continue
+				}
 				out += entry(c, permissions.HasPermission(client.Perms(), permissions.PermissionField["BAN_INFO"]))
 			}
 		}

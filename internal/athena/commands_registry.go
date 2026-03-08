@@ -171,6 +171,13 @@ func initCommands() {
 			desc:     "Sends a global message.",
 			reqPerms: permissions.PermissionField["NONE"],
 		},
+		"hide": {
+			handler:  cmdHide,
+			minArgs:  0,
+			usage:    "Usage: /hide",
+			desc:     "Toggles hiding yourself from the player list, /players, /gas, and room player counts.",
+			reqPerms: permissions.PermissionField["ADMIN"],
+		},
 		"invite": {
 			handler:  cmdInvite,
 			minArgs:  1,
