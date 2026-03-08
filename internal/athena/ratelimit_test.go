@@ -282,7 +282,7 @@ func TestConnRateLimitDisabled(t *testing.T) {
 
 	ipid := "testipDisabled"
 	for i := 0; i < 100; i++ {
-		if checkConnRateLimit(ipid) {
+		if reject, _ := checkConnRateLimit(ipid); reject {
 			t.Errorf("Connection was rejected when connection rate limiting is disabled (attempt %d)", i+1)
 			return
 		}
@@ -307,14 +307,14 @@ func TestConnRateLimitBasic(t *testing.T) {
 
 	// First 5 connections should be allowed
 	for i := 0; i < 5; i++ {
-		if checkConnRateLimit(ipid) {
+		if reject, _ := checkConnRateLimit(ipid); reject {
 			t.Errorf("Connection %d was rejected (limit is 5)", i+1)
 			return
 		}
 	}
 
 	// 6th connection should be rejected
-	if !checkConnRateLimit(ipid) {
+	if reject, _ := checkConnRateLimit(ipid); !reject {
 		t.Errorf("Connection was not rejected after exceeding the limit")
 	}
 }
@@ -337,14 +337,14 @@ func TestConnRateLimitWindowExpiry(t *testing.T) {
 
 	// Fill up the limit
 	for i := 0; i < 3; i++ {
-		if checkConnRateLimit(ipid) {
+		if reject, _ := checkConnRateLimit(ipid); reject {
 			t.Errorf("Connection %d was rejected prematurely", i+1)
 			return
 		}
 	}
 
 	// Should be rejected now
-	if !checkConnRateLimit(ipid) {
+	if reject, _ := checkConnRateLimit(ipid); !reject {
 		t.Errorf("Connection was not rejected after reaching the limit")
 		return
 	}
@@ -353,7 +353,7 @@ func TestConnRateLimitWindowExpiry(t *testing.T) {
 	time.Sleep(time.Duration(config.ConnRateLimitWindow)*time.Second + 100*time.Millisecond)
 
 	// Should be allowed again after window expiry
-	if checkConnRateLimit(ipid) {
+	if reject, _ := checkConnRateLimit(ipid); reject {
 		t.Errorf("Connection was rejected after window expired")
 	}
 }
@@ -378,123 +378,154 @@ func TestConnRateLimitIsolation(t *testing.T) {
 	// Fill up limit for ipid1
 	checkConnRateLimit(ipid1)
 	checkConnRateLimit(ipid1)
-	if !checkConnRateLimit(ipid1) {
+	if reject, _ := checkConnRateLimit(ipid1); !reject {
 		t.Errorf("ipid1 was not rejected after exceeding the limit")
 		return
 	}
 
 	// ipid2 should not be affected
-	if checkConnRateLimit(ipid2) {
+	if reject, _ := checkConnRateLimit(ipid2); reject {
 		t.Errorf("ipid2 was rejected even though it has not exceeded its limit")
 	}
 }
 
-// TestShouldAutoBanConnFlooder tests that shouldAutoBanConnFlooder returns true only
-// after the configured threshold of rejections is reached.
-func TestShouldAutoBanConnFlooder(t *testing.T) {
+// TestConnFloodAutobanThreshold verifies that the autoban signal is returned exactly once
+// when the rejection count reaches the configured threshold, and not before or after.
+func TestConnFloodAutobanThreshold(t *testing.T) {
 	oldConfig := config
 	defer func() { config = oldConfig }()
 
 	config = &settings.Config{}
+	config.ConnRateLimit = 2
+	config.ConnRateLimitWindow = 10
 	config.ConnFloodAutoban = true
 	config.ConnFloodAutobanThreshold = 3
 
-	// Reset rejection tracker for a clean test
 	connTracker.mu.Lock()
+	connTracker.timestamps = make(map[string][]time.Time)
 	connTracker.rejections = make(map[string]int)
 	connTracker.mu.Unlock()
 
-	ipid := "testAutobanFlooder"
+	ipid := "testAutobanThreshold"
 
-	// First 2 rejections should not trigger auto-ban
+	// First 2 connections are within limit: no rejection, no autoban.
 	for i := 0; i < 2; i++ {
-		if shouldAutoBanConnFlooder(ipid) {
-			t.Errorf("Auto-ban triggered at rejection %d (threshold is 3)", i+1)
+		if reject, autoban := checkConnRateLimit(ipid); reject || autoban {
+			t.Errorf("connection %d: got (reject=%v, autoban=%v), want (false, false)", i+1, reject, autoban)
 			return
 		}
 	}
 
-	// 3rd rejection should trigger auto-ban
-	if !shouldAutoBanConnFlooder(ipid) {
-		t.Errorf("Auto-ban was not triggered after reaching the threshold")
+	// Rejections 1 and 2: rejected but not yet at threshold.
+	for i := 0; i < 2; i++ {
+		if reject, autoban := checkConnRateLimit(ipid); !reject || autoban {
+			t.Errorf("rejection %d: got (reject=%v, autoban=%v), want (true, false)", i+1, reject, autoban)
+			return
+		}
+	}
+
+	// Rejection 3: threshold reached — autoban must fire.
+	if reject, autoban := checkConnRateLimit(ipid); !reject || !autoban {
+		t.Errorf("rejection 3: got (reject=%v, autoban=%v), want (true, true)", reject, autoban)
+		return
+	}
+
+	// Rejection 4+: threshold already passed — autoban must NOT fire again.
+	for i := 0; i < 3; i++ {
+		if reject, autoban := checkConnRateLimit(ipid); !reject || autoban {
+			t.Errorf("rejection %d after threshold: got (reject=%v, autoban=%v), want (true, false)", i+4, reject, autoban)
+			return
+		}
 	}
 }
 
-// TestShouldAutoBanConnFlooderDisabled tests that shouldAutoBanConnFlooder never
-// triggers when conn_flood_autoban is disabled.
-func TestShouldAutoBanConnFlooderDisabled(t *testing.T) {
+// TestConnFloodAutobanDisabled verifies that no autoban signal is returned when
+// conn_flood_autoban is disabled.
+func TestConnFloodAutobanDisabled(t *testing.T) {
 	oldConfig := config
 	defer func() { config = oldConfig }()
 
 	config = &settings.Config{}
+	config.ConnRateLimit = 1
+	config.ConnRateLimitWindow = 10
 	config.ConnFloodAutoban = false
 	config.ConnFloodAutobanThreshold = 1
 
-	// Reset rejection tracker for a clean test
 	connTracker.mu.Lock()
+	connTracker.timestamps = make(map[string][]time.Time)
 	connTracker.rejections = make(map[string]int)
 	connTracker.mu.Unlock()
 
 	ipid := "testAutobanDisabled"
 
-	for i := 0; i < 100; i++ {
-		if shouldAutoBanConnFlooder(ipid) {
-			t.Errorf("Auto-ban triggered when conn_flood_autoban is disabled (rejection %d)", i+1)
+	checkConnRateLimit(ipid) // fills the limit
+	for i := 0; i < 20; i++ {
+		if _, autoban := checkConnRateLimit(ipid); autoban {
+			t.Errorf("autoban triggered at rejection %d when conn_flood_autoban is disabled", i+1)
 			return
 		}
 	}
 }
 
-// TestShouldAutoBanConnFlooderZeroThreshold tests that shouldAutoBanConnFlooder never
-// triggers when the threshold is 0 (disabled).
-func TestShouldAutoBanConnFlooderZeroThreshold(t *testing.T) {
+// TestConnFloodAutobanZeroThreshold verifies that no autoban signal is returned when
+// conn_flood_autoban_threshold is 0.
+func TestConnFloodAutobanZeroThreshold(t *testing.T) {
 	oldConfig := config
 	defer func() { config = oldConfig }()
 
 	config = &settings.Config{}
+	config.ConnRateLimit = 1
+	config.ConnRateLimitWindow = 10
 	config.ConnFloodAutoban = true
 	config.ConnFloodAutobanThreshold = 0
 
-	// Reset rejection tracker for a clean test
 	connTracker.mu.Lock()
+	connTracker.timestamps = make(map[string][]time.Time)
 	connTracker.rejections = make(map[string]int)
 	connTracker.mu.Unlock()
 
 	ipid := "testAutobanZeroThreshold"
 
-	for i := 0; i < 100; i++ {
-		if shouldAutoBanConnFlooder(ipid) {
-			t.Errorf("Auto-ban triggered when threshold is 0 (rejection %d)", i+1)
+	checkConnRateLimit(ipid) // fills the limit
+	for i := 0; i < 20; i++ {
+		if _, autoban := checkConnRateLimit(ipid); autoban {
+			t.Errorf("autoban triggered at rejection %d when threshold is 0", i+1)
 			return
 		}
 	}
 }
 
-// TestShouldAutoBanConnFlooderIsolation tests that rejection counts are tracked per IP.
-func TestShouldAutoBanConnFlooderIsolation(t *testing.T) {
+// TestConnFloodAutobanIsolation verifies that rejection counts are tracked per IP and
+// one IP reaching the threshold does not affect another.
+func TestConnFloodAutobanIsolation(t *testing.T) {
 	oldConfig := config
 	defer func() { config = oldConfig }()
 
 	config = &settings.Config{}
+	config.ConnRateLimit = 1
+	config.ConnRateLimitWindow = 10
 	config.ConnFloodAutoban = true
-	config.ConnFloodAutobanThreshold = 3
+	config.ConnFloodAutobanThreshold = 2
 
-	// Reset rejection tracker for a clean test
 	connTracker.mu.Lock()
+	connTracker.timestamps = make(map[string][]time.Time)
 	connTracker.rejections = make(map[string]int)
 	connTracker.mu.Unlock()
 
 	ipid1 := "testAutobanIso1"
 	ipid2 := "testAutobanIso2"
 
-	// Fill threshold for ipid1
-	for i := 0; i < 3; i++ {
-		shouldAutoBanConnFlooder(ipid1)
-	}
+	// Fill rate limit for both IPs.
+	checkConnRateLimit(ipid1)
+	checkConnRateLimit(ipid2)
 
-	// ipid2 should not be affected
-	if shouldAutoBanConnFlooder(ipid2) {
-		t.Errorf("ipid2 triggered auto-ban even though it has not reached the threshold")
+	// Trigger threshold for ipid1 (2 rejections).
+	checkConnRateLimit(ipid1) // rejection 1 — no autoban
+	checkConnRateLimit(ipid1) // rejection 2 — autoban fires
+
+	// ipid2 has 0 rejections so far; its first rejection should not trigger autoban.
+	if _, autoban := checkConnRateLimit(ipid2); autoban {
+		t.Errorf("ipid2 triggered autoban even though it has not reached the threshold")
 	}
 }
 
