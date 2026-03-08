@@ -69,8 +69,10 @@ var (
 	connTracker = struct {
 		mu         sync.Mutex
 		timestamps map[string][]time.Time // ipid -> connection attempt timestamps
+		rejections map[string]int         // ipid -> consecutive rejection count
 	}{
 		timestamps: make(map[string][]time.Time),
+		rejections: make(map[string]int),
 	}
 
 	// ipModcallTracker tracks the last modcall time per IP across connections.
@@ -553,6 +555,9 @@ func HandleWS(w http.ResponseWriter, r *http.Request) {
 	ipid := getIpid(getRealIP(r))
 	if checkConnRateLimit(ipid) {
 		logger.LogInfof("Connection from %v rejected (connection rate limit exceeded)", ipid)
+		if shouldAutoBanConnFlooder(ipid) {
+			go autoBanConnFlooder(ipid)
+		}
 		http.Error(w, "Too many connections", http.StatusTooManyRequests)
 		return
 	}
@@ -897,6 +902,10 @@ func forgetIP(ipid string) {
 	delete(ipFirstSeenTracker.times, ipid)
 	ipFirstSeenTracker.mu.Unlock()
 
+	connTracker.mu.Lock()
+	delete(connTracker.rejections, ipid)
+	connTracker.mu.Unlock()
+
 	go func() {
 		if err := db.RemoveKnownIP(ipid); err != nil {
 			logger.LogErrorf("Failed to remove banned IP %s from known IPs: %v", ipid, err)
@@ -971,6 +980,42 @@ func autoBanPacketFlooder(ipid string) {
 	logger.LogInfof("Auto-banned %v for packet flooding", ipid)
 }
 
+// shouldAutoBanConnFlooder increments the connection rejection count for the given IPID
+// and returns true if conn_flood_autoban is enabled and the rejection count has reached
+// the configured threshold. Must be called only when a connection has already been rejected
+// by checkConnRateLimit.
+func shouldAutoBanConnFlooder(ipid string) bool {
+	if !config.ConnFloodAutoban || config.ConnFloodAutobanThreshold <= 0 {
+		return false
+	}
+	connTracker.mu.Lock()
+	connTracker.rejections[ipid]++
+	count := connTracker.rejections[ipid]
+	connTracker.mu.Unlock()
+	return count >= config.ConnFloodAutobanThreshold
+}
+
+// autoBanConnFlooder adds a temporary ban for an IP that has exceeded the connection
+// flood auto-ban threshold. If the IP is already banned, no additional ban is added.
+func autoBanConnFlooder(ipid string) {
+	banned, _, err := db.IsBanned(db.IPID, ipid)
+	if err != nil || banned {
+		return
+	}
+	dur, err := str2duration.ParseDuration(config.BanLen)
+	if err != nil {
+		return
+	}
+	expiry := time.Now().UTC().Add(dur).Unix()
+	_, err = db.AddBan(ipid, "", time.Now().UTC().Unix(), expiry, "Automatic ban: connection flooding", "Server")
+	if err != nil {
+		logger.LogErrorf("Failed to auto-ban connection flooder %v: %v", ipid, err)
+		return
+	}
+	forgetIP(ipid)
+	logger.LogInfof("Auto-banned %v for connection flooding", ipid)
+}
+
 // startConnTrackerCleanup periodically removes stale entries from the connection tracker
 // to prevent unbounded memory growth from unique IPs that no longer connect.
 // This goroutine runs for the lifetime of the server process; a graceful stop is not
@@ -991,6 +1036,9 @@ func startConnTrackerCleanup() {
 			}
 			if i == len(times) {
 				delete(connTracker.timestamps, ipid)
+				// Also clear rejection counts for IPs with no recent connection attempts,
+				// so short-lived flooders that stop connecting don't accumulate forever.
+				delete(connTracker.rejections, ipid)
 			} else if i > 0 {
 				connTracker.timestamps[ipid] = times[i:]
 			}

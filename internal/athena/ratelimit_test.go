@@ -389,6 +389,115 @@ func TestConnRateLimitIsolation(t *testing.T) {
 	}
 }
 
+// TestShouldAutoBanConnFlooder tests that shouldAutoBanConnFlooder returns true only
+// after the configured threshold of rejections is reached.
+func TestShouldAutoBanConnFlooder(t *testing.T) {
+	oldConfig := config
+	defer func() { config = oldConfig }()
+
+	config = &settings.Config{}
+	config.ConnFloodAutoban = true
+	config.ConnFloodAutobanThreshold = 3
+
+	// Reset rejection tracker for a clean test
+	connTracker.mu.Lock()
+	connTracker.rejections = make(map[string]int)
+	connTracker.mu.Unlock()
+
+	ipid := "testAutobanFlooder"
+
+	// First 2 rejections should not trigger auto-ban
+	for i := 0; i < 2; i++ {
+		if shouldAutoBanConnFlooder(ipid) {
+			t.Errorf("Auto-ban triggered at rejection %d (threshold is 3)", i+1)
+			return
+		}
+	}
+
+	// 3rd rejection should trigger auto-ban
+	if !shouldAutoBanConnFlooder(ipid) {
+		t.Errorf("Auto-ban was not triggered after reaching the threshold")
+	}
+}
+
+// TestShouldAutoBanConnFlooderDisabled tests that shouldAutoBanConnFlooder never
+// triggers when conn_flood_autoban is disabled.
+func TestShouldAutoBanConnFlooderDisabled(t *testing.T) {
+	oldConfig := config
+	defer func() { config = oldConfig }()
+
+	config = &settings.Config{}
+	config.ConnFloodAutoban = false
+	config.ConnFloodAutobanThreshold = 1
+
+	// Reset rejection tracker for a clean test
+	connTracker.mu.Lock()
+	connTracker.rejections = make(map[string]int)
+	connTracker.mu.Unlock()
+
+	ipid := "testAutobanDisabled"
+
+	for i := 0; i < 100; i++ {
+		if shouldAutoBanConnFlooder(ipid) {
+			t.Errorf("Auto-ban triggered when conn_flood_autoban is disabled (rejection %d)", i+1)
+			return
+		}
+	}
+}
+
+// TestShouldAutoBanConnFlooderZeroThreshold tests that shouldAutoBanConnFlooder never
+// triggers when the threshold is 0 (disabled).
+func TestShouldAutoBanConnFlooderZeroThreshold(t *testing.T) {
+	oldConfig := config
+	defer func() { config = oldConfig }()
+
+	config = &settings.Config{}
+	config.ConnFloodAutoban = true
+	config.ConnFloodAutobanThreshold = 0
+
+	// Reset rejection tracker for a clean test
+	connTracker.mu.Lock()
+	connTracker.rejections = make(map[string]int)
+	connTracker.mu.Unlock()
+
+	ipid := "testAutobanZeroThreshold"
+
+	for i := 0; i < 100; i++ {
+		if shouldAutoBanConnFlooder(ipid) {
+			t.Errorf("Auto-ban triggered when threshold is 0 (rejection %d)", i+1)
+			return
+		}
+	}
+}
+
+// TestShouldAutoBanConnFlooderIsolation tests that rejection counts are tracked per IP.
+func TestShouldAutoBanConnFlooderIsolation(t *testing.T) {
+	oldConfig := config
+	defer func() { config = oldConfig }()
+
+	config = &settings.Config{}
+	config.ConnFloodAutoban = true
+	config.ConnFloodAutobanThreshold = 3
+
+	// Reset rejection tracker for a clean test
+	connTracker.mu.Lock()
+	connTracker.rejections = make(map[string]int)
+	connTracker.mu.Unlock()
+
+	ipid1 := "testAutobanIso1"
+	ipid2 := "testAutobanIso2"
+
+	// Fill threshold for ipid1
+	for i := 0; i < 3; i++ {
+		shouldAutoBanConnFlooder(ipid1)
+	}
+
+	// ipid2 should not be affected
+	if shouldAutoBanConnFlooder(ipid2) {
+		t.Errorf("ipid2 triggered auto-ban even though it has not reached the threshold")
+	}
+}
+
 // TestOOCRateLimitDisabled tests that OOC rate limiting can be disabled.
 func TestOOCRateLimitDisabled(t *testing.T) {
 	oldConfig := config
