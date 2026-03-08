@@ -29,113 +29,12 @@ var confusedSplitter = regexp.MustCompile(`[^\p{L}\p{N}]+`)
 
 const maxTextLength = 2000
 
-// safeSubstring safely extracts a substring with bounds checking
-func safeSubstring(s string, start, length int) string {
-	runes := []rune(s)
-	if start >= len(runes) {
-		return ""
-	}
-	end := start + length
-	if end > len(runes) {
-		end = len(runes)
-	}
-	return string(runes[start:end])
-}
+// Package-level tables — allocated once at program start, reused on every IC
+// message. Moving these out of the hot-path function bodies eliminates the
+// per-call heap allocation that would otherwise occur on every punished message.
 
-// truncateText ensures text doesn't exceed maximum length
-func truncateText(text string) string {
-	if len(text) > maxTextLength {
-		return safeSubstring(text, 0, maxTextLength)
-	}
-	return text
-}
-
-// applyBackward reverses character order
-func applyBackward(text string) string {
-	runes := []rune(text)
-	for i, j := 0, len(runes)-1; i < j; i, j = i+1, j-1 {
-		runes[i], runes[j] = runes[j], runes[i]
-	}
-	return string(runes)
-}
-
-// applyStutterstep doubles every word
-func applyStutterstep(text string) string {
-	words := strings.Fields(text)
-	var result strings.Builder
-	for i, word := range words {
-		if i > 0 {
-			result.WriteString(" ")
-		}
-		result.WriteString(word)
-		result.WriteString(" ")
-		result.WriteString(word)
-	}
-	return truncateText(result.String())
-}
-
-// applyElongate repeats vowels
-func applyElongate(text string) string {
-	var result strings.Builder
-	vowels := "aeiouAEIOU"
-	for _, r := range text {
-		result.WriteRune(r)
-		if strings.ContainsRune(vowels, r) {
-			result.WriteRune(r)
-			result.WriteRune(r)
-		}
-	}
-	return truncateText(result.String())
-}
-
-// applyUppercase converts to uppercase
-func applyUppercase(text string) string {
-	return strings.ToUpper(text)
-}
-
-// applyLowercase converts to lowercase
-func applyLowercase(text string) string {
-	return strings.ToLower(text)
-}
-
-// applyRobotic replaces with [BEEP] [BOOP]
-func applyRobotic(text string) string {
-	words := strings.Fields(text)
-	if len(words) == 0 {
-		return "[BEEP]"
-	}
-	var result strings.Builder
-	robotWords := []string{"[BEEP]", "[BOOP]", "[WHIRR]", "[BUZZ]"}
-	for i := 0; i < len(words); i++ {
-		if i > 0 {
-			result.WriteString(" ")
-		}
-		result.WriteString(robotWords[i%len(robotWords)])
-	}
-	return truncateText(result.String())
-}
-
-// applyAlternating creates alternating case
-func applyAlternating(text string) string {
-	runes := []rune(text)
-	upper := true
-	for i, r := range runes {
-		if unicode.IsLetter(r) {
-			if upper {
-				runes[i] = unicode.ToUpper(r)
-			} else {
-				runes[i] = unicode.ToLower(r)
-			}
-			upper = !upper
-		}
-	}
-	return string(runes)
-}
-
-// applyFancy converts to Unicode fancy characters (mathematical bold)
-func applyFancy(text string) string {
-	var result strings.Builder
-	fancyMap := map[rune]rune{
+var (
+	fancyTable = map[rune]rune{
 		'a': '𝐚', 'b': '𝐛', 'c': '𝐜', 'd': '𝐝', 'e': '𝐞', 'f': '𝐟', 'g': '𝐠',
 		'h': '𝐡', 'i': '𝐢', 'j': '𝐣', 'k': '𝐤', 'l': '𝐥', 'm': '𝐦', 'n': '𝐧',
 		'o': '𝐨', 'p': '𝐩', 'q': '𝐪', 'r': '𝐫', 's': '𝐬', 't': '𝐭', 'u': '𝐮',
@@ -145,38 +44,10 @@ func applyFancy(text string) string {
 		'O': '𝐎', 'P': '𝐏', 'Q': '𝐐', 'R': '𝐑', 'S': '𝐒', 'T': '𝐓', 'U': '𝐔',
 		'V': '𝐕', 'W': '𝐖', 'X': '𝐗', 'Y': '𝐘', 'Z': '𝐙',
 	}
-	for _, r := range text {
-		if fancy, ok := fancyMap[r]; ok {
-			result.WriteRune(fancy)
-		} else {
-			result.WriteRune(r)
-		}
-	}
-	return truncateText(result.String())
-}
 
-// applyUwu converts to UwU speak
-func applyUwu(text string) string {
-	text = strings.ReplaceAll(text, "r", "w")
-	text = strings.ReplaceAll(text, "R", "W")
-	text = strings.ReplaceAll(text, "l", "w")
-	text = strings.ReplaceAll(text, "L", "W")
-	text = strings.ReplaceAll(text, "no", "nyo")
-	text = strings.ReplaceAll(text, "No", "Nyo")
-	text = strings.ReplaceAll(text, "na", "nya")
-	text = strings.ReplaceAll(text, "Na", "Nya")
-	
-	// Add random UwU expressions
-	if rand.Float32() < 0.3 {
-		suffixes := []string{" uwu", " owo", " >w<", " ^w^"}
-		text += suffixes[rand.Intn(len(suffixes))]
-	}
-	return truncateText(text)
-}
-
-// applyPirate converts to pirate speech
-func applyPirate(text string) string {
-	replacements := map[string]string{
+	uwuSuffixes    = []string{" uwu", " owo", " >w<", " ^w^"}
+	pirateSuffixes = []string{", arr!", ", matey!", ", ye scurvy dog!"}
+	pirateTable    = map[string]string{
 		"hello": "ahoy",
 		"hi":    "ahoy",
 		"yes":   "aye",
@@ -186,23 +57,8 @@ func applyPirate(text string) string {
 		"are":   "be",
 		"is":    "be",
 	}
-	
-	lower := strings.ToLower(text)
-	for old, new := range replacements {
-		lower = strings.ReplaceAll(lower, old, new)
-	}
-	
-	// Add pirate expressions
-	if rand.Float32() < 0.3 {
-		suffixes := []string{", arr!", ", matey!", ", ye scurvy dog!"}
-		lower += suffixes[rand.Intn(len(suffixes))]
-	}
-	return truncateText(lower)
-}
 
-// applyShakespearean converts to Shakespearean English
-func applyShakespearean(text string) string {
-	replacements := map[string]string{
+	shakespeareanTable = map[string]string{
 		"you":       "thou",
 		"your":      "thy",
 		"yours":     "thine",
@@ -282,7 +138,267 @@ func applyShakespearean(text string) string {
 		"speak":     "speakest",
 		"say":       "sayest",
 	}
+	shakespeareanPrefixes = []string{
+		"Hark! ",
+		"Forsooth! ",
+		"Zounds! ",
+		"Prithee, ",
+		"Methinks ",
+		"By my troth! ",
+		"O fie! ",
+		"Marry! ",
+		"'Tis said that ",
+		"Good morrow! ",
+	}
+	shakespeareanSuffixes = []string{
+		", methinks.",
+		", forsooth!",
+		", I prithee.",
+		", good soul.",
+		", 'tis so!",
+		", verily.",
+		", upon mine honour.",
+		", I dare say.",
+	}
 
+	cavemanWords   = []string{"UGH", "GRUNT", "OOG", "RAWR", "HMPH", "GRUG"}
+	robotWords     = []string{"[BEEP]", "[BOOP]", "[WHIRR]", "[BUZZ]"}
+	whistleSounds  = []string{"♪", "♫", "~", "♬"}
+	paranoidPhrases = []string{
+		" (they're watching)",
+		" (don't trust them)",
+		" (they know)",
+		" (THEY'RE LISTENING)",
+		" (it's a conspiracy)",
+	}
+	subtitleLines = []string{
+		" [ominous music playing]",
+		" [confusing noises]",
+		" [awkward silence]",
+		" [dramatic pause]",
+		" [indistinct chatter]",
+	}
+	snakeSuffixes  = []string{" *hisss*", " ssss...", " ~hisssss~"}
+	monkeySounds   = []string{"ook", "eek", "ooh ooh", "ahh ahh", "oo oo", "ee ee", "*scratches head*", "*swings from tree*"}
+	dogSounds      = []string{"woof", "arf", "grr", "bark!", "ruff", "yip", "*wags tail*", "bork"}
+	catSounds      = []string{"meow", "purrr~", "mrrrow", "mew", "nya~", "*purrs*", "prrrr", "mrrr"}
+	birdSounds     = []string{"tweet", "chirp", "squawk", "cheep", "coo coo", "*flaps wings*", "peep", "caw"}
+	cowSounds      = []string{"moo", "mooo", "MOOO", "moooo", "*chews cud*", "muu", "MOO MOO"}
+	frogSounds     = []string{"ribbit", "croak", "brrr-ribbit", "riiibbit", "*jumps*", "crrroak", "ribbit-ribbit"}
+	duckSounds     = []string{"quack", "QUACK", "quack!", "quack quack", "*waddles*", "QUACK!", "QUACK QUACK"}
+	horseSounds    = []string{"neigh", "whinny", "nicker", "NEIGH!", "*clip clop*", "hrrrr", "snort"}
+	lionSounds     = []string{"ROAR", "grrr", "rawr", "GRRR", "*snarls*", "rrrroar", "RAWRR"}
+	bunnySounds    = []string{"*thump*", "*thump thump*", "*nose twitch*", "*hops away*", "*binky!*", "*flops*", "*teeth chattering*", "*nudges*"}
+	emojiTable     = []string{"😀", "😎", "🤡", "👻", "🎃", "🦄", "🐱", "🐶", "🎮", "⭐"}
+
+	autospellTable = map[string]string{
+		"the":   "teh",
+		"you":   "u",
+		"your":  "ur",
+		"there": "their",
+		"their": "there",
+		"to":    "too",
+		"too":   "to",
+		"its":   "it's",
+		"it's":  "its",
+	}
+
+	spaghettiEffects = []func(string) string{
+		applyUppercase,
+		applyBackward,
+		applyElongate,
+		applyConfused,
+		applyDrunk,
+	}
+	rngEffects = []func(string) string{
+		applyBackward,
+		applyUppercase,
+		applyLowercase,
+		applyUwu,
+		applyPirate,
+		applyRobotic,
+		applyAlternating,
+	}
+	tormentEffects = []func(string) string{
+		applyUppercase,
+		applyBackward,
+		applyUwu,
+		applyRobotic,
+		applyConfused,
+	}
+	zooEffects = []func(string) string{
+		applyMonkey,
+		applySnake,
+		applyDog,
+		applyCat,
+		applyBird,
+		applyCow,
+		applyFrog,
+		applyDuck,
+		applyHorse,
+		applyLion,
+		applyBunny,
+	}
+
+	// tourettesAllVariants bundles the four outburst categories so applyTourettes
+	// can pick one with a single rand.Intn call instead of allocating a new slice.
+	tourettesAllVariants = [][]string{
+		tourettesSwearing,
+		tourettesRandom,
+		tourettesExclamations,
+		tourettesAnimalSounds,
+	}
+)
+
+// safeSubstring safely extracts a substring with bounds checking
+func safeSubstring(s string, start, length int) string {
+	runes := []rune(s)
+	if start >= len(runes) {
+		return ""
+	}
+	end := start + length
+	if end > len(runes) {
+		end = len(runes)
+	}
+	return string(runes[start:end])
+}
+
+// truncateText ensures text doesn't exceed maximum length
+func truncateText(text string) string {
+	if len(text) > maxTextLength {
+		return safeSubstring(text, 0, maxTextLength)
+	}
+	return text
+}
+
+// applyBackward reverses character order
+func applyBackward(text string) string {
+	runes := []rune(text)
+	for i, j := 0, len(runes)-1; i < j; i, j = i+1, j-1 {
+		runes[i], runes[j] = runes[j], runes[i]
+	}
+	return string(runes)
+}
+
+// applyStutterstep doubles every word
+func applyStutterstep(text string) string {
+	words := strings.Fields(text)
+	var result strings.Builder
+	for i, word := range words {
+		if i > 0 {
+			result.WriteString(" ")
+		}
+		result.WriteString(word)
+		result.WriteString(" ")
+		result.WriteString(word)
+	}
+	return truncateText(result.String())
+}
+
+// applyElongate repeats vowels
+func applyElongate(text string) string {
+	var result strings.Builder
+	vowels := "aeiouAEIOU"
+	for _, r := range text {
+		result.WriteRune(r)
+		if strings.ContainsRune(vowels, r) {
+			result.WriteRune(r)
+			result.WriteRune(r)
+		}
+	}
+	return truncateText(result.String())
+}
+
+// applyUppercase converts to uppercase
+func applyUppercase(text string) string {
+	return strings.ToUpper(text)
+}
+
+// applyLowercase converts to lowercase
+func applyLowercase(text string) string {
+	return strings.ToLower(text)
+}
+
+// applyRobotic replaces with [BEEP] [BOOP]
+func applyRobotic(text string) string {
+	words := strings.Fields(text)
+	if len(words) == 0 {
+		return "[BEEP]"
+	}
+	var result strings.Builder
+	for i := 0; i < len(words); i++ {
+		if i > 0 {
+			result.WriteString(" ")
+		}
+		result.WriteString(robotWords[i%len(robotWords)])
+	}
+	return truncateText(result.String())
+}
+
+// applyAlternating creates alternating case
+func applyAlternating(text string) string {
+	runes := []rune(text)
+	upper := true
+	for i, r := range runes {
+		if unicode.IsLetter(r) {
+			if upper {
+				runes[i] = unicode.ToUpper(r)
+			} else {
+				runes[i] = unicode.ToLower(r)
+			}
+			upper = !upper
+		}
+	}
+	return string(runes)
+}
+
+// applyFancy converts to Unicode fancy characters (mathematical bold)
+func applyFancy(text string) string {
+	var result strings.Builder
+	for _, r := range text {
+		if fancy, ok := fancyTable[r]; ok {
+			result.WriteRune(fancy)
+		} else {
+			result.WriteRune(r)
+		}
+	}
+	return truncateText(result.String())
+}
+
+// applyUwu converts to UwU speak
+func applyUwu(text string) string {
+	text = strings.ReplaceAll(text, "r", "w")
+	text = strings.ReplaceAll(text, "R", "W")
+	text = strings.ReplaceAll(text, "l", "w")
+	text = strings.ReplaceAll(text, "L", "W")
+	text = strings.ReplaceAll(text, "no", "nyo")
+	text = strings.ReplaceAll(text, "No", "Nyo")
+	text = strings.ReplaceAll(text, "na", "nya")
+	text = strings.ReplaceAll(text, "Na", "Nya")
+
+	// Add random UwU expressions
+	if rand.Float32() < 0.3 {
+		text += uwuSuffixes[rand.Intn(len(uwuSuffixes))]
+	}
+	return truncateText(text)
+}
+
+// applyPirate converts to pirate speech
+func applyPirate(text string) string {
+	lower := strings.ToLower(text)
+	for old, new := range pirateTable {
+		lower = strings.ReplaceAll(lower, old, new)
+	}
+
+	// Add pirate expressions
+	if rand.Float32() < 0.3 {
+		lower += pirateSuffixes[rand.Intn(len(pirateSuffixes))]
+	}
+	return truncateText(lower)
+}
+
+// applyShakespearean converts to Shakespearean English
+func applyShakespearean(text string) string {
 	words := strings.Fields(text)
 	for i, word := range words {
 		// Strip trailing punctuation for lookup, restore it after
@@ -296,7 +412,7 @@ func applyShakespearean(text string) string {
 			}
 		}
 		lower := strings.ToLower(stripped)
-		if replacement, ok := replacements[lower]; ok {
+		if replacement, ok := shakespeareanTable[lower]; ok {
 			// Preserve leading capital if original word was capitalised
 			if len(stripped) > 0 && unicode.IsUpper([]rune(stripped)[0]) {
 				r := []rune(replacement)
@@ -309,34 +425,12 @@ func applyShakespearean(text string) string {
 
 	result := strings.Join(words, " ")
 
-	prefixes := []string{
-		"Hark! ",
-		"Forsooth! ",
-		"Zounds! ",
-		"Prithee, ",
-		"Methinks ",
-		"By my troth! ",
-		"O fie! ",
-		"Marry! ",
-		"'Tis said that ",
-		"Good morrow! ",
-	}
 	if rand.Float32() < 0.4 {
-		result = prefixes[rand.Intn(len(prefixes))] + result
+		result = shakespeareanPrefixes[rand.Intn(len(shakespeareanPrefixes))] + result
 	}
 
-	suffixes := []string{
-		", methinks.",
-		", forsooth!",
-		", I prithee.",
-		", good soul.",
-		", 'tis so!",
-		", verily.",
-		", upon mine honour.",
-		", I dare say.",
-	}
 	if rand.Float32() < 0.3 {
-		result = result + suffixes[rand.Intn(len(suffixes))]
+		result = result + shakespeareanSuffixes[rand.Intn(len(shakespeareanSuffixes))]
 	}
 
 	return truncateText(result)
@@ -348,8 +442,7 @@ func applyCaveman(text string) string {
 	if len(words) == 0 {
 		return "UGH"
 	}
-	
-	cavemanWords := []string{"UGH", "GRUNT", "OOG", "RAWR", "HMPH", "GRUG"}
+
 	var result strings.Builder
 	for i := 0; i < (len(words)+1)/2; i++ {
 		if i > 0 {
@@ -395,13 +488,6 @@ func applyConfused(text string) string {
 
 // applyParanoid adds paranoid text
 func applyParanoid(text string) string {
-	paranoidPhrases := []string{
-		" (they're watching)",
-		" (don't trust them)",
-		" (they know)",
-		" (THEY'RE LISTENING)",
-		" (it's a conspiracy)",
-	}
 	phrase := paranoidPhrases[rand.Intn(len(paranoidPhrases))]
 	return truncateText(text + phrase)
 }
@@ -460,15 +546,14 @@ func applyHiccup(text string) string {
 // applyWhistle replaces letters with whistles
 func applyWhistle(text string) string {
 	words := strings.Fields(text)
-	whistles := []string{"♪", "♫", "~", "♬"}
-	
+
 	var result strings.Builder
 	for i, word := range words {
 		if i > 0 {
 			result.WriteString(" ")
 		}
 		for range word {
-			result.WriteString(whistles[rand.Intn(len(whistles))])
+			result.WriteString(whistleSounds[rand.Intn(len(whistleSounds))])
 		}
 	}
 	return truncateText(result.String())
@@ -500,36 +585,17 @@ func applyMumble(text string) string {
 
 // applySpaghetti combines multiple random effects
 func applySpaghetti(text string) string {
-	effects := []func(string) string{
-		applyUppercase,
-		applyBackward,
-		applyElongate,
-		applyConfused,
-		applyDrunk,
-	}
-	
 	// Apply 2-3 random effects
 	numEffects := 2 + rand.Intn(2)
 	for i := 0; i < numEffects; i++ {
-		effect := effects[rand.Intn(len(effects))]
-		text = effect(text)
+		text = spaghettiEffects[rand.Intn(len(spaghettiEffects))](text)
 	}
 	return text
 }
 
 // applyRng applies random effect from pool
 func applyRng(text string) string {
-	effects := []func(string) string{
-		applyBackward,
-		applyUppercase,
-		applyLowercase,
-		applyUwu,
-		applyPirate,
-		applyRobotic,
-		applyAlternating,
-	}
-	effect := effects[rand.Intn(len(effects))]
-	return effect(text)
+	return rngEffects[rand.Intn(len(rngEffects))](text)
 }
 
 // applyEssay ensures minimum character count
@@ -542,22 +608,10 @@ func applyEssay(text string) string {
 
 // applyAutospell intentionally misspells words
 func applyAutospell(text string) string {
-	replacements := map[string]string{
-		"the":   "teh",
-		"you":   "u",
-		"your":  "ur",
-		"there": "their",
-		"their": "there",
-		"to":    "too",
-		"too":   "to",
-		"its":   "it's",
-		"it's":  "its",
-	}
-	
 	words := strings.Fields(text)
 	for i, word := range words {
 		lower := strings.ToLower(word)
-		if replacement, ok := replacements[lower]; ok {
+		if replacement, ok := autospellTable[lower]; ok {
 			words[i] = replacement
 		}
 	}
@@ -566,27 +620,12 @@ func applyAutospell(text string) string {
 
 // applyTorment cycles through different effects based on message count
 func applyTorment(text string, cycleIndex int) string {
-	effects := []func(string) string{
-		applyUppercase,
-		applyBackward,
-		applyUwu,
-		applyRobotic,
-		applyConfused,
-	}
-	effect := effects[cycleIndex%len(effects)]
-	return effect(text)
+	return tormentEffects[cycleIndex%len(tormentEffects)](text)
 }
 
 // applySubtitles adds confusing annotations
 func applySubtitles(text string) string {
-	subtitles := []string{
-		" [ominous music playing]",
-		" [confusing noises]",
-		" [awkward silence]",
-		" [dramatic pause]",
-		" [indistinct chatter]",
-	}
-	return text + subtitles[rand.Intn(len(subtitles))]
+	return text + subtitleLines[rand.Intn(len(subtitleLines))]
 }
 
 // applySpotlight adds an announcement prefix
@@ -721,7 +760,6 @@ func applyMonkey(text string) string {
 	if len(words) == 0 {
 		return "OOH OOH AHH AHH"
 	}
-	monkeySounds := []string{"ook", "eek", "ooh ooh", "ahh ahh", "oo oo", "ee ee", "*scratches head*", "*swings from tree*"}
 	var result strings.Builder
 	for i := range words {
 		if i > 0 {
@@ -737,8 +775,7 @@ func applySnake(text string) string {
 	text = strings.ReplaceAll(text, "s", "sss")
 	text = strings.ReplaceAll(text, "S", "SSS")
 	if rand.Float32() < 0.5 {
-		suffixes := []string{" *hisss*", " ssss...", " ~hisssss~"}
-		text += suffixes[rand.Intn(len(suffixes))]
+		text += snakeSuffixes[rand.Intn(len(snakeSuffixes))]
 	}
 	return truncateText(text)
 }
@@ -749,7 +786,6 @@ func applyDog(text string) string {
 	if len(words) == 0 {
 		return "WOOF!"
 	}
-	dogSounds := []string{"woof", "arf", "grr", "bark!", "ruff", "yip", "*wags tail*", "bork"}
 	var result strings.Builder
 	for i := range words {
 		if i > 0 {
@@ -766,7 +802,6 @@ func applyCat(text string) string {
 	if len(words) == 0 {
 		return "meow~"
 	}
-	catSounds := []string{"meow", "purrr~", "mrrrow", "mew", "nya~", "*purrs*", "prrrr", "mrrr"}
 	var result strings.Builder
 	for i := range words {
 		if i > 0 {
@@ -783,7 +818,6 @@ func applyBird(text string) string {
 	if len(words) == 0 {
 		return "tweet!"
 	}
-	birdSounds := []string{"tweet", "chirp", "squawk", "cheep", "coo coo", "*flaps wings*", "peep", "caw"}
 	var result strings.Builder
 	for i := range words {
 		if i > 0 {
@@ -800,7 +834,6 @@ func applyCow(text string) string {
 	if len(words) == 0 {
 		return "MOO"
 	}
-	cowSounds := []string{"moo", "mooo", "MOOO", "moooo", "*chews cud*", "muu", "MOO MOO"}
 	var result strings.Builder
 	for i := range words {
 		if i > 0 {
@@ -817,7 +850,6 @@ func applyFrog(text string) string {
 	if len(words) == 0 {
 		return "ribbit!"
 	}
-	frogSounds := []string{"ribbit", "croak", "brrr-ribbit", "riiibbit", "*jumps*", "crrroak", "ribbit-ribbit"}
 	var result strings.Builder
 	for i := range words {
 		if i > 0 {
@@ -834,7 +866,6 @@ func applyDuck(text string) string {
 	if len(words) == 0 {
 		return "QUACK!"
 	}
-	duckSounds := []string{"quack", "QUACK", "quack!", "quack quack", "*waddles*", "QUACK!", "QUACK QUACK"}
 	var result strings.Builder
 	for i := range words {
 		if i > 0 {
@@ -851,7 +882,6 @@ func applyHorse(text string) string {
 	if len(words) == 0 {
 		return "NEIGH!"
 	}
-	horseSounds := []string{"neigh", "whinny", "nicker", "NEIGH!", "*clip clop*", "hrrrr", "snort"}
 	var result strings.Builder
 	for i := range words {
 		if i > 0 {
@@ -868,7 +898,6 @@ func applyLion(text string) string {
 	if len(words) == 0 {
 		return "ROAR!"
 	}
-	lionSounds := []string{"ROAR", "grrr", "rawr", "GRRR", "*snarls*", "rrrroar", "RAWRR"}
 	var result strings.Builder
 	for i := range words {
 		if i > 0 {
@@ -881,21 +910,7 @@ func applyLion(text string) string {
 
 // applyZoo applies a random animal punishment from the full zoo
 func applyZoo(text string) string {
-	animalEffects := []func(string) string{
-		applyMonkey,
-		applySnake,
-		applyDog,
-		applyCat,
-		applyBird,
-		applyCow,
-		applyFrog,
-		applyDuck,
-		applyHorse,
-		applyLion,
-		applyBunny,
-	}
-	effect := animalEffects[rand.Intn(len(animalEffects))]
-	return effect(text)
+	return zooEffects[rand.Intn(len(zooEffects))](text)
 }
 
 // applyBunny replaces text with bunny sounds
@@ -904,7 +919,6 @@ func applyBunny(text string) string {
 	if len(words) == 0 {
 		return "*thump thump*"
 	}
-	bunnySounds := []string{"*thump*", "*thump thump*", "*nose twitch*", "*hops away*", "*binky!*", "*flops*", "*teeth chattering*", "*nudges*"}
 	var result strings.Builder
 	for i := range words {
 		if i > 0 {
@@ -917,8 +931,7 @@ func applyBunny(text string) string {
 
 // GetRandomEmoji returns a random emoji string
 func GetRandomEmoji() string {
-	emojis := []string{"😀", "😎", "🤡", "👻", "🎃", "🦄", "🐱", "🐶", "🎮", "⭐"}
-	return emojis[rand.Intn(len(emojis))]
+	return emojiTable[rand.Intn(len(emojiTable))]
 }
 
 // ── Dere-type punishments ────────────────────────────────────────────────────
@@ -1292,13 +1305,6 @@ func applyTourettes(text string) string {
 		return text
 	}
 
-	allVariants := [][]string{
-		tourettesSwearing,
-		tourettesRandom,
-		tourettesExclamations,
-		tourettesAnimalSounds,
-	}
-
 	var result strings.Builder
 	for i, word := range words {
 		if i > 0 {
@@ -1308,7 +1314,7 @@ func applyTourettes(text string) string {
 
 		// ~35% chance of an outburst after each word
 		if rand.Float32() < 0.35 {
-			category := allVariants[rand.Intn(len(allVariants))]
+			category := tourettesAllVariants[rand.Intn(len(tourettesAllVariants))]
 			outburst := category[rand.Intn(len(category))]
 			result.WriteString(" ")
 			result.WriteString(outburst)

@@ -48,6 +48,10 @@ var tstNavRegex = regexp.MustCompile(`[<>]([[:digit:]]+)?`)
 // maxShownameLength is the maximum number of characters allowed in a showname.
 const maxShownameLength = 30
 
+// validDeskMods is the set of accepted values for args[0] (desk_mod) in MS packets.
+// Defined at package level to avoid a slice allocation on every IC message.
+var validDeskMods = []string{"chat", "0", "1", "2", "3", "4", "5"}
+
 type pktMapValue struct {
 	Args     int
 	MustJoin bool
@@ -433,7 +437,7 @@ func pktIC(client *Client, p *packet.Packet) {
 	msgText := decode(args[4])
 
 	switch {
-	case !sliceutil.ContainsString([]string{"chat", "0", "1", "2", "3", "4", "5"}, args[0]): // desk_mod
+	case !sliceutil.ContainsString(validDeskMods, args[0]): // desk_mod
 		return
 	case !isPossessing && !strings.EqualFold(characters[client.CharID()], args[2]) && !client.Area().IniswapAllowed(): // character name (skip check when possessing)
 		client.SendServerMessage("Iniswapping is not allowed in this area.")
