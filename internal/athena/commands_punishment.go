@@ -153,10 +153,6 @@ func cmdFastspammer(client *Client, args []string, usage string) {
 	cmdPunishment(client, args, usage, PunishmentFastspammer)
 }
 
-func cmdPause(client *Client, args []string, usage string) {
-	cmdPunishment(client, args, usage, PunishmentPause)
-}
-
 func cmdLag(client *Client, args []string, usage string) {
 	cmdPunishment(client, args, usage, PunishmentLag)
 }
