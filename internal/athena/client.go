@@ -125,6 +125,8 @@ const (
 	PunishmentDegrade
 	// Chaos/Outburst Punishments
 	PunishmentTourettes
+	// Internet Slang Punishment
+	PunishmentSlang
 )
 
 type PunishmentState struct {
@@ -1516,6 +1518,8 @@ func (p PunishmentType) String() string {
 		return "degrade"
 	case PunishmentTourettes:
 		return "tourettes"
+	case PunishmentSlang:
+		return "slang"
 	default:
 		return "none"
 	}

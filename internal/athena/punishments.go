@@ -248,6 +248,71 @@ var (
 		tourettesExclamations,
 		tourettesAnimalSounds,
 	}
+
+	// slangPhrases maps common multi-word phrases to their internet slang abbreviations.
+	// These are applied before single-word substitutions so longer matches take priority.
+	slangPhrases = [][2]string{
+		{"rolling on the floor laughing", "rotfl"},
+		{"too long didn't read", "tldr"},
+		{"too long did not read", "tldr"},
+		{"good luck have fun", "glhf"},
+		{"in my humble opinion", "imho"},
+		{"talk to you later", "ttyl"},
+		{"talk to you soon", "ttys"},
+		{"as soon as possible", "asap"},
+		{"oh my god", "omg"},
+		{"oh my gosh", "omg"},
+		{"laughing out loud", "lol"},
+		{"laugh out loud", "lol"},
+		{"in my opinion", "imo"},
+		{"i don't know", "idk"},
+		{"i do not know", "idk"},
+		{"to be honest", "tbh"},
+		{"to be fair", "tbf"},
+		{"by the way", "btw"},
+		{"i know right", "ikr"},
+		{"what the heck", "wth"},
+		{"what the hell", "wth"},
+		{"what the fuck", "wtf"},
+		{"got to go", "gtg"},
+		{"be right back", "brb"},
+		{"for the win", "ftw"},
+		{"never mind", "nvm"},
+		{"no problem", "np"},
+		{"good luck", "gl"},
+		{"have fun", "hf"},
+		{"for real", "fr"},
+	}
+
+	// slangWords maps individual words to their internet slang abbreviations.
+	slangWords = map[string]string{
+		"you":       "u",
+		"are":       "r",
+		"please":    "pls",
+		"thanks":    "thx",
+		"because":   "bc",
+		"though":    "tho",
+		"something": "smth",
+		"tomorrow":  "tmrw",
+		"tonight":   "2nite",
+		"today":     "2day",
+		"already":   "alrdy",
+		"really":    "rly",
+		"probably":  "prob",
+		"anyway":    "neway",
+		"before":    "b4",
+		"okay":      "ok",
+		"later":     "l8r",
+		"great":     "gr8",
+		"wait":      "w8",
+		"late":      "l8",
+		"mate":      "m8",
+		"hate":      "h8",
+		"anyone":    "ne1",
+		"everyone":  "evry1",
+		"with":      "w/",
+		"without":   "w/o",
+	}
 )
 
 // safeSubstring safely extracts a substring with bounds checking
@@ -736,6 +801,8 @@ func ApplyPunishmentToText(text string, pType PunishmentType) string {
 		return applyDegrade(text)
 	case PunishmentTourettes:
 		return applyTourettes(text)
+	case PunishmentSlang:
+		return applySlang(text)
 	default:
 		return text
 	}
@@ -1321,6 +1388,36 @@ func applyTourettes(text string) string {
 		}
 	}
 	return truncateText(result.String())
+}
+
+// applySlang converts common words and phrases to internet slang abbreviations.
+// Multi-word phrases are matched first so they take priority over single-word lookups.
+func applySlang(text string) string {
+	lower := strings.ToLower(text)
+
+	// Replace multi-word phrases first (longest entries are listed first in slangPhrases)
+	for _, entry := range slangPhrases {
+		lower = strings.ReplaceAll(lower, entry[0], entry[1])
+	}
+
+	// Replace individual words, preserving trailing punctuation
+	words := strings.Fields(lower)
+	for i, word := range words {
+		punct := ""
+		stripped := word
+		if len(stripped) > 0 {
+			last := rune(stripped[len(stripped)-1])
+			if strings.ContainsRune(".,!?;:", last) {
+				punct = string(last)
+				stripped = stripped[:len(stripped)-1]
+			}
+		}
+		if replacement, ok := slangWords[stripped]; ok {
+			words[i] = replacement + punct
+		}
+	}
+
+	return truncateText(strings.Join(words, " "))
 }
 
 // lovebombTemplates are silly love-bomb message templates.

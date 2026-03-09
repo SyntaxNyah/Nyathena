@@ -496,6 +496,8 @@ func parsePunishmentType(s string) PunishmentType {
 		return PunishmentDegrade
 	case "tourettes":
 		return PunishmentTourettes
+	case "slang":
+		return PunishmentSlang
 	default:
 		return PunishmentNone
 	}
@@ -757,6 +759,11 @@ func cmdTourettes(client *Client, args []string, usage string) {
 	cmdPunishment(client, args, usage, PunishmentTourettes)
 }
 
+// cmdSlang applies the slang punishment.
+func cmdSlang(client *Client, args []string, usage string) {
+	cmdPunishment(client, args, usage, PunishmentSlang)
+}
+
 // cmdUndegrade removes the degrade punishment from user(s).
 func cmdUndegrade(client *Client, args []string, usage string) {
 	if len(args) == 0 {
@@ -781,6 +788,32 @@ func cmdUndegrade(client *Client, args []string, usage string) {
 	report = strings.TrimSuffix(report, ", ")
 	client.SendServerMessage(fmt.Sprintf("Removed degrade punishment from %v clients.", count))
 	addToBuffer(client, "CMD", fmt.Sprintf("Removed degrade from %v.", report), false)
+}
+
+// cmdUnslang removes the slang punishment from user(s).
+func cmdUnslang(client *Client, args []string, usage string) {
+	if len(args) == 0 {
+		client.SendServerMessage("Not enough arguments:\n" + usage)
+		return
+	}
+	toUnpunish := getUidList(strings.Split(args[0], ","))
+	var count int
+	var report string
+	for _, c := range toUnpunish {
+		if !c.HasPunishment(PunishmentSlang) {
+			continue
+		}
+		c.RemovePunishment(PunishmentSlang)
+		if err := db.DeleteTextPunishment(c.Ipid(), int(PunishmentSlang)); err != nil {
+			logger.LogErrorf("Failed to remove slang for %v: %v", c.Ipid(), err)
+		}
+		c.SendServerMessage("Slang punishment has been removed.")
+		count++
+		report += fmt.Sprintf("%v, ", c.Uid())
+	}
+	report = strings.TrimSuffix(report, ", ")
+	client.SendServerMessage(fmt.Sprintf("Removed slang punishment from %v clients.", count))
+	addToBuffer(client, "CMD", fmt.Sprintf("Removed slang from %v.", report), false)
 }
 
 // cmdTournament manages punishment tournament mode
