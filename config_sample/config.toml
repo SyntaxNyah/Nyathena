@@ -339,6 +339,18 @@ random_song_cooldown = 5
 # Default: 120 seconds (2 minutes).
 botban_playtime_threshold = 120
 
+# IPHub API key for VPN/proxy detection.
+# When set, moderators can use /firewall on|off to enable or disable IP screening.
+# While the firewall is active, every new IP (not previously known to the server) is
+# checked against the IPHub API (https://iphub.info). If the IP is classified as a
+# VPN or non-residential proxy (block=1), the connection is immediately rejected.
+# IPs that are already known to the server (from previous connections) are never
+# sent to the API, and each unique IP is only checked once per server session to
+# respect the free-tier limit of 1 000 requests/day.
+# Leave blank to disable IPHub integration entirely (the /firewall command will
+# still exist but will report that no API key is configured).
+iphub_api_key = ""
+
 [Logging]
 # Sets the number of actions (IC chat messages, OOC chat messages, judge actions, etc.) each area should store.
 # When a user calls a mod, this buffer will be flushed to a report file for review.

@@ -457,7 +457,8 @@ func (s *Server) ListenTCP() {
 		if err != nil {
 			logger.LogError(err.Error())
 		}
-		ipid := getIpid(conn.RemoteAddr().String())
+		rawAddr := conn.RemoteAddr().String()
+		ipid := getIpid(rawAddr)
 		if reject, autoban := checkConnRateLimit(ipid); reject {
 			logger.LogInfof("Connection from %v rejected (connection rate limit exceeded)", ipid)
 			if autoban {
@@ -468,6 +469,11 @@ func (s *Server) ListenTCP() {
 		}
 		if checkGlobalNewIPRateLimit(ipid) {
 			logger.LogInfof("Connection from new IP %v rejected (global new IP rate limit exceeded)", ipid)
+			conn.Close()
+			continue
+		}
+		if checkFirewallForIP(extractIP(rawAddr), ipid) {
+			logger.LogInfof("Connection from %v rejected (VPN/proxy detected by IPHub firewall)", ipid)
 			conn.Close()
 			continue
 		}
@@ -555,7 +561,8 @@ func ListenWSS() { server.ListenWSS() }
 
 // HandleWS handles a websocket connection.
 func HandleWS(w http.ResponseWriter, r *http.Request) {
-	ipid := getIpid(getRealIP(r))
+	rawIP := getRealIP(r)
+	ipid := getIpid(rawIP)
 	if reject, autoban := checkConnRateLimit(ipid); reject {
 		logger.LogInfof("Connection from %v rejected (connection rate limit exceeded)", ipid)
 		if autoban {
@@ -582,6 +589,11 @@ func HandleWS(w http.ResponseWriter, r *http.Request) {
 	if checkGlobalNewIPRateLimit(ipid) {
 		logger.LogInfof("Connection from new IP %v rejected (global new IP rate limit exceeded)", ipid)
 		http.Error(w, "Too many connections", http.StatusTooManyRequests)
+		return
+	}
+	if checkFirewallForIP(extractIP(rawIP), ipid) {
+		logger.LogInfof("Connection from %v rejected (VPN/proxy detected by IPHub firewall)", ipid)
+		http.Error(w, "Forbidden", http.StatusForbidden)
 		return
 	}
 	recordIPFirstSeen(ipid)
@@ -842,18 +854,21 @@ func getRealIP(r *http.Request) string {
 func getIpid(s string) string {
 	// For privacy and ease of use, AO servers traditionally use a hashed version of a client's IP address to identify a client.
 	// Athena uses the MD5 hash of the IP address, encoded in base64.
-
-	// Extract just the IP address, removing the port if present
-	// Use net.SplitHostPort which correctly handles both IPv4 and IPv6 addresses
-	ip, _, err := net.SplitHostPort(s)
-	if err != nil {
-		// If there's an error, the input doesn't have a port, so use it as-is
-		ip = s
-	}
-
+	ip := extractIP(s)
 	hash := md5.Sum([]byte(ip))
 	ipid := base64.StdEncoding.EncodeToString(hash[:])
 	return ipid[:len(ipid)-2] // Removes the trailing padding.
+}
+
+// extractIP returns the plain IP address from a "host:port" string (or plain IP).
+// It mirrors the extraction logic inside getIpid so callers can obtain the raw IP
+// without re-parsing the same string.
+func extractIP(s string) string {
+	ip, _, err := net.SplitHostPort(s)
+	if err != nil {
+		return s
+	}
+	return ip
 }
 
 // getParrotMsg returns a random string from the server's parrot list.

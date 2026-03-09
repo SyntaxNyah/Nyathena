@@ -90,6 +90,7 @@ type ServerConfig struct {
 	AutoModAction              string `toml:"automod_action"`
 	RandomSongCooldown         int    `toml:"random_song_cooldown"`
 	BotBanPlaytimeThreshold    int    `toml:"botban_playtime_threshold"`
+	IPHubAPIKey                string `toml:"iphub_api_key"`
 }
 
 type LogConfig struct {
