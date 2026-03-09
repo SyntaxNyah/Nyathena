@@ -402,6 +402,13 @@ func initCommands() {
 			desc:     "Removes a forced showname from a player.",
 			reqPerms: permissions.PermissionField["KICK"],
 		},
+		"nameshuffle": {
+			handler:  cmdNameShuffle,
+			minArgs:  0,
+			usage:    "Usage: /nameshuffle",
+			desc:     "Randomly shuffles the shownames of all players in the current area.",
+			reqPerms: permissions.PermissionField["KICK"],
+		},
 		"unpair": {
 			handler:  cmdUnpair,
 			minArgs:  0,

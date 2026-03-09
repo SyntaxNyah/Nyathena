@@ -21,6 +21,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"math/rand"
 	"strconv"
 	"strings"
 	"time"
@@ -943,6 +944,52 @@ func cmdUnforceName(client *Client, args []string, _ string) {
 	target.SendServerMessage("Your forced showname has been removed by a moderator.")
 	client.SendServerMessage(fmt.Sprintf("Removed forced showname from UID %v.", uid))
 	addToBuffer(client, "CMD", fmt.Sprintf("removed forced showname from UID %v", uid), true)
+}
+
+// cmdNameShuffle randomly reassigns all shownames within the current area.
+// Each player receives another player's effective showname so that every name
+// is displaced but none is lost.
+func cmdNameShuffle(client *Client, _ []string, _ string) {
+	targetArea := client.Area()
+
+	// Collect all joined (UID != -1) clients in the area.
+	var targets []*Client
+	for c := range clients.GetAllClients() {
+		if c.Uid() != -1 && c.Area() == targetArea {
+			targets = append(targets, c)
+		}
+	}
+
+	if len(targets) < 2 {
+		client.SendServerMessage("There are not enough players in this area to shuffle names (need at least 2).")
+		return
+	}
+
+	// Collect the current effective shownames (stored as AO2-encoded strings).
+	names := make([]string, len(targets))
+	for i, c := range targets {
+		names[i] = c.EffectiveShowname()
+	}
+
+	// Use the Sattolo algorithm to produce a uniformly random single-cycle
+	// permutation. This guarantees that every element moves to a new position
+	// (a derangement) in a single O(n) pass with no retries needed.
+	shuffled := make([]string, len(names))
+	copy(shuffled, names)
+	for i := len(shuffled) - 1; i > 0; i-- {
+		j := rand.Intn(i) // j in [0, i-1], ensuring a cyclic derangement
+		shuffled[i], shuffled[j] = shuffled[j], shuffled[i]
+	}
+
+	// Apply the shuffled shownames and broadcast PU updates.
+	for i, c := range targets {
+		c.SetForcedShowname(shuffled[i])
+		writeToAll("PU", strconv.Itoa(c.Uid()), "2", decode(shuffled[i]))
+		c.SendServerMessage("A moderator has shuffled the shownames in this area.")
+	}
+
+	client.SendServerMessage(fmt.Sprintf("Shuffled shownames of %d players in the area.", len(targets)))
+	addToBuffer(client, "CMD", fmt.Sprintf("shuffled shownames of %d players in area %v", len(targets), targetArea.Name()), true)
 }
 
 // cmdUntorment removes an IPID from the automod torment list.
