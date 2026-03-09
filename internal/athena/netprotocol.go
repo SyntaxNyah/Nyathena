@@ -446,6 +446,9 @@ func pktIC(client *Client, p *packet.Packet) {
 	case !isPossessing && !strings.EqualFold(characters[client.CharID()], args[2]) && !client.Area().IniswapAllowed(): // character name (skip check when possessing)
 		client.SendServerMessage("Iniswapping is not allowed in this area.")
 		return
+	case !isPossessing && !strings.EqualFold(characters[client.CharID()], args[2]) && client.IsCharStuck(): // block iniswap when charstuck
+		client.SendServerMessage(fmt.Sprintf("You are character stuck as %v and cannot iniswap.", characters[client.CharID()]))
+		return
 	case len(msgText) > config.MaxMsg: // message
 		client.SendServerMessage("Your message exceeds the maximum message length!")
 		return
