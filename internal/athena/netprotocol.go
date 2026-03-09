@@ -440,11 +440,18 @@ func pktIC(client *Client, p *packet.Packet) {
 	// Decode the message text once; reused for length validation, testimony navigation, and automod.
 	msgText := decode(args[4])
 
+	// Single lock to obtain the stuck character ID; -1 means not stuck.
+	// Used in both iniswap cases below to avoid redundant mutex acquisitions.
+	stuckCharID := client.charStuckID()
+
 	switch {
 	case !sliceutil.ContainsString(validDeskMods, args[0]): // desk_mod
 		return
 	case !isPossessing && !strings.EqualFold(characters[client.CharID()], args[2]) && !client.Area().IniswapAllowed(): // character name (skip check when possessing)
 		client.SendServerMessage("Iniswapping is not allowed in this area.")
+		return
+	case !isPossessing && stuckCharID >= 0 && !strings.EqualFold(characters[stuckCharID], args[2]): // block iniswap when charstuck
+		client.SendServerMessage(fmt.Sprintf("You are character stuck as %v and cannot iniswap.", characters[stuckCharID]))
 		return
 	case len(msgText) > config.MaxMsg: // message
 		client.SendServerMessage("Your message exceeds the maximum message length!")

@@ -151,6 +151,35 @@ func TestApplyMultiplePunishments(t *testing.T) {
 	}
 }
 
+// TestCharStuckBlocksIniswap verifies that IsCharStuck correctly reflects the charstuck state
+// used to block iniswapping in the IC packet handler.
+func TestCharStuckBlocksIniswap(t *testing.T) {
+	// Not stuck by default
+	client := &Client{charStuckCharID: -1}
+	if client.IsCharStuck() {
+		t.Error("expected IsCharStuck to be false for a client with no charstuck restriction")
+	}
+
+	// Actively stuck
+	client.SetCharStuck(0, time.Now().UTC().Add(10*time.Minute))
+	if !client.IsCharStuck() {
+		t.Error("expected IsCharStuck to be true after SetCharStuck with future expiry")
+	}
+
+	// Expired restriction should not count as stuck
+	client.SetCharStuck(0, time.Now().UTC().Add(-1*time.Second))
+	if client.IsCharStuck() {
+		t.Error("expected IsCharStuck to be false after the charstuck restriction has expired")
+	}
+
+	// Cleared restriction
+	client.SetCharStuck(0, time.Now().UTC().Add(10*time.Minute))
+	client.ClearCharStuck()
+	if client.IsCharStuck() {
+		t.Error("expected IsCharStuck to be false after ClearCharStuck")
+	}
+}
+
 // TestCanSpeakOOCMuteStates verifies that CanSpeakOOC returns false for OOC-muted clients,
 // ensuring /global and /pm respect the same OOC mute restrictions as regular OOC chat.
 func TestCanSpeakOOCMuteStates(t *testing.T) {
