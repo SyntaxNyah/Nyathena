@@ -21,6 +21,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"math/rand"
 	"strconv"
 	"strings"
 	"time"
@@ -943,6 +944,58 @@ func cmdUnforceName(client *Client, args []string, _ string) {
 	target.SendServerMessage("Your forced showname has been removed by a moderator.")
 	client.SendServerMessage(fmt.Sprintf("Removed forced showname from UID %v.", uid))
 	addToBuffer(client, "CMD", fmt.Sprintf("removed forced showname from UID %v", uid), true)
+}
+
+// cmdNameShuffle randomly reassigns all shownames within the current area.
+// Each player receives another player's effective showname so that every name
+// is displaced but none is lost.
+func cmdNameShuffle(client *Client, _ []string, _ string) {
+	targetArea := client.Area()
+
+	// Fast path: skip the full client-list scan when the area clearly lacks
+	// enough participants. PlayerCount() is an O(1) cached counter that only
+	// counts clients that have fully joined an area (UID != -1), so it is a
+	// reliable lower bound. A second check below handles any edge-case races.
+	if targetArea.PlayerCount() < 2 {
+		client.SendServerMessage("There are not enough players in this area to shuffle names (need at least 2).")
+		return
+	}
+
+	// Collect joined clients and their shownames in a single pass.
+	// Pre-allocate with the cached player count to avoid repeated re-allocs.
+	n := targetArea.PlayerCount()
+	targets := make([]*Client, 0, n)
+	names := make([]string, 0, n)
+	for c := range clients.GetAllClients() {
+		if c.Uid() != -1 && c.Area() == targetArea {
+			targets = append(targets, c)
+			names = append(names, c.EffectiveShowname())
+		}
+	}
+
+	if len(targets) < 2 {
+		client.SendServerMessage("There are not enough players in this area to shuffle names (need at least 2).")
+		return
+	}
+
+	// Sattolo algorithm: single O(n) in-place pass that guarantees every
+	// element moves to a new index (a cyclic derangement). The bound is i
+	// (not i+1 as in Fisher-Yates) to exclude self-swaps and ensure the
+	// result is always a derangement; no copy or retry loop is needed.
+	for i := len(names) - 1; i > 0; i-- {
+		j := rand.Intn(i) // [0, i-1] inclusive
+		names[i], names[j] = names[j], names[i]
+	}
+
+	// Apply shuffled shownames and broadcast PU updates.
+	for i, c := range targets {
+		c.SetForcedShowname(names[i])
+		writeToAll("PU", strconv.Itoa(c.Uid()), "2", decode(names[i]))
+		c.SendServerMessage("A moderator has shuffled the shownames in this area.")
+	}
+
+	client.SendServerMessage(fmt.Sprintf("Shuffled shownames of %d players in the area.", len(targets)))
+	addToBuffer(client, "CMD", fmt.Sprintf("shuffled shownames of %d players in area %v", len(targets), targetArea.Name()), true)
 }
 
 // cmdUntorment removes an IPID from the automod torment list.
