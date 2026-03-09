@@ -248,6 +248,169 @@ var (
 		tourettesExclamations,
 		tourettesAnimalSounds,
 	}
+
+	// slangWords maps individual words to internet-slang shorthands.
+	// Applied after phrase substitution; keys are already lower-cased.
+	slangWords = map[string]string{
+		// Pronouns / verbs
+		"you":        "u",
+		"your":       "ur",
+		"yourself":   "urself",
+		"are":        "r",
+		"be":         "b",
+		"see":        "c",
+		"why":        "y",
+		"for":        "4",
+		"to":         "2",
+		"too":        "2",
+		"two":        "2",
+		// Polite words
+		"please":     "pls",
+		"thanks":     "thx",
+		"okay":       "k",
+		"ok":         "k",
+		// Common shortenings
+		"because":    "bc",
+		"though":     "tho",
+		"about":      "abt",
+		"something":  "smth",
+		"someone":    "sm1",
+		"everyone":   "evry1",
+		"anyone":     "ne1",
+		"anywhere":   "nywhr",
+		"somewhere":  "smwhr",
+		"nothing":    "nth",
+		"without":    "w/o",
+		"with":       "w/",
+		// Time
+		"tomorrow":   "tmrw",
+		"tonight":    "2nite",
+		"today":      "2day",
+		"later":      "l8r",
+		"before":     "b4",
+		"forever":    "4ever",
+		"together":   "2gether",
+		"second":     "sec",
+		// Adjectives / adverbs
+		"really":     "rly",
+		"seriously":  "srsly",
+		"definitely": "def",
+		"probably":   "prob",
+		"already":    "alrdy",
+		"anyway":     "neway",
+		// Fun leet-style
+		"great":      "gr8",
+		"wait":       "w8",
+		"late":       "l8",
+		"mate":       "m8",
+		"hate":       "h8",
+		"good":       "gud",
+		"love":       "luv",
+		"night":      "nite",
+		"people":     "ppl",
+		"what":       "wut",
+		"this":       "dis",
+		"that":       "dat",
+		// Relationships
+		"girlfriend": "gf",
+		"boyfriend":  "bf",
+		"brother":    "bro",
+		"sister":     "sis",
+		// Misc
+		"message":    "msg",
+		"picture":    "pic",
+		"pictures":   "pics",
+		"information": "info",
+		"whatever":   "w/e",
+	}
+)
+
+// slangPhraseReplacer performs all multi-word phrase substitutions in a single
+// left-to-right O(n) pass (Aho-Corasick internally).  Entries are ordered
+// longest-first so that longer phrases always win over their shorter prefixes
+// (e.g. "see you later" matches before "see you").
+var slangPhraseReplacer = strings.NewReplacer(
+	// ── 25+ chars ────────────────────────────────────────────────────────────
+	"rolling on the floor laughing", "rotfl",
+	// ── 21 chars ─────────────────────────────────────────────────────────────
+	"at the end of the day", "ateotd",
+	"in case you missed it", "icymi",
+	"if i recall correctly", "iirc",
+	"too long did not read", "tldr",
+	// ── 20 chars ─────────────────────────────────────────────────────────────
+	"you know what i mean", "ykwim",
+	"don't worry about it", "dwai",
+	"in my humble opinion", "imho",
+	"greatest of all time", "goat",
+	"best friends forever", "bff",
+	"too long didn't read", "tldr",
+	// ── 19 chars ─────────────────────────────────────────────────────────────
+	"fear of missing out", "fomo",
+	"laughing my ass off", "lmao",
+	"as soon as possible", "asap",
+	// ── 18 chars ─────────────────────────────────────────────────────────────
+	"good luck have fun", "glhf",
+	"you only live once", "yolo",
+	// ── 17 chars ─────────────────────────────────────────────────────────────
+	"not safe for work", "nsfw",
+	"talk to you later", "ttyl",
+	"laughing out loud", "lol",
+	// ── 16 chars ─────────────────────────────────────────────────────────────
+	"talk to you soon", "ttys",
+	"not going to lie", "ngl",
+	"as far as i know", "afaik",
+	"long story short", "lss",
+	"laugh my ass off", "lmao",
+	"what do you mean", "wdym",
+	// ── 15 chars ─────────────────────────────────────────────────────────────
+	"shaking my head", "smh",
+	"to be continued", "tbc",
+	// ── 14 chars ─────────────────────────────────────────────────────────────
+	"laugh out loud", "lol",
+	// ── 13 chars ─────────────────────────────────────────────────────────────
+	"see you later", "cya",   // must come before "see you"
+	"i do not know", "idk",
+	"i do not care", "idc",
+	"be right back", "brb",
+	"what the heck", "wth",
+	"what the hell", "wth",
+	"what the fuck", "wtf",
+	"at the moment", "atm",
+	"in my opinion", "imo",
+	"shake my head", "smh",
+	"not gonna lie", "ngl",
+	// ── 12 chars ─────────────────────────────────────────────────────────────
+	"just kidding", "jk",
+	"good morning", "gm",
+	"in real life", "irl",
+	"i don't know", "idk",
+	"i don't care", "idc",
+	"to be honest", "tbh",
+	"i know right", "ikr",
+	// ── 11 chars ─────────────────────────────────────────────────────────────
+	"let me know", "lmk",
+	"for the win", "ftw",
+	// ── 10 chars ─────────────────────────────────────────────────────────────
+	"oh my gosh", "omg",   // before "oh my god"
+	"never mind", "nvm",
+	"no problem", "np",
+	"to be fair", "tbf",
+	"good night", "gn",
+	"by the way", "btw",
+	"i love you", "ily",
+	// ── 9 chars ──────────────────────────────────────────────────────────────
+	"got to go", "gtg",
+	"on my way", "omw",
+	"hit me up", "hmu",
+	"all right", "aight",
+	"good luck", "gl",
+	"right now", "rn",
+	"oh my god", "omg",
+	// ── 8 chars ──────────────────────────────────────────────────────────────
+	"have fun", "hf",
+	"for real", "fr",
+	// ── 7 chars ──────────────────────────────────────────────────────────────
+	"see you", "cya",
 )
 
 // safeSubstring safely extracts a substring with bounds checking
@@ -736,6 +899,8 @@ func ApplyPunishmentToText(text string, pType PunishmentType) string {
 		return applyDegrade(text)
 	case PunishmentTourettes:
 		return applyTourettes(text)
+	case PunishmentSlang:
+		return applySlang(text)
 	default:
 		return text
 	}
@@ -1321,6 +1486,61 @@ func applyTourettes(text string) string {
 		}
 	}
 	return truncateText(result.String())
+}
+
+// applySlang converts common words and phrases to internet-slang shorthands.
+//
+// Two-phase design for maximum efficiency:
+//
+//  1. slangPhraseReplacer.Replace performs ALL multi-word phrase substitutions
+//     in a single O(n) left-to-right scan (Aho-Corasick automaton, built once
+//     at package init).
+//
+//  2. A single word-level scan substitutes individual words from slangWords,
+//     stripping and restoring one byte of trailing ASCII punctuation per token.
+//     strings.Builder with a pre-grown buffer keeps allocations to the minimum.
+//
+// IPID persistence: the punishment is stored and restored by the generic
+// cmdPunishment / restorePunishments machinery, so slang survives reconnects.
+func applySlang(text string) string {
+	// Phase 1: lower-case once; replace all phrases in one pass.
+	s := slangPhraseReplacer.Replace(strings.ToLower(text))
+
+	words := strings.Fields(s)
+	if len(words) == 0 {
+		return s
+	}
+
+	// Phase 2: word-level substitution.
+	// Pre-grow to len(s): slang replacements shrink text, so this is a safe
+	// upper bound that avoids any re-allocation inside the builder.
+	var b strings.Builder
+	b.Grow(len(s))
+
+	for i, word := range words {
+		if i > 0 {
+			b.WriteByte(' ')
+		}
+		// Detect and strip a single trailing ASCII punctuation byte so that
+		// "you," → "u," rather than leaving "you," unmatched.
+		punct := byte(0)
+		if n := len(word); n > 0 {
+			c := word[n-1]
+			if c == '.' || c == ',' || c == '!' || c == '?' || c == ';' || c == ':' {
+				punct = c
+				word = word[:n-1]
+			}
+		}
+		if rep, ok := slangWords[word]; ok {
+			b.WriteString(rep)
+		} else {
+			b.WriteString(word)
+		}
+		if punct != 0 {
+			b.WriteByte(punct)
+		}
+	}
+	return truncateText(b.String())
 }
 
 // lovebombTemplates are silly love-bomb message templates.

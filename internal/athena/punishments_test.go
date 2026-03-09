@@ -745,3 +745,90 @@ if len(seen) < 2 {
 t.Errorf("applyTourettes: expected multiple distinct outputs in 200 runs, got %d", len(seen))
 }
 }
+
+// ── Slang punishment tests ────────────────────────────────────────────────────
+
+func TestApplySlang(t *testing.T) {
+cases := []struct {
+input string
+want  string
+}{
+// Multi-word phrases (handled by slangPhraseReplacer)
+{"I don't know", "idk"},
+{"i don't care", "idc"},
+{"got to go", "gtg"},
+{"be right back", "brb"},
+{"talk to you later", "ttyl"},
+{"oh my god", "omg"},
+{"oh my gosh", "omg"},
+{"by the way", "btw"},
+{"never mind", "nvm"},
+{"no problem", "np"},
+{"good luck have fun", "glhf"},
+{"not gonna lie", "ngl"},
+{"laugh my ass off", "lmao"},
+{"laughing my ass off", "lmao"},
+{"you only live once", "yolo"},
+{"greatest of all time", "goat"},
+{"fear of missing out", "fomo"},
+{"see you later", "cya"},
+// Single-word substitutions
+{"please", "pls"},
+{"thanks", "thx"},
+{"really", "rly"},
+{"probably", "prob"},
+{"forever", "4ever"},
+{"together", "2gether"},
+// Punctuation is preserved
+{"please,", "pls,"},
+{"thanks.", "thx."},
+}
+
+for _, tt := range cases {
+got := applySlang(tt.input)
+if got != tt.want {
+t.Errorf("applySlang(%q) = %q, want %q", tt.input, got, tt.want)
+}
+}
+}
+
+func TestApplySlangPhraseBeatsWord(t *testing.T) {
+// "good luck have fun" must produce "glhf", not "gl have fun" or "gl hf"
+got := applySlang("good luck have fun")
+if got != "glhf" {
+t.Errorf("applySlang phrase priority: got %q, want %q", got, "glhf")
+}
+// "see you later" must produce "cya", not "c u l8r"
+got = applySlang("see you later")
+if got != "cya" {
+t.Errorf("applySlang phrase priority: got %q, want %q", got, "cya")
+}
+}
+
+func TestApplySlangDoesNotExceedMaxLength(t *testing.T) {
+long := strings.Repeat("word ", 500)
+result := applySlang(long)
+if len(result) > maxTextLength {
+t.Errorf("applySlang: result length %d exceeds maxTextLength %d", len(result), maxTextLength)
+}
+}
+
+func TestApplySlangEmptyInput(t *testing.T) {
+if got := applySlang(""); got != "" {
+t.Errorf("applySlang empty input: got %q, want empty string", got)
+}
+}
+
+func TestPunishmentSlangString(t *testing.T) {
+if got := PunishmentSlang.String(); got != "slang" {
+t.Errorf("PunishmentSlang.String(): got %q, want %q", got, "slang")
+}
+}
+
+func TestApplySlangViaApplyPunishmentToText(t *testing.T) {
+input := "I don't know"
+got := ApplyPunishmentToText(input, PunishmentSlang)
+if got != "idk" {
+t.Errorf("ApplyPunishmentToText(slang) %q = %q, want %q", input, got, "idk")
+}
+}

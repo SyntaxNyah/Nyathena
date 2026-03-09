@@ -38,7 +38,7 @@ All punishment commands:
 /unpunish -t uppercase 45        # Remove only uppercase punishment
 ```
 
-## Text Modification Commands (13)
+## Text Modification Commands (14)
 
 ### `/whisper`
 Makes messages only visible to mods and CMs. Players can still send messages, but only staff can see them.
@@ -102,6 +102,14 @@ Converts to Shakespearean English.
 Converts to caveman grunts.
 - Input: "Hello world test"
 - Output: "UGH GRUNT"
+
+### `/slang`
+Converts messages to internet slang abbreviations.
+- Input: "I don't know, got to go"
+- Output: "idk, gtg"
+- Input: "be right back, talk to you later"
+- Output: "brb, ttyl"
+- Remove with: `/unslang <uid1>,<uid2>,...`
 
 ## Visibility/Cosmetic Commands (2)
 

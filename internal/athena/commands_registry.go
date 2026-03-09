@@ -1111,6 +1111,20 @@ func initCommands() {
 			desc:     "Causes random outbursts to be inserted into IC messages (swearing, random objects, nonsense, animal noises). Moderator only.",
 			reqPerms: permissions.PermissionField["MUTE"],
 		},
+		"slang": {
+			handler:  cmdSlang,
+			minArgs:  1,
+			usage:    "Usage: /slang [-d duration] [-r reason] <uid1>,<uid2>...",
+			desc:     "Converts messages to internet slang abbreviations (e.g. 'i don't know' -> 'idk', 'got to go' -> 'gtg').",
+			reqPerms: permissions.PermissionField["MUTE"],
+		},
+		"unslang": {
+			handler:  cmdUnslang,
+			minArgs:  1,
+			usage:    "Usage: /unslang <uid1>,<uid2>...",
+			desc:     "Removes slang punishment from user(s). Moderator only.",
+			reqPerms: permissions.PermissionField["MUTE"],
+		},
 		"unpunish": {
 			handler:  cmdUnpunish,
 			minArgs:  1,
