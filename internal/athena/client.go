@@ -186,6 +186,8 @@ type Client struct {
 	connectedAt     time.Time   // Time the client joined the server (uid assigned); zero if not yet joined
 	jailAreaID      int         // Area index where this client is jailed; -1 = no specific jail area
 	hidden          bool        // Whether the client is hidden from the player list and area counts
+	charStuckUntil  time.Time   // Time when the character-stuck restriction expires; zero = not stuck
+	charStuckCharID int         // Character ID the client is locked to; -1 = not stuck
 }
 
 // NewClient returns a new client.
@@ -199,6 +201,7 @@ func NewClient(conn net.Conn, ipid string) *Client {
 		forcePairUID: -1,
 		possessing: -1,
 		jailAreaID: -1,
+		charStuckCharID: -1,
 	}
 }
 
@@ -659,6 +662,8 @@ func (client *Client) restorePunishments() {
 		case db.PunishKindJail:
 			client.SetJailedUntil(expiresAt)
 			client.SetJailAreaID(p.Value)
+		case db.PunishKindCharStuck:
+			client.SetCharStuck(p.Value, expiresAt)
 		case db.PunishKindText:
 			pType := PunishmentType(p.Subtype)
 			var remaining time.Duration
@@ -1030,6 +1035,46 @@ func (client *Client) JailAreaID() int {
 func (client *Client) SetJailAreaID(id int) {
 	client.mu.Lock()
 	client.jailAreaID = id
+	client.mu.Unlock()
+}
+
+// IsCharStuck returns true if the client is currently under a character-stuck restriction.
+// Both fields are read under a single mutex lock to avoid double-locking.
+func (client *Client) IsCharStuck() bool {
+	client.mu.Lock()
+	id := client.charStuckCharID
+	t := client.charStuckUntil
+	client.mu.Unlock()
+	return id >= 0 && !t.IsZero() && time.Now().UTC().Before(t)
+}
+
+// charStuckID returns the locked character ID if the client is currently stuck, or -1 if not.
+// Both fields are read under a single lock; this is the preferred hot-path check that avoids
+// the need to call IsCharStuck and CharStuckCharID separately.
+func (client *Client) charStuckID() int {
+	client.mu.Lock()
+	id := client.charStuckCharID
+	t := client.charStuckUntil
+	client.mu.Unlock()
+	if id >= 0 && !t.IsZero() && time.Now().UTC().Before(t) {
+		return id
+	}
+	return -1
+}
+
+// SetCharStuck atomically sets both the locked character ID and the expiry time in one lock.
+func (client *Client) SetCharStuck(id int, until time.Time) {
+	client.mu.Lock()
+	client.charStuckCharID = id
+	client.charStuckUntil = until
+	client.mu.Unlock()
+}
+
+// ClearCharStuck atomically clears both char-stuck fields in one lock.
+func (client *Client) ClearCharStuck() {
+	client.mu.Lock()
+	client.charStuckCharID = -1
+	client.charStuckUntil = time.Time{}
 	client.mu.Unlock()
 }
 

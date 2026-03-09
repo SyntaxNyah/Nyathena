@@ -107,6 +107,10 @@ func cmdBg(client *Client, args []string, _ string) {
 
 func cmdCharSelect(client *Client, args []string, _ string) {
 	if len(args) == 0 {
+		if stuckID := client.charStuckID(); stuckID >= 0 {
+			client.SendServerMessage(fmt.Sprintf("You are character stuck as %v and cannot return to character select.", characters[stuckID]))
+			return
+		}
 		client.ChangeCharacter(-1)
 		client.SendPacket("DONE")
 	} else {

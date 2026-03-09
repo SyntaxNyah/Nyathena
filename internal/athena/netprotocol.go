@@ -199,6 +199,10 @@ func pktChangeChar(client *Client, p *packet.Packet) {
 			return // No free characters available
 		}
 	}
+	if stuckID := client.charStuckID(); stuckID >= 0 && newid != stuckID {
+		client.SendServerMessage(fmt.Sprintf("You are character stuck as %v and cannot change characters.", characters[stuckID]))
+		return
+	}
 	client.ChangeCharacter(newid)
 }
 

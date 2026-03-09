@@ -53,9 +53,10 @@ const ver = 6
 
 // Persistent punishment kind constants.
 const (
-	PunishKindMute = 0 // Mute/parrot; VALUE holds the MuteState integer.
-	PunishKindJail = 1 // Jail; VALUE unused (0).
-	PunishKindText = 2 // Text/behaviour punishment; SUBTYPE holds the PunishmentType integer.
+	PunishKindMute      = 0 // Mute/parrot; VALUE holds the MuteState integer.
+	PunishKindJail      = 1 // Jail; VALUE unused (0).
+	PunishKindText      = 2 // Text/behaviour punishment; SUBTYPE holds the PunishmentType integer.
+	PunishKindCharStuck = 3 // Char-stuck; VALUE holds the locked character ID.
 )
 
 // PersistentPunishment holds one row from the PUNISHMENTS table.
@@ -429,6 +430,21 @@ func UpsertTextPunishment(ipid string, pType int, expires int64, reason string) 
 func DeleteTextPunishment(ipid string, pType int) error {
 	_, err := db.Exec("DELETE FROM PUNISHMENTS WHERE IPID = ? AND KIND = ? AND SUBTYPE = ?",
 		ipid, PunishKindText, pType)
+	return err
+}
+
+// UpsertCharStuck stores (or replaces) a character-stuck record for an IPID.
+// charID is the character the player is locked to. expires is a Unix timestamp (0 = permanent).
+func UpsertCharStuck(ipid string, charID int, expires int64, reason string) error {
+	_, err := db.Exec(
+		"INSERT OR REPLACE INTO PUNISHMENTS(IPID, KIND, SUBTYPE, VALUE, EXPIRES, REASON) VALUES(?, ?, 0, ?, ?, ?)",
+		ipid, PunishKindCharStuck, charID, expires, reason)
+	return err
+}
+
+// DeleteCharStuck removes any stored char-stuck record for an IPID.
+func DeleteCharStuck(ipid string) error {
+	_, err := db.Exec("DELETE FROM PUNISHMENTS WHERE IPID = ? AND KIND = ?", ipid, PunishKindCharStuck)
 	return err
 }
 
