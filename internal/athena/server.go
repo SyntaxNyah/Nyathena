@@ -457,7 +457,8 @@ func (s *Server) ListenTCP() {
 		if err != nil {
 			logger.LogError(err.Error())
 		}
-		ipid := getIpid(conn.RemoteAddr().String())
+		rawAddr := conn.RemoteAddr().String()
+		ipid := getIpid(rawAddr)
 		if reject, autoban := checkConnRateLimit(ipid); reject {
 			logger.LogInfof("Connection from %v rejected (connection rate limit exceeded)", ipid)
 			if autoban {
@@ -471,20 +472,38 @@ func (s *Server) ListenTCP() {
 			conn.Close()
 			continue
 		}
-		recordIPFirstSeen(ipid)
-		// Persist the IP and update its last-seen timestamp for all connections
-		// (new and returning). The upsert keeps FIRST_SEEN intact for existing rows.
-		go func(id string) {
-			if err := db.MarkIPKnown(id); err != nil {
-				logger.LogErrorf("Failed to update known IP %s: %v", id, err)
-			}
-		}(ipid)
-		if logger.DebugNetwork {
-			logger.LogDebugf("Connection received from %v", ipid)
-		}
-		client := NewClient(conn, ipid)
-		go client.HandleClient()
+		// The firewall check may block on a network round-trip to IPHub.
+		// Dispatch everything after the fast in-memory checks into its own
+		// goroutine so the accept loop is never stalled waiting for the API.
+		go acceptTCPConnection(conn, extractIP(rawAddr), ipid)
 	}
+}
+
+// acceptTCPConnection completes the setup for a single accepted TCP connection.
+// It runs in its own goroutine so that an IPHub API call (when the firewall is
+// active) never stalls the ListenTCP accept loop.
+// HandleClient is called without `go` because this goroutine IS the connection
+// goroutine — it blocks for the lifetime of the connection, which is the
+// standard one-goroutine-per-connection pattern in Go.
+func acceptTCPConnection(conn net.Conn, rawIP, ipid string) {
+	if checkFirewallForIP(rawIP, ipid) {
+		logger.LogInfof("Connection from %v rejected (VPN/proxy detected by IPHub firewall)", ipid)
+		conn.Close()
+		return
+	}
+	recordIPFirstSeen(ipid)
+	// Persist the IP and update its last-seen timestamp for all connections
+	// (new and returning). The upsert keeps FIRST_SEEN intact for existing rows.
+	go func() {
+		if err := db.MarkIPKnown(ipid); err != nil {
+			logger.LogErrorf("Failed to update known IP %s: %v", ipid, err)
+		}
+	}()
+	if logger.DebugNetwork {
+		logger.LogDebugf("Connection received from %v", ipid)
+	}
+	client := NewClient(conn, ipid)
+	client.HandleClient()
 }
 
 // ListenTCP starts the TCP listener on the active server instance.
@@ -555,7 +574,8 @@ func ListenWSS() { server.ListenWSS() }
 
 // HandleWS handles a websocket connection.
 func HandleWS(w http.ResponseWriter, r *http.Request) {
-	ipid := getIpid(getRealIP(r))
+	rawIP := getRealIP(r)
+	ipid := getIpid(rawIP)
 	if reject, autoban := checkConnRateLimit(ipid); reject {
 		logger.LogInfof("Connection from %v rejected (connection rate limit exceeded)", ipid)
 		if autoban {
@@ -582,6 +602,11 @@ func HandleWS(w http.ResponseWriter, r *http.Request) {
 	if checkGlobalNewIPRateLimit(ipid) {
 		logger.LogInfof("Connection from new IP %v rejected (global new IP rate limit exceeded)", ipid)
 		http.Error(w, "Too many connections", http.StatusTooManyRequests)
+		return
+	}
+	if checkFirewallForIP(extractIP(rawIP), ipid) {
+		logger.LogInfof("Connection from %v rejected (VPN/proxy detected by IPHub firewall)", ipid)
+		http.Error(w, "Forbidden", http.StatusForbidden)
 		return
 	}
 	recordIPFirstSeen(ipid)
@@ -842,18 +867,21 @@ func getRealIP(r *http.Request) string {
 func getIpid(s string) string {
 	// For privacy and ease of use, AO servers traditionally use a hashed version of a client's IP address to identify a client.
 	// Athena uses the MD5 hash of the IP address, encoded in base64.
-
-	// Extract just the IP address, removing the port if present
-	// Use net.SplitHostPort which correctly handles both IPv4 and IPv6 addresses
-	ip, _, err := net.SplitHostPort(s)
-	if err != nil {
-		// If there's an error, the input doesn't have a port, so use it as-is
-		ip = s
-	}
-
+	ip := extractIP(s)
 	hash := md5.Sum([]byte(ip))
 	ipid := base64.StdEncoding.EncodeToString(hash[:])
 	return ipid[:len(ipid)-2] // Removes the trailing padding.
+}
+
+// extractIP returns the plain IP address from a "host:port" string (or plain IP).
+// It mirrors the extraction logic inside getIpid so callers can obtain the raw IP
+// without re-parsing the same string.
+func extractIP(s string) string {
+	ip, _, err := net.SplitHostPort(s)
+	if err != nil {
+		return s
+	}
+	return ip
 }
 
 // getParrotMsg returns a random string from the server's parrot list.

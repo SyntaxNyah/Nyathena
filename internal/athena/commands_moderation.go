@@ -979,6 +979,40 @@ func cmdLockdown(client *Client, _ []string, _ string) {
 	}
 }
 
+// cmdFirewall toggles the IPHub VPN/proxy firewall gate.
+// Usage: /firewall on | /firewall off
+// While the firewall is active, every new connection whose IP has not been seen
+// before is checked against the IPHub API.  IPs classified as VPNs or proxies
+// (block=1) are rejected immediately.  Already-known IPs and previously-checked
+// IPs (cached within this session) are never sent to the API, keeping usage well
+// within the free-tier daily limit of 1 000 requests.
+// Requires an iphub_api_key to be set in config.toml.
+func cmdFirewall(client *Client, args []string, usage string) {
+	if len(args) < 1 {
+		client.SendServerMessage("Not enough arguments:\n" + usage)
+		return
+	}
+
+	switch args[0] {
+	case "on":
+		if config.IPHubAPIKey == "" {
+			client.SendServerMessage("Cannot enable firewall: no iphub_api_key is configured in config.toml.")
+			return
+		}
+		firewallActive.Store(true)
+		writeToAll("CT", "OOC", "🔥 VPN firewall is now ACTIVE. New connections will be screened against IPHub.", "1")
+		client.SendServerMessage("Firewall enabled. New IPs will be checked via IPHub.")
+		addToBuffer(client, "CMD", "Enabled IPHub firewall.", true)
+	case "off":
+		firewallActive.Store(false)
+		writeToAll("CT", "OOC", "🔓 VPN firewall has been DISABLED. New connections are no longer screened.", "1")
+		client.SendServerMessage("Firewall disabled.")
+		addToBuffer(client, "CMD", "Disabled IPHub firewall.", true)
+	default:
+		client.SendServerMessage("Invalid argument. " + usage)
+	}
+}
+
 // cmdBotBan bans all currently-connected spectators whose total playtime
 // (accumulated from previous sessions plus the current session) is less than
 // the configured botban_playtime_threshold (default 120 seconds).

@@ -150,6 +150,13 @@ func initCommands() {
 			desc:     "Toggles enforcing the server BG list on or off.",
 			reqPerms: permissions.PermissionField["MODIFY_AREA"],
 		},
+		"firewall": {
+			handler:  cmdFirewall,
+			minArgs:  1,
+			usage:    "Usage: /firewall <on|off>",
+			desc:     "Enables or disables IPHub VPN/proxy screening for new connections. Requires iphub_api_key in config.",
+			reqPerms: permissions.PermissionField["BAN"],
+		},
 		"getban": {
 			handler:  cmdGetBan,
 			minArgs:  0,
