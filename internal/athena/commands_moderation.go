@@ -952,11 +952,24 @@ func cmdUnforceName(client *Client, args []string, _ string) {
 func cmdNameShuffle(client *Client, _ []string, _ string) {
 	targetArea := client.Area()
 
-	// Collect all joined (UID != -1) clients in the area.
-	var targets []*Client
+	// Fast path: skip the full client-list scan when the area clearly lacks
+	// enough participants. PlayerCount() is an O(1) cached counter that only
+	// counts clients that have fully joined an area (UID != -1), so it is a
+	// reliable lower bound. A second check below handles any edge-case races.
+	if targetArea.PlayerCount() < 2 {
+		client.SendServerMessage("There are not enough players in this area to shuffle names (need at least 2).")
+		return
+	}
+
+	// Collect joined clients and their shownames in a single pass.
+	// Pre-allocate with the cached player count to avoid repeated re-allocs.
+	n := targetArea.PlayerCount()
+	targets := make([]*Client, 0, n)
+	names := make([]string, 0, n)
 	for c := range clients.GetAllClients() {
 		if c.Uid() != -1 && c.Area() == targetArea {
 			targets = append(targets, c)
+			names = append(names, c.EffectiveShowname())
 		}
 	}
 
@@ -965,26 +978,19 @@ func cmdNameShuffle(client *Client, _ []string, _ string) {
 		return
 	}
 
-	// Collect the current effective shownames (stored as AO2-encoded strings).
-	names := make([]string, len(targets))
-	for i, c := range targets {
-		names[i] = c.EffectiveShowname()
+	// Sattolo algorithm: single O(n) in-place pass that guarantees every
+	// element moves to a new index (a cyclic derangement). The bound is i
+	// (not i+1 as in Fisher-Yates) to exclude self-swaps and ensure the
+	// result is always a derangement; no copy or retry loop is needed.
+	for i := len(names) - 1; i > 0; i-- {
+		j := rand.Intn(i) // [0, i-1] inclusive
+		names[i], names[j] = names[j], names[i]
 	}
 
-	// Use the Sattolo algorithm to produce a uniformly random single-cycle
-	// permutation. This guarantees that every element moves to a new position
-	// (a derangement) in a single O(n) pass with no retries needed.
-	shuffled := make([]string, len(names))
-	copy(shuffled, names)
-	for i := len(shuffled) - 1; i > 0; i-- {
-		j := rand.Intn(i) // j in [0, i-1], ensuring a cyclic derangement
-		shuffled[i], shuffled[j] = shuffled[j], shuffled[i]
-	}
-
-	// Apply the shuffled shownames and broadcast PU updates.
+	// Apply shuffled shownames and broadcast PU updates.
 	for i, c := range targets {
-		c.SetForcedShowname(shuffled[i])
-		writeToAll("PU", strconv.Itoa(c.Uid()), "2", decode(shuffled[i]))
+		c.SetForcedShowname(names[i])
+		writeToAll("PU", strconv.Itoa(c.Uid()), "2", decode(names[i]))
 		c.SendServerMessage("A moderator has shuffled the shownames in this area.")
 	}
 
