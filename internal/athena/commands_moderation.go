@@ -1244,8 +1244,7 @@ func cmdCharStuck(client *Client, args []string, usage string) {
 	charID := target.CharID()
 	charName := characters[charID]
 
-	target.SetCharStuckCharID(charID)
-	target.SetCharStuckUntil(stuckUntil)
+	target.SetCharStuck(charID, stuckUntil)
 
 	if err := db.UpsertCharStuck(target.Ipid(), charID, stuckUntil.Unix(), *reason); err != nil {
 		logger.LogErrorf("Failed to persist char-stuck for %v: %v", target.Ipid(), err)
@@ -1274,21 +1273,22 @@ func cmdCharStuck(client *Client, args []string, usage string) {
 func cmdUnCharStuck(client *Client, args []string, _ string) {
 	toUnstuck := getUidList(strings.Split(args[0], ","))
 	var count int
-	var report string
+	var sb strings.Builder
 	for _, c := range toUnstuck {
 		if !c.IsCharStuck() {
 			continue
 		}
-		c.SetCharStuckCharID(-1)
-		c.SetCharStuckUntil(time.Time{})
+		c.ClearCharStuck()
 		if err := db.DeleteCharStuck(c.Ipid()); err != nil {
 			logger.LogErrorf("Failed to remove char-stuck for %v: %v", c.Ipid(), err)
 		}
 		c.SendServerMessage("Your character-stuck restriction has been lifted.")
 		count++
-		report += fmt.Sprintf("%v, ", c.Uid())
+		if sb.Len() > 0 {
+			sb.WriteString(", ")
+		}
+		sb.WriteString(strconv.Itoa(c.Uid()))
 	}
-	report = strings.TrimSuffix(report, ", ")
 	client.SendServerMessage(fmt.Sprintf("Lifted char-stuck from %v clients.", count))
-	addToBuffer(client, "CMD", fmt.Sprintf("Lifted char-stuck from %v.", report), false)
+	addToBuffer(client, "CMD", fmt.Sprintf("Lifted char-stuck from %v.", sb.String()), false)
 }

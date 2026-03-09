@@ -663,8 +663,7 @@ func (client *Client) restorePunishments() {
 			client.SetJailedUntil(expiresAt)
 			client.SetJailAreaID(p.Value)
 		case db.PunishKindCharStuck:
-			client.SetCharStuckCharID(p.Value)
-			client.SetCharStuckUntil(expiresAt)
+			client.SetCharStuck(p.Value, expiresAt)
 		case db.PunishKindText:
 			pType := PunishmentType(p.Subtype)
 			var remaining time.Duration
@@ -1040,37 +1039,42 @@ func (client *Client) SetJailAreaID(id int) {
 }
 
 // IsCharStuck returns true if the client is currently under a character-stuck restriction.
+// Both fields are read under a single mutex lock to avoid double-locking.
 func (client *Client) IsCharStuck() bool {
-	t := client.CharStuckUntil()
-	id := client.CharStuckCharID()
+	client.mu.Lock()
+	id := client.charStuckCharID
+	t := client.charStuckUntil
+	client.mu.Unlock()
 	return id >= 0 && !t.IsZero() && time.Now().UTC().Before(t)
 }
 
-// CharStuckUntil returns the time when the client's character-stuck restriction expires.
-func (client *Client) CharStuckUntil() time.Time {
+// charStuckID returns the locked character ID if the client is currently stuck, or -1 if not.
+// Both fields are read under a single lock; this is the preferred hot-path check that avoids
+// the need to call IsCharStuck and CharStuckCharID separately.
+func (client *Client) charStuckID() int {
 	client.mu.Lock()
-	defer client.mu.Unlock()
-	return client.charStuckUntil
+	id := client.charStuckCharID
+	t := client.charStuckUntil
+	client.mu.Unlock()
+	if id >= 0 && !t.IsZero() && time.Now().UTC().Before(t) {
+		return id
+	}
+	return -1
 }
 
-// SetCharStuckUntil sets the time when the client's character-stuck restriction expires.
-func (client *Client) SetCharStuckUntil(t time.Time) {
+// SetCharStuck atomically sets both the locked character ID and the expiry time in one lock.
+func (client *Client) SetCharStuck(id int, until time.Time) {
 	client.mu.Lock()
-	client.charStuckUntil = t
+	client.charStuckCharID = id
+	client.charStuckUntil = until
 	client.mu.Unlock()
 }
 
-// CharStuckCharID returns the character ID the client is locked to (-1 if not stuck).
-func (client *Client) CharStuckCharID() int {
+// ClearCharStuck atomically clears both char-stuck fields in one lock.
+func (client *Client) ClearCharStuck() {
 	client.mu.Lock()
-	defer client.mu.Unlock()
-	return client.charStuckCharID
-}
-
-// SetCharStuckCharID sets the character ID the client is locked to (-1 to clear).
-func (client *Client) SetCharStuckCharID(id int) {
-	client.mu.Lock()
-	client.charStuckCharID = id
+	client.charStuckCharID = -1
+	client.charStuckUntil = time.Time{}
 	client.mu.Unlock()
 }
 
