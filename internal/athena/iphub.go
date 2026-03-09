@@ -19,6 +19,7 @@ package athena
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"sync"
 	"sync/atomic"
@@ -32,31 +33,46 @@ import (
 var firewallActive atomic.Bool
 
 // iphubCache stores the result of past IPHub API lookups so that each unique IP
-// is checked at most once per server session, conserving the free-tier daily limit
-// of 1 000 requests.  true = VPN/proxy (block=1), false = residential/clean.
+// is checked at most once per server session, conserving the free-tier daily
+// allowance of 1 000 requests.  true = VPN/proxy (block=1); false = clean.
 var iphubCache = struct {
 	mu    sync.RWMutex
-	cache map[string]bool // raw IP -> isVPN
-}{
-	cache: make(map[string]bool),
-}
+	cache map[string]bool // raw IP → isVPN
+}{cache: make(map[string]bool)}
 
-// iphubResponse is the subset of the IPHub v2 API response that Athena needs.
+// iphubInflight deduplicates concurrent API lookups for the same IP address.
+// When a goroutine begins a lookup it inserts a channel here; subsequent
+// goroutines that arrive for the same IP wait on that channel and then read the
+// now-populated cache entry instead of making a second API call.
+var iphubInflight = struct {
+	mu sync.Mutex
+	m  map[string]chan struct{} // raw IP → completion signal
+}{m: make(map[string]chan struct{})}
+
+// iphubResponse is the only field of the IPHub v2 JSON body that Athena needs.
 type iphubResponse struct {
 	Block int `json:"block"`
 }
 
-// iphubHTTPClient is the HTTP client used for IPHub requests.  A custom client
-// with a short timeout is used so that a slow/unreachable IPHub API does not
-// stall the connection-accept loop.
-var iphubHTTPClient = &http.Client{Timeout: 5 * time.Second}
+// iphubHTTPClient is shared across all lookups so TCP connections to the IPHub
+// endpoint are reused (HTTP keep-alive), minimising per-lookup overhead.
+// DisableCompression is set because IPHub responses are tiny (~50 bytes) and
+// compression negotiation would cost more than it saves.
+var iphubHTTPClient = &http.Client{
+	Timeout: 4 * time.Second,
+	Transport: &http.Transport{
+		MaxIdleConns:        2,
+		IdleConnTimeout:     90 * time.Second,
+		DisableCompression:  true,
+		ForceAttemptHTTP2:   false, // IPHub v2 API works fine on HTTP/1.1
+	},
+}
 
 // queryIPHub calls the IPHub v2 API for the given raw IP address and returns
-// true if IPHub classifies it as a VPN or non-residential proxy (block == 1).
-// The API key must be non-empty; callers should verify this beforehand.
+// true when IPHub classifies it as a VPN or non-residential proxy (block == 1).
+// The API key must be non-empty; callers verify this beforehand.
 func queryIPHub(apiKey, ip string) (bool, error) {
-	url := fmt.Sprintf("https://v2.api.iphub.info/ip/%s", ip)
-	req, err := http.NewRequest(http.MethodGet, url, nil)
+	req, err := http.NewRequest(http.MethodGet, "https://v2.api.iphub.info/ip/"+ip, nil)
 	if err != nil {
 		return false, err
 	}
@@ -72,33 +88,35 @@ func queryIPHub(apiKey, ip string) (bool, error) {
 		return false, fmt.Errorf("IPHub returned status %d", resp.StatusCode)
 	}
 
+	// Cap to 512 bytes — a valid IPHub response is ~50 bytes.
 	var result iphubResponse
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+	if err := json.NewDecoder(io.LimitReader(resp.Body, 512)).Decode(&result); err != nil {
 		return false, err
 	}
-
 	return result.Block == 1, nil
 }
 
-// checkFirewallForIP returns true (connection should be rejected) when all of
-// the following conditions hold:
-//  1. The firewall is currently active (/firewall on).
-//  2. An IPHub API key is configured.
-//  3. The IP is not already known to the server (not in ipFirstSeenTracker).
-//  4. The IP is classified as a VPN/proxy by the IPHub API.
+// checkFirewallForIP returns true (connection should be rejected) when:
+//  1. The firewall is active (/firewall on).
+//  2. An iphub_api_key is configured.
+//  3. The IP is not already known to the server (ipFirstSeenTracker).
+//  4. IPHub classifies the IP as a VPN/proxy.
 //
-// Results are cached per IP so the API is called at most once per session.
-// On any API error the connection is allowed through (fail-open), and a warning
-// is logged.
+// Each unique IP is queried at most once per session; the result is cached.
+// Concurrent lookups for the same new IP are collapsed into a single API call
+// via the inflight tracker — no duplicate requests are ever sent.
+// On any API error the function fails open (allows the connection) and logs a
+// warning so that a transient IPHub outage never locks out legitimate players.
 func checkFirewallForIP(rawIP, ipid string) bool {
 	if !firewallActive.Load() {
 		return false
 	}
-	if config == nil || config.IPHubAPIKey == "" {
+	apiKey := config.IPHubAPIKey
+	if apiKey == "" {
 		return false
 	}
 
-	// Known IPs are exempt from the firewall check.
+	// Already-known IPs are exempt — no API call needed.
 	ipFirstSeenTracker.mu.Lock()
 	_, known := ipFirstSeenTracker.times[ipid]
 	ipFirstSeenTracker.mu.Unlock()
@@ -106,7 +124,7 @@ func checkFirewallForIP(rawIP, ipid string) bool {
 		return false
 	}
 
-	// Consult the cache before hitting the API.
+	// Fast path: result already in cache (read lock, non-blocking for readers).
 	iphubCache.mu.RLock()
 	isVPN, cached := iphubCache.cache[rawIP]
 	iphubCache.mu.RUnlock()
@@ -114,15 +132,48 @@ func checkFirewallForIP(rawIP, ipid string) bool {
 		return isVPN
 	}
 
-	// Not cached yet – query the API.
-	isVPN, err := queryIPHub(config.IPHubAPIKey, rawIP)
+	// Slow path: ensure at most one goroutine calls the API per IP address.
+	iphubInflight.mu.Lock()
+	if ch, pending := iphubInflight.m[rawIP]; pending {
+		// Another goroutine is already looking this IP up — wait for it, then
+		// read from the cache (guaranteed non-empty once the channel closes).
+		iphubInflight.mu.Unlock()
+		<-ch
+		iphubCache.mu.RLock()
+		isVPN = iphubCache.cache[rawIP]
+		iphubCache.mu.RUnlock()
+		return isVPN
+	}
+	// Register this goroutine as the owner of the lookup.
+	ch := make(chan struct{})
+	iphubInflight.m[rawIP] = ch
+	iphubInflight.mu.Unlock()
+
+	// Wake all waiters regardless of how this function exits (including panics
+	// from the HTTP stack). Writing false to the cache before closing ensures
+	// waiters fail open rather than reading an uninitialised cache entry.
+	defer func() {
+		iphubCache.mu.Lock()
+		if _, already := iphubCache.cache[rawIP]; !already {
+			iphubCache.cache[rawIP] = false // safety net: fail open
+		}
+		iphubCache.mu.Unlock()
+		// Delete and close under the same lock so there is no window between
+		// the delete and the close during which a new goroutine could register
+		// a fresh inflight entry for the same IP.
+		iphubInflight.mu.Lock()
+		delete(iphubInflight.m, rawIP)
+		close(ch)
+		iphubInflight.mu.Unlock()
+	}()
+
+	isVPN, err := queryIPHub(apiKey, rawIP)
 	if err != nil {
 		logger.LogErrorf("IPHub API error for %v: %v (allowing connection)", rawIP, err)
-		// Fail open: do not block the connection when the API is unreachable.
-		isVPN = false
+		isVPN = false // fail open
 	}
 
-	// Cache the result regardless of whether it came from the API or a fallback.
+	// Write result to cache; the defer above will then wake all waiters.
 	iphubCache.mu.Lock()
 	iphubCache.cache[rawIP] = isVPN
 	iphubCache.mu.Unlock()

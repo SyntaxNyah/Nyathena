@@ -472,25 +472,38 @@ func (s *Server) ListenTCP() {
 			conn.Close()
 			continue
 		}
-		if checkFirewallForIP(extractIP(rawAddr), ipid) {
-			logger.LogInfof("Connection from %v rejected (VPN/proxy detected by IPHub firewall)", ipid)
-			conn.Close()
-			continue
-		}
-		recordIPFirstSeen(ipid)
-		// Persist the IP and update its last-seen timestamp for all connections
-		// (new and returning). The upsert keeps FIRST_SEEN intact for existing rows.
-		go func(id string) {
-			if err := db.MarkIPKnown(id); err != nil {
-				logger.LogErrorf("Failed to update known IP %s: %v", id, err)
-			}
-		}(ipid)
-		if logger.DebugNetwork {
-			logger.LogDebugf("Connection received from %v", ipid)
-		}
-		client := NewClient(conn, ipid)
-		go client.HandleClient()
+		// The firewall check may block on a network round-trip to IPHub.
+		// Dispatch everything after the fast in-memory checks into its own
+		// goroutine so the accept loop is never stalled waiting for the API.
+		go acceptTCPConnection(conn, extractIP(rawAddr), ipid)
 	}
+}
+
+// acceptTCPConnection completes the setup for a single accepted TCP connection.
+// It runs in its own goroutine so that an IPHub API call (when the firewall is
+// active) never stalls the ListenTCP accept loop.
+// HandleClient is called without `go` because this goroutine IS the connection
+// goroutine — it blocks for the lifetime of the connection, which is the
+// standard one-goroutine-per-connection pattern in Go.
+func acceptTCPConnection(conn net.Conn, rawIP, ipid string) {
+	if checkFirewallForIP(rawIP, ipid) {
+		logger.LogInfof("Connection from %v rejected (VPN/proxy detected by IPHub firewall)", ipid)
+		conn.Close()
+		return
+	}
+	recordIPFirstSeen(ipid)
+	// Persist the IP and update its last-seen timestamp for all connections
+	// (new and returning). The upsert keeps FIRST_SEEN intact for existing rows.
+	go func() {
+		if err := db.MarkIPKnown(ipid); err != nil {
+			logger.LogErrorf("Failed to update known IP %s: %v", ipid, err)
+		}
+	}()
+	if logger.DebugNetwork {
+		logger.LogDebugf("Connection received from %v", ipid)
+	}
+	client := NewClient(conn, ipid)
+	client.HandleClient()
 }
 
 // ListenTCP starts the TCP listener on the active server instance.
