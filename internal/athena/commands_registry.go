@@ -94,6 +94,13 @@ func initCommands() {
 			desc:     "Return to character select.",
 			reqPerms: permissions.PermissionField["NONE"],
 		},
+		"charstuck": {
+			handler:  cmdCharStuck,
+			minArgs:  1,
+			usage:    "Usage: /charstuck [-d duration] [-r reason] <uid>",
+			desc:     "Locks a player to their current character, preventing character changes.",
+			reqPerms: permissions.PermissionField["MUTE"],
+		},
 		"cm": {
 			handler:  cmdCM,
 			minArgs:  0,
@@ -618,6 +625,13 @@ func initCommands() {
 			usage:    "Usage: /unjail <uid1>,<uid2>...",
 			desc:     "Releases user(s) from jail.",
 			reqPerms: permissions.PermissionField["BAN"],
+		},
+		"uncharstuck": {
+			handler:  cmdUnCharStuck,
+			minArgs:  1,
+			usage:    "Usage: /uncharstuck <uid1>,<uid2>...",
+			desc:     "Removes the character-stuck restriction from user(s).",
+			reqPerms: permissions.PermissionField["MUTE"],
 		},
 		"unlock": {
 			handler:  cmdUnlock,

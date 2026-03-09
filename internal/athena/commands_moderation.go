@@ -1196,3 +1196,99 @@ func cmdPurgeDB(client *Client, _ []string, _ string) {
 	client.SendServerMessage(fmt.Sprintf("Purged %v known IP record(s) from the database.", n))
 	addToBuffer(client, "CMD", fmt.Sprintf("Purged %v known IP record(s) from the database.", n), true)
 }
+
+// Handles /charstuck
+
+func cmdCharStuck(client *Client, args []string, usage string) {
+	flags := flag.NewFlagSet("", 0)
+	flags.SetOutput(io.Discard)
+	duration := flags.String("d", "perma", "")
+	reason := flags.String("r", "", "")
+	flags.Parse(args)
+
+	if len(flags.Args()) == 0 {
+		client.SendServerMessage("Not enough arguments:\n" + usage)
+		return
+	}
+
+	uid, err := strconv.Atoi(flags.Arg(0))
+	if err != nil {
+		client.SendServerMessage("Invalid UID.")
+		return
+	}
+
+	target, err := getClientByUid(uid)
+	if err != nil {
+		client.SendServerMessage("Client not found.")
+		return
+	}
+
+	if target.CharID() == -1 {
+		client.SendServerMessage("Target is not on a character. They must be on a character to be stuck.")
+		return
+	}
+
+	isPerma := strings.ToLower(*duration) == "perma"
+	var stuckUntil time.Time
+	if isPerma {
+		stuckUntil = time.Date(2099, 12, 31, 23, 59, 59, 0, time.UTC)
+	} else {
+		parsedDur, err := str2duration.ParseDuration(*duration)
+		if err != nil {
+			client.SendServerMessage("Failed to apply char-stuck: Cannot parse duration.")
+			return
+		}
+		stuckUntil = time.Now().UTC().Add(parsedDur)
+	}
+
+	charID := target.CharID()
+	charName := characters[charID]
+
+	target.SetCharStuckCharID(charID)
+	target.SetCharStuckUntil(stuckUntil)
+
+	if err := db.UpsertCharStuck(target.Ipid(), charID, stuckUntil.Unix(), *reason); err != nil {
+		logger.LogErrorf("Failed to persist char-stuck for %v: %v", target.Ipid(), err)
+	}
+
+	msg := fmt.Sprintf("You have been stuck on %v and cannot change characters.", charName)
+	if !isPerma {
+		msg = fmt.Sprintf("You have been stuck on %v for %v and cannot change characters.", charName, *duration)
+	}
+	if *reason != "" {
+		msg += " Reason: " + *reason
+	}
+	target.SendServerMessage(msg)
+
+	client.SendServerMessage(fmt.Sprintf("Stuck [%v] %v on character %v.", uid, target.OOCName(), charName))
+
+	logMsg := fmt.Sprintf("Stuck [%v] %v on character %v", uid, target.OOCName(), charName)
+	if *reason != "" {
+		logMsg += " for reason: " + *reason
+	}
+	addToBuffer(client, "CMD", logMsg, false)
+}
+
+// Handles /uncharstuck
+
+func cmdUnCharStuck(client *Client, args []string, _ string) {
+	toUnstuck := getUidList(strings.Split(args[0], ","))
+	var count int
+	var report string
+	for _, c := range toUnstuck {
+		if !c.IsCharStuck() {
+			continue
+		}
+		c.SetCharStuckCharID(-1)
+		c.SetCharStuckUntil(time.Time{})
+		if err := db.DeleteCharStuck(c.Ipid()); err != nil {
+			logger.LogErrorf("Failed to remove char-stuck for %v: %v", c.Ipid(), err)
+		}
+		c.SendServerMessage("Your character-stuck restriction has been lifted.")
+		count++
+		report += fmt.Sprintf("%v, ", c.Uid())
+	}
+	report = strings.TrimSuffix(report, ", ")
+	client.SendServerMessage(fmt.Sprintf("Lifted char-stuck from %v clients.", count))
+	addToBuffer(client, "CMD", fmt.Sprintf("Lifted char-stuck from %v.", report), false)
+}
