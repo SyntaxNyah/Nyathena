@@ -1003,7 +1003,10 @@ func cmdNameShuffle(client *Client, _ []string, _ string) {
 func cmdUnnameShuffle(client *Client, _ []string, _ string) {
 	targetArea := client.Area()
 
-	var resetTargets []*Client
+	// Pre-allocate with the cached player count to avoid repeated re-allocs.
+	// PlayerCount() is O(1); the slice may end up shorter if not all players
+	// have a forced showname, but this avoids any mid-loop heap growth.
+	resetTargets := make([]*Client, 0, targetArea.PlayerCount())
 	for c := range clients.GetAllClients() {
 		if c.Uid() != -1 && c.Area() == targetArea && c.ForcedShowname() != "" {
 			resetTargets = append(resetTargets, c)
