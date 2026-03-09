@@ -998,6 +998,36 @@ func cmdNameShuffle(client *Client, _ []string, _ string) {
 	addToBuffer(client, "CMD", fmt.Sprintf("shuffled shownames of %d players in area %v", len(targets), targetArea.Name()), true)
 }
 
+// cmdUnnameShuffle removes all forced shownames in the current area, restoring
+// each player's own showname and broadcasting a PU update to all clients.
+func cmdUnnameShuffle(client *Client, _ []string, _ string) {
+	targetArea := client.Area()
+
+	// Pre-allocate with the cached player count to avoid repeated re-allocs.
+	// PlayerCount() is O(1); the slice may end up shorter if not all players
+	// have a forced showname, but this avoids any mid-loop heap growth.
+	resetTargets := make([]*Client, 0, targetArea.PlayerCount())
+	for c := range clients.GetAllClients() {
+		if c.Uid() != -1 && c.Area() == targetArea && c.ForcedShowname() != "" {
+			resetTargets = append(resetTargets, c)
+		}
+	}
+
+	if len(resetTargets) == 0 {
+		client.SendServerMessage("No players in this area have a forced showname.")
+		return
+	}
+
+	for _, c := range resetTargets {
+		c.SetForcedShowname("")
+		writeToAll("PU", strconv.Itoa(c.Uid()), "2", decode(c.Showname()))
+		c.SendServerMessage("A moderator has restored shownames in this area.")
+	}
+
+	client.SendServerMessage(fmt.Sprintf("Restored shownames of %d players in the area.", len(resetTargets)))
+	addToBuffer(client, "CMD", fmt.Sprintf("restored shownames of %d players in area %v", len(resetTargets), targetArea.Name()), true)
+}
+
 // cmdUntorment removes an IPID from the automod torment list.
 func cmdUntorment(client *Client, args []string, usage string) {
 	ipid := strings.TrimSpace(args[0])
