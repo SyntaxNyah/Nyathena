@@ -404,6 +404,10 @@ func cmdFullPossess(client *Client, args []string, _ string) {
 
 // Handles /rmusr
 
+func cmdDance(client *Client, _ []string, _ string) {
+	client.ToggleDance()
+}
+
 func cmdRoll(client *Client, args []string, _ string) {
 	flags := flag.NewFlagSet("", 0)
 	flags.SetOutput(io.Discard)

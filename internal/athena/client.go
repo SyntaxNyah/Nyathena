@@ -190,6 +190,8 @@ type Client struct {
 	hidden          bool        // Whether the client is hidden from the player list and area counts
 	charStuckUntil  time.Time   // Time when the character-stuck restriction expires; zero = not stuck
 	charStuckCharID int         // Character ID the client is locked to; -1 = not stuck
+	dancing         bool        // Whether the client has dance mode active (flips sprite every message)
+	danceFlipped    bool        // Current flip state for dance mode; toggles each IC message
 }
 
 // NewClient returns a new client.
@@ -892,6 +894,39 @@ func (client *Client) ToggleNarrator() {
 	} else {
 		client.SendServerMessage("You are no longer in narrator mode.")
 	}
+}
+
+// ToggleDance toggles dance mode on or off and notifies the client.
+func (client *Client) ToggleDance() {
+	client.mu.Lock()
+	client.dancing = !client.dancing
+	if !client.dancing {
+		client.danceFlipped = false
+	}
+	client.mu.Unlock()
+	if client.dancing {
+		client.SendServerMessage("Dance mode enabled. Your sprite will flip and unflip with every message.")
+	} else {
+		client.SendServerMessage("Dance mode disabled.")
+	}
+}
+
+// CheckAndToggleDanceFlip atomically checks if dance mode is active and, if so,
+// toggles the flip state in one lock acquisition. Returns the new flip value
+// ("0" or "1") when dancing, or "" when dance mode is off.
+func (client *Client) CheckAndToggleDanceFlip() string {
+	client.mu.Lock()
+	if !client.dancing {
+		client.mu.Unlock()
+		return ""
+	}
+	client.danceFlipped = !client.danceFlipped
+	flipped := client.danceFlipped
+	client.mu.Unlock()
+	if flipped {
+		return "1"
+	}
+	return "0"
 }
 
 // canAlterEvidence is a helper function that returns if a client can alter evidence in their current area.
