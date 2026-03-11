@@ -122,6 +122,13 @@ func initCommands() {
 			desc:     "Deletes the current testimony statement.",
 			reqPerms: permissions.PermissionField["CM"],
 		},
+		"dance": {
+			handler:  cmdDance,
+			minArgs:  0,
+			usage:    "Usage: /dance",
+			desc:     "Toggles dance mode. Flips your sprite on each message you send.",
+			reqPerms: permissions.PermissionField["NONE"],
+		},
 		"editban": {
 			handler:  cmdEditBan,
 			minArgs:  2,

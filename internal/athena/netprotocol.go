@@ -397,6 +397,9 @@ func pktIC(client *Client, p *packet.Packet) {
 	if client.IsNarrator() {
 		args[3] = ""
 	}
+	if client.IsDancing() {
+		args[12] = client.ToggleDanceFlip()
+	}
 	emote_mod, err := strconv.Atoi(args[7])
 	if err != nil {
 		return
