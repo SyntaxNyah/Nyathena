@@ -208,53 +208,50 @@ func TestCanSpeakOOCMuteStates(t *testing.T) {
 	}
 }
 
-// TestDanceModeToggle tests that dance mode toggles correctly and alternates the flip state.
+// TestDanceModeToggle tests that CheckAndToggleDanceFlip alternates the flip state
+// and returns "" when dance mode is off.
 func TestDanceModeToggle(t *testing.T) {
 	client := &Client{}
 
-	if client.IsDancing() {
-		t.Errorf("Expected dancing to be false initially")
+	// Before enabling: must return "" (no-op, no lock wasted on write).
+	if got := client.CheckAndToggleDanceFlip(); got != "" {
+		t.Errorf("Expected '' when not dancing, got %q", got)
 	}
 
-	// Enable dance mode
+	// Enable dance mode directly (avoids calling SendServerMessage in ToggleDance).
 	client.mu.Lock()
-	client.dancing = !client.dancing
+	client.dancing = true
 	client.mu.Unlock()
 
-	if !client.IsDancing() {
-		t.Errorf("Expected dancing to be true after first toggle")
+	// First message: flip false→true → "1"
+	if flip := client.CheckAndToggleDanceFlip(); flip != "1" {
+		t.Errorf("Expected flip '1' on first message, got %q", flip)
 	}
 
-	// First message: flip should become "1"
-	flip1 := client.ToggleDanceFlip()
-	if flip1 != "1" {
-		t.Errorf("Expected flip to be '1' on first message, got %v", flip1)
+	// Second message: flip true→false → "0"
+	if flip := client.CheckAndToggleDanceFlip(); flip != "0" {
+		t.Errorf("Expected flip '0' on second message, got %q", flip)
 	}
 
-	// Second message: flip should become "0"
-	flip2 := client.ToggleDanceFlip()
-	if flip2 != "0" {
-		t.Errorf("Expected flip to be '0' on second message, got %v", flip2)
+	// Third message: alternates back to "1"
+	if flip := client.CheckAndToggleDanceFlip(); flip != "1" {
+		t.Errorf("Expected flip '1' on third message, got %q", flip)
 	}
 
-	// Third message: flip should alternate back to "1"
-	flip3 := client.ToggleDanceFlip()
-	if flip3 != "1" {
-		t.Errorf("Expected flip to be '1' on third message, got %v", flip3)
-	}
-
-	// Disable dance mode: danceFlipped should reset
+	// Disable dance mode and verify reset.
 	client.mu.Lock()
-	client.dancing = !client.dancing
-	if !client.dancing {
-		client.danceFlipped = false
-	}
+	client.dancing = false
+	client.danceFlipped = false
 	client.mu.Unlock()
 
-	if client.IsDancing() {
-		t.Errorf("Expected dancing to be false after second toggle")
+	if got := client.CheckAndToggleDanceFlip(); got != "" {
+		t.Errorf("Expected '' after disabling dance mode, got %q", got)
 	}
-	if client.danceFlipped {
-		t.Errorf("Expected danceFlipped to be reset to false when dance mode disabled")
+	// Re-enable to confirm danceFlipped was reset: first call must return "1" (false→true), not "0".
+	client.mu.Lock()
+	client.dancing = true
+	client.mu.Unlock()
+	if flip := client.CheckAndToggleDanceFlip(); flip != "1" {
+		t.Errorf("Expected flip to restart at '1' after re-enable, got %q (danceFlipped was not reset)", flip)
 	}
 }

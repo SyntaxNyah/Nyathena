@@ -896,13 +896,6 @@ func (client *Client) ToggleNarrator() {
 	}
 }
 
-// IsDancing returns whether the client has dance mode active.
-func (client *Client) IsDancing() bool {
-	client.mu.Lock()
-	defer client.mu.Unlock()
-	return client.dancing
-}
-
 // ToggleDance toggles dance mode on or off and notifies the client.
 func (client *Client) ToggleDance() {
 	client.mu.Lock()
@@ -918,9 +911,15 @@ func (client *Client) ToggleDance() {
 	}
 }
 
-// ToggleDanceFlip flips the dance flip state and returns the new flip value ("0" or "1").
-func (client *Client) ToggleDanceFlip() string {
+// CheckAndToggleDanceFlip atomically checks if dance mode is active and, if so,
+// toggles the flip state in one lock acquisition. Returns the new flip value
+// ("0" or "1") when dancing, or "" when dance mode is off.
+func (client *Client) CheckAndToggleDanceFlip() string {
 	client.mu.Lock()
+	if !client.dancing {
+		client.mu.Unlock()
+		return ""
+	}
 	client.danceFlipped = !client.danceFlipped
 	flipped := client.danceFlipped
 	client.mu.Unlock()
