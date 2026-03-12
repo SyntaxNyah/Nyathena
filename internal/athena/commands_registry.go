@@ -86,6 +86,13 @@ func initCommands() {
 			desc:     "Sets the area's background.",
 			reqPerms: permissions.PermissionField["CM"],
 		},
+		"bglist": {
+			handler:  cmdBgList,
+			minArgs:  0,
+			usage:    "Usage: /bglist",
+			desc:     "Lists all available backgrounds.",
+			reqPerms: permissions.PermissionField["NONE"],
+		},
 		"charselect": {
 			handler:  cmdCharSelect,
 			minArgs:  0,
