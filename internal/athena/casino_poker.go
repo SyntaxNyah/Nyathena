@@ -52,6 +52,11 @@ const (
 	PokerShowdown
 )
 
+// pokerReshuffleThreshold is the minimum number of cards remaining in the deck
+// before a fresh deck is shuffled in. Chosen to ensure enough cards for a full
+// deal (up to 9 players × 2 hole cards + 5 community cards = 23 cards worst case).
+const pokerReshuffleThreshold = 25
+
 // PokerTable holds the complete state for one Texas Hold'em table.
 type PokerTable struct {
 	mu         sync.Mutex
@@ -74,7 +79,7 @@ type PokerTable struct {
 // --- internal helpers; callers must hold table.mu ---
 
 func (t *PokerTable) drawCard() Card {
-	if len(t.deck) < 20 {
+	if len(t.deck) < pokerReshuffleThreshold {
 		t.deck = newDeck(1)
 	}
 	c := t.deck[0]

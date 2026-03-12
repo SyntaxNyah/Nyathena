@@ -145,6 +145,11 @@ const (
 	BJDone                           // round resolved
 )
 
+// bjReshuffleThreshold is the minimum number of cards remaining in the 6-deck shoe
+// before it is reshuffled. Set to ~17% penetration (52 of 312 cards) which is a
+// standard casino cut-card placement to prevent card counting.
+const bjReshuffleThreshold = 52
+
 // BJTable holds the complete state for one blackjack table.
 type BJTable struct {
 	mu      sync.Mutex
@@ -160,7 +165,7 @@ type BJTable struct {
 // --- internal helpers; callers must hold table.mu ---
 
 func (t *BJTable) drawCard() Card {
-	if len(t.deck) < 52 {
+	if len(t.deck) < bjReshuffleThreshold {
 		t.deck = newDeck(6)
 	}
 	c := t.deck[0]

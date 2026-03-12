@@ -1357,11 +1357,32 @@ func initCommands() {
 			reqPerms: permissions.PermissionField["NONE"],
 		},
 		"chips": {
-			handler:  cmdChips,
+			handler:  cmdChipsEnhanced,
 			minArgs:  0,
-			usage:    "Usage: /chips",
-			desc:     "Check your chip balance.",
+			usage:    "Usage: /chips [top [n]] | [area [n]] | [give <uid> <amount>]",
+			desc:     "Check your Nyathena Chip balance, view leaderboards, or give chips to another player.",
 			reqPerms: permissions.PermissionField["NONE"],
+		},
+		"casino": {
+			handler:  cmdCasino,
+			minArgs:  0,
+			usage:    "Usage: /casino [status]",
+			desc:     "View the casino dashboard or status for the current area.",
+			reqPerms: permissions.PermissionField["NONE"],
+		},
+		"casinoenable": {
+			handler:  cmdCasinoEnable,
+			minArgs:  1,
+			usage:    "Usage: /casinoenable <true|false>",
+			desc:     "Enables or disables the casino for this area.",
+			reqPerms: permissions.PermissionField["MODIFY_AREA"],
+		},
+		"casinoset": {
+			handler:  cmdCasinoSet,
+			minArgs:  2,
+			usage:    "Usage: /casinoset <minbet|maxbet|maxtables|jackpot> <value>",
+			desc:     "Configures casino settings for this area.",
+			reqPerms: permissions.PermissionField["MODIFY_AREA"],
 		},
 	}
 }

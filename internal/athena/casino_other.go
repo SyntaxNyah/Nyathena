@@ -296,7 +296,8 @@ func cmdBaccarat(client *Client, args []string, _ string) {
 			payout = amount * 2
 		case "banker":
 			// Banker wins pay 0.95:1 (5% commission). Total return = bet + 95% of bet = 1.95×.
-			payout = amount + int64(float64(amount)*0.95)
+			// Use integer arithmetic to avoid floating-point precision issues.
+			payout = (amount * 195) / 100
 		case "tie":
 			payout = amount * 9 // 8:1
 		}
