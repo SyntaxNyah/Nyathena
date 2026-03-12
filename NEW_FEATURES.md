@@ -794,3 +794,34 @@ Comprehensive tests include:
 - Thread-safe with mutex protection
 - No race conditions in pairing/unpairing logic
 - Safe handling of disconnected players
+
+
+---
+
+## Feature 7: Character Curse Command
+
+### Overview
+A new mod-only command `/charcurse` that forces a player to immediately switch to a specified character. Unlike `/charstuck`, the player is free to change characters again afterwards — it is a one-time forced swap.
+
+### Usage
+```
+/charcurse <uid> <charname>
+```
+
+### Examples
+```
+/charcurse 1 Amanda
+/charcurse 5 Miles Edgeworth
+/charcurse 12 makoto_hd
+```
+
+### Notes
+- Requires `KICK` permission (mod-level access)
+- The character name is case-insensitive and matched against the server's character list
+- If the target character is already taken by another player in the area, the command will fail with an informative error
+- The cursed player receives a notification and can freely change characters afterwards
+- The action is logged to the command buffer
+
+### Security
+- CodeQL scan: No vulnerabilities detected
+- No persistent state is stored; effect is a simple one-time character change
