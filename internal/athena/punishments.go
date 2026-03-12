@@ -1072,7 +1072,7 @@ func applyThesaurusOverload(text string) string {
 		}
 		lower := strings.ToLower(stripped)
 		if replacement, ok := thesaurusTable[lower]; ok {
-			if len(stripped) > 0 && unicode.IsUpper([]rune(stripped)[0]) {
+			if unicode.IsUpper([]rune(stripped)[0]) {
 				r := []rune(replacement)
 				r[0] = unicode.ToUpper(r[0])
 				replacement = string(r)
@@ -1231,6 +1231,7 @@ func applyUncannyValley(text string) string {
 		strings.Contains(lowerText, "i'm fine") ||
 		strings.Contains(lowerText, "i am fine") {
 		text = strings.NewReplacer(
+			"Im fine", "Im fine :)",
 			"im fine", "im fine :)",
 			"i'm fine", "i'm fine :)",
 			"I'm fine", "I'm fine :)",
@@ -1271,8 +1272,8 @@ func MutateShowname(name string) string {
 		// Fallback: add underscore suffix
 		return string(runes) + "_"
 	case 1:
-		// Add underscore suffix
-		return string(runes) + "_"
+		// Add a period suffix (distinct from the underscore fallback in case 0)
+		return string(runes) + "."
 	case 2:
 		// Swap two adjacent letters (skip first char to keep capital intact)
 		if len(runes) >= 3 {

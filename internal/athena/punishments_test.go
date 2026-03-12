@@ -866,9 +866,9 @@ func TestApplyThesaurusOverloadPunctuation(t *testing.T) {
 	if !strings.Contains(result, "desist") {
 		t.Errorf("applyThesaurusOverload: expected 'desist' with trailing punct in %q", result)
 	}
-	if !strings.HasSuffix(strings.TrimRight(result, " ().,!?[]\t"), ".") &&
-		!strings.Contains(result, "desist.") {
-		// The suffix may also be appended; just verify punctuation isn't lost
+	// Punctuation should be preserved in the output
+	if !strings.Contains(result, ".") {
+		t.Errorf("applyThesaurusOverload: expected trailing '.' to be preserved in %q", result)
 	}
 }
 
