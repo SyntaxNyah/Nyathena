@@ -303,10 +303,10 @@ func pktIC(client *Client, p *packet.Packet) {
 			}
 
 			// Replace character and appearance with target's (including their saved position)
-			args[2] = targetCharName                  // character name (target's displayed character, including iniswap)
-			args[3] = targetEmote                     // emote
-			args[5] = client.PossessedPos()           // position (saved target position)
-			args[8] = strconv.Itoa(targetCharID)      // char_id (ID of target's displayed character)
+			args[2] = targetCharName             // character name (target's displayed character, including iniswap)
+			args[3] = targetEmote                // emote
+			args[5] = client.PossessedPos()      // position (saved target position)
+			args[8] = strconv.Itoa(targetCharID) // char_id (ID of target's displayed character)
 
 			// Use target's text color
 			targetTextColor := target.LastTextColor()
@@ -379,6 +379,9 @@ func pktIC(client *Client, p *packet.Packet) {
 					}
 				}
 				modifiedMsg = applyLovebombMessage(targetShowname)
+			} else if p.punishmentType == PunishmentThirdPerson {
+				displayName := clientDisplayName(client)
+				modifiedMsg = applyThirdPersonWithName(decodedMsg, displayName)
 			} else {
 				modifiedMsg = ApplyPunishmentToText(decodedMsg, p.punishmentType)
 			}
@@ -388,6 +391,15 @@ func pktIC(client *Client, p *packet.Packet) {
 		// Handle name modifications
 		if p.punishmentType == PunishmentEmoji {
 			args[3] = GetRandomEmoji()
+		}
+		if p.punishmentType == PunishmentUncannyValley {
+			name := args[15]
+			if strings.TrimSpace(name) == "" && client.CharID() >= 0 && client.CharID() < len(characters) {
+				name = characters[client.CharID()]
+			}
+			if name != "" {
+				args[15] = MutateShowname(name)
+			}
 		}
 	}
 

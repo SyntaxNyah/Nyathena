@@ -14,7 +14,6 @@ GNU Affero General Public License for more details.
 You should have received a copy of the GNU Affero General Public License
 along with this program.  If not, see <https://www.gnu.org/licenses/>. */
 
-
 package athena
 
 import (
@@ -498,6 +497,18 @@ func parsePunishmentType(s string) PunishmentType {
 		return PunishmentTourettes
 	case "slang":
 		return PunishmentSlang
+	case "thesaurusoverload":
+		return PunishmentThesaurusOverload
+	case "valleygirl":
+		return PunishmentValleyGirl
+	case "babytalk":
+		return PunishmentBabytalk
+	case "thirdperson":
+		return PunishmentThirdPerson
+	case "unreliablenarrator":
+		return PunishmentUnreliableNarrator
+	case "uncannyvalley":
+		return PunishmentUncannyValley
 	default:
 		return PunishmentNone
 	}
@@ -764,6 +775,36 @@ func cmdSlang(client *Client, args []string, usage string) {
 	cmdPunishment(client, args, usage, PunishmentSlang)
 }
 
+// cmdThesaurusOverload applies the thesaurusoverload punishment.
+func cmdThesaurusOverload(client *Client, args []string, usage string) {
+	cmdPunishment(client, args, usage, PunishmentThesaurusOverload)
+}
+
+// cmdValleyGirl applies the valleygirl punishment.
+func cmdValleyGirl(client *Client, args []string, usage string) {
+	cmdPunishment(client, args, usage, PunishmentValleyGirl)
+}
+
+// cmdBabytalk applies the babytalk punishment.
+func cmdBabytalk(client *Client, args []string, usage string) {
+	cmdPunishment(client, args, usage, PunishmentBabytalk)
+}
+
+// cmdThirdPerson applies the thirdperson punishment.
+func cmdThirdPerson(client *Client, args []string, usage string) {
+	cmdPunishment(client, args, usage, PunishmentThirdPerson)
+}
+
+// cmdUnreliableNarrator applies the unreliablenarrator punishment.
+func cmdUnreliableNarrator(client *Client, args []string, usage string) {
+	cmdPunishment(client, args, usage, PunishmentUnreliableNarrator)
+}
+
+// cmdUncannyValley applies the uncannyvalley punishment.
+func cmdUncannyValley(client *Client, args []string, usage string) {
+	cmdPunishment(client, args, usage, PunishmentUncannyValley)
+}
+
 // cmdUndegrade removes the degrade punishment from user(s).
 func cmdUndegrade(client *Client, args []string, usage string) {
 	if len(args) == 0 {
@@ -814,6 +855,162 @@ func cmdUnslang(client *Client, args []string, usage string) {
 	report = strings.TrimSuffix(report, ", ")
 	client.SendServerMessage(fmt.Sprintf("Removed slang punishment from %v clients.", count))
 	addToBuffer(client, "CMD", fmt.Sprintf("Removed slang from %v.", report), false)
+}
+
+// cmdUnthesaurusoverload removes the thesaurusoverload punishment from user(s).
+func cmdUnthesaurusoverload(client *Client, args []string, usage string) {
+	if len(args) == 0 {
+		client.SendServerMessage("Not enough arguments:\n" + usage)
+		return
+	}
+	toUnpunish := getUidList(strings.Split(args[0], ","))
+	var count int
+	var report string
+	for _, c := range toUnpunish {
+		if !c.HasPunishment(PunishmentThesaurusOverload) {
+			continue
+		}
+		c.RemovePunishment(PunishmentThesaurusOverload)
+		if err := db.DeleteTextPunishment(c.Ipid(), int(PunishmentThesaurusOverload)); err != nil {
+			logger.LogErrorf("Failed to remove thesaurusoverload for %v: %v", c.Ipid(), err)
+		}
+		c.SendServerMessage("Thesaurus overload punishment has been removed.")
+		count++
+		report += fmt.Sprintf("%v, ", c.Uid())
+	}
+	report = strings.TrimSuffix(report, ", ")
+	client.SendServerMessage(fmt.Sprintf("Removed thesaurusoverload punishment from %v clients.", count))
+	addToBuffer(client, "CMD", fmt.Sprintf("Removed thesaurusoverload from %v.", report), false)
+}
+
+// cmdUnvalleygirl removes the valleygirl punishment from user(s).
+func cmdUnvalleygirl(client *Client, args []string, usage string) {
+	if len(args) == 0 {
+		client.SendServerMessage("Not enough arguments:\n" + usage)
+		return
+	}
+	toUnpunish := getUidList(strings.Split(args[0], ","))
+	var count int
+	var report string
+	for _, c := range toUnpunish {
+		if !c.HasPunishment(PunishmentValleyGirl) {
+			continue
+		}
+		c.RemovePunishment(PunishmentValleyGirl)
+		if err := db.DeleteTextPunishment(c.Ipid(), int(PunishmentValleyGirl)); err != nil {
+			logger.LogErrorf("Failed to remove valleygirl for %v: %v", c.Ipid(), err)
+		}
+		c.SendServerMessage("Valley girl punishment has been removed.")
+		count++
+		report += fmt.Sprintf("%v, ", c.Uid())
+	}
+	report = strings.TrimSuffix(report, ", ")
+	client.SendServerMessage(fmt.Sprintf("Removed valleygirl punishment from %v clients.", count))
+	addToBuffer(client, "CMD", fmt.Sprintf("Removed valleygirl from %v.", report), false)
+}
+
+// cmdUnbabytalk removes the babytalk punishment from user(s).
+func cmdUnbabytalk(client *Client, args []string, usage string) {
+	if len(args) == 0 {
+		client.SendServerMessage("Not enough arguments:\n" + usage)
+		return
+	}
+	toUnpunish := getUidList(strings.Split(args[0], ","))
+	var count int
+	var report string
+	for _, c := range toUnpunish {
+		if !c.HasPunishment(PunishmentBabytalk) {
+			continue
+		}
+		c.RemovePunishment(PunishmentBabytalk)
+		if err := db.DeleteTextPunishment(c.Ipid(), int(PunishmentBabytalk)); err != nil {
+			logger.LogErrorf("Failed to remove babytalk for %v: %v", c.Ipid(), err)
+		}
+		c.SendServerMessage("Baby talk punishment has been removed.")
+		count++
+		report += fmt.Sprintf("%v, ", c.Uid())
+	}
+	report = strings.TrimSuffix(report, ", ")
+	client.SendServerMessage(fmt.Sprintf("Removed babytalk punishment from %v clients.", count))
+	addToBuffer(client, "CMD", fmt.Sprintf("Removed babytalk from %v.", report), false)
+}
+
+// cmdUnthirdperson removes the thirdperson punishment from user(s).
+func cmdUnthirdperson(client *Client, args []string, usage string) {
+	if len(args) == 0 {
+		client.SendServerMessage("Not enough arguments:\n" + usage)
+		return
+	}
+	toUnpunish := getUidList(strings.Split(args[0], ","))
+	var count int
+	var report string
+	for _, c := range toUnpunish {
+		if !c.HasPunishment(PunishmentThirdPerson) {
+			continue
+		}
+		c.RemovePunishment(PunishmentThirdPerson)
+		if err := db.DeleteTextPunishment(c.Ipid(), int(PunishmentThirdPerson)); err != nil {
+			logger.LogErrorf("Failed to remove thirdperson for %v: %v", c.Ipid(), err)
+		}
+		c.SendServerMessage("Third person punishment has been removed.")
+		count++
+		report += fmt.Sprintf("%v, ", c.Uid())
+	}
+	report = strings.TrimSuffix(report, ", ")
+	client.SendServerMessage(fmt.Sprintf("Removed thirdperson punishment from %v clients.", count))
+	addToBuffer(client, "CMD", fmt.Sprintf("Removed thirdperson from %v.", report), false)
+}
+
+// cmdUnunreliablenarrator removes the unreliablenarrator punishment from user(s).
+func cmdUnunreliablenarrator(client *Client, args []string, usage string) {
+	if len(args) == 0 {
+		client.SendServerMessage("Not enough arguments:\n" + usage)
+		return
+	}
+	toUnpunish := getUidList(strings.Split(args[0], ","))
+	var count int
+	var report string
+	for _, c := range toUnpunish {
+		if !c.HasPunishment(PunishmentUnreliableNarrator) {
+			continue
+		}
+		c.RemovePunishment(PunishmentUnreliableNarrator)
+		if err := db.DeleteTextPunishment(c.Ipid(), int(PunishmentUnreliableNarrator)); err != nil {
+			logger.LogErrorf("Failed to remove unreliablenarrator for %v: %v", c.Ipid(), err)
+		}
+		c.SendServerMessage("Unreliable narrator punishment has been removed.")
+		count++
+		report += fmt.Sprintf("%v, ", c.Uid())
+	}
+	report = strings.TrimSuffix(report, ", ")
+	client.SendServerMessage(fmt.Sprintf("Removed unreliablenarrator punishment from %v clients.", count))
+	addToBuffer(client, "CMD", fmt.Sprintf("Removed unreliablenarrator from %v.", report), false)
+}
+
+// cmdUnuncannyvalley removes the uncannyvalley punishment from user(s).
+func cmdUnuncannyvalley(client *Client, args []string, usage string) {
+	if len(args) == 0 {
+		client.SendServerMessage("Not enough arguments:\n" + usage)
+		return
+	}
+	toUnpunish := getUidList(strings.Split(args[0], ","))
+	var count int
+	var report string
+	for _, c := range toUnpunish {
+		if !c.HasPunishment(PunishmentUncannyValley) {
+			continue
+		}
+		c.RemovePunishment(PunishmentUncannyValley)
+		if err := db.DeleteTextPunishment(c.Ipid(), int(PunishmentUncannyValley)); err != nil {
+			logger.LogErrorf("Failed to remove uncannyvalley for %v: %v", c.Ipid(), err)
+		}
+		c.SendServerMessage("Uncanny valley punishment has been removed.")
+		count++
+		report += fmt.Sprintf("%v, ", c.Uid())
+	}
+	report = strings.TrimSuffix(report, ", ")
+	client.SendServerMessage(fmt.Sprintf("Removed uncannyvalley punishment from %v clients.", count))
+	addToBuffer(client, "CMD", fmt.Sprintf("Removed uncannyvalley from %v.", report), false)
 }
 
 // cmdTournament manages punishment tournament mode

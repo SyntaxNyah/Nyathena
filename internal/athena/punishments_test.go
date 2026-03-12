@@ -446,7 +446,7 @@ func TestApplyPunishmentToTextAnimal(t *testing.T) {
 
 func TestApplyPunishmentToText(t *testing.T) {
 	input := "hello world"
-	
+
 	tests := []struct {
 		name       string
 		pType      PunishmentType
@@ -469,137 +469,136 @@ func TestApplyPunishmentToText(t *testing.T) {
 	}
 }
 
-
 // ── Dere-type punishment tests ───────────────────────────────────────────────
 
 func TestApplyTsundere(t *testing.T) {
-input := "hello"
-result := applyTsundere(input)
-if !strings.Contains(result, input) {
-t.Errorf("applyTsundere: expected original text %q in output %q", input, result)
-}
-if len(result) <= len(input) {
-t.Errorf("applyTsundere: expected output longer than input, got %q", result)
-}
+	input := "hello"
+	result := applyTsundere(input)
+	if !strings.Contains(result, input) {
+		t.Errorf("applyTsundere: expected original text %q in output %q", input, result)
+	}
+	if len(result) <= len(input) {
+		t.Errorf("applyTsundere: expected output longer than input, got %q", result)
+	}
 }
 
 func TestApplyYandere(t *testing.T) {
-input := "hello"
-result := applyYandere(input)
-if !strings.Contains(result, input) {
-t.Errorf("applyYandere: expected original text %q in output %q", input, result)
-}
-if !strings.Contains(result, "♥") {
-t.Errorf("applyYandere: expected ♥ in output %q", result)
-}
+	input := "hello"
+	result := applyYandere(input)
+	if !strings.Contains(result, input) {
+		t.Errorf("applyYandere: expected original text %q in output %q", input, result)
+	}
+	if !strings.Contains(result, "♥") {
+		t.Errorf("applyYandere: expected ♥ in output %q", result)
+	}
 }
 
 func TestApplyKuudere(t *testing.T) {
-input := "Hello World"
-result := applyKuudere(input)
-if result == input {
-t.Errorf("applyKuudere: expected transformed output, got unchanged %q", result)
-}
-lower := strings.ToLower(input)
-if !strings.Contains(result, lower) {
-t.Errorf("applyKuudere: expected lowercased input %q in output %q", lower, result)
-}
+	input := "Hello World"
+	result := applyKuudere(input)
+	if result == input {
+		t.Errorf("applyKuudere: expected transformed output, got unchanged %q", result)
+	}
+	lower := strings.ToLower(input)
+	if !strings.Contains(result, lower) {
+		t.Errorf("applyKuudere: expected lowercased input %q in output %q", lower, result)
+	}
 }
 
 func TestApplyDandere(t *testing.T) {
-input := "hello there everyone"
-result := applyDandere(input)
-if result == input {
-t.Errorf("applyDandere: expected transformed output, got unchanged %q", result)
-}
-if !strings.Contains(result, "hello") {
-t.Errorf("applyDandere: expected original word in output %q", result)
-}
+	input := "hello there everyone"
+	result := applyDandere(input)
+	if result == input {
+		t.Errorf("applyDandere: expected transformed output, got unchanged %q", result)
+	}
+	if !strings.Contains(result, "hello") {
+		t.Errorf("applyDandere: expected original word in output %q", result)
+	}
 }
 
 func TestApplyDeredere(t *testing.T) {
-input := "hello"
-result := applyDeredere(input)
-if !strings.Contains(result, input) {
-t.Errorf("applyDeredere: expected original text %q in output %q", input, result)
-}
-if !strings.Contains(result, "♥") {
-t.Errorf("applyDeredere: expected ♥ in output %q", result)
-}
+	input := "hello"
+	result := applyDeredere(input)
+	if !strings.Contains(result, input) {
+		t.Errorf("applyDeredere: expected original text %q in output %q", input, result)
+	}
+	if !strings.Contains(result, "♥") {
+		t.Errorf("applyDeredere: expected ♥ in output %q", result)
+	}
 }
 
 func TestApplyHimedere(t *testing.T) {
-input := "hello"
-result := applyHimedere(input)
-if !strings.Contains(result, input) {
-t.Errorf("applyHimedere: expected original text %q in output %q", input, result)
-}
-if len(result) <= len(input) {
-t.Errorf("applyHimedere: expected output longer than input %q, got %q", input, result)
-}
+	input := "hello"
+	result := applyHimedere(input)
+	if !strings.Contains(result, input) {
+		t.Errorf("applyHimedere: expected original text %q in output %q", input, result)
+	}
+	if len(result) <= len(input) {
+		t.Errorf("applyHimedere: expected output longer than input %q, got %q", input, result)
+	}
 }
 
 func TestApplyKamidere(t *testing.T) {
-input := "hello"
-result := applyKamidere(input)
-if !strings.Contains(result, input) {
-t.Errorf("applyKamidere: expected original text %q in output %q", input, result)
-}
-if len(result) <= len(input) {
-t.Errorf("applyKamidere: expected output longer than input %q, got %q", input, result)
-}
+	input := "hello"
+	result := applyKamidere(input)
+	if !strings.Contains(result, input) {
+		t.Errorf("applyKamidere: expected original text %q in output %q", input, result)
+	}
+	if len(result) <= len(input) {
+		t.Errorf("applyKamidere: expected output longer than input %q, got %q", input, result)
+	}
 }
 
 func TestApplyUndere(t *testing.T) {
-input := "hello"
-result := applyUndere(input)
-if !strings.Contains(result, input) {
-t.Errorf("applyUndere: expected original text %q in output %q", input, result)
-}
-if len(result) <= len(input) {
-t.Errorf("applyUndere: expected output longer than input %q, got %q", input, result)
-}
+	input := "hello"
+	result := applyUndere(input)
+	if !strings.Contains(result, input) {
+		t.Errorf("applyUndere: expected original text %q in output %q", input, result)
+	}
+	if len(result) <= len(input) {
+		t.Errorf("applyUndere: expected output longer than input %q, got %q", input, result)
+	}
 }
 
 func TestApplyBakadere(t *testing.T) {
-input := "hello there everyone"
-result := applyBakadere(input)
-if result == input {
-t.Errorf("applyBakadere: expected transformed output, got unchanged %q", result)
-}
-if !strings.Contains(result, "hello") {
-t.Errorf("applyBakadere: expected original word in output %q", result)
-}
+	input := "hello there everyone"
+	result := applyBakadere(input)
+	if result == input {
+		t.Errorf("applyBakadere: expected transformed output, got unchanged %q", result)
+	}
+	if !strings.Contains(result, "hello") {
+		t.Errorf("applyBakadere: expected original word in output %q", result)
+	}
 }
 
 func TestApplyMayadere(t *testing.T) {
-input := "hello"
-result := applyMayadere(input)
-if !strings.Contains(result, input) {
-t.Errorf("applyMayadere: expected original text %q in output %q", input, result)
-}
-if len(result) <= len(input) {
-t.Errorf("applyMayadere: expected output longer than input %q, got %q", input, result)
-}
+	input := "hello"
+	result := applyMayadere(input)
+	if !strings.Contains(result, input) {
+		t.Errorf("applyMayadere: expected original text %q in output %q", input, result)
+	}
+	if len(result) <= len(input) {
+		t.Errorf("applyMayadere: expected output longer than input %q, got %q", input, result)
+	}
 }
 
 func TestDerePunishmentTypes(t *testing.T) {
-// Ensure each dere type is dispatched and transforms the text.
-input := "test message"
-dereTypes := []PunishmentType{
-PunishmentTsundere, PunishmentYandere, PunishmentKuudere,
-PunishmentDandere, PunishmentDeredere, PunishmentHimedere,
-PunishmentKamidere, PunishmentUndere, PunishmentBakadere,
-PunishmentMayadere,
-}
-for _, pt := range dereTypes {
-t.Run(pt.String(), func(t *testing.T) {
-result := ApplyPunishmentToText(input, pt)
-if result == input {
-t.Errorf("%v: expected transformed output, got unchanged %q", pt, result)
-}
-})
-}
+	// Ensure each dere type is dispatched and transforms the text.
+	input := "test message"
+	dereTypes := []PunishmentType{
+		PunishmentTsundere, PunishmentYandere, PunishmentKuudere,
+		PunishmentDandere, PunishmentDeredere, PunishmentHimedere,
+		PunishmentKamidere, PunishmentUndere, PunishmentBakadere,
+		PunishmentMayadere,
+	}
+	for _, pt := range dereTypes {
+		t.Run(pt.String(), func(t *testing.T) {
+			result := ApplyPunishmentToText(input, pt)
+			if result == input {
+				t.Errorf("%v: expected transformed output, got unchanged %q", pt, result)
+			}
+		})
+	}
 }
 
 func TestApplyDegrade(t *testing.T) {
@@ -664,171 +663,491 @@ func TestPunishmentLovebombString(t *testing.T) {
 }
 
 func TestApplyLovebombMessageWithTarget(t *testing.T) {
-const target = "Phoenix"
-// Run enough times to hit multiple templates
-for i := 0; i < 100; i++ {
-result := applyLovebombMessage(target)
-if result == "" {
-t.Errorf("applyLovebombMessage(%q): returned empty string", target)
-}
-if !strings.Contains(result, target) {
-t.Errorf("applyLovebombMessage(%q): target name missing from result %q", target, result)
-}
-}
+	const target = "Phoenix"
+	// Run enough times to hit multiple templates
+	for i := 0; i < 100; i++ {
+		result := applyLovebombMessage(target)
+		if result == "" {
+			t.Errorf("applyLovebombMessage(%q): returned empty string", target)
+		}
+		if !strings.Contains(result, target) {
+			t.Errorf("applyLovebombMessage(%q): target name missing from result %q", target, result)
+		}
+	}
 }
 
 func TestApplyLovebombMessageEmptyTarget(t *testing.T) {
-result := applyLovebombMessage("")
-if result == "" {
-t.Errorf("applyLovebombMessage(empty): returned empty string")
-}
-// Empty target should return the fallback (no %s placeholder used)
-if strings.Contains(result, "%s") {
-t.Errorf("applyLovebombMessage(empty): result contains literal %%s: %q", result)
-}
+	result := applyLovebombMessage("")
+	if result == "" {
+		t.Errorf("applyLovebombMessage(empty): returned empty string")
+	}
+	// Empty target should return the fallback (no %s placeholder used)
+	if strings.Contains(result, "%s") {
+		t.Errorf("applyLovebombMessage(empty): result contains literal %%s: %q", result)
+	}
 }
 
 func TestApplyLovebombMessageVariety(t *testing.T) {
-// With enough samples we should see at least 3 distinct messages.
-seen := make(map[string]struct{})
-for i := 0; i < 200; i++ {
-seen[applyLovebombMessage("Alice")] = struct{}{}
-}
-if len(seen) < 3 {
-t.Errorf("applyLovebombMessage: expected at least 3 distinct messages in 200 runs, got %d", len(seen))
-}
+	// With enough samples we should see at least 3 distinct messages.
+	seen := make(map[string]struct{})
+	for i := 0; i < 200; i++ {
+		seen[applyLovebombMessage("Alice")] = struct{}{}
+	}
+	if len(seen) < 3 {
+		t.Errorf("applyLovebombMessage: expected at least 3 distinct messages in 200 runs, got %d", len(seen))
+	}
 }
 
 func TestApplyTourettes(t *testing.T) {
-// Original words must be preserved in the output
-input := "hello world"
-result := applyTourettes(input)
-if !strings.Contains(result, "hello") {
-t.Errorf("applyTourettes: expected original word 'hello' preserved in %q", result)
-}
-if !strings.Contains(result, "world") {
-t.Errorf("applyTourettes: expected original word 'world' preserved in %q", result)
-}
+	// Original words must be preserved in the output
+	input := "hello world"
+	result := applyTourettes(input)
+	if !strings.Contains(result, "hello") {
+		t.Errorf("applyTourettes: expected original word 'hello' preserved in %q", result)
+	}
+	if !strings.Contains(result, "world") {
+		t.Errorf("applyTourettes: expected original word 'world' preserved in %q", result)
+	}
 
-// Empty input should not panic
-emptyResult := applyTourettes("")
-if emptyResult != "" {
-t.Errorf("applyTourettes: expected empty string for empty input, got %q", emptyResult)
-}
+	// Empty input should not panic
+	emptyResult := applyTourettes("")
+	if emptyResult != "" {
+		t.Errorf("applyTourettes: expected empty string for empty input, got %q", emptyResult)
+	}
 
-// Output should not exceed maxTextLength
-long := strings.Repeat("word ", 500)
-longResult := applyTourettes(long)
-if len(longResult) > maxTextLength {
-t.Errorf("applyTourettes: result exceeds maxTextLength (%d > %d)", len(longResult), maxTextLength)
-}
+	// Output should not exceed maxTextLength
+	long := strings.Repeat("word ", 500)
+	longResult := applyTourettes(long)
+	if len(longResult) > maxTextLength {
+		t.Errorf("applyTourettes: result exceeds maxTextLength (%d > %d)", len(longResult), maxTextLength)
+	}
 
-// Over many runs, outbursts should appear at least once (35% per-word chance)
-outburstFound := false
-for i := 0; i < 200 && !outburstFound; i++ {
-r := applyTourettes("one two three four five")
-// An outburst means there are more words than the original five
-if len(strings.Fields(r)) > 5 {
-outburstFound = true
-}
-}
-if !outburstFound {
-t.Error("applyTourettes: no outbursts detected in 200 runs (expected frequent outbursts)")
-}
+	// Over many runs, outbursts should appear at least once (35% per-word chance)
+	outburstFound := false
+	for i := 0; i < 200 && !outburstFound; i++ {
+		r := applyTourettes("one two three four five")
+		// An outburst means there are more words than the original five
+		if len(strings.Fields(r)) > 5 {
+			outburstFound = true
+		}
+	}
+	if !outburstFound {
+		t.Error("applyTourettes: no outbursts detected in 200 runs (expected frequent outbursts)")
+	}
 
-// Variety check: over many runs we should see multiple distinct outputs
-seen := make(map[string]struct{})
-for i := 0; i < 200; i++ {
-seen[applyTourettes("I like to talk")] = struct{}{}
-}
-if len(seen) < 2 {
-t.Errorf("applyTourettes: expected multiple distinct outputs in 200 runs, got %d", len(seen))
-}
+	// Variety check: over many runs we should see multiple distinct outputs
+	seen := make(map[string]struct{})
+	for i := 0; i < 200; i++ {
+		seen[applyTourettes("I like to talk")] = struct{}{}
+	}
+	if len(seen) < 2 {
+		t.Errorf("applyTourettes: expected multiple distinct outputs in 200 runs, got %d", len(seen))
+	}
 }
 
 // ── Slang punishment tests ────────────────────────────────────────────────────
 
 func TestApplySlang(t *testing.T) {
-cases := []struct {
-input string
-want  string
-}{
-// Multi-word phrases (handled by slangPhraseReplacer)
-{"I don't know", "idk"},
-{"i don't care", "idc"},
-{"got to go", "gtg"},
-{"be right back", "brb"},
-{"talk to you later", "ttyl"},
-{"oh my god", "omg"},
-{"oh my gosh", "omg"},
-{"by the way", "btw"},
-{"never mind", "nvm"},
-{"no problem", "np"},
-{"good luck have fun", "glhf"},
-{"not gonna lie", "ngl"},
-{"laugh my ass off", "lmao"},
-{"laughing my ass off", "lmao"},
-{"you only live once", "yolo"},
-{"greatest of all time", "goat"},
-{"fear of missing out", "fomo"},
-{"see you later", "cya"},
-// Single-word substitutions
-{"please", "pls"},
-{"thanks", "thx"},
-{"really", "rly"},
-{"probably", "prob"},
-{"forever", "4ever"},
-{"together", "2gether"},
-// Punctuation is preserved
-{"please,", "pls,"},
-{"thanks.", "thx."},
-}
+	cases := []struct {
+		input string
+		want  string
+	}{
+		// Multi-word phrases (handled by slangPhraseReplacer)
+		{"I don't know", "idk"},
+		{"i don't care", "idc"},
+		{"got to go", "gtg"},
+		{"be right back", "brb"},
+		{"talk to you later", "ttyl"},
+		{"oh my god", "omg"},
+		{"oh my gosh", "omg"},
+		{"by the way", "btw"},
+		{"never mind", "nvm"},
+		{"no problem", "np"},
+		{"good luck have fun", "glhf"},
+		{"not gonna lie", "ngl"},
+		{"laugh my ass off", "lmao"},
+		{"laughing my ass off", "lmao"},
+		{"you only live once", "yolo"},
+		{"greatest of all time", "goat"},
+		{"fear of missing out", "fomo"},
+		{"see you later", "cya"},
+		// Single-word substitutions
+		{"please", "pls"},
+		{"thanks", "thx"},
+		{"really", "rly"},
+		{"probably", "prob"},
+		{"forever", "4ever"},
+		{"together", "2gether"},
+		// Punctuation is preserved
+		{"please,", "pls,"},
+		{"thanks.", "thx."},
+	}
 
-for _, tt := range cases {
-got := applySlang(tt.input)
-if got != tt.want {
-t.Errorf("applySlang(%q) = %q, want %q", tt.input, got, tt.want)
-}
-}
+	for _, tt := range cases {
+		got := applySlang(tt.input)
+		if got != tt.want {
+			t.Errorf("applySlang(%q) = %q, want %q", tt.input, got, tt.want)
+		}
+	}
 }
 
 func TestApplySlangPhraseBeatsWord(t *testing.T) {
-// "good luck have fun" must produce "glhf", not "gl have fun" or "gl hf"
-got := applySlang("good luck have fun")
-if got != "glhf" {
-t.Errorf("applySlang phrase priority: got %q, want %q", got, "glhf")
-}
-// "see you later" must produce "cya", not "c u l8r"
-got = applySlang("see you later")
-if got != "cya" {
-t.Errorf("applySlang phrase priority: got %q, want %q", got, "cya")
-}
+	// "good luck have fun" must produce "glhf", not "gl have fun" or "gl hf"
+	got := applySlang("good luck have fun")
+	if got != "glhf" {
+		t.Errorf("applySlang phrase priority: got %q, want %q", got, "glhf")
+	}
+	// "see you later" must produce "cya", not "c u l8r"
+	got = applySlang("see you later")
+	if got != "cya" {
+		t.Errorf("applySlang phrase priority: got %q, want %q", got, "cya")
+	}
 }
 
 func TestApplySlangDoesNotExceedMaxLength(t *testing.T) {
-long := strings.Repeat("word ", 500)
-result := applySlang(long)
-if len(result) > maxTextLength {
-t.Errorf("applySlang: result length %d exceeds maxTextLength %d", len(result), maxTextLength)
-}
+	long := strings.Repeat("word ", 500)
+	result := applySlang(long)
+	if len(result) > maxTextLength {
+		t.Errorf("applySlang: result length %d exceeds maxTextLength %d", len(result), maxTextLength)
+	}
 }
 
 func TestApplySlangEmptyInput(t *testing.T) {
-if got := applySlang(""); got != "" {
-t.Errorf("applySlang empty input: got %q, want empty string", got)
-}
+	if got := applySlang(""); got != "" {
+		t.Errorf("applySlang empty input: got %q, want empty string", got)
+	}
 }
 
 func TestPunishmentSlangString(t *testing.T) {
-if got := PunishmentSlang.String(); got != "slang" {
-t.Errorf("PunishmentSlang.String(): got %q, want %q", got, "slang")
-}
+	if got := PunishmentSlang.String(); got != "slang" {
+		t.Errorf("PunishmentSlang.String(): got %q, want %q", got, "slang")
+	}
 }
 
 func TestApplySlangViaApplyPunishmentToText(t *testing.T) {
-input := "I don't know"
-got := ApplyPunishmentToText(input, PunishmentSlang)
-if got != "idk" {
-t.Errorf("ApplyPunishmentToText(slang) %q = %q, want %q", input, got, "idk")
+	input := "I don't know"
+	got := ApplyPunishmentToText(input, PunishmentSlang)
+	if got != "idk" {
+		t.Errorf("ApplyPunishmentToText(slang) %q = %q, want %q", input, got, "idk")
+	}
 }
+
+// ── ThesaurusOverload ────────────────────────────────────────────────────────
+
+func TestApplyThesaurusOverload(t *testing.T) {
+	// Check known word replacements
+	for input, want := range map[string]string{
+		"go":   "peregrinate",
+		"want": "desire",
+		"big":  "gargantuan",
+		"bad":  "deplorable",
+		"good": "splendid",
+		"stop": "desist",
+		"help": "ameliorate",
+		"slow": "sluggardly",
+	} {
+		result := applyThesaurusOverload(input)
+		if !strings.Contains(result, want) {
+			t.Errorf("applyThesaurusOverload(%q): expected %q in result %q", input, want, result)
+		}
+	}
+}
+
+func TestApplyThesaurusOverloadCasePreserved(t *testing.T) {
+	result := applyThesaurusOverload("Go now")
+	// "Go" (capital) should produce "Peregrinate" (capital)
+	if !strings.Contains(result, "Peregrinate") {
+		t.Errorf("applyThesaurusOverload: expected capitalised 'Peregrinate' in %q", result)
+	}
+}
+
+func TestApplyThesaurusOverloadPunctuation(t *testing.T) {
+	result := applyThesaurusOverload("stop.")
+	if !strings.Contains(result, "desist") {
+		t.Errorf("applyThesaurusOverload: expected 'desist' with trailing punct in %q", result)
+	}
+	// Punctuation should be preserved in the output
+	if !strings.Contains(result, ".") {
+		t.Errorf("applyThesaurusOverload: expected trailing '.' to be preserved in %q", result)
+	}
+}
+
+func TestPunishmentThesaurusOverloadString(t *testing.T) {
+	if got := PunishmentThesaurusOverload.String(); got != "thesaurusoverload" {
+		t.Errorf("PunishmentThesaurusOverload.String(): got %q, want %q", got, "thesaurusoverload")
+	}
+}
+
+func TestApplyThesaurusOverloadViaDispatcher(t *testing.T) {
+	result := ApplyPunishmentToText("go", PunishmentThesaurusOverload)
+	if !strings.Contains(result, "peregrinate") {
+		t.Errorf("ApplyPunishmentToText(thesaurusoverload) 'go': expected 'peregrinate', got %q", result)
+	}
+}
+
+// ── ValleyGirl ───────────────────────────────────────────────────────────────
+
+func TestApplyValleyGirlContainsFiller(t *testing.T) {
+	// Over many runs, a filler or suffix should appear
+	fillerFound := false
+	knownFillers := []string{"like, ", "literally ", "okay sooo ", "um, ", "I mean, ", "honestly? ", "no but like, ", "okay but "}
+	knownSuffixes := []string{" I literally can't.", " like, seriously??", " omg.", ", like, whatever.", " ugh, literally.", " no cap.", "?? okay??", " I can't even."}
+	for i := 0; i < 100; i++ {
+		result := applyValleyGirl("stop following me")
+		for _, f := range knownFillers {
+			if strings.Contains(result, f) {
+				fillerFound = true
+				break
+			}
+		}
+		for _, s := range knownSuffixes {
+			if strings.Contains(result, s) {
+				fillerFound = true
+				break
+			}
+		}
+		if fillerFound {
+			break
+		}
+	}
+	if !fillerFound {
+		t.Error("applyValleyGirl: expected a filler or suffix to appear across 100 runs")
+	}
+}
+
+func TestPunishmentValleyGirlString(t *testing.T) {
+	if got := PunishmentValleyGirl.String(); got != "valleygirl" {
+		t.Errorf("PunishmentValleyGirl.String(): got %q, want %q", got, "valleygirl")
+	}
+}
+
+func TestApplyValleyGirlViaDispatcher(t *testing.T) {
+	// Should not panic and should change the text in some way across many runs
+	changed := false
+	for i := 0; i < 50; i++ {
+		result := ApplyPunishmentToText("stop", PunishmentValleyGirl)
+		if result != "stop" {
+			changed = true
+			break
+		}
+	}
+	if !changed {
+		t.Error("ApplyPunishmentToText(valleygirl): text was never changed across 50 runs")
+	}
+}
+
+// ── Babytalk ─────────────────────────────────────────────────────────────────
+
+func TestApplyBabytalk(t *testing.T) {
+	cases := []struct{ input, want string }{
+		{"give it back", "gib"},
+		{"little", "widdle"},
+		{"please", "pwease"},
+		{"sorry", "sowwy"},
+		{"very", "vewy"},
+		{"okay", "otay"},
+		{"pretty", "pwetty"},
+		{"friend", "fwiend"},
+	}
+	for _, tt := range cases {
+		result := applyBabytalk(tt.input)
+		if !strings.Contains(result, tt.want) {
+			t.Errorf("applyBabytalk(%q): expected %q in result %q", tt.input, tt.want, result)
+		}
+	}
+}
+
+func TestApplyBabytalkStageDirection(t *testing.T) {
+	directionFound := false
+	knownDirections := babytalkStageDirections
+	for i := 0; i < 100; i++ {
+		result := applyBabytalk("give it back")
+		for _, d := range knownDirections {
+			if strings.Contains(result, d) {
+				directionFound = true
+				break
+			}
+		}
+		if directionFound {
+			break
+		}
+	}
+	if !directionFound {
+		t.Error("applyBabytalk: expected a stage direction to appear across 100 runs")
+	}
+}
+
+func TestPunishmentBabytalkString(t *testing.T) {
+	if got := PunishmentBabytalk.String(); got != "babytalk" {
+		t.Errorf("PunishmentBabytalk.String(): got %q, want %q", got, "babytalk")
+	}
+}
+
+// ── ThirdPerson ──────────────────────────────────────────────────────────────
+
+func TestApplyThirdPersonWithName(t *testing.T) {
+	result := applyThirdPersonWithName("hello everyone", "Phoenix")
+	if !strings.Contains(result, "Phoenix") {
+		t.Errorf("applyThirdPersonWithName: expected showname 'Phoenix' in result %q", result)
+	}
+	if !strings.Contains(result, "hello everyone") {
+		t.Errorf("applyThirdPersonWithName: expected original text in result %q", result)
+	}
+}
+
+func TestApplyThirdPersonMoodTagFeral(t *testing.T) {
+	result := applyThirdPersonWithName("WHAT THE HECK!!!", "Phoenix")
+	if !strings.Contains(result, "[feral]") {
+		t.Errorf("applyThirdPersonWithName: expected '[feral]' mood tag for all-caps+exclamation in %q", result)
+	}
+}
+
+func TestApplyThirdPersonMoodTagConfused(t *testing.T) {
+	result := applyThirdPersonWithName("what??", "Phoenix")
+	if !strings.Contains(result, "[confused]") {
+		t.Errorf("applyThirdPersonWithName: expected '[confused]' mood tag for question in %q", result)
+	}
+}
+
+func TestApplyThirdPersonFallbackShowname(t *testing.T) {
+	result := applyThirdPerson("hello")
+	if !strings.Contains(result, "Someone") {
+		t.Errorf("applyThirdPerson: expected fallback 'Someone' showname in %q", result)
+	}
+}
+
+func TestPunishmentThirdPersonString(t *testing.T) {
+	if got := PunishmentThirdPerson.String(); got != "thirdperson" {
+		t.Errorf("PunishmentThirdPerson.String(): got %q, want %q", got, "thirdperson")
+	}
+}
+
+func TestApplyThirdPersonViaDispatcher(t *testing.T) {
+	result := ApplyPunishmentToText("hello", PunishmentThirdPerson)
+	if !strings.Contains(result, "Someone") {
+		t.Errorf("ApplyPunishmentToText(thirdperson): expected 'Someone' fallback in %q", result)
+	}
+}
+
+// ── UnreliableNarrator ───────────────────────────────────────────────────────
+
+func TestApplyUnreliableNarratorContainsSuffix(t *testing.T) {
+	suffixFound := false
+	for i := 0; i < 50; i++ {
+		result := applyUnreliableNarrator("I didn't do it")
+		for _, s := range unreliableSuffixes {
+			if strings.Contains(result, s) {
+				suffixFound = true
+				break
+			}
+		}
+		if suffixFound {
+			break
+		}
+	}
+	if !suffixFound {
+		t.Error("applyUnreliableNarrator: expected a suffix in at least one run")
+	}
+}
+
+func TestApplyUnreliableNarratorContainsHedge(t *testing.T) {
+	hedgeFound := false
+	for i := 0; i < 100; i++ {
+		result := applyUnreliableNarrator("I saw them do it")
+		for _, h := range unreliableHedges {
+			if strings.Contains(result, h) {
+				hedgeFound = true
+				break
+			}
+		}
+		if hedgeFound {
+			break
+		}
+	}
+	if !hedgeFound {
+		t.Error("applyUnreliableNarrator: expected a hedge word across 100 runs")
+	}
+}
+
+func TestPunishmentUnreliableNarratorString(t *testing.T) {
+	if got := PunishmentUnreliableNarrator.String(); got != "unreliablenarrator" {
+		t.Errorf("PunishmentUnreliableNarrator.String(): got %q, want %q", got, "unreliablenarrator")
+	}
+}
+
+func TestApplyUnreliableNarratorViaDispatcher(t *testing.T) {
+	result := ApplyPunishmentToText("I'm innocent", PunishmentUnreliableNarrator)
+	if result == "I'm innocent" {
+		t.Error("ApplyPunishmentToText(unreliablenarrator): text should be modified")
+	}
+}
+
+// ── UncannyValley ────────────────────────────────────────────────────────────
+
+func TestApplyUncannyValleyFineSmiley(t *testing.T) {
+	result := applyUncannyValley("im fine")
+	if !strings.Contains(result, ":)") {
+		t.Errorf("applyUncannyValley: expected ':)' easter egg for 'im fine', got %q", result)
+	}
+
+	result2 := applyUncannyValley("i'm fine")
+	if !strings.Contains(result2, ":)") {
+		t.Errorf("applyUncannyValley: expected ':)' easter egg for \"i'm fine\", got %q", result2)
+	}
+}
+
+func TestApplyUncannyValleyGlitchTag(t *testing.T) {
+	tagFound := false
+	for i := 0; i < 100; i++ {
+		result := applyUncannyValley("hello world")
+		for _, tag := range uncannyGlitchTags {
+			if strings.Contains(result, tag) {
+				tagFound = true
+				break
+			}
+		}
+		if tagFound {
+			break
+		}
+	}
+	if !tagFound {
+		t.Error("applyUncannyValley: expected a glitch tag across 100 runs")
+	}
+}
+
+func TestMutateShownameNotEmpty(t *testing.T) {
+	name := "Phoenix"
+	for i := 0; i < 20; i++ {
+		result := MutateShowname(name)
+		if result == "" {
+			t.Errorf("MutateShowname(%q): returned empty string", name)
+		}
+	}
+}
+
+func TestMutateShownameEmpty(t *testing.T) {
+	if got := MutateShowname(""); got != "" {
+		t.Errorf("MutateShowname empty: expected empty string, got %q", got)
+	}
+}
+
+func TestMutateShownameDoesNotExceedMaxLength(t *testing.T) {
+	name := strings.Repeat("a", maxShownameLength-1)
+	for i := 0; i < 20; i++ {
+		result := MutateShowname(name)
+		if len(result) > maxShownameLength {
+			t.Errorf("MutateShowname: result length %d exceeds maxShownameLength %d", len(result), maxShownameLength)
+		}
+	}
+}
+
+func TestPunishmentUncannyValleyString(t *testing.T) {
+	if got := PunishmentUncannyValley.String(); got != "uncannyvalley" {
+		t.Errorf("PunishmentUncannyValley.String(): got %q, want %q", got, "uncannyvalley")
+	}
+}
+
+func TestApplyUncannyValleyViaDispatcher(t *testing.T) {
+	// Should not panic; result may or may not have a glitch tag depending on rand
+	_ = ApplyPunishmentToText("hello", PunishmentUncannyValley)
 }
