@@ -22,6 +22,7 @@ import (
 	"regexp"
 	"strings"
 	"unicode"
+	"unicode/utf8"
 )
 
 // confusedSplitter splits on any sequence of non-letter, non-digit characters
@@ -583,6 +584,53 @@ var (
 	}
 )
 
+// babytalkReplacer applies all babytalk phonetic substitutions in a single O(n)
+// pass. Longer patterns are listed before shorter ones that share a prefix (e.g.
+// "together" before "tr", "flower" before "fl") so that the first match wins.
+var babytalkReplacer = strings.NewReplacer(
+	// 8 chars
+	"together", "togedder",
+	// 7 chars
+	"brother", "bwudder",
+	// 6 chars
+	"bottle", "baba",
+	"flower", "fwower",
+	"friend", "fwiend",
+	"hungry", "hungy",
+	"little", "widdle",
+	"please", "pwease",
+	"pretty", "pwetty",
+	// 5 chars
+	"light", "wight",
+	"right", "wight",
+	"sorry", "sowwy",
+	"water", "wawa",
+	// 4 chars
+	"crap", "poop",
+	"damn", "dang",
+	"give", "gib",
+	"hell", "heck",
+	"okay", "otay",
+	"very", "vewy",
+	// 3 chars (str before tr so "str" isn't partially consumed by "tr")
+	"str", "stw",
+	// 2 chars
+	"dr", "dw",
+	"fl", "fw",
+	"tr", "tw",
+)
+
+// uncannyFineReplacer handles all capitalisation variants of "im/i'm/i am fine"
+// so that applyUncannyValley doesn't allocate a Replacer on every hot-path call.
+var uncannyFineReplacer = strings.NewReplacer(
+	"I am fine", "I am fine :)",
+	"i am fine", "i am fine :)",
+	"I'm fine", "I'm fine :)",
+	"i'm fine", "i'm fine :)",
+	"Im fine", "Im fine :)",
+	"im fine", "im fine :)",
+)
+
 // slangPhraseReplacer performs all multi-word phrase substitutions in a single
 // left-to-right O(n) pass (Aho-Corasick internally).  Entries are ordered
 // longest-first so that longer phrases always win over their shorter prefixes
@@ -834,8 +882,9 @@ func applyShakespearean(text string) string {
 		}
 		lower := strings.ToLower(stripped)
 		if replacement, ok := shakespeareanTable[lower]; ok {
-			// Preserve leading capital if original word was capitalised
-			if len(stripped) > 0 && unicode.IsUpper([]rune(stripped)[0]) {
+			// Preserve leading capital if original word was capitalised.
+			// utf8.DecodeRuneInString avoids allocating a full []rune slice.
+			if firstRune, _ := utf8.DecodeRuneInString(stripped); unicode.IsUpper(firstRune) {
 				r := []rune(replacement)
 				r[0] = unicode.ToUpper(r[0])
 				replacement = string(r)
@@ -1072,7 +1121,7 @@ func applyThesaurusOverload(text string) string {
 		}
 		lower := strings.ToLower(stripped)
 		if replacement, ok := thesaurusTable[lower]; ok {
-			if unicode.IsUpper([]rune(stripped)[0]) {
+			if firstRune, _ := utf8.DecodeRuneInString(stripped); unicode.IsUpper(firstRune) {
 				r := []rune(replacement)
 				r[0] = unicode.ToUpper(r[0])
 				replacement = string(r)
@@ -1095,13 +1144,15 @@ func applyValleyGirl(text string) string {
 	if rand.Float32() < 0.6 {
 		text = valleygirlFillers[rand.Intn(len(valleygirlFillers))] + text
 	}
-	// Stretch some vowels for drama
+	// Stretch some vowels for drama. Compute lower once and keep it in sync
+	// with text so subsequent searches use accurate positions without
+	// redundant ToLower calls.
+	lower := strings.ToLower(text)
 	for _, ch := range []string{"o", "e", "a"} {
-		if rand.Float32() < 0.3 && strings.Contains(strings.ToLower(text), ch) {
-			// Extend first occurrence of this vowel run
-			idx := strings.Index(strings.ToLower(text), ch)
-			if idx >= 0 {
+		if rand.Float32() < 0.3 {
+			if idx := strings.Index(lower, ch); idx >= 0 {
 				text = text[:idx+1] + ch + ch + text[idx+1:]
+				lower = lower[:idx+1] + ch + ch + lower[idx+1:]
 			}
 		}
 	}
@@ -1119,38 +1170,9 @@ func applyValleyGirl(text string) string {
 
 // applyBabytalk converts text to toddler-style speech.
 func applyBabytalk(text string) string {
-	// Phonetic substitutions (order matters: longer first)
-	replacements := []struct{ old, new string }{
-		{"please", "pwease"},
-		{"pretty", "pwetty"},
-		{"flower", "fwower"},
-		{"friend", "fwiend"},
-		{"brother", "bwudder"},
-		{"little", "widdle"},
-		{"bottle", "baba"},
-		{"water", "wawa"},
-		{"together", "togedder"},
-		{"hungry", "hungy"},
-		{"sorry", "sowwy"},
-		{"right", "wight"},
-		{"light", "wight"},
-		{"give", "gib"},
-		{"very", "vewy"},
-		{"okay", "otay"},
-		{"str", "stw"},
-		{"tr", "tw"},
-		{"dr", "dw"},
-		{"fl", "fw"},
-	}
-	lower := strings.ToLower(text)
-	for _, r := range replacements {
-		lower = strings.ReplaceAll(lower, r.old, r.new)
-	}
-	// Replace profanity with toddler equivalents
-	lower = strings.ReplaceAll(lower, "damn", "dang")
-	lower = strings.ReplaceAll(lower, "hell", "heck")
-	lower = strings.ReplaceAll(lower, "crap", "poop")
-
+	// babytalkReplacer performs all phonetic substitutions (including profanity
+	// softening) in a single O(n) pass instead of 22 sequential ReplaceAll calls.
+	lower := babytalkReplacer.Replace(strings.ToLower(text))
 	// Add a stage direction ~40% of the time
 	if rand.Float32() < 0.4 {
 		lower += babytalkStageDirections[rand.Intn(len(babytalkStageDirections))]
@@ -1166,10 +1188,14 @@ func applyThirdPersonWithName(text, showname string) string {
 	if strings.TrimSpace(showname) == "" {
 		showname = "Someone"
 	}
-	// Determine mood tag from punctuation / capitalisation
+	// Determine mood tag from punctuation / capitalisation.
+	// Count uppercase letters and total runes in a single pass to avoid the
+	// extra O(n) allocation that len([]rune(text)) would cause.
 	moodTag := ""
 	upperCount := 0
+	runeCount := 0
 	for _, r := range text {
+		runeCount++
 		if unicode.IsUpper(r) {
 			upperCount++
 		}
@@ -1177,8 +1203,8 @@ func applyThirdPersonWithName(text, showname string) string {
 	hasExclamation := strings.Contains(text, "!")
 	hasQuestion := strings.Contains(text, "?")
 	upperRatio := 0.0
-	if len(text) > 0 {
-		upperRatio = float64(upperCount) / float64(len([]rune(text)))
+	if runeCount > 0 {
+		upperRatio = float64(upperCount) / float64(runeCount)
 	}
 	switch {
 	case upperRatio > 0.6 && hasExclamation:
@@ -1208,11 +1234,14 @@ func applyThirdPerson(text string) string {
 
 // applyUnreliableNarrator makes the speaker sound like an untrustworthy narrator.
 func applyUnreliableNarrator(text string) string {
-	// Insert a hedge word after the first word ~60% of the time
+	// Insert a hedge word after the first word ~60% of the time.
+	// Use in-place grow-and-shift to avoid allocating two temporary slices.
 	words := strings.Fields(text)
 	if len(words) >= 2 && rand.Float32() < 0.6 {
 		hedge := unreliableHedges[rand.Intn(len(unreliableHedges))]
-		words = append(words[:1], append([]string{hedge}, words[1:]...)...)
+		words = append(words, "")  // grow by one
+		copy(words[2:], words[1:]) // shift [1:] one position right
+		words[1] = hedge
 		text = strings.Join(words, " ")
 	}
 	// Append a suspicious suffix
@@ -1225,20 +1254,11 @@ func applyUnreliableNarrator(text string) string {
 // applyUncannyValley adds glitchy system-note suffixes to messages.
 // The display-name mutation is handled in netprotocol.go.
 func applyUncannyValley(text string) string {
-	// Easter egg: if they claim to be fine, add an unsettling smiley
-	lowerText := strings.ToLower(text)
-	if strings.Contains(lowerText, "im fine") ||
-		strings.Contains(lowerText, "i'm fine") ||
-		strings.Contains(lowerText, "i am fine") {
-		text = strings.NewReplacer(
-			"Im fine", "Im fine :)",
-			"im fine", "im fine :)",
-			"i'm fine", "i'm fine :)",
-			"I'm fine", "I'm fine :)",
-			"I am fine", "I am fine :)",
-			"i am fine", "i am fine :)",
-		).Replace(text)
-	}
+	// Easter egg: if they claim to be fine, add an unsettling smiley.
+	// uncannyFineReplacer is package-level so no allocation occurs here.
+	// It returns the original string unchanged if none of the patterns match,
+	// which is cheaper than pre-checking with ToLower + Contains.
+	text = uncannyFineReplacer.Replace(text)
 	// ~60% chance to append a glitch tag
 	if rand.Float32() < 0.6 {
 		text += uncannyGlitchTags[rand.Intn(len(uncannyGlitchTags))]
@@ -1284,8 +1304,9 @@ func MutateShowname(name string) string {
 		}
 		return string(runes)
 	default:
-		// Duplicate a random character (only if within length budget)
-		if len(string(runes)) < maxShownameLength-1 {
+		// Duplicate a random character (only if within length budget).
+		// len(runes) is the rune count — the correct comparison for maxShownameLength.
+		if len(runes) < maxShownameLength-1 {
 			idx := rand.Intn(len(runes))
 			newRunes := make([]rune, len(runes)+1)
 			copy(newRunes, runes[:idx+1])
