@@ -47,9 +47,12 @@ const (
 var DBPath string
 var db *sql.DB
 
+// defaultChipBalance is the starting chip balance assigned to new players.
+const defaultChipBalance = 100
+
 // Database version.
 // This should be incremented whenever changes are made to the DB that require existing databases to upgrade.
-const ver = 6
+const ver = 7
 
 // Persistent punishment kind constants.
 const (
@@ -66,6 +69,12 @@ type PersistentPunishment struct {
 	Value   int   // MuteState for mutes; 0 for others.
 	Expires int64 // Unix timestamp; 0 = no expiry (permanent).
 	Reason  string
+}
+
+// ChipEntry holds one row from the CHIPS leaderboard query.
+type ChipEntry struct {
+	Ipid    string
+	Balance int64
 }
 
 // Opens the server's database connection.
@@ -135,6 +144,13 @@ func Open() error {
 	if err != nil {
 		return err
 	}
+	_, err = db.Exec(`CREATE TABLE IF NOT EXISTS CHIPS(
+		IPID    TEXT    PRIMARY KEY,
+		BALANCE INTEGER NOT NULL DEFAULT 100
+	)`)
+	if err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -200,6 +216,19 @@ func upgradeDB(v int) error {
 			return err
 		}
 		_, err = db.Exec("PRAGMA user_version = 6")
+		if err != nil {
+			return err
+		}
+		fallthrough
+	case 6:
+		_, err := db.Exec(`CREATE TABLE IF NOT EXISTS CHIPS(
+			IPID    TEXT    PRIMARY KEY,
+			BALANCE INTEGER NOT NULL DEFAULT 100
+		)`)
+		if err != nil {
+			return err
+		}
+		_, err = db.Exec("PRAGMA user_version = 7")
 		if err != nil {
 			return err
 		}
@@ -660,4 +689,93 @@ func LoadTormentedIPs() ([]string, error) {
 		ipids = append(ipids, ipid)
 	}
 	return ipids, rows.Err()
+}
+
+// EnsureChipBalance ensures an IPID exists in the CHIPS table, creating it with 100 chips if absent.
+// It is safe to call on every connect; it is a no-op for known IPIDs.
+func EnsureChipBalance(ipid string) error {
+	if db == nil {
+		return nil
+	}
+	_, err := db.Exec("INSERT OR IGNORE INTO CHIPS(IPID, BALANCE) VALUES(?, ?)", ipid, defaultChipBalance)
+	return err
+}
+
+// GetChipBalance returns the current chip balance for an IPID.
+// Returns 0, nil if the IPID is not found (EnsureChipBalance has not been called yet).
+func GetChipBalance(ipid string) (int64, error) {
+	if db == nil {
+		return 0, nil
+	}
+	row := db.QueryRow("SELECT BALANCE FROM CHIPS WHERE IPID = ?", ipid)
+	var balance int64
+	if err := row.Scan(&balance); err != nil {
+		if err == sql.ErrNoRows {
+			return 0, nil
+		}
+		return 0, err
+	}
+	return balance, nil
+}
+
+// AddChips adds the given amount to an IPID's chip balance and returns the new balance.
+// The amount must be positive. EnsureChipBalance must be called first.
+func AddChips(ipid string, amount int64) (int64, error) {
+	if db == nil {
+		return 0, nil
+	}
+	if amount <= 0 {
+		return 0, fmt.Errorf("amount must be positive")
+	}
+	var newBalance int64
+	err := db.QueryRow(
+		"UPDATE CHIPS SET BALANCE = BALANCE + ? WHERE IPID = ? RETURNING BALANCE",
+		amount, ipid).Scan(&newBalance)
+	if err != nil {
+		return 0, err
+	}
+	return newBalance, nil
+}
+
+// SpendChips deducts the given amount from an IPID's chip balance, returning the new balance.
+// Returns an error if the balance would go below zero.
+func SpendChips(ipid string, amount int64) (int64, error) {
+	if db == nil {
+		return 0, nil
+	}
+	if amount <= 0 {
+		return 0, fmt.Errorf("amount must be positive")
+	}
+	var newBalance int64
+	err := db.QueryRow(
+		"UPDATE CHIPS SET BALANCE = BALANCE - ? WHERE IPID = ? AND BALANCE >= ? RETURNING BALANCE",
+		amount, ipid, amount).Scan(&newBalance)
+	if err == sql.ErrNoRows {
+		return 0, fmt.Errorf("insufficient chips")
+	}
+	if err != nil {
+		return 0, err
+	}
+	return newBalance, nil
+}
+
+// GetTopChipBalances returns the top n IPIDs by chip balance, ordered descending.
+func GetTopChipBalances(n int) ([]ChipEntry, error) {
+	if db == nil {
+		return nil, nil
+	}
+	rows, err := db.Query("SELECT IPID, BALANCE FROM CHIPS ORDER BY BALANCE DESC LIMIT ?", n)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var entries []ChipEntry
+	for rows.Next() {
+		var e ChipEntry
+		if err := rows.Scan(&e.Ipid, &e.Balance); err != nil {
+			return entries, err
+		}
+		entries = append(entries, e)
+	}
+	return entries, rows.Err()
 }
