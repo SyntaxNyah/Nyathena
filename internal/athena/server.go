@@ -52,6 +52,7 @@ const version = "v1.0.2"
 var (
 	config                                 *settings.Config
 	characters, music, backgrounds, parrot []string
+	charactersByName                       map[string]int // O(1) lookup: lowercase name → character ID
 	areas                                  []*area.Area
 	areaNames                              string
 	areaIndexMap                           map[*area.Area]int // pre-computed index lookup for O(1) getAreaIndex
@@ -389,6 +390,10 @@ func NewServer(conf *settings.Config) (*Server, error) {
 	// and command handlers continue to work without modification.
 	config = s.config
 	characters = s.characters
+	charactersByName = make(map[string]int, len(s.characters))
+	for i, name := range s.characters {
+		charactersByName[strings.ToLower(name)] = i
+	}
 	music = s.music
 	backgrounds = s.backgrounds
 	parrot = s.parrot

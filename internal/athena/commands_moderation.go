@@ -1296,11 +1296,6 @@ func cmdUnCharStuck(client *Client, args []string, _ string) {
 // Handles /charcurse
 
 func cmdCharCurse(client *Client, args []string, usage string) {
-	if len(args) < 2 {
-		client.SendServerMessage("Not enough arguments:\n" + usage)
-		return
-	}
-
 	uid, err := strconv.Atoi(args[0])
 	if err != nil {
 		client.SendServerMessage("Invalid UID.")
@@ -1309,24 +1304,24 @@ func cmdCharCurse(client *Client, args []string, usage string) {
 
 	target, err := getClientByUid(uid)
 	if err != nil {
-		client.SendServerMessage(fmt.Sprintf("Client with UID %v does not exist.", uid))
+		client.SendServerMessage(fmt.Sprintf("Client with UID %d does not exist.", uid))
 		return
 	}
 
 	charName := strings.Join(args[1:], " ")
 	charID := getCharacterID(charName)
 	if charID == -1 {
-		client.SendServerMessage(fmt.Sprintf("Character \"%v\" not found.", charName))
+		client.SendServerMessage(fmt.Sprintf("Character \"%s\" not found.", charName))
 		return
 	}
 
 	if target.Area().IsTaken(charID) && target.CharID() != charID {
-		client.SendServerMessage(fmt.Sprintf("Character \"%v\" is already taken in that area.", charName))
+		client.SendServerMessage(fmt.Sprintf("Character \"%s\" is already taken in that area.", charName))
 		return
 	}
 
 	target.ChangeCharacter(charID)
-	target.SendServerMessage(fmt.Sprintf("A moderator has forced you to play as %v. You may change characters freely.", charName))
-	client.SendServerMessage(fmt.Sprintf("Forced UID %v to character %v.", uid, charName))
-	addToBuffer(client, "CMD", fmt.Sprintf("Char-cursed UID %v to character %v.", uid, charName), false)
+	target.SendServerMessage(fmt.Sprintf("A moderator has forced you to play as %s. You may change characters freely.", charName))
+	client.SendServerMessage(fmt.Sprintf("Forced UID %d to character %s.", uid, charName))
+	addToBuffer(client, "CMD", fmt.Sprintf("Char-cursed UID %d to character %s.", uid, charName), false)
 }
