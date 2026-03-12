@@ -348,6 +348,16 @@ func cmdSetEviMod(client *Client, args []string, _ string) {
 	addToBuffer(client, "CMD", fmt.Sprintf("Set the evidence mode to %v.", args[0]), false)
 }
 
+// Handles /bglist
+
+func cmdBgList(client *Client, _ []string, _ string) {
+	if len(backgrounds) == 0 {
+		client.SendServerMessage("No backgrounds are available.")
+		return
+	}
+	client.SendServerMessage(bgListStr)
+}
+
 // Handles /forcebglist
 
 func cmdForceBGList(client *Client, args []string, _ string) {

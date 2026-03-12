@@ -55,6 +55,7 @@ var (
 	charactersByName                       map[string]int // O(1) lookup: lowercase name → character ID
 	areas                                  []*area.Area
 	areaNames                              string
+	bgListStr                              string // pre-built background list for /bglist; zero alloc per call
 	areaIndexMap                           map[*area.Area]int // pre-computed index lookup for O(1) getAreaIndex
 	roles                                  []permissions.Role
 	uids                                   uidmanager.UidManager
@@ -171,6 +172,7 @@ type Server struct {
 	parrot                 []string
 	areas                  []*area.Area
 	areaNames              string
+	bgListStr              string
 	areaIndexMap           map[*area.Area]int
 	roles                  []permissions.Role
 	uids                   uidmanager.UidManager
@@ -282,6 +284,16 @@ func NewServer(conf *settings.Config) (*Server, error) {
 	} else if len(s.backgrounds) == 0 {
 		return nil, fmt.Errorf("empty background list")
 	}
+	var bgBuilder strings.Builder
+	bgBuilder.Grow(len("Available backgrounds:\n") + estimateJoinedLen(s.backgrounds))
+	bgBuilder.WriteString("Available backgrounds:\n")
+	for i, bg := range s.backgrounds {
+		if i > 0 {
+			bgBuilder.WriteByte('\n')
+		}
+		bgBuilder.WriteString(bg)
+	}
+	s.bgListStr = bgBuilder.String()
 
 	s.parrot, err = settings.LoadFile("/parrot.txt")
 	if err != nil {
@@ -399,6 +411,7 @@ func NewServer(conf *settings.Config) (*Server, error) {
 	parrot = s.parrot
 	areas = s.areas
 	areaNames = s.areaNames
+	bgListStr = s.bgListStr
 	areaIndexMap = s.areaIndexMap
 	roles = s.roles
 	uids = s.uids
@@ -1337,4 +1350,17 @@ func checkGlobalNewIPRateLimit(ipid string) bool {
 	globalNewIPTracker.timestamps = times
 
 	return len(times) >= config.GlobalNewIPRateLimit
+}
+
+// estimateJoinedLen returns the total byte length of all strings in ss joined by newlines.
+// Used to pre-size a strings.Builder, avoiding intermediate reallocations.
+func estimateJoinedLen(ss []string) int {
+	if len(ss) == 0 {
+		return 0
+	}
+	n := len(ss) - 1 // separators
+	for _, s := range ss {
+		n += len(s)
+	}
+	return n
 }
