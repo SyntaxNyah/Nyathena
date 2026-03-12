@@ -127,6 +127,13 @@ const (
 	PunishmentTourettes
 	// Internet Slang Punishment
 	PunishmentSlang
+	// New Fun Punishment Commands
+	PunishmentThesaurusOverload
+	PunishmentValleyGirl
+	PunishmentBabytalk
+	PunishmentThirdPerson
+	PunishmentUnreliableNarrator
+	PunishmentUncannyValley
 )
 
 type PunishmentState struct {
@@ -149,29 +156,29 @@ type ClientPairInfo struct {
 }
 
 type Client struct {
-	pair          ClientPairInfo
-	mu            sync.Mutex
-	conn          net.Conn
-	joining       bool
-	hdid          string
-	uid           int
-	area          *area.Area
-	char          int
-	ipid          string
-	oocName       string
-	lastmsg       string
-	lastTextColor string
-	perms         uint64
-	authenticated bool
-	mod_name      string
-	pos           string
-	case_prefs    [5]bool
-	muted         MuteState
-	muteuntil     time.Time
-	showname      string
-	narrator      bool
-	jailedUntil   time.Time
-	lastRpsTime   time.Time
+	pair               ClientPairInfo
+	mu                 sync.Mutex
+	conn               net.Conn
+	joining            bool
+	hdid               string
+	uid                int
+	area               *area.Area
+	char               int
+	ipid               string
+	oocName            string
+	lastmsg            string
+	lastTextColor      string
+	perms              uint64
+	authenticated      bool
+	mod_name           string
+	pos                string
+	case_prefs         [5]bool
+	muted              MuteState
+	muteuntil          time.Time
+	showname           string
+	narrator           bool
+	jailedUntil        time.Time
+	lastRpsTime        time.Time
 	punishments        []PunishmentState
 	msgTimestamps      []time.Time // Tracks message timestamps for rate limiting
 	oocMsgTimestamps   []time.Time // Tracks OOC message timestamps for OOC rate limiting
@@ -181,30 +188,30 @@ type Client struct {
 	lastRandomCharTime time.Time   // Tracks last /randomchar time for cooldown
 	lastRandomBgTime   time.Time   // Tracks last /randombg time for cooldown
 	lastRandomSongTime time.Time   // Tracks last /randomsong time for cooldown
-	forcePairUID    int         // UID of the client this client is force-paired with (-1 if none)
-	possessing      int         // UID of the client being possessed (-1 if not possessing anyone)
-	possessedPos    string      // Position of the possessed target (saved at time of possession)
-	forcedShowname  string      // Showname forced by a moderator ("" if none)
-	connectedAt     time.Time   // Time the client joined the server (uid assigned); zero if not yet joined
-	jailAreaID      int         // Area index where this client is jailed; -1 = no specific jail area
-	hidden          bool        // Whether the client is hidden from the player list and area counts
-	charStuckUntil  time.Time   // Time when the character-stuck restriction expires; zero = not stuck
-	charStuckCharID int         // Character ID the client is locked to; -1 = not stuck
-	dancing         bool        // Whether the client has dance mode active (flips sprite every message)
-	danceFlipped    bool        // Current flip state for dance mode; toggles each IC message
+	forcePairUID       int         // UID of the client this client is force-paired with (-1 if none)
+	possessing         int         // UID of the client being possessed (-1 if not possessing anyone)
+	possessedPos       string      // Position of the possessed target (saved at time of possession)
+	forcedShowname     string      // Showname forced by a moderator ("" if none)
+	connectedAt        time.Time   // Time the client joined the server (uid assigned); zero if not yet joined
+	jailAreaID         int         // Area index where this client is jailed; -1 = no specific jail area
+	hidden             bool        // Whether the client is hidden from the player list and area counts
+	charStuckUntil     time.Time   // Time when the character-stuck restriction expires; zero = not stuck
+	charStuckCharID    int         // Character ID the client is locked to; -1 = not stuck
+	dancing            bool        // Whether the client has dance mode active (flips sprite every message)
+	danceFlipped       bool        // Current flip state for dance mode; toggles each IC message
 }
 
 // NewClient returns a new client.
 func NewClient(conn net.Conn, ipid string) *Client {
 	return &Client{
-		conn:       conn,
-		uid:        -1,
-		char:       -1,
-		pair:       ClientPairInfo{wanted_id: -1},
-		ipid:       ipid,
-		forcePairUID: -1,
-		possessing: -1,
-		jailAreaID: -1,
+		conn:            conn,
+		uid:             -1,
+		char:            -1,
+		pair:            ClientPairInfo{wanted_id: -1},
+		ipid:            ipid,
+		forcePairUID:    -1,
+		possessing:      -1,
+		jailAreaID:      -1,
 		charStuckCharID: -1,
 	}
 }
@@ -888,7 +895,7 @@ func (client *Client) IsNarrator() bool {
 func (client *Client) ToggleNarrator() {
 	client.mu.Lock()
 	client.narrator = !client.narrator
-	client.mu.Unlock()	
+	client.mu.Unlock()
 	if client.narrator {
 		client.SendServerMessage("You are now in narrator mode.")
 	} else {
@@ -1269,7 +1276,7 @@ func (m MuteState) String() string {
 func (client *Client) AddPunishment(pType PunishmentType, duration time.Duration, reason string) {
 	client.mu.Lock()
 	defer client.mu.Unlock()
-	
+
 	// Remove existing punishment of the same type (prevent duplicate same-type punishments)
 	// Different punishment types can coexist and stack their effects
 	for i := len(client.punishments) - 1; i >= 0; i-- {
@@ -1278,12 +1285,12 @@ func (client *Client) AddPunishment(pType PunishmentType, duration time.Duration
 			break
 		}
 	}
-	
+
 	expiresAt := time.Time{}
 	if duration > 0 {
 		expiresAt = time.Now().UTC().Add(duration)
 	}
-	
+
 	client.punishments = append(client.punishments, PunishmentState{
 		punishmentType: pType,
 		expiresAt:      expiresAt,
@@ -1300,7 +1307,7 @@ func (client *Client) AddPunishment(pType PunishmentType, duration time.Duration
 func (client *Client) RemovePunishment(pType PunishmentType) {
 	client.mu.Lock()
 	defer client.mu.Unlock()
-	
+
 	for i := len(client.punishments) - 1; i >= 0; i-- {
 		if client.punishments[i].punishmentType == pType {
 			client.punishments = append(client.punishments[:i], client.punishments[i+1:]...)
@@ -1347,7 +1354,7 @@ func (client *Client) RemoveAllPunishments() {
 func (client *Client) HasPunishment(pType PunishmentType) bool {
 	client.mu.Lock()
 	defer client.mu.Unlock()
-	
+
 	for _, p := range client.punishments {
 		if p.punishmentType == pType {
 			return true
@@ -1362,7 +1369,7 @@ func (client *Client) HasPunishment(pType PunishmentType) bool {
 func (client *Client) GetPunishment(pType PunishmentType) *PunishmentState {
 	client.mu.Lock()
 	defer client.mu.Unlock()
-	
+
 	for i := range client.punishments {
 		if client.punishments[i].punishmentType == pType {
 			return &client.punishments[i]
@@ -1375,7 +1382,7 @@ func (client *Client) GetPunishment(pType PunishmentType) *PunishmentState {
 func (client *Client) UpdatePunishmentState(pType PunishmentType, updateFunc func(*PunishmentState)) {
 	client.mu.Lock()
 	defer client.mu.Unlock()
-	
+
 	for i := range client.punishments {
 		if client.punishments[i].punishmentType == pType {
 			updateFunc(&client.punishments[i])
@@ -1414,17 +1421,17 @@ func (client *Client) CheckExpiredPunishments() bool {
 func (client *Client) GetActivePunishments() []PunishmentState {
 	client.mu.Lock()
 	defer client.mu.Unlock()
-	
+
 	// Clean up expired punishments first
 	now := time.Now().UTC()
 	active := make([]PunishmentState, 0, len(client.punishments))
-	
+
 	for _, p := range client.punishments {
 		if p.expiresAt.IsZero() || now.Before(p.expiresAt) {
 			active = append(active, p)
 		}
 	}
-	
+
 	return active
 }
 
@@ -1555,6 +1562,18 @@ func (p PunishmentType) String() string {
 		return "tourettes"
 	case PunishmentSlang:
 		return "slang"
+	case PunishmentThesaurusOverload:
+		return "thesaurusoverload"
+	case PunishmentValleyGirl:
+		return "valleygirl"
+	case PunishmentBabytalk:
+		return "babytalk"
+	case PunishmentThirdPerson:
+		return "thirdperson"
+	case PunishmentUnreliableNarrator:
+		return "unreliablenarrator"
+	case PunishmentUncannyValley:
+		return "uncannyvalley"
 	default:
 		return "none"
 	}
@@ -1577,7 +1596,7 @@ func (client *Client) CheckRateLimit() bool {
 
 	// Remove timestamps outside the current window (sliding window)
 	cutoff := now.Add(-window)
-	
+
 	// Find the first timestamp that is still within the window
 	validIdx := -1
 	for i, ts := range client.msgTimestamps {
@@ -1586,7 +1605,7 @@ func (client *Client) CheckRateLimit() bool {
 			break
 		}
 	}
-	
+
 	// Clean up old timestamps
 	if validIdx == -1 {
 		// All timestamps are expired, release the underlying array for GC

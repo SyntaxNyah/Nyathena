@@ -14,7 +14,6 @@ GNU Affero General Public License for more details.
 You should have received a copy of the GNU Affero General Public License
 along with this program.  If not, see <https://www.gnu.org/licenses/>. */
 
-
 package athena
 
 import (
@@ -1137,6 +1136,90 @@ func initCommands() {
 			minArgs:  1,
 			usage:    "Usage: /unslang <uid1>,<uid2>...",
 			desc:     "Removes slang punishment from user(s). Moderator only.",
+			reqPerms: permissions.PermissionField["MUTE"],
+		},
+		"thesaurusoverload": {
+			handler:  cmdThesaurusOverload,
+			minArgs:  1,
+			usage:    "Usage: /thesaurusoverload [-d duration] [-r reason] <uid1>,<uid2>...",
+			desc:     "Forces IC messages to use comically pompous synonyms and smug parentheticals. Moderator only.",
+			reqPerms: permissions.PermissionField["MUTE"],
+		},
+		"unthesaurusoverload": {
+			handler:  cmdUnthesaurusoverload,
+			minArgs:  1,
+			usage:    "Usage: /unthesaurusoverload <uid1>,<uid2>...",
+			desc:     "Removes thesaurusoverload punishment from user(s). Moderator only.",
+			reqPerms: permissions.PermissionField["MUTE"],
+		},
+		"valleygirl": {
+			handler:  cmdValleyGirl,
+			minArgs:  1,
+			usage:    "Usage: /valleygirl [-d duration] [-r reason] <uid1>,<uid2>...",
+			desc:     "Injects valley-girl filler words, vowel stretching, and dramatic tone into IC messages. Moderator only.",
+			reqPerms: permissions.PermissionField["MUTE"],
+		},
+		"unvalleygirl": {
+			handler:  cmdUnvalleygirl,
+			minArgs:  1,
+			usage:    "Usage: /unvalleygirl <uid1>,<uid2>...",
+			desc:     "Removes valleygirl punishment from user(s). Moderator only.",
+			reqPerms: permissions.PermissionField["MUTE"],
+		},
+		"babytalk": {
+			handler:  cmdBabytalk,
+			minArgs:  1,
+			usage:    "Usage: /babytalk [-d duration] [-r reason] <uid1>,<uid2>...",
+			desc:     "Converts IC messages to toddler-style baby talk with phonetic substitutions and stage directions. Moderator only.",
+			reqPerms: permissions.PermissionField["MUTE"],
+		},
+		"unbabytalk": {
+			handler:  cmdUnbabytalk,
+			minArgs:  1,
+			usage:    "Usage: /unbabytalk <uid1>,<uid2>...",
+			desc:     "Removes babytalk punishment from user(s). Moderator only.",
+			reqPerms: permissions.PermissionField["MUTE"],
+		},
+		"thirdperson": {
+			handler:  cmdThirdPerson,
+			minArgs:  1,
+			usage:    "Usage: /thirdperson [-d duration] [-r reason] <uid1>,<uid2>...",
+			desc:     "Forces IC messages into third-person narration using the player's display name, with mood tags. Moderator only.",
+			reqPerms: permissions.PermissionField["MUTE"],
+		},
+		"unthirdperson": {
+			handler:  cmdUnthirdperson,
+			minArgs:  1,
+			usage:    "Usage: /unthirdperson <uid1>,<uid2>...",
+			desc:     "Removes thirdperson punishment from user(s). Moderator only.",
+			reqPerms: permissions.PermissionField["MUTE"],
+		},
+		"unreliablenarrator": {
+			handler:  cmdUnreliableNarrator,
+			minArgs:  1,
+			usage:    "Usage: /unreliablenarrator [-d duration] [-r reason] <uid1>,<uid2>...",
+			desc:     "Makes IC messages sound suspiciously unreliable with hedges, contradictions, and self-doubting commentary. Moderator only.",
+			reqPerms: permissions.PermissionField["MUTE"],
+		},
+		"ununreliablenarrator": {
+			handler:  cmdUnunreliablenarrator,
+			minArgs:  1,
+			usage:    "Usage: /ununreliablenarrator <uid1>,<uid2>...",
+			desc:     "Removes unreliablenarrator punishment from user(s). Moderator only.",
+			reqPerms: permissions.PermissionField["MUTE"],
+		},
+		"uncannyvalley": {
+			handler:  cmdUncannyValley,
+			minArgs:  1,
+			usage:    "Usage: /uncannyvalley [-d duration] [-r reason] <uid1>,<uid2>...",
+			desc:     "Adds glitchy system notes to IC messages and subtly mutates the player's display name each message. Moderator only.",
+			reqPerms: permissions.PermissionField["MUTE"],
+		},
+		"ununcannyvalley": {
+			handler:  cmdUnuncannyvalley,
+			minArgs:  1,
+			usage:    "Usage: /ununcannyvalley <uid1>,<uid2>...",
+			desc:     "Removes uncannyvalley punishment from user(s). Moderator only.",
 			reqPerms: permissions.PermissionField["MUTE"],
 		},
 		"unpunish": {

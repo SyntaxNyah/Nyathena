@@ -161,9 +161,9 @@ var (
 		", I dare say.",
 	}
 
-	cavemanWords   = []string{"UGH", "GRUNT", "OOG", "RAWR", "HMPH", "GRUG"}
-	robotWords     = []string{"[BEEP]", "[BOOP]", "[WHIRR]", "[BUZZ]"}
-	whistleSounds  = []string{"♪", "♫", "~", "♬"}
+	cavemanWords    = []string{"UGH", "GRUNT", "OOG", "RAWR", "HMPH", "GRUG"}
+	robotWords      = []string{"[BEEP]", "[BOOP]", "[WHIRR]", "[BUZZ]"}
+	whistleSounds   = []string{"♪", "♫", "~", "♬"}
 	paranoidPhrases = []string{
 		" (they're watching)",
 		" (don't trust them)",
@@ -178,18 +178,18 @@ var (
 		" [dramatic pause]",
 		" [indistinct chatter]",
 	}
-	snakeSuffixes  = []string{" *hisss*", " ssss...", " ~hisssss~"}
-	monkeySounds   = []string{"ook", "eek", "ooh ooh", "ahh ahh", "oo oo", "ee ee", "*scratches head*", "*swings from tree*"}
-	dogSounds      = []string{"woof", "arf", "grr", "bark!", "ruff", "yip", "*wags tail*", "bork"}
-	catSounds      = []string{"meow", "purrr~", "mrrrow", "mew", "nya~", "*purrs*", "prrrr", "mrrr"}
-	birdSounds     = []string{"tweet", "chirp", "squawk", "cheep", "coo coo", "*flaps wings*", "peep", "caw"}
-	cowSounds      = []string{"moo", "mooo", "MOOO", "moooo", "*chews cud*", "muu", "MOO MOO"}
-	frogSounds     = []string{"ribbit", "croak", "brrr-ribbit", "riiibbit", "*jumps*", "crrroak", "ribbit-ribbit"}
-	duckSounds     = []string{"quack", "QUACK", "quack!", "quack quack", "*waddles*", "QUACK!", "QUACK QUACK"}
-	horseSounds    = []string{"neigh", "whinny", "nicker", "NEIGH!", "*clip clop*", "hrrrr", "snort"}
-	lionSounds     = []string{"ROAR", "grrr", "rawr", "GRRR", "*snarls*", "rrrroar", "RAWRR"}
-	bunnySounds    = []string{"*thump*", "*thump thump*", "*nose twitch*", "*hops away*", "*binky!*", "*flops*", "*teeth chattering*", "*nudges*"}
-	emojiTable     = []string{"😀", "😎", "🤡", "👻", "🎃", "🦄", "🐱", "🐶", "🎮", "⭐"}
+	snakeSuffixes = []string{" *hisss*", " ssss...", " ~hisssss~"}
+	monkeySounds  = []string{"ook", "eek", "ooh ooh", "ahh ahh", "oo oo", "ee ee", "*scratches head*", "*swings from tree*"}
+	dogSounds     = []string{"woof", "arf", "grr", "bark!", "ruff", "yip", "*wags tail*", "bork"}
+	catSounds     = []string{"meow", "purrr~", "mrrrow", "mew", "nya~", "*purrs*", "prrrr", "mrrr"}
+	birdSounds    = []string{"tweet", "chirp", "squawk", "cheep", "coo coo", "*flaps wings*", "peep", "caw"}
+	cowSounds     = []string{"moo", "mooo", "MOOO", "moooo", "*chews cud*", "muu", "MOO MOO"}
+	frogSounds    = []string{"ribbit", "croak", "brrr-ribbit", "riiibbit", "*jumps*", "crrroak", "ribbit-ribbit"}
+	duckSounds    = []string{"quack", "QUACK", "quack!", "quack quack", "*waddles*", "QUACK!", "QUACK QUACK"}
+	horseSounds   = []string{"neigh", "whinny", "nicker", "NEIGH!", "*clip clop*", "hrrrr", "snort"}
+	lionSounds    = []string{"ROAR", "grrr", "rawr", "GRRR", "*snarls*", "rrrroar", "RAWRR"}
+	bunnySounds   = []string{"*thump*", "*thump thump*", "*nose twitch*", "*hops away*", "*binky!*", "*flops*", "*teeth chattering*", "*nudges*"}
+	emojiTable    = []string{"😀", "😎", "🤡", "👻", "🎃", "🦄", "🐱", "🐶", "🎮", "⭐"}
 
 	autospellTable = map[string]string{
 		"the":   "teh",
@@ -240,6 +240,264 @@ var (
 		applyBunny,
 	}
 
+	// ── ThesaurusOverload ────────────────────────────────────────────────────
+	thesaurusTable = map[string]string{
+		"go":         "peregrinate",
+		"going":      "peregrinating",
+		"walk":       "ambulate",
+		"say":        "proclaim",
+		"says":       "proclaims",
+		"said":       "proclaimed",
+		"talk":       "discourse",
+		"want":       "desire",
+		"wanted":     "desired",
+		"need":       "necessitate",
+		"needs":      "necessitates",
+		"see":        "behold",
+		"saw":        "beheld",
+		"look":       "observe",
+		"get":        "procure",
+		"make":       "fabricate",
+		"think":      "contemplate",
+		"thought":    "contemplated",
+		"know":       "comprehend",
+		"feel":       "discern",
+		"find":       "ascertain",
+		"give":       "bestow",
+		"take":       "appropriate",
+		"have":       "possess",
+		"big":        "gargantuan",
+		"large":      "voluminous",
+		"small":      "diminutive",
+		"good":       "splendid",
+		"great":      "magnanimous",
+		"bad":        "deplorable",
+		"awful":      "egregious",
+		"happy":      "ebullient",
+		"sad":        "melancholic",
+		"angry":      "incensed",
+		"smart":      "perspicacious",
+		"dumb":       "obtuse",
+		"stupid":     "obtuse",
+		"fast":       "expeditious",
+		"slow":       "sluggardly",
+		"friend":     "compatriot",
+		"enemy":      "adversary",
+		"help":       "ameliorate",
+		"stop":       "desist",
+		"start":      "commence",
+		"now":        "forthwith",
+		"later":      "subsequently",
+		"here":       "hereupon",
+		"there":      "thereupon",
+		"yes":        "affirmative",
+		"no":         "negatory",
+		"okay":       "acquiescence granted",
+		"ok":         "affirmative",
+		"please":     "I beseech thee",
+		"thanks":     "gratitude proffered",
+		"sorry":      "I sincerely apologise",
+		"sure":       "unequivocally",
+		"very":       "exceedingly",
+		"really":     "veritably",
+		"just":       "merely",
+		"thing":      "entity",
+		"things":     "entities",
+		"stuff":      "sundry materials",
+		"use":        "employ",
+		"do":         "execute",
+		"did":        "executed",
+		"done":       "concluded",
+		"try":        "endeavour",
+		"wrong":      "erroneous",
+		"right":      "perspicacious",
+		"old":        "antiquated",
+		"new":        "contemporary",
+		"time":       "temporal juncture",
+		"food":       "sustenance",
+		"work":       "endeavour productively",
+		"win":        "triumph",
+		"lose":       "suffer defeat",
+		"answer":     "riposte",
+		"question":   "inquiry",
+		"problem":    "predicament",
+		"idea":       "conjecture",
+		"place":      "locale",
+		"home":       "domicile",
+		"people":     "individuals",
+		"person":     "individual",
+		"tell":       "elucidate",
+		"about":      "pertaining to",
+		"because":    "for the reason that",
+		"also":       "furthermore",
+		"actually":   "in point of fact",
+		"literally":  "in a wholly un-metaphorical capacity",
+		"basically":  "fundamentally",
+		"totally":    "unequivocally",
+		"wait":       "remain stationary momentarily",
+		"show":       "demonstrate",
+		"weird":      "idiosyncratic",
+		"strange":    "anomalous",
+		"normal":     "normative",
+		"fine":       "satisfactory",
+		"hard":       "arduous",
+		"easy":       "facile",
+		"cold":       "frigid",
+		"funny":      "mirthfully provocative",
+		"serious":    "solemn",
+		"true":       "veritable",
+		"false":      "erroneous",
+		"ask":        "inquire",
+		"asked":      "inquired",
+		"choose":     "elect",
+		"believe":    "hypothesise",
+		"remember":   "recollect",
+		"forget":     "fail to recollect",
+		"important":  "of considerable import",
+		"leave":      "vacate",
+		"return":     "recommence one's presence",
+		"check":      "verify",
+		"move":       "relocate",
+		"write":      "inscribe",
+		"read":       "peruse",
+		"send":       "transmit",
+		"call":       "invoke",
+		"decide":     "adjudicate",
+		"understand": "apprehend",
+		"agree":      "concur",
+		"disagree":   "dissent",
+		"mean":       "signify",
+		"like":       "regard with favour",
+		"hate":       "hold in contemptuous disfavour",
+		"love":       "harbour deep affection for",
+		"eat":        "partake of sustenance",
+		"sleep":      "enter a state of somnolence",
+		"play":       "engage in recreational pursuits",
+	}
+	thesaurusSuffixes = []string{
+		" (i.e., as previously stated)",
+		" (per se)",
+		" [citation needed]",
+		" (source: my own perspicacity)",
+		" (ergo, QED)",
+		" (QED)",
+		" (cf. the above)",
+		" (vide infra)",
+		" (this is veritably the case)",
+		" (one might say)",
+	}
+
+	// ── ValleyGirl ───────────────────────────────────────────────────────────
+	valleygirlFillers = []string{
+		"like, ",
+		"literally ",
+		"okay sooo ",
+		"um, ",
+		"I mean, ",
+		"honestly? ",
+		"no but like, ",
+		"okay but ",
+	}
+	valleygirlSuffixes = []string{
+		" I literally can't.",
+		" like, seriously??",
+		" omg.",
+		", like, whatever.",
+		" ugh, literally.",
+		" no cap.",
+		"?? okay??",
+		" I can't even.",
+	}
+
+	// ── Babytalk ─────────────────────────────────────────────────────────────
+	babytalkStageDirections = []string{
+		" *tiny stomp*",
+		" *pout*",
+		" *wiggles*",
+		" *reaches arms up*",
+		" *blows raspberry*",
+		" *tugs sleeve*",
+		" *bottom lip wobbles*",
+		" *sniffles*",
+	}
+
+	// ── ThirdPerson ──────────────────────────────────────────────────────────
+	thirdPersonTemplates = []string{
+		"%s says: \"%s\"",
+		"%s declares: \"%s\"",
+		"%s, with great conviction, states: \"%s\"",
+		"%s announces to the room: \"%s\"",
+		"%s, without hesitation, proclaims: \"%s\"",
+		"According to %s: \"%s\"",
+		"%s would like the room to know: \"%s\"",
+		"Allegedly, %s says: \"%s\"",
+	}
+	thirdPersonMoodTags = []string{
+		" [dramatically]",
+		" [emphatically]",
+		" [passionately]",
+		" [mysteriously]",
+		" [suspiciously]",
+		" [unconvincingly]",
+	}
+
+	// ── UnreliableNarrator ───────────────────────────────────────────────────
+	unreliableHedges = []string{
+		"allegedly",
+		"supposedly",
+		"in theory",
+		"or so I'm told",
+		"I think",
+		"maybe",
+		"perhaps",
+		"apparently",
+		"if memory serves",
+		"according to sources",
+	}
+	unreliableSuffixes = []string{
+		" (…or so I recall.)",
+		" (Source: trust me.)",
+		" (I think.)",
+		" (allegedly.)",
+		" *narrator's note: this is unverified*",
+		" (unconfirmed)",
+		" (or did they?)",
+		" (citation: vibes)",
+		" (don't quote me on this)",
+		" (I was there. Probably.)",
+		" (in a dream, maybe?)",
+		" (my lawyer says I can't confirm this)",
+	}
+
+	// ── UncannyValley ────────────────────────────────────────────────────────
+	uncannyGlitchTags = []string{
+		" [checksum mismatch]",
+		" [signal distortion detected]",
+		" [buffer overflow at 0x0]",
+		" [connection unstable]",
+		" [data corruption detected]",
+		" [reality.exe has stopped responding]",
+		" [unexpected EOF]",
+		" [ERR: IDENTITY_UNDEFINED]",
+		" [rendering artifact]",
+		" [frame desync]",
+		" [memory leak suspected]",
+		" [this message may not be real]",
+	}
+	// uncannyVowelSwaps maps vowels to safe lookalike substitutions for showname glitching.
+	uncannyVowelSwaps = map[rune][]rune{
+		'a': {'α', 'ä', 'â'},
+		'e': {'ε', 'ë', 'é'},
+		'i': {'ι', 'ï', 'í'},
+		'o': {'ο', 'ö', 'ô'},
+		'u': {'υ', 'ü', 'ú'},
+		'A': {'Α', 'Ä', 'Â'},
+		'E': {'Ε', 'Ë', 'É'},
+		'I': {'Ι', 'Ï', 'Í'},
+		'O': {'Ο', 'Ö', 'Ô'},
+		'U': {'Υ', 'Ü', 'Ú'},
+	}
+
 	// tourettesAllVariants bundles the four outburst categories so applyTourettes
 	// can pick one with a single rand.Intn call instead of allocating a new slice.
 	tourettesAllVariants = [][]string{
@@ -253,44 +511,44 @@ var (
 	// Applied after phrase substitution; keys are already lower-cased.
 	slangWords = map[string]string{
 		// Pronouns / verbs
-		"you":        "u",
-		"your":       "ur",
-		"yourself":   "urself",
-		"are":        "r",
-		"be":         "b",
-		"see":        "c",
-		"why":        "y",
-		"for":        "4",
-		"to":         "2",
-		"too":        "2",
-		"two":        "2",
+		"you":      "u",
+		"your":     "ur",
+		"yourself": "urself",
+		"are":      "r",
+		"be":       "b",
+		"see":      "c",
+		"why":      "y",
+		"for":      "4",
+		"to":       "2",
+		"too":      "2",
+		"two":      "2",
 		// Polite words
-		"please":     "pls",
-		"thanks":     "thx",
-		"okay":       "k",
-		"ok":         "k",
+		"please": "pls",
+		"thanks": "thx",
+		"okay":   "k",
+		"ok":     "k",
 		// Common shortenings
-		"because":    "bc",
-		"though":     "tho",
-		"about":      "abt",
-		"something":  "smth",
-		"someone":    "sm1",
-		"everyone":   "evry1",
-		"anyone":     "ne1",
-		"anywhere":   "nywhr",
-		"somewhere":  "smwhr",
-		"nothing":    "nth",
-		"without":    "w/o",
-		"with":       "w/",
+		"because":   "bc",
+		"though":    "tho",
+		"about":     "abt",
+		"something": "smth",
+		"someone":   "sm1",
+		"everyone":  "evry1",
+		"anyone":    "ne1",
+		"anywhere":  "nywhr",
+		"somewhere": "smwhr",
+		"nothing":   "nth",
+		"without":   "w/o",
+		"with":      "w/",
 		// Time
-		"tomorrow":   "tmrw",
-		"tonight":    "2nite",
-		"today":      "2day",
-		"later":      "l8r",
-		"before":     "b4",
-		"forever":    "4ever",
-		"together":   "2gether",
-		"second":     "sec",
+		"tomorrow": "tmrw",
+		"tonight":  "2nite",
+		"today":    "2day",
+		"later":    "l8r",
+		"before":   "b4",
+		"forever":  "4ever",
+		"together": "2gether",
+		"second":   "sec",
 		// Adjectives / adverbs
 		"really":     "rly",
 		"seriously":  "srsly",
@@ -299,29 +557,29 @@ var (
 		"already":    "alrdy",
 		"anyway":     "neway",
 		// Fun leet-style
-		"great":      "gr8",
-		"wait":       "w8",
-		"late":       "l8",
-		"mate":       "m8",
-		"hate":       "h8",
-		"good":       "gud",
-		"love":       "luv",
-		"night":      "nite",
-		"people":     "ppl",
-		"what":       "wut",
-		"this":       "dis",
-		"that":       "dat",
+		"great":  "gr8",
+		"wait":   "w8",
+		"late":   "l8",
+		"mate":   "m8",
+		"hate":   "h8",
+		"good":   "gud",
+		"love":   "luv",
+		"night":  "nite",
+		"people": "ppl",
+		"what":   "wut",
+		"this":   "dis",
+		"that":   "dat",
 		// Relationships
 		"girlfriend": "gf",
 		"boyfriend":  "bf",
 		"brother":    "bro",
 		"sister":     "sis",
 		// Misc
-		"message":    "msg",
-		"picture":    "pic",
-		"pictures":   "pics",
+		"message":     "msg",
+		"picture":     "pic",
+		"pictures":    "pics",
 		"information": "info",
-		"whatever":   "w/e",
+		"whatever":    "w/e",
 	}
 )
 
@@ -368,7 +626,7 @@ var slangPhraseReplacer = strings.NewReplacer(
 	// ── 14 chars ─────────────────────────────────────────────────────────────
 	"laugh out loud", "lol",
 	// ── 13 chars ─────────────────────────────────────────────────────────────
-	"see you later", "cya",   // must come before "see you"
+	"see you later", "cya", // must come before "see you"
 	"i do not know", "idk",
 	"i do not care", "idc",
 	"be right back", "brb",
@@ -391,7 +649,7 @@ var slangPhraseReplacer = strings.NewReplacer(
 	"let me know", "lmk",
 	"for the win", "ftw",
 	// ── 10 chars ─────────────────────────────────────────────────────────────
-	"oh my gosh", "omg",   // before "oh my god"
+	"oh my gosh", "omg", // before "oh my god"
 	"never mind", "nvm",
 	"no problem", "np",
 	"to be fair", "tbf",
@@ -659,18 +917,18 @@ func applyParanoid(text string) string {
 func applyDrunk(text string) string {
 	words := strings.Fields(text)
 	var result strings.Builder
-	
+
 	for i, word := range words {
 		if i > 0 {
 			result.WriteString(" ")
 		}
-		
+
 		// Randomly repeat words
 		if rand.Float32() < 0.3 {
 			result.WriteString(word)
 			result.WriteString(" ")
 		}
-		
+
 		// Slur by repeating letters
 		runes := []rune(word)
 		for j, r := range runes {
@@ -680,7 +938,7 @@ func applyDrunk(text string) string {
 			}
 		}
 	}
-	
+
 	// Add hiccups
 	if rand.Float32() < 0.3 {
 		result.WriteString(" *hic*")
@@ -692,13 +950,13 @@ func applyDrunk(text string) string {
 func applyHiccup(text string) string {
 	words := strings.Fields(text)
 	var result strings.Builder
-	
+
 	for i, word := range words {
 		if i > 0 {
 			result.WriteString(" ")
 		}
 		result.WriteString(word)
-		
+
 		if rand.Float32() < 0.4 {
 			result.WriteString(" *hic*")
 		}
@@ -726,12 +984,12 @@ func applyWhistle(text string) string {
 func applyMumble(text string) string {
 	words := strings.Fields(text)
 	var result strings.Builder
-	
+
 	for i, word := range words {
 		if i > 0 {
 			result.WriteString(" ")
 		}
-		
+
 		runes := []rune(word)
 		for j, r := range runes {
 			if j == 0 || j == len(runes)-1 {
@@ -794,6 +1052,248 @@ func applySubtitles(text string) string {
 // applySpotlight adds an announcement prefix
 func applySpotlight(text string) string {
 	return "📣 EVERYONE LOOK: " + text
+}
+
+// ── ThesaurusOverload ────────────────────────────────────────────────────────
+
+// applyThesaurusOverload replaces common words with absurdly pompous synonyms.
+func applyThesaurusOverload(text string) string {
+	words := strings.Fields(text)
+	for i, word := range words {
+		// Strip trailing punctuation
+		punct := ""
+		stripped := word
+		if len(stripped) > 0 {
+			last := rune(stripped[len(stripped)-1])
+			if strings.ContainsRune(".,!?;:", last) {
+				punct = string(last)
+				stripped = stripped[:len(stripped)-1]
+			}
+		}
+		lower := strings.ToLower(stripped)
+		if replacement, ok := thesaurusTable[lower]; ok {
+			if len(stripped) > 0 && unicode.IsUpper([]rune(stripped)[0]) {
+				r := []rune(replacement)
+				r[0] = unicode.ToUpper(r[0])
+				replacement = string(r)
+			}
+			words[i] = replacement + punct
+		}
+	}
+	result := strings.Join(words, " ")
+	if rand.Float32() < 0.4 {
+		result += thesaurusSuffixes[rand.Intn(len(thesaurusSuffixes))]
+	}
+	return truncateText(result)
+}
+
+// ── ValleyGirl ───────────────────────────────────────────────────────────────
+
+// applyValleyGirl injects valley-girl filler words and stretches vowels.
+func applyValleyGirl(text string) string {
+	// Inject a filler at the start ~60% of the time
+	if rand.Float32() < 0.6 {
+		text = valleygirlFillers[rand.Intn(len(valleygirlFillers))] + text
+	}
+	// Stretch some vowels for drama
+	for _, ch := range []string{"o", "e", "a"} {
+		if rand.Float32() < 0.3 && strings.Contains(strings.ToLower(text), ch) {
+			// Extend first occurrence of this vowel run
+			idx := strings.Index(strings.ToLower(text), ch)
+			if idx >= 0 {
+				text = text[:idx+1] + ch + ch + text[idx+1:]
+			}
+		}
+	}
+	// Replace "no" with "nooo" and "yes" with "yesss"
+	text = strings.ReplaceAll(text, " no ", " nooo ")
+	text = strings.ReplaceAll(text, " yes ", " yesss ")
+	// Append a dramatic suffix ~50% of the time
+	if rand.Float32() < 0.5 {
+		text += valleygirlSuffixes[rand.Intn(len(valleygirlSuffixes))]
+	}
+	return truncateText(text)
+}
+
+// ── Babytalk ─────────────────────────────────────────────────────────────────
+
+// applyBabytalk converts text to toddler-style speech.
+func applyBabytalk(text string) string {
+	// Phonetic substitutions (order matters: longer first)
+	replacements := []struct{ old, new string }{
+		{"please", "pwease"},
+		{"pretty", "pwetty"},
+		{"flower", "fwower"},
+		{"friend", "fwiend"},
+		{"brother", "bwudder"},
+		{"little", "widdle"},
+		{"bottle", "baba"},
+		{"water", "wawa"},
+		{"together", "togedder"},
+		{"hungry", "hungy"},
+		{"sorry", "sowwy"},
+		{"right", "wight"},
+		{"light", "wight"},
+		{"give", "gib"},
+		{"very", "vewy"},
+		{"okay", "otay"},
+		{"str", "stw"},
+		{"tr", "tw"},
+		{"dr", "dw"},
+		{"fl", "fw"},
+	}
+	lower := strings.ToLower(text)
+	for _, r := range replacements {
+		lower = strings.ReplaceAll(lower, r.old, r.new)
+	}
+	// Replace profanity with toddler equivalents
+	lower = strings.ReplaceAll(lower, "damn", "dang")
+	lower = strings.ReplaceAll(lower, "hell", "heck")
+	lower = strings.ReplaceAll(lower, "crap", "poop")
+
+	// Add a stage direction ~40% of the time
+	if rand.Float32() < 0.4 {
+		lower += babytalkStageDirections[rand.Intn(len(babytalkStageDirections))]
+	}
+	return truncateText(lower)
+}
+
+// ── ThirdPerson ──────────────────────────────────────────────────────────────
+
+// applyThirdPersonWithName wraps text in third-person narration using the
+// player's display name. Call applyThirdPerson for the no-showname fallback.
+func applyThirdPersonWithName(text, showname string) string {
+	if strings.TrimSpace(showname) == "" {
+		showname = "Someone"
+	}
+	// Determine mood tag from punctuation / capitalisation
+	moodTag := ""
+	upperCount := 0
+	for _, r := range text {
+		if unicode.IsUpper(r) {
+			upperCount++
+		}
+	}
+	hasExclamation := strings.Contains(text, "!")
+	hasQuestion := strings.Contains(text, "?")
+	upperRatio := 0.0
+	if len(text) > 0 {
+		upperRatio = float64(upperCount) / float64(len([]rune(text)))
+	}
+	switch {
+	case upperRatio > 0.6 && hasExclamation:
+		moodTag = " [feral]"
+	case upperRatio > 0.6:
+		moodTag = " [unhinged]"
+	case hasExclamation && hasQuestion:
+		moodTag = " [confused and dramatic]"
+	case hasExclamation:
+		moodTag = " [dramatic]"
+	case hasQuestion:
+		moodTag = " [confused]"
+	case rand.Float32() < 0.25:
+		moodTag = thirdPersonMoodTags[rand.Intn(len(thirdPersonMoodTags))]
+	}
+	template := thirdPersonTemplates[rand.Intn(len(thirdPersonTemplates))]
+	result := fmt.Sprintf(template, showname, text) + moodTag
+	return truncateText(result)
+}
+
+// applyThirdPerson is the no-showname version used by the generic dispatcher.
+func applyThirdPerson(text string) string {
+	return applyThirdPersonWithName(text, "")
+}
+
+// ── UnreliableNarrator ───────────────────────────────────────────────────────
+
+// applyUnreliableNarrator makes the speaker sound like an untrustworthy narrator.
+func applyUnreliableNarrator(text string) string {
+	// Insert a hedge word after the first word ~60% of the time
+	words := strings.Fields(text)
+	if len(words) >= 2 && rand.Float32() < 0.6 {
+		hedge := unreliableHedges[rand.Intn(len(unreliableHedges))]
+		words = append(words[:1], append([]string{hedge}, words[1:]...)...)
+		text = strings.Join(words, " ")
+	}
+	// Append a suspicious suffix
+	text += unreliableSuffixes[rand.Intn(len(unreliableSuffixes))]
+	return truncateText(text)
+}
+
+// ── UncannyValley ────────────────────────────────────────────────────────────
+
+// applyUncannyValley adds glitchy system-note suffixes to messages.
+// The display-name mutation is handled in netprotocol.go.
+func applyUncannyValley(text string) string {
+	// Easter egg: if they claim to be fine, add an unsettling smiley
+	lowerText := strings.ToLower(text)
+	if strings.Contains(lowerText, "im fine") ||
+		strings.Contains(lowerText, "i'm fine") ||
+		strings.Contains(lowerText, "i am fine") {
+		text = strings.NewReplacer(
+			"im fine", "im fine :)",
+			"i'm fine", "i'm fine :)",
+			"I'm fine", "I'm fine :)",
+			"I am fine", "I am fine :)",
+			"i am fine", "i am fine :)",
+		).Replace(text)
+	}
+	// ~60% chance to append a glitch tag
+	if rand.Float32() < 0.6 {
+		text += uncannyGlitchTags[rand.Intn(len(uncannyGlitchTags))]
+	}
+	return truncateText(text)
+}
+
+// MutateShowname applies a mild per-message display-name glitch for
+// PunishmentUncannyValley. It makes safe mutations (no true impersonation).
+func MutateShowname(name string) string {
+	if len(name) == 0 {
+		return name
+	}
+	runes := []rune(name)
+	choice := rand.Intn(4)
+	switch choice {
+	case 0:
+		// Replace one vowel with a lookalike homoglyph
+		var vowelIndices []int
+		for i, r := range runes {
+			if _, ok := uncannyVowelSwaps[r]; ok {
+				vowelIndices = append(vowelIndices, i)
+			}
+		}
+		if len(vowelIndices) > 0 {
+			idx := vowelIndices[rand.Intn(len(vowelIndices))]
+			options := uncannyVowelSwaps[runes[idx]]
+			runes[idx] = options[rand.Intn(len(options))]
+			return string(runes)
+		}
+		// Fallback: add underscore suffix
+		return string(runes) + "_"
+	case 1:
+		// Add underscore suffix
+		return string(runes) + "_"
+	case 2:
+		// Swap two adjacent letters (skip first char to keep capital intact)
+		if len(runes) >= 3 {
+			idx := 1 + rand.Intn(len(runes)-2)
+			runes[idx], runes[idx+1] = runes[idx+1], runes[idx]
+		} else {
+			return string(runes) + "."
+		}
+		return string(runes)
+	default:
+		// Duplicate a random character (only if within length budget)
+		if len(string(runes)) < maxShownameLength-1 {
+			idx := rand.Intn(len(runes))
+			newRunes := make([]rune, len(runes)+1)
+			copy(newRunes, runes[:idx+1])
+			newRunes[idx+1] = runes[idx]
+			copy(newRunes[idx+2:], runes[idx+1:])
+			return string(newRunes)
+		}
+		return string(runes) + "."
+	}
 }
 
 // ApplyPunishmentToText applies a punishment effect to text
@@ -901,6 +1401,18 @@ func ApplyPunishmentToText(text string, pType PunishmentType) string {
 		return applyTourettes(text)
 	case PunishmentSlang:
 		return applySlang(text)
+	case PunishmentThesaurusOverload:
+		return applyThesaurusOverload(text)
+	case PunishmentValleyGirl:
+		return applyValleyGirl(text)
+	case PunishmentBabytalk:
+		return applyBabytalk(text)
+	case PunishmentThirdPerson:
+		return applyThirdPerson(text)
+	case PunishmentUnreliableNarrator:
+		return applyUnreliableNarrator(text)
+	case PunishmentUncannyValley:
+		return applyUncannyValley(text)
 	default:
 		return text
 	}
