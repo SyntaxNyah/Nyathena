@@ -101,6 +101,13 @@ func initCommands() {
 			desc:     "Locks a player to their current character, preventing character changes.",
 			reqPerms: permissions.PermissionField["MUTE"],
 		},
+		"charcurse": {
+			handler:  cmdCharCurse,
+			minArgs:  2,
+			usage:    "Usage: /charcurse <uid> <charname>",
+			desc:     "Forces a player to a specific character. The player may still change characters freely.",
+			reqPerms: permissions.PermissionField["KICK"],
+		},
 		"cm": {
 			handler:  cmdCM,
 			minArgs:  0,
