@@ -381,6 +381,7 @@ func (client *Client) clientCleanup() {
 		writeToAll("PR", strconv.Itoa(client.Uid()), "1")
 		sendPlayerArup()
 	}
+	handleCasinoDisconnect(client)
 	client.conn.Close()
 	clients.RemoveClient(client)
 }
