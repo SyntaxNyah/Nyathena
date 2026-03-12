@@ -355,7 +355,7 @@ func cmdBgList(client *Client, _ []string, _ string) {
 		client.SendServerMessage("No backgrounds are available.")
 		return
 	}
-	client.SendServerMessage("Available backgrounds:\n" + strings.Join(backgrounds, "\n"))
+	client.SendServerMessage(bgListStr)
 }
 
 // Handles /forcebglist
