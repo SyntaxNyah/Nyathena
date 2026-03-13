@@ -20,6 +20,7 @@ import (
 	"database/sql"
 	"fmt"
 	"strconv"
+	"strings"
 	"time"
 
 	"golang.org/x/crypto/bcrypt"
@@ -47,9 +48,12 @@ const (
 var DBPath string
 var db *sql.DB
 
+// defaultChipBalance is the starting chip balance assigned to new players.
+const defaultChipBalance = 100
+
 // Database version.
 // This should be incremented whenever changes are made to the DB that require existing databases to upgrade.
-const ver = 6
+const ver = 8
 
 // Persistent punishment kind constants.
 const (
@@ -66,6 +70,19 @@ type PersistentPunishment struct {
 	Value   int   // MuteState for mutes; 0 for others.
 	Expires int64 // Unix timestamp; 0 = no expiry (permanent).
 	Reason  string
+}
+
+// ChipEntry holds one row from the CHIPS leaderboard query.
+type ChipEntry struct {
+	Ipid    string
+	Balance int64
+}
+
+// PlaytimeEntry holds one row from the playtime leaderboard query.
+type PlaytimeEntry struct {
+	Ipid     string
+	Username string // empty when no account is linked
+	Playtime int64  // seconds
 }
 
 // Opens the server's database connection.
@@ -104,7 +121,7 @@ func Open() error {
 	if err != nil {
 		return err
 	}
-	_, err = db.Exec("CREATE TABLE IF NOT EXISTS USERS(USERNAME TEXT PRIMARY KEY, PASSWORD TEXT, PERMISSIONS TEXT)")
+	_, err = db.Exec("CREATE TABLE IF NOT EXISTS USERS(USERNAME TEXT PRIMARY KEY, PASSWORD TEXT, PERMISSIONS TEXT, IPID TEXT NOT NULL DEFAULT '')")
 	if err != nil {
 		return err
 	}
@@ -131,6 +148,13 @@ func Open() error {
 	}
 	_, err = db.Exec(`CREATE TABLE IF NOT EXISTS TORMENTED_IPS(
 		IPID TEXT PRIMARY KEY
+	)`)
+	if err != nil {
+		return err
+	}
+	_, err = db.Exec(`CREATE TABLE IF NOT EXISTS CHIPS(
+		IPID    TEXT    PRIMARY KEY,
+		BALANCE INTEGER NOT NULL DEFAULT 100
 	)`)
 	if err != nil {
 		return err
@@ -203,6 +227,36 @@ func upgradeDB(v int) error {
 		if err != nil {
 			return err
 		}
+		fallthrough
+	case 6:
+		_, err := db.Exec(`CREATE TABLE IF NOT EXISTS CHIPS(
+			IPID    TEXT    PRIMARY KEY,
+			BALANCE INTEGER NOT NULL DEFAULT 100
+		)`)
+		if err != nil {
+			return err
+		}
+		_, err = db.Exec("PRAGMA user_version = 7")
+		if err != nil {
+			return err
+		}
+		fallthrough
+	case 7:
+		// Add IPID column to USERS so player accounts can be linked to their connection fingerprint.
+		// Only alter the table when it already exists (i.e. we are upgrading an existing database).
+		// Brand-new databases get the column from the CREATE TABLE statement in Open().
+		var usersExists int
+		db.QueryRow("SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='USERS'").Scan(&usersExists) //nolint:errcheck
+		if usersExists > 0 {
+			_, err := db.Exec("ALTER TABLE USERS ADD COLUMN IPID TEXT NOT NULL DEFAULT ''")
+			if err != nil {
+				return err
+			}
+		}
+		_, err := db.Exec("PRAGMA user_version = 8")
+		if err != nil {
+			return err
+		}
 	}
 	return nil
 }
@@ -218,12 +272,14 @@ func UserExists(username string) bool {
 }
 
 // CreateUser adds a new user to the server's database.
+// This creates a moderator/admin account with the given permissions.
+// The IPID field is left empty and must be linked on first login via LinkIPIDToUser.
 func CreateUser(username string, password []byte, permissions uint64) error {
 	hashed, err := bcrypt.GenerateFromPassword(password, 12)
 	if err != nil {
 		return err
 	}
-	_, err = db.Exec("INSERT INTO USERS VALUES(?, ?, ?)", username, hashed, strconv.FormatUint(permissions, 10))
+	_, err = db.Exec("INSERT INTO USERS(USERNAME, PASSWORD, PERMISSIONS) VALUES(?, ?, ?)", username, hashed, strconv.FormatUint(permissions, 10))
 	if err != nil {
 		return err
 	}
@@ -262,6 +318,45 @@ func ChangePermissions(username string, permissions uint64) error {
 		return err
 	}
 	return nil
+}
+
+// RegisterPlayer creates a player (non-moderator) account with zero permissions
+// and records the player's IPID so it can be looked up later.
+// Returns an error if the username is already taken.
+func RegisterPlayer(username string, password []byte, ipid string) error {
+	hashed, err := bcrypt.GenerateFromPassword(password, 12)
+	if err != nil {
+		return err
+	}
+	_, err = db.Exec("INSERT INTO USERS(USERNAME, PASSWORD, PERMISSIONS, IPID) VALUES(?, ?, '0', ?)", username, hashed, ipid)
+	return err
+}
+
+// LinkIPIDToUser associates an IPID with a user account.
+// Called on every successful login so the leaderboard can show account names.
+func LinkIPIDToUser(username, ipid string) error {
+	if db == nil {
+		return nil
+	}
+	_, err := db.Exec("UPDATE USERS SET IPID = ? WHERE USERNAME = ?", ipid, username)
+	return err
+}
+
+// GetUsernameByIPID returns the username whose account is linked to the given IPID.
+// Returns ("", nil) when no account is associated with that IPID.
+func GetUsernameByIPID(ipid string) (string, error) {
+	if db == nil {
+		return "", nil
+	}
+	row := db.QueryRow("SELECT USERNAME FROM USERS WHERE IPID = ?", ipid)
+	var username string
+	if err := row.Scan(&username); err != nil {
+		if err == sql.ErrNoRows {
+			return "", nil
+		}
+		return "", err
+	}
+	return username, nil
 }
 
 // AddBan adds a new ban to the database.
@@ -575,6 +670,28 @@ func AddPlaytime(ipid string, seconds int64) error {
 	return err
 }
 
+// AddPlaytimeReturning atomically increments the PLAYTIME counter for an IPID by
+// the given number of seconds and returns the new accumulated total.
+// Using a single RETURNING statement avoids the read-then-write race that arises
+// when two sessions for the same IPID disconnect simultaneously.
+// Returns (0, nil) when the database is not initialised.
+func AddPlaytimeReturning(ipid string, seconds int64) (int64, error) {
+	if db == nil {
+		return 0, nil
+	}
+	row := db.QueryRow(
+		"UPDATE KNOWN_IPS SET PLAYTIME = PLAYTIME + ? WHERE IPID = ? RETURNING PLAYTIME",
+		seconds, ipid)
+	var newTotal int64
+	if err := row.Scan(&newTotal); err != nil {
+		if err == sql.ErrNoRows {
+			return 0, nil
+		}
+		return 0, err
+	}
+	return newTotal, nil
+}
+
 // PruneShortPlaytimeIPs deletes all KNOWN_IPS rows whose accumulated PLAYTIME is
 // less than minSeconds. IPs that have played for at least minSeconds are retained.
 // It returns the number of rows removed.
@@ -660,4 +777,154 @@ func LoadTormentedIPs() ([]string, error) {
 		ipids = append(ipids, ipid)
 	}
 	return ipids, rows.Err()
+}
+
+// EnsureChipBalance ensures an IPID exists in the CHIPS table, creating it with 100 chips if absent.
+// It is safe to call on every connect; it is a no-op for known IPIDs.
+func EnsureChipBalance(ipid string) error {
+	if db == nil {
+		return nil
+	}
+	_, err := db.Exec("INSERT OR IGNORE INTO CHIPS(IPID, BALANCE) VALUES(?, ?)", ipid, defaultChipBalance)
+	return err
+}
+
+// GetChipBalance returns the current chip balance for an IPID.
+// Returns 0, nil if the IPID is not found (EnsureChipBalance has not been called yet).
+func GetChipBalance(ipid string) (int64, error) {
+	if db == nil {
+		return 0, nil
+	}
+	row := db.QueryRow("SELECT BALANCE FROM CHIPS WHERE IPID = ?", ipid)
+	var balance int64
+	if err := row.Scan(&balance); err != nil {
+		if err == sql.ErrNoRows {
+			return 0, nil
+		}
+		return 0, err
+	}
+	return balance, nil
+}
+
+// AddChips adds the given amount to an IPID's chip balance and returns the new balance.
+// The amount must be positive. EnsureChipBalance must be called first.
+func AddChips(ipid string, amount int64) (int64, error) {
+	if db == nil {
+		return 0, nil
+	}
+	if amount <= 0 {
+		return 0, fmt.Errorf("amount must be positive")
+	}
+	var newBalance int64
+	err := db.QueryRow(
+		"UPDATE CHIPS SET BALANCE = BALANCE + ? WHERE IPID = ? RETURNING BALANCE",
+		amount, ipid).Scan(&newBalance)
+	if err != nil {
+		return 0, err
+	}
+	return newBalance, nil
+}
+
+// SpendChips deducts the given amount from an IPID's chip balance, returning the new balance.
+// Returns an error if the balance would go below zero.
+func SpendChips(ipid string, amount int64) (int64, error) {
+	if db == nil {
+		return 0, nil
+	}
+	if amount <= 0 {
+		return 0, fmt.Errorf("amount must be positive")
+	}
+	var newBalance int64
+	err := db.QueryRow(
+		"UPDATE CHIPS SET BALANCE = BALANCE - ? WHERE IPID = ? AND BALANCE >= ? RETURNING BALANCE",
+		amount, ipid, amount).Scan(&newBalance)
+	if err == sql.ErrNoRows {
+		return 0, fmt.Errorf("insufficient chips")
+	}
+	if err != nil {
+		return 0, err
+	}
+	return newBalance, nil
+}
+
+// GetUsernamesByIPIDs returns a map of IPID → username for all given IPIDs that
+// have a linked account. Unlisted IPIDs are simply absent from the result map.
+// This batches N individual GetUsernameByIPID calls into a single query.
+func GetUsernamesByIPIDs(ipids []string) (map[string]string, error) {
+	if db == nil || len(ipids) == 0 {
+		return map[string]string{}, nil
+	}
+	placeholders := make([]string, len(ipids))
+	args := make([]any, len(ipids))
+	for i, id := range ipids {
+		placeholders[i] = "?"
+		args[i] = id
+	}
+	rows, err := db.Query(
+		"SELECT IPID, USERNAME FROM USERS WHERE IPID IN ("+strings.Join(placeholders, ",")+")",
+		args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	m := make(map[string]string, len(ipids))
+	for rows.Next() {
+		var ipid, username string
+		if err := rows.Scan(&ipid, &username); err != nil {
+			return m, err
+		}
+		m[ipid] = username
+	}
+	return m, rows.Err()
+}
+
+// GetTopChipBalances returns the top n IPIDs by chip balance, ordered descending.
+func GetTopChipBalances(n int) ([]ChipEntry, error) {
+	if db == nil {
+		return nil, nil
+	}
+	rows, err := db.Query("SELECT IPID, BALANCE FROM CHIPS ORDER BY BALANCE DESC LIMIT ?", n)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var entries []ChipEntry
+	for rows.Next() {
+		var e ChipEntry
+		if err := rows.Scan(&e.Ipid, &e.Balance); err != nil {
+			return entries, err
+		}
+		entries = append(entries, e)
+	}
+	return entries, rows.Err()
+}
+
+// GetTopPlaytimes returns the top n entries by accumulated playtime, ordered
+// descending. Each entry includes the IPID and the linked account username
+// (empty string when no account is associated). The query is a single
+// LEFT JOIN so it is safe to call frequently without extra resource cost.
+func GetTopPlaytimes(n int) ([]PlaytimeEntry, error) {
+	if db == nil {
+		return nil, nil
+	}
+	rows, err := db.Query(`
+		SELECT k.IPID, COALESCE(u.USERNAME, ''), k.PLAYTIME
+		FROM KNOWN_IPS k
+		LEFT JOIN USERS u ON u.IPID = k.IPID
+		WHERE k.PLAYTIME > 0
+		ORDER BY k.PLAYTIME DESC
+		LIMIT ?`, n)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	entries := make([]PlaytimeEntry, 0, n)
+	for rows.Next() {
+		var e PlaytimeEntry
+		if err := rows.Scan(&e.Ipid, &e.Username, &e.Playtime); err != nil {
+			return entries, err
+		}
+		entries = append(entries, e)
+	}
+	return entries, rows.Err()
 }

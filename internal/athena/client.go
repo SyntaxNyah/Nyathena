@@ -328,14 +328,27 @@ func (client *Client) clientCleanup() {
 	if client.Uid() != -1 {
 		logger.LogInfof("Client (IPID:%v UID:%v) left the server", client.ipid, client.Uid())
 
-		// Accumulate session playtime in the database.
+		// Accumulate session playtime and award 1 chip per newly-completed hour.
+		// AddPlaytimeReturning is a single atomic SQL operation, so concurrent
+		// disconnects for the same IPID (multiclient) cannot race on the boundary.
 		if connAt := client.ConnectedAt(); !connAt.IsZero() {
 			sessionSecs := int64(time.Since(connAt).Seconds())
 			if sessionSecs > 0 {
 				ipid := client.Ipid()
 				go func() {
-					if err := db.AddPlaytime(ipid, sessionSecs); err != nil {
+					newPt, err := db.AddPlaytimeReturning(ipid, sessionSecs)
+					if err != nil {
 						logger.LogErrorf("Failed to add playtime for %v: %v", ipid, err)
+						return
+					}
+					oldPt := newPt - sessionSecs
+					chipsEarned := (newPt / 3600) - (oldPt / 3600)
+					if chipsEarned > 0 && config.EnableCasino {
+						if err := db.EnsureChipBalance(ipid); err == nil {
+							if _, err := db.AddChips(ipid, chipsEarned); err != nil {
+								logger.LogErrorf("Failed to award playtime chips for %v: %v", ipid, err)
+							}
+						}
 					}
 				}()
 			}
@@ -381,6 +394,7 @@ func (client *Client) clientCleanup() {
 		writeToAll("PR", strconv.Itoa(client.Uid()), "1")
 		sendPlayerArup()
 	}
+	handleCasinoDisconnect(client)
 	client.conn.Close()
 	clients.RemoveClient(client)
 }
@@ -647,6 +661,15 @@ func (client *Client) RemoveAuth() {
 	client.mu.Unlock()
 	client.SendServerMessage("Logged out as moderator.")
 	client.SendPacket("AUTH", "-1")
+}
+
+// RemoveAccountAuth logs a client out of a player account (no moderator badge change needed).
+func (client *Client) RemoveAccountAuth() {
+	client.mu.Lock()
+	username := client.mod_name
+	client.authenticated, client.perms, client.mod_name = false, 0, ""
+	client.mu.Unlock()
+	client.SendServerMessage(fmt.Sprintf("Logged out of account '%v'.", username))
 }
 
 // restorePunishments loads any persistent punishments for this client from the database

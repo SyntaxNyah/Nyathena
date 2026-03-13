@@ -77,9 +77,22 @@ func cmdAllowIniswap(client *Client, args []string, _ string) {
 // Handles /areainfo
 
 func cmdAreaInfo(client *Client, _ []string, _ string) {
-	out := fmt.Sprintf("\nBG: %v\nEvi mode: %v\nAllow iniswap: %v\nNon-interrupting pres: %v\nCMs allowed: %v\nForce BG list: %v\nBG locked: %v\nMusic locked: %v\nSpectate mode: %v",
-		client.Area().Background(), client.Area().EvidenceMode().String(), client.Area().IniswapAllowed(), client.Area().NoInterrupt(),
-		client.Area().CMsAllowed(), client.Area().ForceBGList(), client.Area().LockBG(), client.Area().LockMusic(), client.Area().SpectateMode())
+	a := client.Area()
+	casinoStatus := "disabled"
+	if a.CasinoEnabled() {
+		minBet := a.CasinoMinBet()
+		maxBet := a.CasinoMaxBet()
+		casinoStatus = "enabled"
+		if minBet > 0 || maxBet > 0 {
+			casinoStatus = fmt.Sprintf("enabled (bet: %d–%d)", minBet, maxBet)
+		}
+		if a.CasinoJackpot() {
+			casinoStatus += fmt.Sprintf(", jackpot pool: %d", a.CasinoJackpotPool())
+		}
+	}
+	out := fmt.Sprintf("\nBG: %v\nEvi mode: %v\nAllow iniswap: %v\nNon-interrupting pres: %v\nCMs allowed: %v\nForce BG list: %v\nBG locked: %v\nMusic locked: %v\nSpectate mode: %v\nCasino: %v",
+		a.Background(), a.EvidenceMode().String(), a.IniswapAllowed(), a.NoInterrupt(),
+		a.CMsAllowed(), a.ForceBGList(), a.LockBG(), a.LockMusic(), a.SpectateMode(), casinoStatus)
 	client.SendServerMessage(out)
 }
 

@@ -78,55 +78,71 @@ type CoinflipChallenge struct {
 }
 
 type Area struct {
-	data           AreaData
-	defaults       defaults
-	mu             sync.Mutex
-	taken          []bool
-	players        int
-	visiblePlayers int
-	defhp        int
-	prohp        int
-	evidence     []string
-	buffer       []string
-	cms          []int
-	last_msg     int
-	evi_mode     EvidenceMode
-	status       Status
-	lock         Lock
-	invited      []int
-	doc          string
-	tr                  TestimonyRecorder
-	activePoll          *Poll
-	lastPollTime        time.Time
-	pollVotes           map[int]int
-	playerVotes         map[int]int
-	activeCoinflip      *CoinflipChallenge
-	lastCoinflipTime    time.Time
-	spectateMode        bool
-	spectateInvited     []int
+	data              AreaData
+	defaults          defaults
+	mu                sync.Mutex
+	taken             []bool
+	players           int
+	visiblePlayers    int
+	defhp             int
+	prohp             int
+	evidence          []string
+	buffer            []string
+	cms               []int
+	last_msg          int
+	evi_mode          EvidenceMode
+	status            Status
+	lock              Lock
+	invited           []int
+	doc               string
+	tr                TestimonyRecorder
+	activePoll        *Poll
+	lastPollTime      time.Time
+	pollVotes         map[int]int
+	playerVotes       map[int]int
+	activeCoinflip    *CoinflipChallenge
+	lastCoinflipTime  time.Time
+	spectateMode      bool
+	spectateInvited   []int
+	casinoEnabled     bool
+	casinoMinBet      int
+	casinoMaxBet      int
+	casinoMaxTables   int
+	casinoJackpot     bool
+	casinoJackpotPool int64
 }
 
 type AreaData struct {
-	Name          string `toml:"name"`
-	Evi_mode      string `toml:"evidence_mode"`
-	Allow_iniswap bool   `toml:"allow_iniswap"`
-	Force_noint   bool   `toml:"force_nointerrupt"`
-	Bg            string `toml:"background"`
-	Allow_cms     bool   `toml:"allow_cms"`
-	Force_bglist  bool   `toml:"force_bglist"`
-	Lock_bg       bool   `toml:"lock_bg"`
-	Lock_music    bool   `toml:"lock_music"`
+	Name              string `toml:"name"`
+	Evi_mode          string `toml:"evidence_mode"`
+	Allow_iniswap     bool   `toml:"allow_iniswap"`
+	Force_noint       bool   `toml:"force_nointerrupt"`
+	Bg                string `toml:"background"`
+	Allow_cms         bool   `toml:"allow_cms"`
+	Force_bglist      bool   `toml:"force_bglist"`
+	Lock_bg           bool   `toml:"lock_bg"`
+	Lock_music        bool   `toml:"lock_music"`
+	Casino_enabled    bool   `toml:"casino_enabled"`
+	Casino_min_bet    int    `toml:"casino_min_bet"`
+	Casino_max_bet    int    `toml:"casino_max_bet"`
+	Casino_max_tables int    `toml:"casino_max_tables"`
+	Casino_jackpot    bool   `toml:"casino_slots_jackpot"`
 }
 
 type defaults struct {
-	evi_mode      EvidenceMode
-	allow_iniswap bool
-	force_noint   bool
-	bg            string
-	allow_cms     bool
-	force_bglist  bool
-	lock_bg       bool
-	lock_music    bool
+	evi_mode          EvidenceMode
+	allow_iniswap     bool
+	force_noint       bool
+	bg                string
+	allow_cms         bool
+	force_bglist      bool
+	lock_bg           bool
+	lock_music        bool
+	casino_enabled    bool
+	casino_min_bet    int
+	casino_max_bet    int
+	casino_max_tables int
+	casino_jackpot    bool
 }
 
 // NewArea returns a new area.
@@ -134,21 +150,31 @@ func NewArea(data AreaData, charlen int, bufsize int, evi_mode EvidenceMode) *Ar
 	return &Area{
 		data: data,
 		defaults: defaults{
-			evi_mode:      evi_mode,
-			allow_iniswap: data.Allow_iniswap,
-			force_noint:   data.Force_noint,
-			bg:            data.Bg,
-			allow_cms:     data.Allow_cms,
-			force_bglist:  data.Force_bglist,
-			lock_bg:       data.Lock_bg,
-			lock_music:    data.Lock_music,
+			evi_mode:          evi_mode,
+			allow_iniswap:     data.Allow_iniswap,
+			force_noint:       data.Force_noint,
+			bg:                data.Bg,
+			allow_cms:         data.Allow_cms,
+			force_bglist:      data.Force_bglist,
+			lock_bg:           data.Lock_bg,
+			lock_music:        data.Lock_music,
+			casino_enabled:    data.Casino_enabled,
+			casino_min_bet:    data.Casino_min_bet,
+			casino_max_bet:    data.Casino_max_bet,
+			casino_max_tables: data.Casino_max_tables,
+			casino_jackpot:    data.Casino_jackpot,
 		},
-		taken:    make([]bool, charlen),
-		defhp:    10,
-		prohp:    10,
-		buffer:   make([]string, bufsize),
-		last_msg: -1,
-		evi_mode: evi_mode,
+		taken:           make([]bool, charlen),
+		defhp:           10,
+		prohp:           10,
+		buffer:          make([]string, bufsize),
+		last_msg:        -1,
+		evi_mode:        evi_mode,
+		casinoEnabled:   data.Casino_enabled,
+		casinoMinBet:    data.Casino_min_bet,
+		casinoMaxBet:    data.Casino_max_bet,
+		casinoMaxTables: data.Casino_max_tables,
+		casinoJackpot:   data.Casino_jackpot,
 	}
 }
 
@@ -558,6 +584,11 @@ func (a *Area) Reset() {
 	a.data.Force_bglist = a.defaults.force_bglist
 	a.data.Lock_bg = a.defaults.lock_bg
 	a.data.Lock_music = a.defaults.lock_music
+	a.casinoEnabled = a.defaults.casino_enabled
+	a.casinoMinBet = a.defaults.casino_min_bet
+	a.casinoMaxBet = a.defaults.casino_max_bet
+	a.casinoMaxTables = a.defaults.casino_max_tables
+	a.casinoJackpot = a.defaults.casino_jackpot
 	a.tr.Index = 0
 	a.tr.State = TRIdle
 	a.tr.Testimony = []string{}
@@ -872,4 +903,95 @@ func (a *Area) ClearPoll() {
 	a.pollVotes = nil
 	a.playerVotes = nil
 	a.mu.Unlock()
+}
+
+// CasinoEnabled returns whether the casino is enabled for this area.
+func (a *Area) CasinoEnabled() bool {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return a.casinoEnabled
+}
+
+// SetCasinoEnabled enables or disables the casino for this area.
+func (a *Area) SetCasinoEnabled(v bool) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	a.casinoEnabled = v
+}
+
+// CasinoMinBet returns the minimum bet for this area's casino.
+func (a *Area) CasinoMinBet() int {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return a.casinoMinBet
+}
+
+// SetCasinoMinBet sets the minimum bet for this area's casino.
+func (a *Area) SetCasinoMinBet(v int) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	a.casinoMinBet = v
+}
+
+// CasinoMaxBet returns the maximum bet for this area's casino.
+func (a *Area) CasinoMaxBet() int {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return a.casinoMaxBet
+}
+
+// SetCasinoMaxBet sets the maximum bet for this area's casino.
+func (a *Area) SetCasinoMaxBet(v int) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	a.casinoMaxBet = v
+}
+
+// CasinoMaxTables returns the maximum active tables allowed in this area.
+func (a *Area) CasinoMaxTables() int {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return a.casinoMaxTables
+}
+
+// SetCasinoMaxTables sets the maximum active tables for this area's casino.
+func (a *Area) SetCasinoMaxTables(v int) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	a.casinoMaxTables = v
+}
+
+// CasinoJackpot returns whether the slots jackpot is enabled for this area.
+func (a *Area) CasinoJackpot() bool {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return a.casinoJackpot
+}
+
+// SetCasinoJackpot enables or disables the slots jackpot for this area.
+func (a *Area) SetCasinoJackpot(v bool) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	a.casinoJackpot = v
+}
+
+// CasinoJackpotPool returns the current jackpot pool size for this area's slots.
+func (a *Area) CasinoJackpotPool() int64 {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return a.casinoJackpotPool
+}
+
+// AddCasinoJackpotPool adds amount to the jackpot pool.
+func (a *Area) AddCasinoJackpotPool(amount int64) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	a.casinoJackpotPool += amount
+}
+
+// ResetCasinoJackpotPool resets the jackpot pool to zero.
+func (a *Area) ResetCasinoJackpotPool() {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	a.casinoJackpotPool = 0
 }

@@ -163,6 +163,31 @@ func pktReqDone(client *Client, _ *packet.Packet) {
 		client.SendServerMessage(config.Motd)
 	}
 	client.restorePunishments()
+
+	// Casino on-join setup: seed chip balance and prompt unregistered players.
+	if config.EnableCasino {
+		ipid := client.Ipid()
+		go func() {
+			if err := db.EnsureChipBalance(ipid); err != nil {
+				logger.LogErrorf("Failed to seed chip balance for %v: %v", ipid, err)
+			}
+		}()
+		if !client.Authenticated() {
+			client.SendServerMessage(
+				"🎰 Welcome! This server has a Casino & Accounts system.\n\n" +
+					"💡 Why make a free account?\n" +
+					"  • Your 💰 chip balance is saved to your account name — not just\n" +
+					"    your IP. Reconnect from any device or network and keep your balance.\n" +
+					"  • Earn ⏱ playtime badges and climb the 🏆 Casino Leaderboard\n" +
+					"    under your own name instead of being anonymous.\n" +
+					"  • Without an account your chips are tied to this connection only —\n" +
+					"    they may be lost if your IP changes.\n\n" +
+					"  /register <username> <password>  — create your free account now\n" +
+					"  /login <username> <password>     — sign in if you already have one\n\n" +
+					"(Username: 3–20 chars, letters/numbers/underscore · Password: 6+ chars)")
+		}
+	}
+
 	logger.LogInfof("Client (IPID:%v UID:%v) joined the server", client.Ipid(), client.Uid())
 }
 
