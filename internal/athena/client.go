@@ -348,7 +348,7 @@ func (client *Client) clientCleanup() {
 						return
 					}
 					oldPt := newPt - sessionSecs
-					chipsEarned := (newPt/3600) - (oldPt/3600) - alreadyAwarded
+					chipsEarned := (newPt/secondsPerHour) - (oldPt/secondsPerHour) - alreadyAwarded
 					if chipsEarned > 0 && config.EnableCasino {
 						if err := db.EnsureChipBalance(ipid); err == nil {
 							if _, err := db.AddChips(ipid, chipsEarned); err != nil {
