@@ -204,6 +204,7 @@ type Client struct {
 	pendingRegPass     []byte      // bcrypt hash from a pending /register that is awaiting captcha confirmation
 	pendingRegCaptcha  string      // Expected captcha token for the pending registration
 	sessionChipsAwarded int64      // Chips already awarded mid-session (hourly ticker); subtracted at disconnect to avoid double-counting
+	ignoredIPIDs        map[string]struct{} // Set of IPIDs permanently ignored by this client
 }
 
 // NewClient returns a new client.
@@ -232,6 +233,18 @@ func (client *Client) HandleClient() {
 	// If this IPID has been tormented by automod, schedule a random disconnect.
 	if isIPIDTormented(client.Ipid()) {
 		go startTormentDisconnect(client)
+	}
+
+	// Load this client's persisted ignore list.
+	if ignoredIPs, err := db.LoadIgnoredIPIDs(client.Ipid()); err != nil {
+		logger.LogErrorf("Failed to load ignore list for %v: %v", client.Ipid(), err)
+	} else if len(ignoredIPs) > 0 {
+		client.mu.Lock()
+		client.ignoredIPIDs = make(map[string]struct{}, len(ignoredIPs))
+		for _, ipid := range ignoredIPs {
+			client.ignoredIPIDs[ipid] = struct{}{}
+		}
+		client.mu.Unlock()
 	}
 
 	var mc int
@@ -1813,4 +1826,29 @@ func (client *Client) AddSessionChipsAwarded(n int64) int64 {
 	defer client.mu.Unlock()
 	client.sessionChipsAwarded += n
 	return client.sessionChipsAwarded
+}
+
+// IgnoresIPID returns true if this client has permanently ignored the given IPID.
+func (client *Client) IgnoresIPID(ipid string) bool {
+	client.mu.Lock()
+	defer client.mu.Unlock()
+	_, ok := client.ignoredIPIDs[ipid]
+	return ok
+}
+
+// AddIgnoredIPID adds an IPID to this client's in-memory permanent ignore set.
+func (client *Client) AddIgnoredIPID(ipid string) {
+	client.mu.Lock()
+	defer client.mu.Unlock()
+	if client.ignoredIPIDs == nil {
+		client.ignoredIPIDs = make(map[string]struct{})
+	}
+	client.ignoredIPIDs[ipid] = struct{}{}
+}
+
+// RemoveIgnoredIPID removes an IPID from this client's in-memory permanent ignore set.
+func (client *Client) RemoveIgnoredIPID(ipid string) {
+	client.mu.Lock()
+	defer client.mu.Unlock()
+	delete(client.ignoredIPIDs, ipid)
 }

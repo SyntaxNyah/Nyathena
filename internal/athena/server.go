@@ -699,6 +699,16 @@ func writeToArea(area *area.Area, header string, contents ...string) {
 	}
 }
 
+// writeToAreaFrom sends a message to all clients in a given area, skipping
+// any recipient that has permanently ignored the sender's IPID.
+func writeToAreaFrom(senderIPID string, area *area.Area, header string, contents ...string) {
+	for client := range clients.GetAllClients() {
+		if client.Area() == area && !client.IgnoresIPID(senderIPID) {
+			client.SendPacket(header, contents...)
+		}
+	}
+}
+
 // writeToAllClients writes a packet to all connected clients
 func writeToAllClients(header string, contents ...string) {
 	for client := range clients.GetAllClients() {

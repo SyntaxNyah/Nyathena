@@ -220,6 +220,20 @@ func initCommands() {
 			desc:     "Invites user(s) to the current area.",
 			reqPerms: permissions.PermissionField["CM"],
 		},
+		"ignore": {
+			handler:  cmdIgnore,
+			minArgs:  1,
+			usage:    "Usage: /ignore <uid>",
+			desc:     "Permanently ignores a user based on their IPID. Their IC and OOC messages will no longer be shown to you, even after they reconnect.",
+			reqPerms: permissions.PermissionField["NONE"],
+		},
+		"unignore": {
+			handler:  cmdUnignore,
+			minArgs:  1,
+			usage:    "Usage: /unignore <uid>",
+			desc:     "Removes a permanent ignore for a user, allowing their messages to be shown to you again.",
+			reqPerms: permissions.PermissionField["NONE"],
+		},
 		"jail": {
 			handler:  cmdJail,
 			minArgs:  1,
