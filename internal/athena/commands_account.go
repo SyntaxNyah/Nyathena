@@ -220,11 +220,11 @@ func cmdAccount(client *Client, _ []string, _ string) {
 		return
 	}
 
-	bal, err := db.GetChipBalance(client.Ipid())
+	chips, playtimeSec, err := db.GetAccountStats(client.Ipid())
 	if err != nil {
-		bal = 0
+		chips = 0
+		playtimeSec = 0
 	}
-	playtimeSec, _ := db.GetPlaytime(client.Ipid())
 	// Add the current session's elapsed time so the display reflects live playtime.
 	if connAt := client.ConnectedAt(); !connAt.IsZero() {
 		playtimeSec += int64(time.Since(connAt).Seconds())
@@ -234,7 +234,7 @@ func cmdAccount(client *Client, _ []string, _ string) {
 		"\n👤 Account: %v\n"+
 			"💰 Chips: %d\n"+
 			"⏱ Playtime: %v",
-		username, bal, formatPlaytime(playtimeSec)))
+		username, chips, formatPlaytime(playtimeSec)))
 }
 
 // formatPlaytime converts seconds into a human-readable "Xh Ym" / "Ym" string.
@@ -284,7 +284,8 @@ func cmdPlaytimeTop(client *Client, args []string, usage string) {
 	// so the leaderboard reflects live playtime, not just the last-flushed DB value.
 	// Multiple clients may share the same IPID (multiclient), so use += to sum
 	// all active sessions for the same IPID, matching clientCleanup behaviour.
-	liveSecs := make(map[string]int64)
+	// Pre-size with the current player count to avoid rehashing.
+	liveSecs := make(map[string]int64, players.GetPlayerCount())
 	for c := range clients.GetAllClients() {
 		if connAt := c.ConnectedAt(); !connAt.IsZero() {
 			if secs := int64(time.Since(connAt).Seconds()); secs > 0 {

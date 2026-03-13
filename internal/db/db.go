@@ -738,6 +738,20 @@ func GetPlaytime(ipid string) (int64, error) {
 	return playtime, nil
 }
 
+// GetAccountStats returns the chip balance and accumulated playtime for an IPID
+// in a single query, avoiding two separate database round-trips.
+// Returns (0, 0, nil) when the database is not initialised.
+func GetAccountStats(ipid string) (chips, playtime int64, err error) {
+	if db == nil {
+		return 0, 0, nil
+	}
+	err = db.QueryRow(
+		`SELECT COALESCE((SELECT BALANCE FROM CHIPS WHERE IPID = ?), 0),
+		        COALESCE((SELECT PLAYTIME FROM KNOWN_IPS WHERE IPID = ?), 0)`,
+		ipid, ipid).Scan(&chips, &playtime)
+	return
+}
+
 // SyncChipsForExistingPlaytime creates CHIPS rows for all KNOWN_IPS entries
 // that have accumulated PLAYTIME but do not yet have a CHIPS row. This is a
 // one-time migration for players who were active before the casino update.
