@@ -956,9 +956,6 @@ func bjLeave(client *Client) {
 
 // cmdBlackjack is the dispatcher for /bj subcommands.
 func cmdBlackjack(client *Client, args []string, _ string) {
-	if !casinoCheck(client) {
-		return
-	}
 	if len(args) == 0 {
 		client.SendServerMessage("Usage: /bj join|bet <amount>|deal|hit|stand|double|split|insurance|status|leave")
 		return

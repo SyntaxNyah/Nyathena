@@ -48,15 +48,6 @@ func getCasinoState(a *area.Area) *AreaCasinoState {
 	return v.(*AreaCasinoState)
 }
 
-// casinoCheck returns false and sends an error message if casino is disabled for the client's area.
-func casinoCheck(client *Client) bool {
-	if !client.Area().CasinoEnabled() {
-		client.SendServerMessage("The casino is not enabled in this area.")
-		return false
-	}
-	return true
-}
-
 // validateBet checks the bet against area min/max limits and the player's chip balance.
 // Returns (valid bool, reason string).
 func validateBet(client *Client, amount int64) (bool, string) {
