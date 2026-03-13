@@ -156,7 +156,7 @@ func cmdCasinoRoulette(client *Client, args []string, _ string) {
 	}
 
 	bal, _ := db.GetChipBalance(client.Ipid())
-	sendAreaServerMessage(client.Area(),
+	sendAreaGamblingMessage(client.Area(),
 		fmt.Sprintf("🎡 Roulette: %s spun the wheel — %s! %s", client.OOCName(), spinColour, result))
 	client.SendServerMessage(fmt.Sprintf(
 		"Roulette result: %s | Your bet: %s | %s | Balance: %d",
@@ -302,7 +302,7 @@ func cmdBaccarat(client *Client, args []string, _ string) {
 	}
 
 	bal, _ := db.GetChipBalance(client.Ipid())
-	sendAreaServerMessage(client.Area(),
+	sendAreaGamblingMessage(client.Area(),
 		fmt.Sprintf("🃏 Baccarat: Player %d vs Banker %d — %s wins! %s bet %s and %s.",
 			pVal, bVal, winner, client.OOCName(), betSide, result))
 	client.SendServerMessage(fmt.Sprintf(
@@ -359,7 +359,7 @@ func cmdCraps(client *Client, args []string, _ string) {
 	default:
 		// Establish point, keep rolling.
 		point := comeOut
-		sendAreaServerMessage(client.Area(),
+		sendAreaGamblingMessage(client.Area(),
 			fmt.Sprintf("🎲 Craps: %s rolls %d+%d=%d — point is %d!", client.OOCName(), d1, d2, comeOut, point))
 		for {
 			d1, d2 = rollDice()
@@ -391,7 +391,7 @@ func cmdCraps(client *Client, args []string, _ string) {
 	if !passWin {
 		outcome = "don't-pass"
 	}
-	sendAreaServerMessage(client.Area(),
+	sendAreaGamblingMessage(client.Area(),
 		fmt.Sprintf("🎲 Craps: %s — %s wins! %s bet %s and %s.",
 			strings.Join(rolls, " → "), outcome, client.OOCName(), betType, result))
 	client.SendServerMessage(fmt.Sprintf(
@@ -485,7 +485,7 @@ func cmdCrash(client *Client, args []string, _ string) {
 
 		if current >= state.CrashAt {
 			// Already crashed.
-			sendAreaServerMessage(client.Area(),
+			sendAreaGamblingMessage(client.Area(),
 				fmt.Sprintf("💥 Crash! %s's game already crashed at %.2fx (too late to cash out).",
 					client.OOCName(), state.CrashAt))
 			client.SendServerMessage(fmt.Sprintf(
@@ -497,7 +497,7 @@ func cmdCrash(client *Client, args []string, _ string) {
 		payout := int64(float64(state.Bet) * current)
 		db.AddChips(client.Ipid(), payout) //nolint:errcheck
 		bal, _ = db.GetChipBalance(client.Ipid())
-		sendAreaServerMessage(client.Area(),
+		sendAreaGamblingMessage(client.Area(),
 			fmt.Sprintf("🚀 Crash: %s cashed out at %.2fx for %d chips!",
 				client.OOCName(), current, payout))
 		client.SendServerMessage(fmt.Sprintf(
@@ -635,7 +635,7 @@ func cmdMines(client *Client, args []string, _ string) {
 			client.SendServerMessage(fmt.Sprintf(
 				"💥 BOOM! Cell %d was a mine! You lose %d chips. Balance: %d",
 				cell, state.Bet, bal))
-			sendAreaServerMessage(client.Area(),
+			sendAreaGamblingMessage(client.Area(),
 				fmt.Sprintf("💣 %s hit a mine in Mines!", client.OOCName()))
 			return
 		}
@@ -666,7 +666,7 @@ func cmdMines(client *Client, args []string, _ string) {
 		payout := int64(float64(state.Bet) * mult)
 		db.AddChips(client.Ipid(), payout) //nolint:errcheck
 		bal, _ := db.GetChipBalance(client.Ipid())
-		sendAreaServerMessage(client.Area(),
+		sendAreaGamblingMessage(client.Area(),
 			fmt.Sprintf("💣 %s cashed out Mines for %d chips (%.2fx)!", client.OOCName(), payout, mult))
 		client.SendServerMessage(fmt.Sprintf(
 			"Cashed out! %d safe picks × %.2fx = %d chips. Balance: %d",
@@ -807,7 +807,7 @@ func cmdKeno(client *Client, args []string, _ string) {
 	client.SendServerMessage(fmt.Sprintf(
 		"🎱 Keno | Picked: %s\nDrawn: %s\nMatches: %d/%d | %s | Balance: %d",
 		strings.Join(pickedStrs, " "), strings.Join(drawnStrs, " "), matches, len(picked), result, bal))
-	sendAreaServerMessage(client.Area(),
+	sendAreaGamblingMessage(client.Area(),
 		fmt.Sprintf("🎱 Keno: %s matched %d/%d numbers — %s",
 			client.OOCName(), matches, len(picked), result))
 }
@@ -817,7 +817,8 @@ func cmdKeno(client *Client, args []string, _ string) {
 // ============================================================
 
 // wheelSegments defines the prize wheel: each entry is (multiplier, cumulative probability).
-// Probabilities: 2x=30%, 1.5x=25%, 0x=20%, 3x=15%, 5x=8%, 10x=2%  (total=100%)
+// Probabilities: 0x=60%, 1.5x=17%, 2x=13%, 3x=7%, 5x=2%, 10x=1%  (total=100%)
+// RTP ≈ 92.5% (house edge ~7.5%), similar to a real casino prize wheel.
 type wheelSegment struct {
 	Label   string
 	Mult    float64
@@ -825,11 +826,11 @@ type wheelSegment struct {
 }
 
 var wheelSegments = []wheelSegment{
-	{"2x", 2.0, 0.30},
-	{"1.5x", 1.5, 0.55},
-	{"0x (miss)", 0.0, 0.75},
-	{"3x", 3.0, 0.90},
-	{"5x", 5.0, 0.98},
+	{"0x (miss)", 0.0, 0.60},
+	{"1.5x", 1.5, 0.77},
+	{"2x", 2.0, 0.90},
+	{"3x", 3.0, 0.97},
+	{"5x", 5.0, 0.99},
 	{"10x", 10.0, 1.00},
 }
 
@@ -874,7 +875,7 @@ func cmdWheel(client *Client, args []string, _ string) {
 	}
 
 	bal, _ := db.GetChipBalance(client.Ipid())
-	sendAreaServerMessage(client.Area(),
+	sendAreaGamblingMessage(client.Area(),
 		fmt.Sprintf("🎡 Wheel: %s spun and got %s! %s", client.OOCName(), seg.Label, result))
 	client.SendServerMessage(fmt.Sprintf(
 		"🎡 Prize Wheel | Landed on: %s | %s | Balance: %d", seg.Label, result, bal))

@@ -132,7 +132,7 @@ func slotsDoSpin(client *Client, bet int64) {
 		bal, _ := db.GetChipBalance(client.Ipid())
 		msg = fmt.Sprintf("[ %s | %s | %s ] %s\nJACKPOT! You won the pool of %d chips! Balance: %d",
 			s1, s2, s3, desc, payout, bal)
-		sendAreaServerMessage(client.Area(),
+		sendAreaGamblingMessage(client.Area(),
 			fmt.Sprintf("🎰 JACKPOT! %s hit the jackpot for %d chips!", client.OOCName(), payout))
 	} else if mult > 0 {
 		payout = int64(float64(bet) * mult)

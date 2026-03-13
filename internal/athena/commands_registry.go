@@ -1367,6 +1367,14 @@ func initCommands() {
 			reqPerms:  permissions.PermissionField["NONE"],
 			casinoCmd: true,
 		},
+		"gamble": {
+			handler:   cmdGamble,
+			minArgs:   1,
+			usage:     "Usage: /gamble hide",
+			desc:      "Toggle visibility of gambling broadcast messages in the area chat.",
+			reqPerms:  permissions.PermissionField["NONE"],
+			casinoCmd: true,
+		},
 		"chips": {
 			handler:   cmdChipsEnhanced,
 			minArgs:   0,

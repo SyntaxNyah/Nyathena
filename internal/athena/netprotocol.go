@@ -182,7 +182,8 @@ func pktReqDone(client *Client, _ *packet.Packet) {
 					"💡 Create a free account to keep your balance across reconnects:\n" +
 					"  /register <username> <password>  — create your free account now\n" +
 					"  /login <username> <password>     — sign in if you already have one\n\n" +
-					"(Username: 3–20 chars, letters/numbers/underscore · Password: 6+ chars)")
+					"(Username: 3–20 chars, letters/numbers/underscore · Password: 6+ chars)\n\n" +
+					"🔇 Don't want to see gambling messages? Use /gamble hide to toggle them off.")
 		}
 	}
 

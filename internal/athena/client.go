@@ -199,6 +199,7 @@ type Client struct {
 	charStuckCharID    int         // Character ID the client is locked to; -1 = not stuck
 	dancing            bool        // Whether the client has dance mode active (flips sprite every message)
 	danceFlipped       bool        // Current flip state for dance mode; toggles each IC message
+	gambleHide         bool        // Whether the client has opted out of seeing gambling broadcast messages
 }
 
 // NewClient returns a new client.
@@ -1156,6 +1157,20 @@ func (client *Client) Hidden() bool {
 func (client *Client) SetHidden(h bool) {
 	client.mu.Lock()
 	client.hidden = h
+	client.mu.Unlock()
+}
+
+// GambleHide returns whether the client has opted out of gambling broadcast messages.
+func (client *Client) GambleHide() bool {
+	client.mu.Lock()
+	defer client.mu.Unlock()
+	return client.gambleHide
+}
+
+// SetGambleHide sets whether the client wants to suppress gambling broadcast messages.
+func (client *Client) SetGambleHide(h bool) {
+	client.mu.Lock()
+	client.gambleHide = h
 	client.mu.Unlock()
 }
 
