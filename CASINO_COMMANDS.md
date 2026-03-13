@@ -22,6 +22,7 @@ This document covers the full casino system, including **Nyathena Chips** (the s
 | `/chips top [n]` | Show the global chip leaderboard (top 10 by default, max 50). |
 | `/chips area [n]` | Show the chip leaderboard for players currently in your area. |
 | `/chips give <uid> <amount>` | Transfer chips to another player (max 500 per transfer, 10-minute cooldown). |
+| `/richest [n]` | Shortcut for `/chips top` — show the richest players by chip balance (top 10 by default, max 50). |
 
 ### Examples
 
@@ -30,6 +31,12 @@ This document covers the full casino system, including **Nyathena Chips** (the s
 > 💰 Your balance: 350 Nyathena Chips
 
 /chips top 5
+> 🏆 Global Chip Leaderboard (Top 5)
+>  1. abc123 — 12000 chips
+>  2. def456 — 8400 chips
+>  ...
+
+/richest 5
 > 🏆 Global Chip Leaderboard (Top 5)
 >  1. abc123 — 12000 chips
 >  2. def456 — 8400 chips

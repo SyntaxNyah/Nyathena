@@ -1375,6 +1375,14 @@ func initCommands() {
 			reqPerms:  permissions.PermissionField["NONE"],
 			casinoCmd: true,
 		},
+		"richest": {
+			handler:   cmdRichest,
+			minArgs:   0,
+			usage:     "Usage: /richest [n]",
+			desc:      "Show the global chip leaderboard (top 10 richest players by default, max 50).",
+			reqPerms:  permissions.PermissionField["NONE"],
+			casinoCmd: true,
+		},
 		"casino": {
 			handler:   cmdCasino,
 			minArgs:   0,
