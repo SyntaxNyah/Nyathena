@@ -174,14 +174,12 @@ func pktReqDone(client *Client, _ *packet.Packet) {
 		}()
 		if !client.Authenticated() {
 			client.SendServerMessage(
-				"🎰 Welcome! This server has a Casino & Accounts system.\n\n" +
-					"💡 Why make a free account?\n" +
-					"  • Your 💰 chip balance is saved to your account name — not just\n" +
-					"    your IP. Reconnect from any device or network and keep your balance.\n" +
-					"  • Earn ⏱ playtime badges and climb the 🏆 Casino Leaderboard\n" +
-					"    under your own name instead of being anonymous.\n" +
-					"  • Without an account your chips are tied to this connection only —\n" +
-					"    they may be lost if your IP changes.\n\n" +
+				"🎰 Welcome! This server tracks 💰 chips & ⏱ playtime for the Casino.\n\n" +
+					"  • Everyone starts with 100 chips.\n" +
+					"  • Earn 1 chip for every hour of playtime.\n" +
+					"  • /richest  — see the top chip holders on the server.\n" +
+					"  • /playtime — see the playtime leaderboard.\n\n" +
+					"💡 Create a free account to keep your balance across reconnects:\n" +
 					"  /register <username> <password>  — create your free account now\n" +
 					"  /login <username> <password>     — sign in if you already have one\n\n" +
 					"(Username: 3–20 chars, letters/numbers/underscore · Password: 6+ chars)")
