@@ -79,15 +79,15 @@ type PersistentPunishment struct {
 
 // ChipEntry holds one row from the CHIPS leaderboard query.
 type ChipEntry struct {
-	Ipid    string
-	Balance int64
+	Username string
+	Balance  int64
 }
 
 // PlaytimeEntry holds one row from the playtime leaderboard query.
 type PlaytimeEntry struct {
-	Ipid     string
-	Username string // empty when no account is linked
-	Playtime int64  // seconds
+	Ipid     string // used for live-session merge; never displayed
+	Username string
+	Playtime int64 // seconds
 }
 
 // Opens the server's database connection.
@@ -348,11 +348,58 @@ func RegisterPlayerHashed(username string, hashedPassword []byte, ipid string) e
 
 // LinkIPIDToUser associates an IPID with a user account.
 // Called on every successful login so the leaderboard can show account names.
+// When the player's IPID has changed (e.g. their IP address changed), any
+// playtime accumulated under the old IPID is merged into the new IPID so the
+// leaderboard continues to display the correct total under the player's account name.
 func LinkIPIDToUser(username, ipid string) error {
 	if db == nil {
 		return nil
 	}
-	_, err := db.Exec("UPDATE USERS SET IPID = ? WHERE USERNAME = ?", ipid, username)
+
+	// Retrieve the IPID currently stored for this account.
+	var oldIPID string
+	switch err := db.QueryRow("SELECT COALESCE(IPID, '') FROM USERS WHERE USERNAME = ?", username).Scan(&oldIPID); {
+	case err == sql.ErrNoRows:
+		// User not found — the UPDATE below will affect 0 rows, which is intentional.
+	case err != nil:
+		return err
+	}
+
+	// Update the USERS table with the new IPID.
+	if _, err := db.Exec("UPDATE USERS SET IPID = ? WHERE USERNAME = ?", ipid, username); err != nil {
+		return err
+	}
+
+	// Nothing more to do if the IPID hasn't changed or was previously unset.
+	if oldIPID == "" || oldIPID == ipid {
+		return nil
+	}
+
+	// Fetch the playtime accumulated under the old IPID.
+	var oldPlaytime int64
+	switch err := db.QueryRow("SELECT COALESCE(PLAYTIME, 0) FROM KNOWN_IPS WHERE IPID = ?", oldIPID).Scan(&oldPlaytime); {
+	case err == sql.ErrNoRows:
+		// No playtime recorded for old IPID — nothing to transfer.
+		return nil
+	case err != nil:
+		return err
+	}
+	if oldPlaytime == 0 {
+		return nil
+	}
+
+	// Merge old playtime into the new IPID. UPSERT ensures the row is created
+	// if it does not yet exist in KNOWN_IPS (defensive; in practice MarkIPKnown
+	// is called on every connection before /login can be issued).
+	now := time.Now().Unix()
+	if _, err := db.Exec(`
+		INSERT INTO KNOWN_IPS (IPID, FIRST_SEEN, LAST_SEEN, PLAYTIME)
+		VALUES (?, ?, ?, ?)
+		ON CONFLICT(IPID) DO UPDATE SET PLAYTIME = PLAYTIME + excluded.PLAYTIME`,
+		ipid, now, now, oldPlaytime); err != nil {
+		return err
+	}
+	_, err := db.Exec("UPDATE KNOWN_IPS SET PLAYTIME = 0 WHERE IPID = ?", oldIPID)
 	return err
 }
 
@@ -960,20 +1007,25 @@ func GetUsernamesByIPIDs(ipids []string) (map[string]string, error) {
 	return m, rows.Err()
 }
 
-// GetTopChipBalances returns the top n IPIDs by chip balance, ordered descending.
+// GetTopChipBalances returns the top n registered players by chip balance, ordered descending.
+// Only players with a linked account are included; anonymous IPIDs are excluded.
 func GetTopChipBalances(n int) ([]ChipEntry, error) {
 	if db == nil {
 		return nil, nil
 	}
-	rows, err := db.Query("SELECT IPID, BALANCE FROM CHIPS ORDER BY BALANCE DESC LIMIT ?", n)
+	rows, err := db.Query(`
+		SELECT u.USERNAME, c.BALANCE
+		FROM CHIPS c
+		INNER JOIN USERS u ON u.IPID = c.IPID
+		ORDER BY c.BALANCE DESC LIMIT ?`, n)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var entries []ChipEntry
+	entries := make([]ChipEntry, 0, n)
 	for rows.Next() {
 		var e ChipEntry
-		if err := rows.Scan(&e.Ipid, &e.Balance); err != nil {
+		if err := rows.Scan(&e.Username, &e.Balance); err != nil {
 			return entries, err
 		}
 		entries = append(entries, e)
@@ -981,18 +1033,17 @@ func GetTopChipBalances(n int) ([]ChipEntry, error) {
 	return entries, rows.Err()
 }
 
-// GetTopPlaytimes returns the top n entries by accumulated playtime, ordered
-// descending. Each entry includes the IPID and the linked account username
-// (empty string when no account is associated). The query is a single
-// LEFT JOIN so it is safe to call frequently without extra resource cost.
+// GetTopPlaytimes returns the top n registered players by accumulated playtime, ordered
+// descending. Only players with a linked account are included; anonymous IPIDs are excluded.
+// The IPID is returned alongside each entry for live-session merging but is never displayed.
 func GetTopPlaytimes(n int) ([]PlaytimeEntry, error) {
 	if db == nil {
 		return nil, nil
 	}
 	rows, err := db.Query(`
-		SELECT k.IPID, COALESCE(u.USERNAME, ''), k.PLAYTIME
+		SELECT k.IPID, u.USERNAME, k.PLAYTIME
 		FROM KNOWN_IPS k
-		LEFT JOIN USERS u ON u.IPID = k.IPID
+		INNER JOIN USERS u ON u.IPID = k.IPID
 		WHERE k.PLAYTIME > 0
 		ORDER BY k.PLAYTIME DESC
 		LIMIT ?`, n)

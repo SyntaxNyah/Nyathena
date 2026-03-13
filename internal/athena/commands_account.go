@@ -252,9 +252,9 @@ func formatPlaytime(seconds int64) string {
 
 // Handles /playtime [top [n]]
 //
-// Displays the global playtime leaderboard. Shows account names when players
-// have linked accounts, falling back to their IPID otherwise.
-// Results come from a single efficient LEFT JOIN query — no extra resources.
+// Displays the global playtime leaderboard. Only registered players appear;
+// anonymous connections are excluded. Results come from a single efficient
+// INNER JOIN query — no extra resource cost.
 func cmdPlaytimeTop(client *Client, args []string, usage string) {
 	n := 10
 	remaining := args
@@ -284,7 +284,7 @@ func cmdPlaytimeTop(client *Client, args []string, usage string) {
 	// so the leaderboard reflects live playtime, not just the last-flushed DB value.
 	// Multiple clients may share the same IPID (multiclient), so use += to sum
 	// all active sessions for the same IPID, matching clientCleanup behaviour.
-	// Pre-size with the current player count to avoid rehashing.
+	// Pre-size with player count to avoid rehashing.
 	liveSecs := make(map[string]int64, players.GetPlayerCount())
 	for c := range clients.GetAllClients() {
 		if connAt := c.ConnectedAt(); !connAt.IsZero() {
@@ -310,11 +310,7 @@ func cmdPlaytimeTop(client *Client, args []string, usage string) {
 	sb.Grow(35 + len(entries)*35)
 	sb.WriteString(fmt.Sprintf("\n⏱ Playtime Leaderboard (Top %d)\n", len(entries)))
 	for i, e := range entries {
-		displayName := e.Ipid
-		if e.Username != "" {
-			displayName = e.Username
-		}
-		sb.WriteString(fmt.Sprintf("  %2d. %-20v  %v\n", i+1, displayName, formatPlaytime(e.Playtime)))
+		sb.WriteString(fmt.Sprintf("  %2d. %-20v  %v\n", i+1, e.Username, formatPlaytime(e.Playtime)))
 	}
 	client.SendServerMessage(sb.String())
 }

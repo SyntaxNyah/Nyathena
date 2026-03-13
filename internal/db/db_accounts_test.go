@@ -129,6 +129,125 @@ func TestLinkIPIDToUserUpdatesOnRelogin(t *testing.T) {
 	}
 }
 
+// TestLinkIPIDToUserMergesPlaytime verifies that when a player re-logs from a
+// new IP address, the playtime accumulated under their old IPID is transferred
+// to the new IPID so the leaderboard continues to show the correct total.
+func TestLinkIPIDToUserMergesPlaytime(t *testing.T) {
+	teardown := setupTestDB(t)
+	defer teardown()
+
+	// Register from old IPID and simulate accumulated playtime.
+	if err := RegisterPlayer("migrant", []byte("pass1234"), "migrate_old"); err != nil {
+		t.Fatalf("RegisterPlayer failed: %v", err)
+	}
+	if err := MarkIPKnown("migrate_old"); err != nil {
+		t.Fatalf("MarkIPKnown (old) failed: %v", err)
+	}
+	if err := AddPlaytime("migrate_old", 3600); err != nil {
+		t.Fatalf("AddPlaytime failed: %v", err)
+	}
+
+	// Simulate the new connection and re-login from a different IP.
+	if err := MarkIPKnown("migrate_new"); err != nil {
+		t.Fatalf("MarkIPKnown (new) failed: %v", err)
+	}
+	if err := LinkIPIDToUser("migrant", "migrate_new"); err != nil {
+		t.Fatalf("LinkIPIDToUser failed: %v", err)
+	}
+
+	// Old IPID's playtime should have been zeroed out.
+	oldPT, err := GetPlaytime("migrate_old")
+	if err != nil {
+		t.Fatalf("GetPlaytime (old) failed: %v", err)
+	}
+	if oldPT != 0 {
+		t.Errorf("expected old IPID playtime=0 after merge, got %d", oldPT)
+	}
+
+	// New IPID should have inherited the old playtime.
+	newPT, err := GetPlaytime("migrate_new")
+	if err != nil {
+		t.Fatalf("GetPlaytime (new) failed: %v", err)
+	}
+	if newPT != 3600 {
+		t.Errorf("expected new IPID playtime=3600 after merge, got %d", newPT)
+	}
+}
+
+// TestLinkIPIDToUserMergesPlaytimeAdditive verifies that when both the old and
+// new IPID already have playtime, the amounts are summed.
+func TestLinkIPIDToUserMergesPlaytimeAdditive(t *testing.T) {
+	teardown := setupTestDB(t)
+	defer teardown()
+
+	if err := RegisterPlayer("addplayer", []byte("pass1234"), "add_old"); err != nil {
+		t.Fatalf("RegisterPlayer failed: %v", err)
+	}
+	if err := MarkIPKnown("add_old"); err != nil {
+		t.Fatalf("MarkIPKnown (old) failed: %v", err)
+	}
+	if err := AddPlaytime("add_old", 1000); err != nil {
+		t.Fatalf("AddPlaytime (old) failed: %v", err)
+	}
+
+	if err := MarkIPKnown("add_new"); err != nil {
+		t.Fatalf("MarkIPKnown (new) failed: %v", err)
+	}
+	if err := AddPlaytime("add_new", 500); err != nil {
+		t.Fatalf("AddPlaytime (new) failed: %v", err)
+	}
+
+	if err := LinkIPIDToUser("addplayer", "add_new"); err != nil {
+		t.Fatalf("LinkIPIDToUser failed: %v", err)
+	}
+
+	newPT, err := GetPlaytime("add_new")
+	if err != nil {
+		t.Fatalf("GetPlaytime (new) failed: %v", err)
+	}
+	if newPT != 1500 {
+		t.Errorf("expected combined playtime=1500, got %d", newPT)
+	}
+
+	oldPT, err := GetPlaytime("add_old")
+	if err != nil {
+		t.Fatalf("GetPlaytime (old) failed: %v", err)
+	}
+	if oldPT != 0 {
+		t.Errorf("expected old IPID playtime=0 after merge, got %d", oldPT)
+	}
+}
+
+// TestLinkIPIDToUserSameIPIDNoOp verifies that re-logging with the same IPID
+// (no IP change) does not modify any KNOWN_IPS playtime.
+func TestLinkIPIDToUserSameIPIDNoOp(t *testing.T) {
+	teardown := setupTestDB(t)
+	defer teardown()
+
+	if err := RegisterPlayer("stable", []byte("pass1234"), "stable_ip"); err != nil {
+		t.Fatalf("RegisterPlayer failed: %v", err)
+	}
+	if err := MarkIPKnown("stable_ip"); err != nil {
+		t.Fatalf("MarkIPKnown failed: %v", err)
+	}
+	if err := AddPlaytime("stable_ip", 7200); err != nil {
+		t.Fatalf("AddPlaytime failed: %v", err)
+	}
+
+	// Re-link with the same IPID — should be a no-op.
+	if err := LinkIPIDToUser("stable", "stable_ip"); err != nil {
+		t.Fatalf("LinkIPIDToUser failed: %v", err)
+	}
+
+	pt, err := GetPlaytime("stable_ip")
+	if err != nil {
+		t.Fatalf("GetPlaytime failed: %v", err)
+	}
+	if pt != 7200 {
+		t.Errorf("expected playtime unchanged at 7200, got %d", pt)
+	}
+}
+
 // TestRegisterPlayerDuplicateUsername verifies that registering the same
 // username twice returns an error.
 func TestRegisterPlayerDuplicateUsername(t *testing.T) {
