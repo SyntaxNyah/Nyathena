@@ -845,6 +845,17 @@ func sendAreaServerMessage(area *area.Area, message string) {
 	writeToArea(area, "CT", encode(config.Name), encode(message), "1")
 }
 
+// sendAreaGamblingMessage sends a gambling-result OOC message to all clients
+// in an area who have not opted out of gambling broadcasts via /gamble hide.
+func sendAreaGamblingMessage(a *area.Area, message string) {
+	encoded := encode(message)
+	for client := range clients.GetAllClients() {
+		if client.Area() == a && !client.GambleHide() {
+			client.SendPacket("CT", encode(config.Name), encoded, "1")
+		}
+	}
+}
+
 // sendGlobalServerMessage broadcasts a server OOC message to every joined client.
 func sendGlobalServerMessage(message string) {
 	writeToAll("CT", encode(config.Name), encode(message), "1")

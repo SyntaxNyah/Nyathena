@@ -11,6 +11,8 @@ This document covers the full casino system, including **Nyathena Chips** (the s
 - Every new connection starts with **100 chips** automatically.
 - Balances persist across sessions.
 - Chips cannot go negative — you can only spend what you have.
+- **Maximum balance: 10,000,000 chips (10 million).** Winnings are capped at this ceiling to prevent runaway inflation.
+- **Default maximum bet: 1,000,000 chips (1 million)** per wager when no area-specific limit is configured. Staff can raise or lower this per-area with `/casinoset maxbet`.
 
 ---
 
@@ -273,16 +275,30 @@ Pick numbers and hope they match the draw.
 /wheel spin <bet>
 ```
 
-**Wheel segments:**
+**Wheel segments (casino-realistic odds, ~92.5% RTP):**
 
 | Multiplier | Probability |
 |------------|-------------|
-| 2× | 30% |
-| 1.5× | 25% |
-| 0× | 20% |
-| 3× | 15% |
-| 5× | 8% |
-| 10× | 2% |
+| 0× (miss)  | 60% |
+| 1.5×       | 17% |
+| 2×         | 13% |
+| 3×         | 7%  |
+| 5×         | 2%  |
+| 10×        | 1%  |
+
+---
+
+### 🔇 Gamble Hide — `/gamble hide`
+
+Toggle whether you see gambling broadcast messages in the area chat.
+
+```
+/gamble hide
+```
+
+- Run once to **hide** all gambling result announcements (wheel spins, slot wins, roulette results, etc.) from your chat.
+- Run again to **show** them again.
+- This setting lasts until you disconnect.
 
 ---
 

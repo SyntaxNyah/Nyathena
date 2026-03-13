@@ -201,3 +201,54 @@ func TestGetTopChipBalancesLimit(t *testing.T) {
 		t.Errorf("expected 3 entries with limit=3, got %d", len(entries))
 	}
 }
+
+// TestAddChipsCapAtMaxBalance verifies that AddChips never exceeds MaxChipBalance.
+func TestAddChipsCapAtMaxBalance(t *testing.T) {
+	teardown := setupTestDB(t)
+	defer teardown()
+
+	ipid := "capcip1"
+	EnsureChipBalance(ipid)
+
+	// Add a huge amount that would far exceed the cap.
+	newBal, err := AddChips(ipid, MaxChipBalance*10)
+	if err != nil {
+		t.Fatalf("AddChips failed: %v", err)
+	}
+	if newBal != MaxChipBalance {
+		t.Errorf("expected balance to be capped at %d, got %d", MaxChipBalance, newBal)
+	}
+
+	stored, _ := GetChipBalance(ipid)
+	if stored != MaxChipBalance {
+		t.Errorf("stored balance mismatch: expected %d, got %d", MaxChipBalance, stored)
+	}
+}
+
+// TestAddChipsNearCapStaysAtCap verifies repeated AddChips near the ceiling stays clamped.
+func TestAddChipsNearCapStaysAtCap(t *testing.T) {
+	teardown := setupTestDB(t)
+	defer teardown()
+
+	ipid := "capcip2"
+	EnsureChipBalance(ipid)
+
+	// Bring the balance to exactly MaxChipBalance.
+	if _, err := AddChips(ipid, MaxChipBalance-100); err != nil {
+		t.Fatalf("AddChips to near-cap failed: %v", err)
+	}
+
+	bal, _ := GetChipBalance(ipid)
+	if bal != MaxChipBalance {
+		t.Fatalf("setup: expected %d, got %d", MaxChipBalance, bal)
+	}
+
+	// Adding more chips at the ceiling should leave the balance unchanged.
+	newBal, err := AddChips(ipid, 500)
+	if err != nil {
+		t.Fatalf("AddChips at cap failed: %v", err)
+	}
+	if newBal != MaxChipBalance {
+		t.Errorf("expected balance to remain at cap %d, got %d", MaxChipBalance, newBal)
+	}
+}

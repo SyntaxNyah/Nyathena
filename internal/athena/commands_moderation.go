@@ -88,6 +88,7 @@ func cmdBan(client *Client, args []string, usage string) {
 			c.SendPacket("KB", fmt.Sprintf("%v\nUntil: %v\nID: %v", reason, untilS, id))
 			c.conn.Close()
 			forgetIP(c.Ipid())
+			deleteAccountForIPID(c.Ipid())
 			count++
 			if err := webhook.PostBan(c.CurrentCharacter(), c.Showname(), c.OOCName(), c.Ipid(), c.Uid(), id, *duration, reason, client.ModName()); err != nil {
 				logger.LogErrorf("while posting ban webhook: %v", err)
@@ -103,6 +104,7 @@ func cmdBan(client *Client, args []string, usage string) {
 					continue
 				}
 				forgetIP(ipid)
+				deleteAccountForIPID(ipid)
 				if err := webhook.PostBan("N/A", "N/A", "N/A", ipid, -1, id, *duration, reason, client.ModName()); err != nil {
 					logger.LogErrorf("while posting ban webhook: %v", err)
 				}
@@ -123,6 +125,7 @@ func cmdBan(client *Client, args []string, usage string) {
 					continue
 				}
 				forgetIP(ipid)
+				deleteAccountForIPID(ipid)
 				for _, c := range onlineClients {
 					if id, ok := banIDByHdid[c.Hdid()]; ok {
 						c.SendPacket("KB", fmt.Sprintf("%v\nUntil: %v\nID: %v", reason, untilS, id))
@@ -149,6 +152,27 @@ func cmdBan(client *Client, args []string, usage string) {
 	}
 	sendPlayerArup()
 	addToBuffer(client, "CMD", fmt.Sprintf("Banned %v from server for %v: %v.", report, *duration, reason), true)
+}
+
+// deleteAccountForIPID removes the player account linked to the given IPID (if any).
+// Any currently-connected session using that account is also logged out.
+// Called automatically whenever a ban is issued so banned players cannot log back in.
+func deleteAccountForIPID(ipid string) {
+	username, err := db.GetUsernameByIPID(ipid)
+	if err != nil || username == "" {
+		return // no linked account — nothing to do
+	}
+	if err := db.RemoveUser(username); err != nil {
+		logger.LogErrorf("deleteAccountForIPID: failed to remove account %q (IPID %v): %v", username, ipid, err)
+		return
+	}
+	// Log out any connected session that was using the now-deleted account.
+	for c := range clients.GetAllClients() {
+		if c.Authenticated() && c.ModName() == username {
+			c.RemoveAuth()
+		}
+	}
+	logger.LogInfof("deleteAccountForIPID: removed account %q linked to banned IPID %v", username, ipid)
 }
 
 // Handles /bg

@@ -41,7 +41,7 @@ func slotsCheckRate(uid int) bool {
 	val, _ := slotsRateLimit.LoadOrStore(uid, &[]time.Time{})
 	ts := val.(*[]time.Time)
 
-	// Prune old timestamps.
+	// Prune old timestamps in-place.
 	valid := (*ts)[:0]
 	for _, t := range *ts {
 		if t.After(cutoff) {
@@ -52,6 +52,16 @@ func slotsCheckRate(uid int) bool {
 
 	if len(*ts) >= 5 {
 		return false
+	}
+
+	// If all prior timestamps just expired the player was idle for >10 s.
+	// Lazily replace the stale map entry with a fresh one so entries for
+	// long-gone players don't accumulate in the sync.Map indefinitely.
+	if len(*ts) == 0 {
+		slotsRateLimit.Delete(uid)
+		fresh := &[]time.Time{now}
+		slotsRateLimit.Store(uid, fresh)
+		return true
 	}
 	*ts = append(*ts, now)
 	return true
@@ -99,7 +109,7 @@ func slotsDoSpin(client *Client, bet int64) {
 		client.SendServerMessage(reason)
 		return
 	}
-	_, err := db.SpendChips(client.Ipid(), bet)
+	balAfterBet, err := db.SpendChips(client.Ipid(), bet)
 	if err != nil {
 		client.SendServerMessage("Failed to place bet: " + err.Error())
 		return
@@ -116,35 +126,33 @@ func slotsDoSpin(client *Client, bet int64) {
 	cs.mu.Lock()
 	cs.slotsStats.TotalSpins++
 
-	var payout int64
+	var bal int64
 	var msg string
 
 	if mult == -1 {
 		// Jackpot!
 		pool := client.Area().CasinoJackpotPool()
-		payout = pool + bet // win the pool plus the bet back
+		payout := pool + bet // win the pool plus the bet back
 		cs.slotsStats.TotalPayout += payout
 		cs.slotsStats.Jackpots++
 		cs.mu.Unlock()
 
 		client.Area().ResetCasinoJackpotPool()
-		db.AddChips(client.Ipid(), payout) //nolint:errcheck
-		bal, _ := db.GetChipBalance(client.Ipid())
+		bal, _ = db.AddChips(client.Ipid(), payout)
 		msg = fmt.Sprintf("[ %s | %s | %s ] %s\nJACKPOT! You won the pool of %d chips! Balance: %d",
 			s1, s2, s3, desc, payout, bal)
-		sendAreaServerMessage(client.Area(),
+		sendAreaGamblingMessage(client.Area(),
 			fmt.Sprintf("🎰 JACKPOT! %s hit the jackpot for %d chips!", client.OOCName(), payout))
 	} else if mult > 0 {
-		payout = int64(float64(bet) * mult)
+		payout := int64(float64(bet) * mult)
 		cs.slotsStats.TotalPayout += payout
 		cs.mu.Unlock()
 
-		db.AddChips(client.Ipid(), payout) //nolint:errcheck
-		bal, _ := db.GetChipBalance(client.Ipid())
+		bal, _ = db.AddChips(client.Ipid(), payout)
 		msg = fmt.Sprintf("[ %s | %s | %s ] %s\nPayout: %d chips. Balance: %d",
 			s1, s2, s3, desc, payout, bal)
 	} else {
-		// Loss: 5% of bet contributes to jackpot pool (integer truncation; zero for tiny bets is acceptable).
+		// Loss: 5% of bet contributes to jackpot pool.
 		if jackpotEnabled {
 			contrib := bet / 20 // 5%
 			cs.mu.Unlock()
@@ -154,7 +162,7 @@ func slotsDoSpin(client *Client, bet int64) {
 		} else {
 			cs.mu.Unlock()
 		}
-		bal, _ := db.GetChipBalance(client.Ipid())
+		bal = balAfterBet
 		msg = fmt.Sprintf("[ %s | %s | %s ] %s\nYou lost %d chips. Balance: %d",
 			s1, s2, s3, desc, bet, bal)
 	}
@@ -181,14 +189,19 @@ func cmdSlots(client *Client, args []string, _ string) {
 
 	switch args[0] {
 	case "max":
-		maxBet := int64(client.Area().CasinoMaxBet())
-		if maxBet <= 0 {
-			bal, _ := db.GetChipBalance(client.Ipid())
-			maxBet = bal
+		areaMax := int64(client.Area().CasinoMaxBet())
+		effectiveMax := areaMax
+		if effectiveMax <= 0 {
+			effectiveMax = globalDefaultMaxBet
 		}
-		if maxBet <= 0 {
+		bal, _ := db.GetChipBalance(client.Ipid())
+		if bal <= 0 {
 			client.SendServerMessage("You have no chips.")
 			return
+		}
+		maxBet := effectiveMax
+		if bal < maxBet {
+			maxBet = bal
 		}
 		slotsDoSpin(client, maxBet)
 

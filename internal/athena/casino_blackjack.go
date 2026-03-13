@@ -199,7 +199,7 @@ func bjResetTimer(table *BJTable) {
 			h := &p.Hands[p.ActiveHand]
 			if !h.Standing && !h.Busted {
 				h.Standing = true
-				sendAreaServerMessage(table.area, fmt.Sprintf("%s timed out and stands.", p.Client.OOCName()))
+				sendAreaGamblingMessage(table.area, fmt.Sprintf("%s timed out and stands.", p.Client.OOCName()))
 				bjAdvanceTurn(table)
 			}
 		}
@@ -232,7 +232,7 @@ func bjAdvanceTurn(table *BJTable) {
 				p.ActiveHand = i
 				p.Client.SendServerMessage(fmt.Sprintf("It's your turn! Your hand: %s. Dealer shows: %s",
 					handString(p.Hands[i]), table.dealer.Cards[0].String()))
-				sendAreaServerMessage(table.area, fmt.Sprintf("It's %s's turn.", p.Client.OOCName()))
+				sendAreaGamblingMessage(table.area, fmt.Sprintf("It's %s's turn.", p.Client.OOCName()))
 				bjResetTimer(table)
 				return
 			}
@@ -253,7 +253,7 @@ func bjStartDealerTurn(table *BJTable) {
 		table.timer = nil
 	}
 
-	sendAreaServerMessage(table.area, fmt.Sprintf("Dealer reveals: %s", handString(table.dealer)))
+	sendAreaGamblingMessage(table.area, fmt.Sprintf("Dealer reveals: %s", handString(table.dealer)))
 
 	// Only draw if at least one player hand is still alive.
 	anyActive := false
@@ -269,7 +269,7 @@ func bjStartDealerTurn(table *BJTable) {
 		for handTotal(table.dealer) < 17 {
 			c := table.drawCard()
 			table.dealer.Cards = append(table.dealer.Cards, c)
-			sendAreaServerMessage(table.area,
+			sendAreaGamblingMessage(table.area,
 				fmt.Sprintf("Dealer draws %s → %s", c.String(), handString(table.dealer)))
 		}
 	}
@@ -344,7 +344,7 @@ func bjResolveRound(table *BJTable) {
 		}
 	}
 
-	sendAreaServerMessage(table.area, fmt.Sprintf("Round over! Dealer: %s", handString(table.dealer)))
+	sendAreaGamblingMessage(table.area, fmt.Sprintf("Round over! Dealer: %s", handString(table.dealer)))
 
 	a := table.area
 	go func() {
@@ -402,12 +402,12 @@ func bjHandleDisconnect(table *BJTable, client *Client) {
 	}
 
 	if isTurn {
-		sendAreaServerMessage(table.area, fmt.Sprintf("%s disconnected and auto-stands.", client.OOCName()))
+		sendAreaGamblingMessage(table.area, fmt.Sprintf("%s disconnected and auto-stands.", client.OOCName()))
 		bjAdvanceTurn(table)
 	}
 
 	if len(table.players) == 0 && table.state != BJDone {
-		sendAreaServerMessage(table.area, "All players left; ending blackjack round.")
+		sendAreaGamblingMessage(table.area, "All players left; ending blackjack round.")
 		bjStartDealerTurn(table)
 	}
 }
@@ -455,7 +455,7 @@ func bjJoin(client *Client) {
 		Client: client,
 		Hands:  []BJHand{{}},
 	})
-	sendAreaServerMessage(table.area,
+	sendAreaGamblingMessage(table.area,
 		fmt.Sprintf("%s joined the blackjack table. (%d/6 players)", client.OOCName(), len(table.players)))
 	client.SendServerMessage("Joined the blackjack table. Use /bj bet <amount> to place your bet, then /bj deal to start.")
 }
@@ -500,7 +500,7 @@ func bjBet(client *Client, args []string) {
 	}
 	p.Hands[0].Bet = amount
 	client.SendServerMessage(fmt.Sprintf("Bet set to %d chips.", amount))
-	sendAreaServerMessage(table.area, fmt.Sprintf("%s placed a bet.", client.OOCName()))
+	sendAreaGamblingMessage(table.area, fmt.Sprintf("%s placed a bet.", client.OOCName()))
 }
 
 func bjDeal(client *Client) {
@@ -554,13 +554,13 @@ func bjDeal(client *Client) {
 	table.state = BJDealing
 	table.turnIdx = -1
 
-	sendAreaServerMessage(table.area,
+	sendAreaGamblingMessage(table.area,
 		fmt.Sprintf("Cards dealt! Dealer shows: %s", table.dealer.Cards[0].String()))
 	for _, p := range active {
 		p.Client.SendServerMessage(fmt.Sprintf("Your hand: %s", handString(p.Hands[0])))
 	}
 	if table.dealer.Cards[0].Value == 1 {
-		sendAreaServerMessage(table.area,
+		sendAreaGamblingMessage(table.area,
 			"Dealer shows an Ace — use /bj insurance to place an insurance side-bet before your turn ends.")
 	}
 
@@ -601,13 +601,13 @@ func bjHit(client *Client) {
 	h.Cards = append(h.Cards, card)
 	total := handTotal(*h)
 	client.SendServerMessage(fmt.Sprintf("You drew %s. Hand: %s", card.String(), handString(*h)))
-	sendAreaServerMessage(table.area, fmt.Sprintf("%s hits.", client.OOCName()))
+	sendAreaGamblingMessage(table.area, fmt.Sprintf("%s hits.", client.OOCName()))
 
 	switch {
 	case total > 21:
 		h.Busted = true
 		client.SendServerMessage("Bust!")
-		sendAreaServerMessage(table.area, fmt.Sprintf("%s busts!", client.OOCName()))
+		sendAreaGamblingMessage(table.area, fmt.Sprintf("%s busts!", client.OOCName()))
 		bjAdvanceTurn(table)
 	case total == 21:
 		h.Standing = true
@@ -651,7 +651,7 @@ func bjStand(client *Client) {
 
 	h.Standing = true
 	client.SendServerMessage(fmt.Sprintf("You stand on %s.", handString(*h)))
-	sendAreaServerMessage(table.area, fmt.Sprintf("%s stands.", client.OOCName()))
+	sendAreaGamblingMessage(table.area, fmt.Sprintf("%s stands.", client.OOCName()))
 	bjAdvanceTurn(table)
 }
 
@@ -705,7 +705,7 @@ func bjDouble(client *Client) {
 	card := table.drawCard()
 	h.Cards = append(h.Cards, card)
 	client.SendServerMessage(fmt.Sprintf("Doubled down! Drew %s. Hand: %s", card.String(), handString(*h)))
-	sendAreaServerMessage(table.area, fmt.Sprintf("%s doubles down.", client.OOCName()))
+	sendAreaGamblingMessage(table.area, fmt.Sprintf("%s doubles down.", client.OOCName()))
 
 	if handTotal(*h) > 21 {
 		h.Busted = true
@@ -781,7 +781,7 @@ func bjSplit(client *Client) {
 
 	client.SendServerMessage(fmt.Sprintf("Split! Hand 1: %s | Hand 2: %s",
 		handString(p.Hands[0]), handString(p.Hands[1])))
-	sendAreaServerMessage(table.area, fmt.Sprintf("%s splits their hand.", client.OOCName()))
+	sendAreaGamblingMessage(table.area, fmt.Sprintf("%s splits their hand.", client.OOCName()))
 	bjResetTimer(table)
 }
 
@@ -930,7 +930,7 @@ func bjLeave(client *Client) {
 	}
 
 	isEmpty := len(table.players) == 0
-	sendAreaServerMessage(table.area, fmt.Sprintf("%s left the blackjack table.", client.OOCName()))
+	sendAreaGamblingMessage(table.area, fmt.Sprintf("%s left the blackjack table.", client.OOCName()))
 	client.SendServerMessage("You left the blackjack table.")
 
 	if isTurn {

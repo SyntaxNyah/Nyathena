@@ -120,7 +120,7 @@ func pokerResetTimer(table *PokerTable) {
 			p := table.players[table.turnIdx]
 			if !p.Folded && !p.AllIn {
 				p.Folded = true
-				sendAreaServerMessage(table.area,
+				sendAreaGamblingMessage(table.area,
 					fmt.Sprintf("%s timed out and folds.", p.Client.OOCName()))
 				pokerAdvanceTurn(table)
 			}
@@ -175,7 +175,7 @@ func pokerAdvanceTurn(table *PokerTable) {
 			p.Client.SendServerMessage(fmt.Sprintf(
 				"Your turn! Stack: %d | Pot: %d | Current bet: %d | Your bet: %d",
 				p.Chips, table.pot, table.currentBet, p.Bet))
-			sendAreaServerMessage(table.area, fmt.Sprintf("It's %s's turn.", p.Client.OOCName()))
+			sendAreaGamblingMessage(table.area, fmt.Sprintf("It's %s's turn.", p.Client.OOCName()))
 			pokerResetTimer(table)
 			return
 		}
@@ -200,21 +200,21 @@ func pokerNextStreet(table *PokerTable) {
 		table.state = PokerFlop
 		c1, c2, c3 := table.drawCard(), table.drawCard(), table.drawCard()
 		table.community = append(table.community, c1, c2, c3)
-		sendAreaServerMessage(table.area,
+		sendAreaGamblingMessage(table.area,
 			fmt.Sprintf("*** FLOP: %s %s %s | Pot: %d ***",
 				c1.String(), c2.String(), c3.String(), table.pot))
 	case PokerFlop:
 		table.state = PokerTurn
 		c := table.drawCard()
 		table.community = append(table.community, c)
-		sendAreaServerMessage(table.area,
+		sendAreaGamblingMessage(table.area,
 			fmt.Sprintf("*** TURN: %s | Community: %s | Pot: %d ***",
 				c.String(), pokerCommunityStr(table), table.pot))
 	case PokerTurn:
 		table.state = PokerRiver
 		c := table.drawCard()
 		table.community = append(table.community, c)
-		sendAreaServerMessage(table.area,
+		sendAreaGamblingMessage(table.area,
 			fmt.Sprintf("*** RIVER: %s | Community: %s | Pot: %d ***",
 				c.String(), pokerCommunityStr(table), table.pot))
 	case PokerRiver:
@@ -234,7 +234,7 @@ func pokerNextStreet(table *PokerTable) {
 			p.Client.SendServerMessage(fmt.Sprintf(
 				"Your turn! Stack: %d | Pot: %d | Check or bet.",
 				p.Chips, table.pot))
-			sendAreaServerMessage(table.area, fmt.Sprintf("It's %s's turn.", p.Client.OOCName()))
+			sendAreaGamblingMessage(table.area, fmt.Sprintf("It's %s's turn.", p.Client.OOCName()))
 			pokerResetTimer(table)
 			return
 		}
@@ -277,7 +277,7 @@ func pokerShowdown(table *PokerTable) {
 			r.player.Client.OOCName(),
 			r.player.Hand[0].String(), r.player.Hand[1].String(), r.desc))
 	}
-	sendAreaServerMessage(table.area, "=== SHOWDOWN ===\n"+strings.Join(reveal, "\n"))
+	sendAreaGamblingMessage(table.area, "=== SHOWDOWN ===\n"+strings.Join(reveal, "\n"))
 
 	// Find winner(s).
 	best := results[0]
@@ -303,14 +303,14 @@ func pokerShowdown(table *PokerTable) {
 		db.AddChips(w.Client.Ipid(), split) //nolint:errcheck
 	}
 	if len(winners) == 1 {
-		sendAreaServerMessage(table.area,
+		sendAreaGamblingMessage(table.area,
 			fmt.Sprintf("%s wins the pot of %d chips! (%s)", winners[0].Client.OOCName(), table.pot, best.desc))
 	} else {
 		names := make([]string, len(winners))
 		for i, w := range winners {
 			names[i] = w.Client.OOCName()
 		}
-		sendAreaServerMessage(table.area,
+		sendAreaGamblingMessage(table.area,
 			fmt.Sprintf("Split pot (%d each): %s", split, strings.Join(names, ", ")))
 	}
 
@@ -331,7 +331,7 @@ func pokerAwardPot(table *PokerTable, winner *PokerPlayer) {
 	}
 	winner.Chips += table.pot
 	db.AddChips(winner.Client.Ipid(), table.pot) //nolint:errcheck
-	sendAreaServerMessage(table.area,
+	sendAreaGamblingMessage(table.area,
 		fmt.Sprintf("%s wins the pot of %d chips (all others folded).", winner.Client.OOCName(), table.pot))
 
 	a := table.area
@@ -379,7 +379,7 @@ func pokerHandleDisconnect(table *PokerTable, client *Client) {
 		table.turnIdx < len(table.players) && table.players[table.turnIdx] == p
 
 	if isTurn {
-		sendAreaServerMessage(table.area,
+		sendAreaGamblingMessage(table.area,
 			fmt.Sprintf("%s disconnected and auto-folds.", client.OOCName()))
 		pokerAdvanceTurn(table)
 	}
@@ -595,7 +595,7 @@ func pokerJoin(client *Client) {
 		Client: client,
 		Chips:  table.buyIn,
 	})
-	sendAreaServerMessage(table.area,
+	sendAreaGamblingMessage(table.area,
 		fmt.Sprintf("%s joined the poker table (buy-in: %d chips). (%d players)",
 			client.OOCName(), table.buyIn, len(table.players)))
 	client.SendServerMessage(fmt.Sprintf(
@@ -628,7 +628,7 @@ func pokerReady(client *Client) {
 	}
 
 	p.Ready = true
-	sendAreaServerMessage(table.area, fmt.Sprintf("%s is ready.", client.OOCName()))
+	sendAreaGamblingMessage(table.area, fmt.Sprintf("%s is ready.", client.OOCName()))
 
 	// Start if all seated players are ready and we have at least 2.
 	eligible := 0
@@ -709,7 +709,7 @@ func pokerStartHand(table *PokerTable) {
 	bb.Bet = bbAmt
 	table.pot += bbAmt
 
-	sendAreaServerMessage(table.area,
+	sendAreaGamblingMessage(table.area,
 		fmt.Sprintf("New hand! Dealer: %s | SB: %s (%d) | BB: %s (%d) | Pot: %d",
 			table.players[table.dealerIdx].Client.OOCName(),
 			sb.Client.OOCName(), sbAmt,
@@ -725,7 +725,7 @@ func pokerStartHand(table *PokerTable) {
 			p.Client.SendServerMessage(fmt.Sprintf(
 				"Your turn (pre-flop)! Stack: %d | Pot: %d | BB: %d | Your bet: %d",
 				p.Chips, table.pot, table.bigBlind, p.Bet))
-			sendAreaServerMessage(table.area, fmt.Sprintf("It's %s's turn.", p.Client.OOCName()))
+			sendAreaGamblingMessage(table.area, fmt.Sprintf("It's %s's turn.", p.Client.OOCName()))
 			pokerResetTimer(table)
 			return
 		}
@@ -786,7 +786,7 @@ func pokerCheck(client *Client) {
 			"Cannot check — there is a bet of %d to call. Use /poker call.", table.currentBet))
 		return
 	}
-	sendAreaServerMessage(table.area, fmt.Sprintf("%s checks.", client.OOCName()))
+	sendAreaGamblingMessage(table.area, fmt.Sprintf("%s checks.", client.OOCName()))
 	pokerAdvanceTurn(table)
 }
 
@@ -821,7 +821,7 @@ func pokerCall(client *Client) {
 	p.Chips -= callAmt
 	p.Bet += callAmt
 	table.pot += callAmt
-	sendAreaServerMessage(table.area, fmt.Sprintf("%s calls %d. Pot: %d", client.OOCName(), callAmt, table.pot))
+	sendAreaGamblingMessage(table.area, fmt.Sprintf("%s calls %d. Pot: %d", client.OOCName(), callAmt, table.pot))
 	pokerAdvanceTurn(table)
 }
 
@@ -883,7 +883,7 @@ func pokerBetOrRaise(client *Client, args []string, isRaise bool) {
 	if isRaise {
 		action = "raises to"
 	}
-	sendAreaServerMessage(table.area,
+	sendAreaGamblingMessage(table.area,
 		fmt.Sprintf("%s %s %d. Pot: %d", client.OOCName(), action, p.Bet, table.pot))
 	pokerAdvanceTurn(table)
 }
@@ -907,7 +907,7 @@ func pokerFold(client *Client) {
 	}
 	p := table.players[table.turnIdx]
 	p.Folded = true
-	sendAreaServerMessage(table.area, fmt.Sprintf("%s folds.", client.OOCName()))
+	sendAreaGamblingMessage(table.area, fmt.Sprintf("%s folds.", client.OOCName()))
 	pokerAdvanceTurn(table)
 }
 
@@ -943,7 +943,7 @@ func pokerAllIn(client *Client) {
 		table.currentBet = p.Bet
 		table.lastRaiser = table.turnIdx
 	}
-	sendAreaServerMessage(table.area,
+	sendAreaGamblingMessage(table.area,
 		fmt.Sprintf("%s goes ALL IN for %d! Pot: %d", client.OOCName(), p.Bet, table.pot))
 	pokerAdvanceTurn(table)
 }
@@ -1027,7 +1027,7 @@ func pokerLeave(client *Client) {
 	isTurn := table.state != PokerWaiting && table.state != PokerShowdown &&
 		table.turnIdx < len(table.players) && table.players[table.turnIdx] == p
 
-	sendAreaServerMessage(table.area, fmt.Sprintf("%s left the poker table.", client.OOCName()))
+	sendAreaGamblingMessage(table.area, fmt.Sprintf("%s left the poker table.", client.OOCName()))
 
 	if isTurn {
 		pokerAdvanceTurn(table)

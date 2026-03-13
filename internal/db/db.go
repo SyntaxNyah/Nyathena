@@ -51,6 +51,11 @@ var db *sql.DB
 // defaultChipBalance is the starting chip balance assigned to new players.
 const defaultChipBalance = 100
 
+// MaxChipBalance is the hard upper limit on any player's chip balance.
+// AddChips will silently clamp the result to this value, preventing runaway
+// inflation across all casino games.
+const MaxChipBalance = 10_000_000
+
 // Database version.
 // This should be incremented whenever changes are made to the DB that require existing databases to upgrade.
 const ver = 8
@@ -808,6 +813,7 @@ func GetChipBalance(ipid string) (int64, error) {
 
 // AddChips adds the given amount to an IPID's chip balance and returns the new balance.
 // The amount must be positive. EnsureChipBalance must be called first.
+// The resulting balance is capped at MaxChipBalance to prevent runaway inflation.
 func AddChips(ipid string, amount int64) (int64, error) {
 	if db == nil {
 		return 0, nil
@@ -817,8 +823,8 @@ func AddChips(ipid string, amount int64) (int64, error) {
 	}
 	var newBalance int64
 	err := db.QueryRow(
-		"UPDATE CHIPS SET BALANCE = BALANCE + ? WHERE IPID = ? RETURNING BALANCE",
-		amount, ipid).Scan(&newBalance)
+		"UPDATE CHIPS SET BALANCE = MIN(BALANCE + ?, ?) WHERE IPID = ? RETURNING BALANCE",
+		amount, MaxChipBalance, ipid).Scan(&newBalance)
 	if err != nil {
 		return 0, err
 	}
@@ -845,6 +851,37 @@ func SpendChips(ipid string, amount int64) (int64, error) {
 		return 0, err
 	}
 	return newBalance, nil
+}
+
+// GetChipBalancesByIPIDs returns a map of IPID → chip balance for all given IPIDs
+// in a single query.  IPIDs with no CHIPS row are absent from the result map.
+func GetChipBalancesByIPIDs(ipids []string) (map[string]int64, error) {
+	if db == nil || len(ipids) == 0 {
+		return map[string]int64{}, nil
+	}
+	placeholders := make([]string, len(ipids))
+	args := make([]any, len(ipids))
+	for i, id := range ipids {
+		placeholders[i] = "?"
+		args[i] = id
+	}
+	rows, err := db.Query(
+		"SELECT IPID, BALANCE FROM CHIPS WHERE IPID IN ("+strings.Join(placeholders, ",")+")",
+		args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	m := make(map[string]int64, len(ipids))
+	for rows.Next() {
+		var ipid string
+		var balance int64
+		if err := rows.Scan(&ipid, &balance); err != nil {
+			return m, err
+		}
+		m[ipid] = balance
+	}
+	return m, rows.Err()
 }
 
 // GetUsernamesByIPIDs returns a map of IPID → username for all given IPIDs that
