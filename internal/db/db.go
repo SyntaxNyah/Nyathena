@@ -670,6 +670,28 @@ func AddPlaytime(ipid string, seconds int64) error {
 	return err
 }
 
+// AddPlaytimeReturning atomically increments the PLAYTIME counter for an IPID by
+// the given number of seconds and returns the new accumulated total.
+// Using a single RETURNING statement avoids the read-then-write race that arises
+// when two sessions for the same IPID disconnect simultaneously.
+// Returns (0, nil) when the database is not initialised.
+func AddPlaytimeReturning(ipid string, seconds int64) (int64, error) {
+	if db == nil {
+		return 0, nil
+	}
+	row := db.QueryRow(
+		"UPDATE KNOWN_IPS SET PLAYTIME = PLAYTIME + ? WHERE IPID = ? RETURNING PLAYTIME",
+		seconds, ipid)
+	var newTotal int64
+	if err := row.Scan(&newTotal); err != nil {
+		if err == sql.ErrNoRows {
+			return 0, nil
+		}
+		return 0, err
+	}
+	return newTotal, nil
+}
+
 // PruneShortPlaytimeIPs deletes all KNOWN_IPS rows whose accumulated PLAYTIME is
 // less than minSeconds. IPs that have played for at least minSeconds are retained.
 // It returns the number of rows removed.

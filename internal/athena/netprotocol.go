@@ -174,12 +174,17 @@ func pktReqDone(client *Client, _ *packet.Packet) {
 		}()
 		if !client.Authenticated() {
 			client.SendServerMessage(
-				"🎰 This server has an account system!\n\n" +
-					"Create a free account to track your 💰 Nyathena Chip balance,\n" +
-					"⏱ playtime, and 🏆 casino leaderboard standings.\n\n" +
-					"  /register <username> <password>  — create your account\n" +
-					"  /login <username> <password>     — sign in if you have one\n\n" +
-					"(Username: 3–20 chars, letters/numbers/underscore; Password: 6+ chars)")
+				"🎰 Welcome! This server has a Casino & Accounts system.\n\n" +
+					"💡 Why make a free account?\n" +
+					"  • Your 💰 chip balance is saved to your account name — not just\n" +
+					"    your IP. Reconnect from any device or network and keep your balance.\n" +
+					"  • Earn ⏱ playtime badges and climb the 🏆 Casino Leaderboard\n" +
+					"    under your own name instead of being anonymous.\n" +
+					"  • Without an account your chips are tied to this connection only —\n" +
+					"    they may be lost if your IP changes.\n\n" +
+					"  /register <username> <password>  — create your free account now\n" +
+					"  /login <username> <password>     — sign in if you already have one\n\n" +
+					"(Username: 3–20 chars, letters/numbers/underscore · Password: 6+ chars)")
 		}
 	}
 

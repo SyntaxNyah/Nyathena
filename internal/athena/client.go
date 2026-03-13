@@ -329,16 +329,19 @@ func (client *Client) clientCleanup() {
 		logger.LogInfof("Client (IPID:%v UID:%v) left the server", client.ipid, client.Uid())
 
 		// Accumulate session playtime and award 1 chip per newly-completed hour.
+		// AddPlaytimeReturning is a single atomic SQL operation, so concurrent
+		// disconnects for the same IPID (multiclient) cannot race on the boundary.
 		if connAt := client.ConnectedAt(); !connAt.IsZero() {
 			sessionSecs := int64(time.Since(connAt).Seconds())
 			if sessionSecs > 0 {
 				ipid := client.Ipid()
 				go func() {
-					oldPt, _ := db.GetPlaytime(ipid)
-					if err := db.AddPlaytime(ipid, sessionSecs); err != nil {
+					newPt, err := db.AddPlaytimeReturning(ipid, sessionSecs)
+					if err != nil {
 						logger.LogErrorf("Failed to add playtime for %v: %v", ipid, err)
+						return
 					}
-					newPt := oldPt + sessionSecs
+					oldPt := newPt - sessionSecs
 					chipsEarned := (newPt / 3600) - (oldPt / 3600)
 					if chipsEarned > 0 && config.EnableCasino {
 						if err := db.EnsureChipBalance(ipid); err == nil {
