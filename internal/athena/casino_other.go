@@ -44,8 +44,9 @@ func cmdChips(client *Client, _ []string, _ string) {
 // /croulette — European Roulette (37 pockets, 0-36)
 // ============================================================
 
-// rouletteRedNumbers contains the 18 red pockets on a European wheel.
-var rouletteRedNumbers = map[int]bool{
+// rouletteRedNumbers is a fixed-size array marking the 18 red pockets (indices 0-36).
+// Array indexing is faster than a map lookup and avoids heap allocation.
+var rouletteRedNumbers = [37]bool{
 	1: true, 3: true, 5: true, 7: true, 9: true, 12: true,
 	14: true, 16: true, 18: true, 19: true, 21: true, 23: true,
 	25: true, 27: true, 30: true, 32: true, 34: true, 36: true,
@@ -100,7 +101,7 @@ func cmdCasinoRoulette(client *Client, args []string, _ string) {
 		client.SendServerMessage(reason)
 		return
 	}
-	_, err = db.SpendChips(client.Ipid(), amount)
+	balAfterBet, err := db.SpendChips(client.Ipid(), amount)
 	if err != nil {
 		client.SendServerMessage("Failed to place bet: " + err.Error())
 		return
@@ -145,17 +146,17 @@ func cmdCasinoRoulette(client *Client, args []string, _ string) {
 		}
 	}
 
-	var payout int64
+	var bal int64
 	var result string
 	if win {
-		payout = amount * payoutMult
-		db.AddChips(client.Ipid(), payout) //nolint:errcheck
+		payout := amount * payoutMult
+		bal, _ = db.AddChips(client.Ipid(), payout)
 		result = fmt.Sprintf("WIN! +%d chips", payout-amount)
 	} else {
+		bal = balAfterBet
 		result = fmt.Sprintf("LOSE. -%d chips", amount)
 	}
 
-	bal, _ := db.GetChipBalance(client.Ipid())
 	sendAreaGamblingMessage(client.Area(),
 		fmt.Sprintf("🎡 Roulette: %s spun the wheel — %s! %s", client.OOCName(), spinColour, result))
 	client.SendServerMessage(fmt.Sprintf(
@@ -206,7 +207,7 @@ func cmdBaccarat(client *Client, args []string, _ string) {
 		client.SendServerMessage(reason)
 		return
 	}
-	_, err = db.SpendChips(client.Ipid(), amount)
+	balAfterBet, err := db.SpendChips(client.Ipid(), amount)
 	if err != nil {
 		client.SendServerMessage("Failed to place bet: " + err.Error())
 		return
@@ -281,6 +282,7 @@ func cmdBaccarat(client *Client, args []string, _ string) {
 		return strings.Join(parts, " ")
 	}
 
+	var bal int64
 	var payout int64
 	var result string
 	switch {
@@ -295,13 +297,12 @@ func cmdBaccarat(client *Client, args []string, _ string) {
 		case "tie":
 			payout = amount * 9 // 8:1
 		}
-		db.AddChips(client.Ipid(), payout) //nolint:errcheck
+		bal, _ = db.AddChips(client.Ipid(), payout)
 		result = fmt.Sprintf("WIN! +%d chips", payout-amount)
 	default:
+		bal = balAfterBet
 		result = fmt.Sprintf("LOSE. -%d chips", amount)
 	}
-
-	bal, _ := db.GetChipBalance(client.Ipid())
 	sendAreaGamblingMessage(client.Area(),
 		fmt.Sprintf("🃏 Baccarat: Player %d vs Banker %d — %s wins! %s bet %s and %s.",
 			pVal, bVal, winner, client.OOCName(), betSide, result))
@@ -336,7 +337,7 @@ func cmdCraps(client *Client, args []string, _ string) {
 		client.SendServerMessage(reason)
 		return
 	}
-	_, err = db.SpendChips(client.Ipid(), amount)
+	balAfterBet, err := db.SpendChips(client.Ipid(), amount)
 	if err != nil {
 		client.SendServerMessage("Failed to place bet: " + err.Error())
 		return
@@ -376,17 +377,17 @@ func cmdCraps(client *Client, args []string, _ string) {
 	}
 
 	win := (betType == "pass") == passWin
-	var payout int64
+	var bal int64
 	var result string
 	if win {
-		payout = amount * 2
-		db.AddChips(client.Ipid(), payout) //nolint:errcheck
+		payout := amount * 2
+		bal, _ = db.AddChips(client.Ipid(), payout)
 		result = fmt.Sprintf("WIN! +%d chips", amount)
 	} else {
+		bal = balAfterBet
 		result = fmt.Sprintf("LOSE. -%d chips", amount)
 	}
 
-	bal, _ := db.GetChipBalance(client.Ipid())
 	outcome := "pass"
 	if !passWin {
 		outcome = "don't-pass"
@@ -448,8 +449,7 @@ func cmdCrash(client *Client, args []string, _ string) {
 			client.SendServerMessage(reason)
 			return
 		}
-		_, err = db.SpendChips(client.Ipid(), amount)
-		if err != nil {
+		if _, err = db.SpendChips(client.Ipid(), amount); err != nil {
 			client.SendServerMessage("Failed to place bet: " + err.Error())
 			return
 		}
@@ -477,11 +477,10 @@ func cmdCrash(client *Client, args []string, _ string) {
 		}
 		state := val.(*CrashState)
 		state.Active = false
+		playerCrashStates.Delete(client.Uid())
 
 		elapsed := time.Since(state.StartTime).Seconds()
 		current := 1.0 + elapsed*crashGrowthPerSec
-
-		bal, _ := db.GetChipBalance(client.Ipid())
 
 		if current >= state.CrashAt {
 			// Already crashed.
@@ -489,14 +488,13 @@ func cmdCrash(client *Client, args []string, _ string) {
 				fmt.Sprintf("💥 Crash! %s's game already crashed at %.2fx (too late to cash out).",
 					client.OOCName(), state.CrashAt))
 			client.SendServerMessage(fmt.Sprintf(
-				"💥 Too late! The game crashed at %.2fx. You lost %d chips. Balance: %d",
-				state.CrashAt, state.Bet, bal))
+				"💥 Too late! The game crashed at %.2fx. You lost %d chips.",
+				state.CrashAt, state.Bet))
 			return
 		}
 
 		payout := int64(float64(state.Bet) * current)
-		db.AddChips(client.Ipid(), payout) //nolint:errcheck
-		bal, _ = db.GetChipBalance(client.Ipid())
+		bal, _ := db.AddChips(client.Ipid(), payout)
 		sendAreaGamblingMessage(client.Area(),
 			fmt.Sprintf("🚀 Crash: %s cashed out at %.2fx for %d chips!",
 				client.OOCName(), current, payout))
@@ -581,8 +579,7 @@ func cmdMines(client *Client, args []string, _ string) {
 			client.SendServerMessage(reason)
 			return
 		}
-		_, err = db.SpendChips(client.Ipid(), bet)
-		if err != nil {
+		if _, err = db.SpendChips(client.Ipid(), bet); err != nil {
 			client.SendServerMessage("Failed to place bet: " + err.Error())
 			return
 		}
@@ -631,10 +628,10 @@ func cmdMines(client *Client, args []string, _ string) {
 		if state.Grid[idx] {
 			// Hit a mine!
 			state.Active = false
-			bal, _ := db.GetChipBalance(client.Ipid())
+			playerMinesStates.Delete(client.Uid())
 			client.SendServerMessage(fmt.Sprintf(
-				"💥 BOOM! Cell %d was a mine! You lose %d chips. Balance: %d",
-				cell, state.Bet, bal))
+				"💥 BOOM! Cell %d was a mine! You lose %d chips.",
+				cell, state.Bet))
 			sendAreaGamblingMessage(client.Area(),
 				fmt.Sprintf("💣 %s hit a mine in Mines!", client.OOCName()))
 			return
@@ -661,11 +658,11 @@ func cmdMines(client *Client, args []string, _ string) {
 			return
 		}
 		state.Active = false
+		playerMinesStates.Delete(client.Uid())
 
 		mult := minesMultiplier(state.SafePicks, state.MineCount)
 		payout := int64(float64(state.Bet) * mult)
-		db.AddChips(client.Ipid(), payout) //nolint:errcheck
-		bal, _ := db.GetChipBalance(client.Ipid())
+		bal, _ := db.AddChips(client.Ipid(), payout)
 		sendAreaGamblingMessage(client.Area(),
 			fmt.Sprintf("💣 %s cashed out Mines for %d chips (%.2fx)!", client.OOCName(), payout, mult))
 		client.SendServerMessage(fmt.Sprintf(
@@ -680,9 +677,9 @@ func cmdMines(client *Client, args []string, _ string) {
 		}
 		state := val.(*MinesState)
 		state.Active = false
-		bal, _ := db.GetChipBalance(client.Ipid())
+		playerMinesStates.Delete(client.Uid())
 		client.SendServerMessage(fmt.Sprintf(
-			"Quit mines. You forfeited your bet of %d chips. Balance: %d", state.Bet, bal))
+			"Quit mines. You forfeited your bet of %d chips.", state.Bet))
 
 	default:
 		client.SendServerMessage("Usage: /mines start <mines> <bet> | /mines pick <n> | /mines cashout | /mines quit")
@@ -733,7 +730,7 @@ func cmdKeno(client *Client, args []string, _ string) {
 	}
 
 	picked := make([]int, 0, len(numStrs))
-	seen := map[int]bool{}
+	var seen [81]bool // indices 1-80; stack-allocated, avoids map overhead
 	for _, s := range numStrs {
 		n, err := strconv.Atoi(s)
 		if err != nil || n < 1 || n > 80 {
@@ -753,7 +750,7 @@ func cmdKeno(client *Client, args []string, _ string) {
 		client.SendServerMessage(reason)
 		return
 	}
-	_, err = db.SpendChips(client.Ipid(), bet)
+	balAfterBet, err := db.SpendChips(client.Ipid(), bet)
 	if err != nil {
 		client.SendServerMessage("Failed to place bet: " + err.Error())
 		return
@@ -765,7 +762,8 @@ func cmdKeno(client *Client, args []string, _ string) {
 	for i := 0; i < 20; i++ {
 		drawn[i] = pool[i] + 1
 	}
-	drawnSet := map[int]bool{}
+	// Use a fixed-size array instead of a map to mark drawn numbers.
+	var drawnSet [81]bool
 	for _, n := range drawn {
 		drawnSet[n] = true
 	}
@@ -784,13 +782,14 @@ func cmdKeno(client *Client, args []string, _ string) {
 		mult = payTable[matches]
 	}
 
-	var payout int64
+	var bal int64
 	var result string
 	if mult > 0 {
-		payout = bet * int64(mult)
-		db.AddChips(client.Ipid(), payout) //nolint:errcheck
+		payout := bet * int64(mult)
+		bal, _ = db.AddChips(client.Ipid(), payout)
 		result = fmt.Sprintf("WIN! %dx = +%d chips", mult, payout-bet)
 	} else {
+		bal = balAfterBet
 		result = fmt.Sprintf("LOSE. -%d chips", bet)
 	}
 
@@ -803,7 +802,6 @@ func cmdKeno(client *Client, args []string, _ string) {
 		pickedStrs[i] = strconv.Itoa(n)
 	}
 
-	bal, _ := db.GetChipBalance(client.Ipid())
 	client.SendServerMessage(fmt.Sprintf(
 		"🎱 Keno | Picked: %s\nDrawn: %s\nMatches: %d/%d | %s | Balance: %d",
 		strings.Join(pickedStrs, " "), strings.Join(drawnStrs, " "), matches, len(picked), result, bal))
@@ -850,7 +848,7 @@ func cmdWheel(client *Client, args []string, _ string) {
 		client.SendServerMessage(reason)
 		return
 	}
-	_, err = db.SpendChips(client.Ipid(), bet)
+	balAfterBet, err := db.SpendChips(client.Ipid(), bet)
 	if err != nil {
 		client.SendServerMessage("Failed to place bet: " + err.Error())
 		return
@@ -866,15 +864,16 @@ func cmdWheel(client *Client, args []string, _ string) {
 	}
 
 	payout := int64(float64(bet) * seg.Mult)
+	var bal int64
 	var result string
 	if payout > 0 {
-		db.AddChips(client.Ipid(), payout) //nolint:errcheck
+		bal, _ = db.AddChips(client.Ipid(), payout)
 		result = fmt.Sprintf("WIN %s = +%d chips", seg.Label, payout-bet)
 	} else {
+		bal = balAfterBet
 		result = fmt.Sprintf("Miss (0x) — lost %d chips", bet)
 	}
 
-	bal, _ := db.GetChipBalance(client.Ipid())
 	sendAreaGamblingMessage(client.Area(),
 		fmt.Sprintf("🎡 Wheel: %s spun and got %s! %s", client.OOCName(), seg.Label, result))
 	client.SendServerMessage(fmt.Sprintf(

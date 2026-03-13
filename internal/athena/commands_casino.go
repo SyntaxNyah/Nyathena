@@ -261,28 +261,21 @@ func chipsTopArea(client *Client, args []string) {
 		return
 	}
 
-	// Batch-resolve IPIDs to account names.
+	// Batch-resolve account names and chip balances in two queries instead of N+1.
 	names, _ := db.GetUsernamesByIPIDs(ipids)
+	balances, _ := db.GetChipBalancesByIPIDs(ipids)
 
-	var entries []entry
+	entries := make([]entry, 0, len(clientsInArea))
 	for _, c := range clientsInArea {
-		bal, err := db.GetChipBalance(c.Ipid())
-		if err != nil {
-			continue
-		}
 		displayName := c.OOCName()
 		if u := names[c.Ipid()]; u != "" {
 			displayName = u
 		}
-		entries = append(entries, entry{name: displayName, balance: bal})
+		entries = append(entries, entry{name: displayName, balance: balances[c.Ipid()]})
 	}
 	sort.Slice(entries, func(i, j int) bool { return entries[i].balance > entries[j].balance })
 	if len(entries) > n {
 		entries = entries[:n]
-	}
-	if len(entries) == 0 {
-		client.SendServerMessage("No chip data for players in this area.")
-		return
 	}
 	var sb strings.Builder
 	sb.WriteString(fmt.Sprintf("\n🏆 Area Chip Leaderboard — %v (Top %d)\n", myArea.Name(), n))
@@ -312,7 +305,8 @@ func chipsGive(client *Client, args []string) {
 		return
 	}
 
-	// Check and record the cooldown atomically to prevent race conditions.
+	// Check and record the cooldown atomically.  Lazily delete entries whose
+	// cooldown has already expired to keep the map bounded.
 	chipsGiveMu.Lock()
 	if last, ok := chipsGiveLastTime[client.Ipid()]; ok {
 		if elapsed := time.Since(last); elapsed < chipsGiveCooldown {
@@ -321,6 +315,8 @@ func chipsGive(client *Client, args []string) {
 			client.SendServerMessage(fmt.Sprintf("You must wait %v before giving chips again.", remaining))
 			return
 		}
+		// Cooldown has passed — remove the stale entry now.
+		delete(chipsGiveLastTime, client.Ipid())
 	}
 	chipsGiveLastTime[client.Ipid()] = time.Now()
 	chipsGiveMu.Unlock()
@@ -335,13 +331,12 @@ func chipsGive(client *Client, args []string) {
 		return
 	}
 
-	_, err = db.SpendChips(client.Ipid(), amount)
+	senderBal, err := db.SpendChips(client.Ipid(), amount)
 	if err != nil {
 		client.SendServerMessage(fmt.Sprintf("Transfer failed: %v", err))
 		return
 	}
-	_, err = db.AddChips(target.Ipid(), amount)
-	if err != nil {
+	if _, err = db.AddChips(target.Ipid(), amount); err != nil {
 		// Attempt to refund the sender; log any failure so admins can investigate.
 		if _, refundErr := db.AddChips(client.Ipid(), amount); refundErr != nil {
 			logger.LogErrorf("chips give: deducted %d chips from %v but credit to %v failed AND refund failed: %v",
@@ -351,8 +346,7 @@ func chipsGive(client *Client, args []string) {
 		return
 	}
 
-	bal, _ := db.GetChipBalance(client.Ipid())
-	client.SendServerMessage(fmt.Sprintf("Sent %d chips to %v. Your balance: %d chips.", amount, target.OOCName(), bal))
+	client.SendServerMessage(fmt.Sprintf("Sent %d chips to %v. Your balance: %d chips.", amount, target.OOCName(), senderBal))
 	target.SendServerMessage(fmt.Sprintf("You received %d Nyathena Chips from %v!", amount, client.OOCName()))
 }
 

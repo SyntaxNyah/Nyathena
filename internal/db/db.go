@@ -853,6 +853,37 @@ func SpendChips(ipid string, amount int64) (int64, error) {
 	return newBalance, nil
 }
 
+// GetChipBalancesByIPIDs returns a map of IPID → chip balance for all given IPIDs
+// in a single query.  IPIDs with no CHIPS row are absent from the result map.
+func GetChipBalancesByIPIDs(ipids []string) (map[string]int64, error) {
+	if db == nil || len(ipids) == 0 {
+		return map[string]int64{}, nil
+	}
+	placeholders := make([]string, len(ipids))
+	args := make([]any, len(ipids))
+	for i, id := range ipids {
+		placeholders[i] = "?"
+		args[i] = id
+	}
+	rows, err := db.Query(
+		"SELECT IPID, BALANCE FROM CHIPS WHERE IPID IN ("+strings.Join(placeholders, ",")+")",
+		args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	m := make(map[string]int64, len(ipids))
+	for rows.Next() {
+		var ipid string
+		var balance int64
+		if err := rows.Scan(&ipid, &balance); err != nil {
+			return m, err
+		}
+		m[ipid] = balance
+	}
+	return m, rows.Err()
+}
+
 // GetUsernamesByIPIDs returns a map of IPID → username for all given IPIDs that
 // have a linked account. Unlisted IPIDs are simply absent from the result map.
 // This batches N individual GetUsernameByIPID calls into a single query.
