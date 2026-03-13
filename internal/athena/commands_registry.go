@@ -1474,7 +1474,11 @@ func ParseCommand(client *Client, command string, args []string) {
 			header = "💡 Player Accounts (optional):\n" +
 				"  • Already have an account? Use /login <username> <password> — no new account needed.\n" +
 				"  • New here? /register <username> <password> creates a free account that tracks\n" +
-				"    chips, playtime, and casino standings. No extra permissions are granted.\n\n"
+				"    chips, playtime, and casino standings. No extra permissions are granted.\n\n" +
+				"🎰 Casino Tips:\n" +
+				"  • /chips                        — check your chip balance.\n" +
+				"  • /chips give <uid> <amount>    — send chips to another player.\n" +
+				"  • /chips top                    — see the global chip leaderboard.\n\n"
 		}
 
 		client.SendServerMessage(header + "Recognized commands:\n" + strings.Join(s, "\n") + "\n\nTo view detailed usage on a command, do /<command> -h")

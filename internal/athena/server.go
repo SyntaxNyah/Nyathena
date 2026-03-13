@@ -47,7 +47,10 @@ import (
 	"nhooyr.io/websocket"
 )
 
-const version = "v1.0.2"
+const (
+	version         = "v1.0.2"
+	secondsPerHour  = int64(3600) // seconds in one hour; used for playtime-to-chips conversions
+)
 
 var (
 	config                                 *settings.Config
@@ -431,6 +434,9 @@ func NewServer(conf *settings.Config) (*Server, error) {
 	initCommands()
 	initAutoMod(conf)
 	go startConnTrackerCleanup()
+	if conf.EnableCasino {
+		go startHourlyChipAward()
+	}
 	return s, nil
 }
 
@@ -1384,4 +1390,52 @@ func estimateJoinedLen(ss []string) int {
 		n += len(s)
 	}
 	return n
+}
+
+// hourlyChipMsg is the notification sent when a player earns exactly 1 chip from the
+// hourly ticker.  Defined as a constant to avoid a fmt.Sprintf allocation every tick.
+const hourlyChipMsg = "💰 You earned 1 chip for being online! Balance updated."
+
+// startHourlyChipAward runs in the background and awards 1 chip to every connected
+// player for each hour of online time they have accumulated during the current session.
+// This ensures players receive their hourly chip without needing to disconnect first.
+// Awards are tracked per-client in sessionChipsAwarded so the disconnect handler does
+// not double-count chips that have already been granted.
+//
+// EnsureChipBalance is intentionally not called here: chip rows are seeded at connect
+// time (pktReqDone), so by the time a player has been online for a full hour the row
+// is guaranteed to exist.
+func startHourlyChipAward() {
+	ticker := time.NewTicker(time.Hour)
+	defer ticker.Stop()
+	for range ticker.C {
+		if config == nil || !config.EnableCasino {
+			continue
+		}
+		// Capture now once so all per-client calculations use the same instant,
+		// avoiding N repeated time.Now() syscalls inside the loop.
+		now := time.Now()
+		for client := range clients.GetAllClients() {
+			connAt := client.ConnectedAt()
+			if connAt.IsZero() {
+				continue
+			}
+			sessionHours := int64(now.Sub(connAt).Seconds()) / secondsPerHour
+			toAward := sessionHours - client.SessionChipsAwarded()
+			if toAward <= 0 {
+				continue
+			}
+			ipid := client.Ipid()
+			if _, err := db.AddChips(ipid, toAward); err != nil {
+				logger.LogErrorf("startHourlyChipAward: AddChips failed for %v: %v", ipid, err)
+				continue
+			}
+			client.AddSessionChipsAwarded(toAward)
+			msg := hourlyChipMsg
+			if toAward != 1 {
+				msg = fmt.Sprintf("💰 You earned %d chips for being online! Balance updated.", toAward)
+			}
+			client.SendServerMessage(msg)
+		}
+	}
 }

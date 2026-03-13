@@ -200,9 +200,10 @@ type Client struct {
 	dancing            bool        // Whether the client has dance mode active (flips sprite every message)
 	danceFlipped       bool        // Current flip state for dance mode; toggles each IC message
 	gambleHide         bool        // Whether the client has opted out of seeing gambling broadcast messages
-	pendingRegUser     string // Username from a pending /register that is awaiting captcha confirmation
-	pendingRegPass     []byte // bcrypt hash from a pending /register that is awaiting captcha confirmation
-	pendingRegCaptcha  string // Expected captcha token for the pending registration
+	pendingRegUser     string      // Username from a pending /register that is awaiting captcha confirmation
+	pendingRegPass     []byte      // bcrypt hash from a pending /register that is awaiting captcha confirmation
+	pendingRegCaptcha  string      // Expected captcha token for the pending registration
+	sessionChipsAwarded int64      // Chips already awarded mid-session (hourly ticker); subtracted at disconnect to avoid double-counting
 }
 
 // NewClient returns a new client.
@@ -339,6 +340,7 @@ func (client *Client) clientCleanup() {
 			sessionSecs := int64(time.Since(connAt).Seconds())
 			if sessionSecs > 0 {
 				ipid := client.Ipid()
+				alreadyAwarded := client.SessionChipsAwarded()
 				go func() {
 					newPt, err := db.AddPlaytimeReturning(ipid, sessionSecs)
 					if err != nil {
@@ -346,7 +348,7 @@ func (client *Client) clientCleanup() {
 						return
 					}
 					oldPt := newPt - sessionSecs
-					chipsEarned := (newPt / 3600) - (oldPt / 3600)
+					chipsEarned := (newPt/secondsPerHour) - (oldPt/secondsPerHour) - alreadyAwarded
 					if chipsEarned > 0 && config.EnableCasino {
 						if err := db.EnsureChipBalance(ipid); err == nil {
 							if _, err := db.AddChips(ipid, chipsEarned); err != nil {
@@ -1794,4 +1796,21 @@ func (client *Client) SetConnectedAt(t time.Time) {
 	client.mu.Lock()
 	client.connectedAt = t
 	client.mu.Unlock()
+}
+
+// SessionChipsAwarded returns the number of chips already awarded to this client
+// by the hourly mid-session ticker during the current connection.
+func (client *Client) SessionChipsAwarded() int64 {
+	client.mu.Lock()
+	defer client.mu.Unlock()
+	return client.sessionChipsAwarded
+}
+
+// AddSessionChipsAwarded increments the mid-session chip award counter and
+// returns the updated total.
+func (client *Client) AddSessionChipsAwarded(n int64) int64 {
+	client.mu.Lock()
+	defer client.mu.Unlock()
+	client.sessionChipsAwarded += n
+	return client.sessionChipsAwarded
 }
