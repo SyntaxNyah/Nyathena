@@ -348,11 +348,57 @@ func RegisterPlayerHashed(username string, hashedPassword []byte, ipid string) e
 
 // LinkIPIDToUser associates an IPID with a user account.
 // Called on every successful login so the leaderboard can show account names.
+// When the player's IPID has changed (e.g. their IP address changed), any
+// playtime accumulated under the old IPID is merged into the new IPID so the
+// leaderboard continues to display the correct total under the player's account name.
 func LinkIPIDToUser(username, ipid string) error {
 	if db == nil {
 		return nil
 	}
-	_, err := db.Exec("UPDATE USERS SET IPID = ? WHERE USERNAME = ?", ipid, username)
+
+	// Retrieve the IPID currently stored for this account.
+	var oldIPID string
+	switch err := db.QueryRow("SELECT COALESCE(IPID, '') FROM USERS WHERE USERNAME = ?", username).Scan(&oldIPID); {
+	case err == sql.ErrNoRows:
+		// User not found — the UPDATE below will be a no-op.
+	case err != nil:
+		return err
+	}
+
+	// Update the USERS table with the new IPID.
+	if _, err := db.Exec("UPDATE USERS SET IPID = ? WHERE USERNAME = ?", ipid, username); err != nil {
+		return err
+	}
+
+	// Nothing more to do if the IPID hasn't changed or was previously unset.
+	if oldIPID == "" || oldIPID == ipid {
+		return nil
+	}
+
+	// Fetch the playtime accumulated under the old IPID.
+	var oldPlaytime int64
+	switch err := db.QueryRow("SELECT COALESCE(PLAYTIME, 0) FROM KNOWN_IPS WHERE IPID = ?", oldIPID).Scan(&oldPlaytime); {
+	case err == sql.ErrNoRows:
+		// No playtime recorded for old IPID — nothing to transfer.
+		return nil
+	case err != nil:
+		return err
+	}
+	if oldPlaytime == 0 {
+		return nil
+	}
+
+	// Merge old playtime into the new IPID. UPSERT ensures the row is created
+	// if it does not yet exist in KNOWN_IPS (defensive; in practice MarkIPKnown
+	// is called on every connection before /login can be issued).
+	if _, err := db.Exec(`
+		INSERT INTO KNOWN_IPS (IPID, FIRST_SEEN, LAST_SEEN, PLAYTIME)
+		VALUES (?, 0, 0, ?)
+		ON CONFLICT(IPID) DO UPDATE SET PLAYTIME = PLAYTIME + excluded.PLAYTIME`,
+		ipid, oldPlaytime); err != nil {
+		return err
+	}
+	_, err := db.Exec("UPDATE KNOWN_IPS SET PLAYTIME = 0 WHERE IPID = ?", oldIPID)
 	return err
 }
 
