@@ -26,11 +26,12 @@ import (
 )
 
 type Command struct {
-	handler  func(client *Client, args []string, usage string)
-	minArgs  int
-	usage    string
-	desc     string
-	reqPerms uint64
+	handler   func(client *Client, args []string, usage string)
+	minArgs   int
+	usage     string
+	desc      string
+	reqPerms  uint64
+	casinoCmd bool // when true, command is hidden/disabled if EnableCasino is false
 }
 
 var Commands map[string]Command
@@ -1287,136 +1288,158 @@ func initCommands() {
 		},
 		// Casino commands
 		"bj": {
-			handler:  cmdBlackjack,
-			minArgs:  0,
-			usage:    "Usage: /bj join|bet <amount>|deal|hit|stand|double|split|insurance|status|leave",
-			desc:     "Play blackjack. Requires casino to be enabled in the area.",
-			reqPerms: permissions.PermissionField["NONE"],
+			handler:   cmdBlackjack,
+			minArgs:   0,
+			usage:     "Usage: /bj join|bet <amount>|deal|hit|stand|double|split|insurance|status|leave",
+			desc:      "Play blackjack. Requires casino to be enabled in the area.",
+			reqPerms:  permissions.PermissionField["NONE"],
+			casinoCmd: true,
 		},
 		"poker": {
-			handler:  cmdPoker,
-			minArgs:  0,
-			usage:    "Usage: /poker join|ready|hand|check|call|bet <n>|raise <n>|fold|allin|status|leave",
-			desc:     "Play Texas Hold'em poker. Requires casino to be enabled in the area.",
-			reqPerms: permissions.PermissionField["NONE"],
+			handler:   cmdPoker,
+			minArgs:   0,
+			usage:     "Usage: /poker join|ready|hand|check|call|bet <n>|raise <n>|fold|allin|status|leave",
+			desc:      "Play Texas Hold'em poker. Requires casino to be enabled in the area.",
+			reqPerms:  permissions.PermissionField["NONE"],
+			casinoCmd: true,
 		},
 		"slots": {
-			handler:  cmdSlots,
-			minArgs:  0,
-			usage:    "Usage: /slots [spin [amount]] | /slots max | /slots jackpot | /slots stats",
-			desc:     "Play slot machines. Requires casino to be enabled in the area.",
-			reqPerms: permissions.PermissionField["NONE"],
+			handler:   cmdSlots,
+			minArgs:   0,
+			usage:     "Usage: /slots [spin [amount]] | /slots max | /slots jackpot | /slots stats",
+			desc:      "Play slot machines. Requires casino to be enabled in the area.",
+			reqPerms:  permissions.PermissionField["NONE"],
+			casinoCmd: true,
 		},
 		"croulette": {
-			handler:  cmdCasinoRoulette,
-			minArgs:  2,
-			usage:    "Usage: /croulette bet <red|black|even|odd|low|high|number <n>> <amount>",
-			desc:     "Play European roulette. Requires casino to be enabled in the area.",
-			reqPerms: permissions.PermissionField["NONE"],
+			handler:   cmdCasinoRoulette,
+			minArgs:   2,
+			usage:     "Usage: /croulette bet <red|black|even|odd|low|high|number <n>> <amount>",
+			desc:      "Play European roulette. Requires casino to be enabled in the area.",
+			reqPerms:  permissions.PermissionField["NONE"],
+			casinoCmd: true,
 		},
 		"baccarat": {
-			handler:  cmdBaccarat,
-			minArgs:  2,
-			usage:    "Usage: /baccarat <player|banker|tie> <amount>",
-			desc:     "Play baccarat. Requires casino to be enabled in the area.",
-			reqPerms: permissions.PermissionField["NONE"],
+			handler:   cmdBaccarat,
+			minArgs:   2,
+			usage:     "Usage: /baccarat <player|banker|tie> <amount>",
+			desc:      "Play baccarat. Requires casino to be enabled in the area.",
+			reqPerms:  permissions.PermissionField["NONE"],
+			casinoCmd: true,
 		},
 		"craps": {
-			handler:  cmdCraps,
-			minArgs:  3,
-			usage:    "Usage: /craps bet <pass|nopass> <amount>",
-			desc:     "Play craps. Requires casino to be enabled in the area.",
-			reqPerms: permissions.PermissionField["NONE"],
+			handler:   cmdCraps,
+			minArgs:   3,
+			usage:     "Usage: /craps bet <pass|nopass> <amount>",
+			desc:      "Play craps. Requires casino to be enabled in the area.",
+			reqPerms:  permissions.PermissionField["NONE"],
+			casinoCmd: true,
 		},
 		"crash": {
-			handler:  cmdCrash,
-			minArgs:  1,
-			usage:    "Usage: /crash bet <amount> | /crash cashout",
-			desc:     "Play crash. Requires casino to be enabled in the area.",
-			reqPerms: permissions.PermissionField["NONE"],
+			handler:   cmdCrash,
+			minArgs:   1,
+			usage:     "Usage: /crash bet <amount> | /crash cashout",
+			desc:      "Play crash. Requires casino to be enabled in the area.",
+			reqPerms:  permissions.PermissionField["NONE"],
+			casinoCmd: true,
 		},
 		"mines": {
-			handler:  cmdMines,
-			minArgs:  1,
-			usage:    "Usage: /mines start <mines> <bet> | /mines pick <n> | /mines cashout | /mines quit",
-			desc:     "Play mines. Requires casino to be enabled in the area.",
-			reqPerms: permissions.PermissionField["NONE"],
+			handler:   cmdMines,
+			minArgs:   1,
+			usage:     "Usage: /mines start <mines> <bet> | /mines pick <n> | /mines cashout | /mines quit",
+			desc:      "Play mines. Requires casino to be enabled in the area.",
+			reqPerms:  permissions.PermissionField["NONE"],
+			casinoCmd: true,
 		},
 		"keno": {
-			handler:  cmdKeno,
-			minArgs:  3,
-			usage:    "Usage: /keno pick <numbers...> <bet>",
-			desc:     "Play keno. Requires casino to be enabled in the area.",
-			reqPerms: permissions.PermissionField["NONE"],
+			handler:   cmdKeno,
+			minArgs:   3,
+			usage:     "Usage: /keno pick <numbers...> <bet>",
+			desc:      "Play keno. Requires casino to be enabled in the area.",
+			reqPerms:  permissions.PermissionField["NONE"],
+			casinoCmd: true,
 		},
 		"wheel": {
-			handler:  cmdWheel,
-			minArgs:  2,
-			usage:    "Usage: /wheel spin <bet>",
-			desc:     "Spin the prize wheel. Requires casino to be enabled in the area.",
-			reqPerms: permissions.PermissionField["NONE"],
+			handler:   cmdWheel,
+			minArgs:   2,
+			usage:     "Usage: /wheel spin <bet>",
+			desc:      "Spin the prize wheel. Requires casino to be enabled in the area.",
+			reqPerms:  permissions.PermissionField["NONE"],
+			casinoCmd: true,
 		},
 		"chips": {
-			handler:  cmdChipsEnhanced,
-			minArgs:  0,
-			usage:    "Usage: /chips [top [n]] | [area [n]] | [give <uid> <amount>]",
-			desc:     "Check your Nyathena Chip balance, view leaderboards, or give chips to another player.",
-			reqPerms: permissions.PermissionField["NONE"],
+			handler:   cmdChipsEnhanced,
+			minArgs:   0,
+			usage:     "Usage: /chips [top [n]] | [area [n]] | [give <uid> <amount>]",
+			desc:      "Check your Nyathena Chip balance, view leaderboards, or give chips to another player.",
+			reqPerms:  permissions.PermissionField["NONE"],
+			casinoCmd: true,
 		},
 		"casino": {
-			handler:  cmdCasino,
-			minArgs:  0,
-			usage:    "Usage: /casino [status]",
-			desc:     "View the casino dashboard or status for the current area.",
-			reqPerms: permissions.PermissionField["NONE"],
+			handler:   cmdCasino,
+			minArgs:   0,
+			usage:     "Usage: /casino [status]",
+			desc:      "View the casino dashboard or status for the current area.",
+			reqPerms:  permissions.PermissionField["NONE"],
+			casinoCmd: true,
 		},
 		"casinoenable": {
-			handler:  cmdCasinoEnable,
-			minArgs:  1,
-			usage:    "Usage: /casinoenable <true|false>",
-			desc:     "Enables or disables the casino for this area.",
-			reqPerms: permissions.PermissionField["MODIFY_AREA"],
+			handler:   cmdCasinoEnable,
+			minArgs:   1,
+			usage:     "Usage: /casinoenable <true|false>",
+			desc:      "Enables or disables the casino for this area.",
+			reqPerms:  permissions.PermissionField["MODIFY_AREA"],
+			casinoCmd: true,
 		},
 		"casinoset": {
-			handler:  cmdCasinoSet,
-			minArgs:  2,
-			usage:    "Usage: /casinoset <minbet|maxbet|maxtables|jackpot> <value>",
-			desc:     "Configures casino settings for this area.",
-			reqPerms: permissions.PermissionField["MODIFY_AREA"],
+			handler:   cmdCasinoSet,
+			minArgs:   2,
+			usage:     "Usage: /casinoset <minbet|maxbet|maxtables|jackpot> <value>",
+			desc:      "Configures casino settings for this area.",
+			reqPerms:  permissions.PermissionField["MODIFY_AREA"],
+			casinoCmd: true,
 		},
 		"register": {
-			handler:  cmdRegister,
-			minArgs:  2,
-			usage:    "Usage: /register <username> <password>",
-			desc:     "Create a free player account to track chips, playtime, and leaderboard standings. No extra permissions are granted.",
-			reqPerms: permissions.PermissionField["NONE"],
+			handler:   cmdRegister,
+			minArgs:   2,
+			usage:     "Usage: /register <username> <password>",
+			desc:      "Create a free player account to track chips, playtime, and leaderboard standings. No extra permissions are granted.",
+			reqPerms:  permissions.PermissionField["NONE"],
+			casinoCmd: true,
 		},
 		"account": {
-			handler:  cmdAccount,
-			minArgs:  0,
-			usage:    "Usage: /account",
-			desc:     "View your account profile: username, chip balance, and playtime.",
-			reqPerms: permissions.PermissionField["NONE"],
+			handler:   cmdAccount,
+			minArgs:   0,
+			usage:     "Usage: /account",
+			desc:      "View your account profile: username, chip balance, and playtime.",
+			reqPerms:  permissions.PermissionField["NONE"],
+			casinoCmd: true,
 		},
 	}
 }
 
 // ParseCommand calls the appropriate function for a given command.
 func ParseCommand(client *Client, command string, args []string) {
+	casinoEnabled := config != nil && config.EnableCasino
+
 	if command == "help" {
 		var s []string
 		for name, cmd := range Commands {
+			// Hide casino/account commands when the feature is disabled.
+			if cmd.casinoCmd && !casinoEnabled {
+				continue
+			}
 			if permissions.HasPermission(client.Perms(), cmd.reqPerms) || (cmd.reqPerms == permissions.PermissionField["CM"] && client.Area().HasCM(client.Uid())) {
 				s = append(s, fmt.Sprintf("- /%v: %v", name, cmd.desc))
 			}
 		}
 		sort.Strings(s)
 
-		// Build an account-aware header.
+		// Build a context-aware header.
 		var header string
 		if client.Authenticated() {
 			header = fmt.Sprintf("Logged in as: %v\n\n", client.ModName())
-		} else {
+		} else if casinoEnabled {
 			header = "💡 Tip: Register a free account with /register to track chips, playtime, and casino standings!\n\n"
 		}
 
@@ -1428,7 +1451,13 @@ func ParseCommand(client *Client, command string, args []string) {
 	if cmd.handler == nil {
 		client.SendServerMessage("Invalid command.")
 		return
-	} else if permissions.HasPermission(client.Perms(), cmd.reqPerms) || (cmd.reqPerms == permissions.PermissionField["CM"] && client.Area().HasCM(client.Uid())) {
+	}
+	// Block casino/account commands when the feature is disabled server-wide.
+	if cmd.casinoCmd && !casinoEnabled {
+		client.SendServerMessage("The casino and player account system is not enabled on this server.")
+		return
+	}
+	if permissions.HasPermission(client.Perms(), cmd.reqPerms) || (cmd.reqPerms == permissions.PermissionField["CM"] && client.Area().HasCM(client.Uid())) {
 		if sliceutil.ContainsString(args, "-h") {
 			client.SendServerMessage(cmd.usage)
 			return

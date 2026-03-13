@@ -351,6 +351,26 @@ botban_playtime_threshold = 120
 # still exist but will report that no API key is configured).
 iphub_api_key = ""
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Casino & Player Account System
+# ─────────────────────────────────────────────────────────────────────────────
+# Set to true to enable the Nyathena casino mini-games (blackjack, poker, slots,
+# roulette, baccarat, craps, crash, mines, keno, prize wheel) and the player
+# account system (/register, /account, /chips leaderboard).
+#
+# When set to false:
+#   • All casino game commands are disabled server-wide and respond with a
+#     "not enabled on this server" message.
+#   • /register, /account, /chips, /casino, /casinoenable, and /casinoset are
+#     also hidden from /help and blocked.
+#   • Existing moderator/admin accounts in the database are unaffected —
+#     /login and /logout continue to work normally.
+#   • All existing chip balances and player account data in the database are
+#     preserved and will be fully accessible if you re-enable this setting later.
+#
+# Default: true
+enable_casino = true
+
 [Logging]
 # Sets the number of actions (IC chat messages, OOC chat messages, judge actions, etc.) each area should store.
 # When a user calls a mod, this buffer will be flushed to a report file for review.
