@@ -48,6 +48,11 @@ func getCasinoState(a *area.Area) *AreaCasinoState {
 	return v.(*AreaCasinoState)
 }
 
+// globalDefaultMaxBet is the server-wide maximum bet enforced when an area has
+// not configured its own maxbet limit.  This prevents single bets from being
+// astronomically large regardless of the player's balance.
+const globalDefaultMaxBet = 1_000_000
+
 // validateBet checks the bet against area min/max limits and the player's chip balance.
 // Returns (valid bool, reason string).
 func validateBet(client *Client, amount int64) (bool, string) {
@@ -59,8 +64,13 @@ func validateBet(client *Client, amount int64) (bool, string) {
 	if minBet > 0 && amount < minBet {
 		return false, fmt.Sprintf("Minimum bet is %d chips.", minBet)
 	}
-	if maxBet > 0 && amount > maxBet {
-		return false, fmt.Sprintf("Maximum bet is %d chips.", maxBet)
+	// When no area-specific max is set, fall back to the server-wide default.
+	effectiveMax := maxBet
+	if effectiveMax <= 0 {
+		effectiveMax = globalDefaultMaxBet
+	}
+	if amount > effectiveMax {
+		return false, fmt.Sprintf("Maximum bet is %d chips.", effectiveMax)
 	}
 	balance, err := db.GetChipBalance(client.Ipid())
 	if err != nil || balance < amount {

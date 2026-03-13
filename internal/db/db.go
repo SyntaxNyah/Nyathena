@@ -51,6 +51,11 @@ var db *sql.DB
 // defaultChipBalance is the starting chip balance assigned to new players.
 const defaultChipBalance = 100
 
+// MaxChipBalance is the hard upper limit on any player's chip balance.
+// AddChips will silently clamp the result to this value, preventing runaway
+// inflation across all casino games.
+const MaxChipBalance = 10_000_000
+
 // Database version.
 // This should be incremented whenever changes are made to the DB that require existing databases to upgrade.
 const ver = 8
@@ -808,6 +813,7 @@ func GetChipBalance(ipid string) (int64, error) {
 
 // AddChips adds the given amount to an IPID's chip balance and returns the new balance.
 // The amount must be positive. EnsureChipBalance must be called first.
+// The resulting balance is capped at MaxChipBalance to prevent runaway inflation.
 func AddChips(ipid string, amount int64) (int64, error) {
 	if db == nil {
 		return 0, nil
@@ -817,8 +823,8 @@ func AddChips(ipid string, amount int64) (int64, error) {
 	}
 	var newBalance int64
 	err := db.QueryRow(
-		"UPDATE CHIPS SET BALANCE = BALANCE + ? WHERE IPID = ? RETURNING BALANCE",
-		amount, ipid).Scan(&newBalance)
+		"UPDATE CHIPS SET BALANCE = MIN(BALANCE + ?, ?) WHERE IPID = ? RETURNING BALANCE",
+		amount, MaxChipBalance, ipid).Scan(&newBalance)
 	if err != nil {
 		return 0, err
 	}

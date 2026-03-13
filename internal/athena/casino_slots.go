@@ -181,9 +181,14 @@ func cmdSlots(client *Client, args []string, _ string) {
 
 	switch args[0] {
 	case "max":
-		maxBet := int64(client.Area().CasinoMaxBet())
-		if maxBet <= 0 {
-			bal, _ := db.GetChipBalance(client.Ipid())
+		areaMax := int64(client.Area().CasinoMaxBet())
+		effectiveMax := areaMax
+		if effectiveMax <= 0 {
+			effectiveMax = globalDefaultMaxBet
+		}
+		bal, _ := db.GetChipBalance(client.Ipid())
+		maxBet := effectiveMax
+		if bal < maxBet {
 			maxBet = bal
 		}
 		if maxBet <= 0 {

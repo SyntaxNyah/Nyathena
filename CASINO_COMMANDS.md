@@ -11,6 +11,8 @@ This document covers the full casino system, including **Nyathena Chips** (the s
 - Every new connection starts with **100 chips** automatically.
 - Balances persist across sessions.
 - Chips cannot go negative — you can only spend what you have.
+- **Maximum balance: 10,000,000 chips (10 million).** Winnings are capped at this ceiling to prevent runaway inflation.
+- **Default maximum bet: 1,000,000 chips (1 million)** per wager when no area-specific limit is configured. Staff can raise or lower this per-area with `/casinoset maxbet`.
 
 ---
 
