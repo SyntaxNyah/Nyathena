@@ -431,6 +431,9 @@ func NewServer(conf *settings.Config) (*Server, error) {
 	initCommands()
 	initAutoMod(conf)
 	go startConnTrackerCleanup()
+	if conf.EnableCasino {
+		go startHourlyChipAward()
+	}
 	return s, nil
 }
 
@@ -1384,4 +1387,43 @@ func estimateJoinedLen(ss []string) int {
 		n += len(s)
 	}
 	return n
+}
+
+// startHourlyChipAward runs in the background and awards 1 chip to every connected
+// player for each hour of online time they have accumulated during the current session.
+// This ensures players receive their hourly chip without needing to disconnect first.
+// Awards are tracked per-client in sessionChipsAwarded so the disconnect handler does
+// not double-count chips that have already been granted.
+func startHourlyChipAward() {
+	ticker := time.NewTicker(time.Hour)
+	defer ticker.Stop()
+	for range ticker.C {
+		if config == nil || !config.EnableCasino {
+			continue
+		}
+		for client := range clients.GetAllClients() {
+			connAt := client.ConnectedAt()
+			if connAt.IsZero() {
+				continue
+			}
+			sessionSecs := int64(time.Since(connAt).Seconds())
+			sessionHours := sessionSecs / 3600
+			already := client.SessionChipsAwarded()
+			toAward := sessionHours - already
+			if toAward <= 0 {
+				continue
+			}
+			ipid := client.Ipid()
+			if err := db.EnsureChipBalance(ipid); err != nil {
+				logger.LogErrorf("startHourlyChipAward: EnsureChipBalance failed for %v: %v", ipid, err)
+				continue
+			}
+			if _, err := db.AddChips(ipid, toAward); err != nil {
+				logger.LogErrorf("startHourlyChipAward: AddChips failed for %v: %v", ipid, err)
+				continue
+			}
+			client.AddSessionChipsAwarded(toAward)
+			client.SendServerMessage(fmt.Sprintf("💰 You earned %d chip(s) for being online! Balance updated.", toAward))
+		}
+	}
 }
