@@ -143,6 +143,65 @@ func TestRegisterPlayerDuplicateUsername(t *testing.T) {
 	}
 }
 
+// TestGetUsernamesByIPIDsEmpty verifies that an empty input returns an empty map.
+func TestGetUsernamesByIPIDsEmpty(t *testing.T) {
+	teardown := setupTestDB(t)
+	defer teardown()
+
+	m, err := GetUsernamesByIPIDs([]string{})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(m) != 0 {
+		t.Errorf("expected empty map, got %v", m)
+	}
+}
+
+// TestGetUsernamesByIPIDsSingle verifies that a single known IPID is resolved.
+func TestGetUsernamesByIPIDsSingle(t *testing.T) {
+	teardown := setupTestDB(t)
+	defer teardown()
+
+	if err := RegisterPlayer("batchuser1", []byte("pass1234"), "batch_ipid_1"); err != nil {
+		t.Fatalf("RegisterPlayer failed: %v", err)
+	}
+
+	m, err := GetUsernamesByIPIDs([]string{"batch_ipid_1"})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if m["batch_ipid_1"] != "batchuser1" {
+		t.Errorf("expected 'batchuser1', got %q", m["batch_ipid_1"])
+	}
+}
+
+// TestGetUsernamesByIPIDsMultiple verifies that multiple IPIDs are resolved in one call.
+func TestGetUsernamesByIPIDsMultiple(t *testing.T) {
+	teardown := setupTestDB(t)
+	defer teardown()
+
+	if err := RegisterPlayer("bulka", []byte("pass1234"), "bulk_1"); err != nil {
+		t.Fatalf("RegisterPlayer bulka: %v", err)
+	}
+	if err := RegisterPlayer("bulkb", []byte("pass5678"), "bulk_2"); err != nil {
+		t.Fatalf("RegisterPlayer bulkb: %v", err)
+	}
+
+	m, err := GetUsernamesByIPIDs([]string{"bulk_1", "bulk_2", "bulk_unknown"})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if m["bulk_1"] != "bulka" {
+		t.Errorf("expected 'bulka', got %q", m["bulk_1"])
+	}
+	if m["bulk_2"] != "bulkb" {
+		t.Errorf("expected 'bulkb', got %q", m["bulk_2"])
+	}
+	if _, ok := m["bulk_unknown"]; ok {
+		t.Error("unknown IPID should be absent from the result map")
+	}
+}
+
 // TestExistingModAccountsCompatible verifies that accounts created via
 // CreateUser (the original admin path) still authenticate correctly after
 // the IPID column migration.

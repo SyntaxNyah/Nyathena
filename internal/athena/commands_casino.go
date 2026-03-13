@@ -208,13 +208,20 @@ func chipsTopGlobal(client *Client, args []string) {
 		client.SendServerMessage("No chip data available.")
 		return
 	}
+
+	// Batch-resolve all IPIDs to account names in one query.
+	ipids := make([]string, len(entries))
+	for i, e := range entries {
+		ipids[i] = e.Ipid
+	}
+	names, _ := db.GetUsernamesByIPIDs(ipids)
+
 	var sb strings.Builder
 	sb.WriteString(fmt.Sprintf("\n🏆 Global Chip Leaderboard (Top %d)\n", n))
 	for i, e := range entries {
-		// Show registered account name when available; fall back to IPID.
 		displayName := e.Ipid
-		if username, uerr := db.GetUsernameByIPID(e.Ipid); uerr == nil && username != "" {
-			displayName = username
+		if u := names[e.Ipid]; u != "" {
+			displayName = u
 		}
 		sb.WriteString(fmt.Sprintf("  %2d. %v — %d chips\n", i+1, displayName, e.Balance))
 	}
@@ -229,23 +236,38 @@ func chipsTopArea(client *Client, args []string) {
 		}
 	}
 
+	// Collect all clients in this area and their IPIDs in one pass.
 	type entry struct {
 		name    string
 		balance int64
 	}
-	var entries []entry
+	myArea := client.Area()
+	var ipids []string
+	var clientsInArea []*Client
 	for c := range clients.GetAllClients() {
-		if c.Area() != client.Area() || c.Uid() == -1 {
+		if c.Area() != myArea || c.Uid() == -1 {
 			continue
 		}
+		ipids = append(ipids, c.Ipid())
+		clientsInArea = append(clientsInArea, c)
+	}
+	if len(clientsInArea) == 0 {
+		client.SendServerMessage("No players in this area.")
+		return
+	}
+
+	// Batch-resolve IPIDs to account names.
+	names, _ := db.GetUsernamesByIPIDs(ipids)
+
+	var entries []entry
+	for _, c := range clientsInArea {
 		bal, err := db.GetChipBalance(c.Ipid())
 		if err != nil {
 			continue
 		}
-		// Prefer registered account name over OOC name.
 		displayName := c.OOCName()
-		if username, uerr := db.GetUsernameByIPID(c.Ipid()); uerr == nil && username != "" {
-			displayName = username
+		if u := names[c.Ipid()]; u != "" {
+			displayName = u
 		}
 		entries = append(entries, entry{name: displayName, balance: bal})
 	}
@@ -254,11 +276,11 @@ func chipsTopArea(client *Client, args []string) {
 		entries = entries[:n]
 	}
 	if len(entries) == 0 {
-		client.SendServerMessage("No players in this area.")
+		client.SendServerMessage("No chip data for players in this area.")
 		return
 	}
 	var sb strings.Builder
-	sb.WriteString(fmt.Sprintf("\n🏆 Area Chip Leaderboard — %v (Top %d)\n", client.Area().Name(), n))
+	sb.WriteString(fmt.Sprintf("\n🏆 Area Chip Leaderboard — %v (Top %d)\n", myArea.Name(), n))
 	for i, e := range entries {
 		sb.WriteString(fmt.Sprintf("  %2d. %v — %d chips\n", i+1, e.name, e.balance))
 	}
@@ -285,15 +307,17 @@ func chipsGive(client *Client, args []string) {
 		return
 	}
 
-	// Cooldown check
+	// Check and record the cooldown atomically to prevent race conditions.
 	chipsGiveMu.Lock()
-	last, ok := chipsGiveLastTime[client.Ipid()]
-	if ok && time.Since(last) < chipsGiveCooldown {
-		remaining := chipsGiveCooldown - time.Since(last)
-		chipsGiveMu.Unlock()
-		client.SendServerMessage(fmt.Sprintf("You must wait %v before giving chips again.", remaining.Truncate(time.Second)))
-		return
+	if last, ok := chipsGiveLastTime[client.Ipid()]; ok {
+		if elapsed := time.Since(last); elapsed < chipsGiveCooldown {
+			remaining := (chipsGiveCooldown - elapsed).Truncate(time.Second)
+			chipsGiveMu.Unlock()
+			client.SendServerMessage(fmt.Sprintf("You must wait %v before giving chips again.", remaining))
+			return
+		}
 	}
+	chipsGiveLastTime[client.Ipid()] = time.Now()
 	chipsGiveMu.Unlock()
 
 	target := clients.GetClientByUID(targetUID)
@@ -321,10 +345,6 @@ func chipsGive(client *Client, args []string) {
 		client.SendServerMessage("Transfer failed: could not credit recipient.")
 		return
 	}
-
-	chipsGiveMu.Lock()
-	chipsGiveLastTime[client.Ipid()] = time.Now()
-	chipsGiveMu.Unlock()
 
 	bal, _ := db.GetChipBalance(client.Ipid())
 	client.SendServerMessage(fmt.Sprintf("Sent %d chips to %v. Your balance: %d chips.", amount, target.OOCName(), bal))

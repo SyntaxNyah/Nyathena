@@ -19,7 +19,6 @@ package athena
 import (
 	"fmt"
 	"regexp"
-	"time"
 
 	"github.com/MangosArentLiterature/Athena/internal/db"
 	"github.com/MangosArentLiterature/Athena/internal/logger"
@@ -121,14 +120,13 @@ func cmdAccount(client *Client, _ []string, _ string) {
 		username, bal, formatPlaytime(playtimeSec)))
 }
 
-// formatPlaytime converts seconds into a human-readable duration string.
+// formatPlaytime converts seconds into a human-readable "Xh Ym" / "Ym" string.
 func formatPlaytime(seconds int64) string {
 	if seconds <= 0 {
 		return "less than a minute"
 	}
-	d := time.Duration(seconds) * time.Second
-	h := int(d.Hours())
-	m := int(d.Minutes()) % 60
+	h := seconds / 3600
+	m := (seconds % 3600) / 60
 	if h > 0 {
 		return fmt.Sprintf("%dh %dm", h, m)
 	}

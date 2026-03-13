@@ -20,6 +20,7 @@ import (
 	"database/sql"
 	"fmt"
 	"strconv"
+	"strings"
 	"time"
 
 	"golang.org/x/crypto/bcrypt"
@@ -815,6 +816,37 @@ func SpendChips(ipid string, amount int64) (int64, error) {
 		return 0, err
 	}
 	return newBalance, nil
+}
+
+// GetUsernamesByIPIDs returns a map of IPID → username for all given IPIDs that
+// have a linked account. Unlisted IPIDs are simply absent from the result map.
+// This batches N individual GetUsernameByIPID calls into a single query.
+func GetUsernamesByIPIDs(ipids []string) (map[string]string, error) {
+	if db == nil || len(ipids) == 0 {
+		return map[string]string{}, nil
+	}
+	placeholders := make([]string, len(ipids))
+	args := make([]any, len(ipids))
+	for i, id := range ipids {
+		placeholders[i] = "?"
+		args[i] = id
+	}
+	rows, err := db.Query(
+		"SELECT IPID, USERNAME FROM USERS WHERE IPID IN ("+strings.Join(placeholders, ",")+")",
+		args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	m := make(map[string]string, len(ipids))
+	for rows.Next() {
+		var ipid, username string
+		if err := rows.Scan(&ipid, &username); err != nil {
+			return m, err
+		}
+		m[ipid] = username
+	}
+	return m, rows.Err()
 }
 
 // GetTopChipBalances returns the top n IPIDs by chip balance, ordered descending.
