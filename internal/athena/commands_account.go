@@ -19,6 +19,8 @@ package athena
 import (
 	"fmt"
 	"regexp"
+	"strconv"
+	"strings"
 
 	"github.com/MangosArentLiterature/Athena/internal/db"
 	"github.com/MangosArentLiterature/Athena/internal/logger"
@@ -131,4 +133,46 @@ func formatPlaytime(seconds int64) string {
 		return fmt.Sprintf("%dh %dm", h, m)
 	}
 	return fmt.Sprintf("%dm", m)
+}
+
+// Handles /playtime [top [n]]
+//
+// Displays the global playtime leaderboard. Shows account names when players
+// have linked accounts, falling back to their IPID otherwise.
+// Results come from a single efficient LEFT JOIN query — no extra resources.
+func cmdPlaytimeTop(client *Client, args []string, usage string) {
+	n := 10
+	remaining := args
+
+	// Accept an optional leading "top" subcommand keyword.
+	if len(remaining) > 0 && strings.ToLower(remaining[0]) == "top" {
+		remaining = remaining[1:]
+	}
+
+	// Accept an optional count argument.
+	if len(remaining) > 0 {
+		if v, err := strconv.Atoi(remaining[0]); err == nil && v > 0 && v <= 50 {
+			n = v
+		} else if remaining[0] != "" {
+			client.SendServerMessage(usage)
+			return
+		}
+	}
+
+	entries, err := db.GetTopPlaytimes(n)
+	if err != nil || len(entries) == 0 {
+		client.SendServerMessage("No playtime data available yet.")
+		return
+	}
+
+	var sb strings.Builder
+	sb.WriteString(fmt.Sprintf("\n⏱ Playtime Leaderboard (Top %d)\n", len(entries)))
+	for i, e := range entries {
+		displayName := e.Ipid
+		if e.Username != "" {
+			displayName = e.Username
+		}
+		sb.WriteString(fmt.Sprintf("  %2d. %-20v  %v\n", i+1, displayName, formatPlaytime(e.Playtime)))
+	}
+	client.SendServerMessage(sb.String())
 }

@@ -78,6 +78,13 @@ type ChipEntry struct {
 	Balance int64
 }
 
+// PlaytimeEntry holds one row from the playtime leaderboard query.
+type PlaytimeEntry struct {
+	Ipid     string
+	Username string // empty when no account is linked
+	Playtime int64  // seconds
+}
+
 // Opens the server's database connection.
 func Open() error {
 	var err error
@@ -863,6 +870,36 @@ func GetTopChipBalances(n int) ([]ChipEntry, error) {
 	for rows.Next() {
 		var e ChipEntry
 		if err := rows.Scan(&e.Ipid, &e.Balance); err != nil {
+			return entries, err
+		}
+		entries = append(entries, e)
+	}
+	return entries, rows.Err()
+}
+
+// GetTopPlaytimes returns the top n entries by accumulated playtime, ordered
+// descending. Each entry includes the IPID and the linked account username
+// (empty string when no account is associated). The query is a single
+// LEFT JOIN so it is safe to call frequently without extra resource cost.
+func GetTopPlaytimes(n int) ([]PlaytimeEntry, error) {
+	if db == nil {
+		return nil, nil
+	}
+	rows, err := db.Query(`
+		SELECT k.IPID, COALESCE(u.USERNAME, ''), k.PLAYTIME
+		FROM KNOWN_IPS k
+		LEFT JOIN USERS u ON u.IPID = k.IPID
+		WHERE k.PLAYTIME > 0
+		ORDER BY k.PLAYTIME DESC
+		LIMIT ?`, n)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var entries []PlaytimeEntry
+	for rows.Next() {
+		var e PlaytimeEntry
+		if err := rows.Scan(&e.Ipid, &e.Username, &e.Playtime); err != nil {
 			return entries, err
 		}
 		entries = append(entries, e)

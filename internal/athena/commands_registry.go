@@ -1415,6 +1415,13 @@ func initCommands() {
 			reqPerms:  permissions.PermissionField["NONE"],
 			casinoCmd: true,
 		},
+		"playtime": {
+			handler:  cmdPlaytimeTop,
+			minArgs:  0,
+			usage:    "Usage: /playtime [top] [n]",
+			desc:     "Show the playtime leaderboard. Displays account names for registered players.",
+			reqPerms: permissions.PermissionField["NONE"],
+		},
 	}
 }
 
