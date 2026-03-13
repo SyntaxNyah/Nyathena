@@ -69,6 +69,13 @@ func cmdRegister(client *Client, args []string, _ string) {
 	client.SetModName(username)
 	// No SetPerms call needed — perms remain 0 (NONE).
 
+	// Guarantee a chip row exists (100 chips if not already seeded).
+	if config.EnableCasino {
+		if err := db.EnsureChipBalance(client.Ipid()); err != nil {
+			logger.LogErrorf("Failed to seed chip balance on register for %v: %v", username, err)
+		}
+	}
+
 	client.SendServerMessage(fmt.Sprintf(
 		"✅ Account '%v' created and logged in!\n\n"+
 			"📋 What your account tracks:\n"+
