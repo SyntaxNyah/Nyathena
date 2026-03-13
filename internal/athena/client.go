@@ -650,6 +650,15 @@ func (client *Client) RemoveAuth() {
 	client.SendPacket("AUTH", "-1")
 }
 
+// RemoveAccountAuth logs a client out of a player account (no moderator badge change needed).
+func (client *Client) RemoveAccountAuth() {
+	client.mu.Lock()
+	username := client.mod_name
+	client.authenticated, client.perms, client.mod_name = false, 0, ""
+	client.mu.Unlock()
+	client.SendServerMessage(fmt.Sprintf("Logged out of account '%v'.", username))
+}
+
 // restorePunishments loads any persistent punishments for this client from the database
 // and applies them. Called once after the client successfully joins the server.
 func (client *Client) restorePunishments() {

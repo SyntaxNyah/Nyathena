@@ -211,7 +211,12 @@ func chipsTopGlobal(client *Client, args []string) {
 	var sb strings.Builder
 	sb.WriteString(fmt.Sprintf("\n🏆 Global Chip Leaderboard (Top %d)\n", n))
 	for i, e := range entries {
-		sb.WriteString(fmt.Sprintf("  %2d. %v — %d chips\n", i+1, e.Ipid, e.Balance))
+		// Show registered account name when available; fall back to IPID.
+		displayName := e.Ipid
+		if username, uerr := db.GetUsernameByIPID(e.Ipid); uerr == nil && username != "" {
+			displayName = username
+		}
+		sb.WriteString(fmt.Sprintf("  %2d. %v — %d chips\n", i+1, displayName, e.Balance))
 	}
 	client.SendServerMessage(sb.String())
 }
@@ -237,7 +242,12 @@ func chipsTopArea(client *Client, args []string) {
 		if err != nil {
 			continue
 		}
-		entries = append(entries, entry{name: c.OOCName(), balance: bal})
+		// Prefer registered account name over OOC name.
+		displayName := c.OOCName()
+		if username, uerr := db.GetUsernameByIPID(c.Ipid()); uerr == nil && username != "" {
+			displayName = username
+		}
+		entries = append(entries, entry{name: displayName, balance: bal})
 	}
 	sort.Slice(entries, func(i, j int) bool { return entries[i].balance > entries[j].balance })
 	if len(entries) > n {

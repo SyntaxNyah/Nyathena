@@ -360,11 +360,15 @@ func cmdLogin(client *Client, args []string, _ string) {
 		client.SetAuthenticated(true)
 		client.SetPerms(perms)
 		client.SetModName(args[0])
+		// Link the current IPID to this account so leaderboards can show names.
+		db.LinkIPIDToUser(args[0], client.Ipid()) //nolint:errcheck
 		if permissions.IsModerator(perms) {
 			client.SendServerMessage("Logged in as moderator.")
+		} else {
+			client.SendServerMessage("Logged in to your account.")
 		}
 		client.SendPacket("AUTH", "1")
-		client.SendServerMessage(fmt.Sprintf("Welcome, %v.", args[0]))
+		client.SendServerMessage(fmt.Sprintf("Welcome back, %v.", args[0]))
 		addToBuffer(client, "AUTH", fmt.Sprintf("Logged in as %v.", args[0]), true)
 		return
 	}
@@ -377,9 +381,14 @@ func cmdLogin(client *Client, args []string, _ string) {
 func cmdLogout(client *Client, _ []string, _ string) {
 	if !client.Authenticated() {
 		client.SendServerMessage("You are not logged in.")
+		return
 	}
 	addToBuffer(client, "AUTH", fmt.Sprintf("Logged out as %v.", client.ModName()), true)
-	client.RemoveAuth()
+	if permissions.IsModerator(client.Perms()) {
+		client.RemoveAuth()
+	} else {
+		client.RemoveAccountAuth()
+	}
 }
 
 // Handles /mkusr

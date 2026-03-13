@@ -1384,6 +1384,20 @@ func initCommands() {
 			desc:     "Configures casino settings for this area.",
 			reqPerms: permissions.PermissionField["MODIFY_AREA"],
 		},
+		"register": {
+			handler:  cmdRegister,
+			minArgs:  2,
+			usage:    "Usage: /register <username> <password>",
+			desc:     "Create a free player account to track chips, playtime, and leaderboard standings. No extra permissions are granted.",
+			reqPerms: permissions.PermissionField["NONE"],
+		},
+		"account": {
+			handler:  cmdAccount,
+			minArgs:  0,
+			usage:    "Usage: /account",
+			desc:     "View your account profile: username, chip balance, and playtime.",
+			reqPerms: permissions.PermissionField["NONE"],
+		},
 	}
 }
 
@@ -1397,7 +1411,16 @@ func ParseCommand(client *Client, command string, args []string) {
 			}
 		}
 		sort.Strings(s)
-		client.SendServerMessage("Recognized commands:\n" + strings.Join(s, "\n") + "\n\nTo view detailed usage on a command, do /<command> -h")
+
+		// Build an account-aware header.
+		var header string
+		if client.Authenticated() {
+			header = fmt.Sprintf("Logged in as: %v\n\n", client.ModName())
+		} else {
+			header = "💡 Tip: Register a free account with /register to track chips, playtime, and casino standings!\n\n"
+		}
+
+		client.SendServerMessage(header + "Recognized commands:\n" + strings.Join(s, "\n") + "\n\nTo view detailed usage on a command, do /<command> -h")
 		return
 	}
 

@@ -52,7 +52,7 @@ const defaultChipBalance = 100
 
 // Database version.
 // This should be incremented whenever changes are made to the DB that require existing databases to upgrade.
-const ver = 7
+const ver = 8
 
 // Persistent punishment kind constants.
 const (
@@ -113,7 +113,7 @@ func Open() error {
 	if err != nil {
 		return err
 	}
-	_, err = db.Exec("CREATE TABLE IF NOT EXISTS USERS(USERNAME TEXT PRIMARY KEY, PASSWORD TEXT, PERMISSIONS TEXT)")
+	_, err = db.Exec("CREATE TABLE IF NOT EXISTS USERS(USERNAME TEXT PRIMARY KEY, PASSWORD TEXT, PERMISSIONS TEXT, IPID TEXT NOT NULL DEFAULT '')")
 	if err != nil {
 		return err
 	}
@@ -232,6 +232,23 @@ func upgradeDB(v int) error {
 		if err != nil {
 			return err
 		}
+		fallthrough
+	case 7:
+		// Add IPID column to USERS so player accounts can be linked to their connection fingerprint.
+		// Only alter the table when it already exists (i.e. we are upgrading an existing database).
+		// Brand-new databases get the column from the CREATE TABLE statement in Open().
+		var usersExists int
+		db.QueryRow("SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='USERS'").Scan(&usersExists) //nolint:errcheck
+		if usersExists > 0 {
+			_, err := db.Exec("ALTER TABLE USERS ADD COLUMN IPID TEXT NOT NULL DEFAULT ''")
+			if err != nil {
+				return err
+			}
+		}
+		_, err := db.Exec("PRAGMA user_version = 8")
+		if err != nil {
+			return err
+		}
 	}
 	return nil
 }
@@ -247,12 +264,14 @@ func UserExists(username string) bool {
 }
 
 // CreateUser adds a new user to the server's database.
+// This creates a moderator/admin account with the given permissions.
+// The IPID field is left empty and must be linked on first login via LinkIPIDToUser.
 func CreateUser(username string, password []byte, permissions uint64) error {
 	hashed, err := bcrypt.GenerateFromPassword(password, 12)
 	if err != nil {
 		return err
 	}
-	_, err = db.Exec("INSERT INTO USERS VALUES(?, ?, ?)", username, hashed, strconv.FormatUint(permissions, 10))
+	_, err = db.Exec("INSERT INTO USERS(USERNAME, PASSWORD, PERMISSIONS) VALUES(?, ?, ?)", username, hashed, strconv.FormatUint(permissions, 10))
 	if err != nil {
 		return err
 	}
@@ -291,6 +310,45 @@ func ChangePermissions(username string, permissions uint64) error {
 		return err
 	}
 	return nil
+}
+
+// RegisterPlayer creates a player (non-moderator) account with zero permissions
+// and records the player's IPID so it can be looked up later.
+// Returns an error if the username is already taken.
+func RegisterPlayer(username string, password []byte, ipid string) error {
+	hashed, err := bcrypt.GenerateFromPassword(password, 12)
+	if err != nil {
+		return err
+	}
+	_, err = db.Exec("INSERT INTO USERS(USERNAME, PASSWORD, PERMISSIONS, IPID) VALUES(?, ?, '0', ?)", username, hashed, ipid)
+	return err
+}
+
+// LinkIPIDToUser associates an IPID with a user account.
+// Called on every successful login so the leaderboard can show account names.
+func LinkIPIDToUser(username, ipid string) error {
+	if db == nil {
+		return nil
+	}
+	_, err := db.Exec("UPDATE USERS SET IPID = ? WHERE USERNAME = ?", ipid, username)
+	return err
+}
+
+// GetUsernameByIPID returns the username whose account is linked to the given IPID.
+// Returns ("", nil) when no account is associated with that IPID.
+func GetUsernameByIPID(ipid string) (string, error) {
+	if db == nil {
+		return "", nil
+	}
+	row := db.QueryRow("SELECT USERNAME FROM USERS WHERE IPID = ?", ipid)
+	var username string
+	if err := row.Scan(&username); err != nil {
+		if err == sql.ErrNoRows {
+			return "", nil
+		}
+		return "", err
+	}
+	return username, nil
 }
 
 // AddBan adds a new ban to the database.
