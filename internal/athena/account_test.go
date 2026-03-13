@@ -42,3 +42,60 @@ func TestFormatPlaytime(t *testing.T) {
 		}
 	}
 }
+
+// TestGenerateCaptcha verifies that generateCaptcha returns a non-empty string
+// and that two successive calls produce different tokens.
+func TestGenerateCaptcha(t *testing.T) {
+	tok1, err := generateCaptcha()
+	if err != nil {
+		t.Fatalf("generateCaptcha returned unexpected error: %v", err)
+	}
+	if tok1 == "" {
+		t.Fatal("generateCaptcha returned an empty string")
+	}
+	// 16 hex characters = 8 bytes.
+	if len(tok1) != 16 {
+		t.Errorf("expected token length 16, got %d", len(tok1))
+	}
+
+	tok2, err := generateCaptcha()
+	if err != nil {
+		t.Fatalf("second generateCaptcha returned unexpected error: %v", err)
+	}
+	if tok1 == tok2 {
+		t.Error("two successive captcha tokens should not be identical")
+	}
+}
+
+// TestClientPendingReg verifies that SetPendingReg stores values and PendingReg
+// retrieves them, and that clearing works correctly.
+func TestClientPendingReg(t *testing.T) {
+	c := &Client{}
+
+	// Initially all fields should be zero-valued.
+	u, tok, hp := c.PendingReg()
+	if u != "" || tok != "" || hp != nil {
+		t.Errorf("expected empty pending reg, got (user=%q, tok=%q, pass=%v)", u, tok, hp)
+	}
+
+	// Set pending registration data.
+	fakeHash := []byte("$2a$12$fakehashvalue")
+	c.SetPendingReg("alice", "abc123def456abcd", fakeHash)
+	u, tok, hp = c.PendingReg()
+	if u != "alice" {
+		t.Errorf("expected username 'alice', got %q", u)
+	}
+	if tok != "abc123def456abcd" {
+		t.Errorf("expected token 'abc123def456abcd', got %q", tok)
+	}
+	if string(hp) != string(fakeHash) {
+		t.Errorf("expected hash %q, got %q", fakeHash, hp)
+	}
+
+	// Clear pending registration.
+	c.SetPendingReg("", "", nil)
+	u, tok, hp = c.PendingReg()
+	if u != "" || tok != "" || hp != nil {
+		t.Errorf("expected cleared pending reg, got (user=%q, tok=%q, pass=%v)", u, tok, hp)
+	}
+}

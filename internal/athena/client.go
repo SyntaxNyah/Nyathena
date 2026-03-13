@@ -200,6 +200,9 @@ type Client struct {
 	dancing            bool        // Whether the client has dance mode active (flips sprite every message)
 	danceFlipped       bool        // Current flip state for dance mode; toggles each IC message
 	gambleHide         bool        // Whether the client has opted out of seeing gambling broadcast messages
+	pendingRegUser     string // Username from a pending /register that is awaiting captcha confirmation
+	pendingRegPass     []byte // bcrypt hash from a pending /register that is awaiting captcha confirmation
+	pendingRegCaptcha  string // Expected captcha token for the pending registration
 }
 
 // NewClient returns a new client.
@@ -575,6 +578,24 @@ func (client *Client) ModName() string {
 func (client *Client) SetModName(name string) {
 	client.mu.Lock()
 	client.mod_name = name
+	client.mu.Unlock()
+}
+
+// PendingReg returns the client's pending registration data.
+// username and captcha are empty strings, hashedPass is nil when no registration is pending.
+func (client *Client) PendingReg() (username, captcha string, hashedPass []byte) {
+	client.mu.Lock()
+	defer client.mu.Unlock()
+	return client.pendingRegUser, client.pendingRegCaptcha, client.pendingRegPass
+}
+
+// SetPendingReg stores a pending registration awaiting captcha confirmation.
+// Pass empty strings and nil to clear any pending registration.
+func (client *Client) SetPendingReg(username, captcha string, hashedPass []byte) {
+	client.mu.Lock()
+	client.pendingRegUser = username
+	client.pendingRegCaptcha = captcha
+	client.pendingRegPass = hashedPass
 	client.mu.Unlock()
 }
 

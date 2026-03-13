@@ -371,6 +371,14 @@ iphub_api_key = ""
 # Default: true
 enable_casino = true
 
+# Require players to complete a random captcha when registering a new account.
+# When true, /register issues a one-time token that the player must echo back
+# with /captcha <token> before the account is created. This prevents automated
+# bulk registration from a single session.
+# Set to false to allow immediate registration without any captcha step.
+# Default: true
+register_captcha = true
+
 [Logging]
 # Sets the number of actions (IC chat messages, OOC chat messages, judge actions, etc.) each area should store.
 # When a user calls a mod, this buffer will be flushed to a report file for review.

@@ -337,6 +337,15 @@ func RegisterPlayer(username string, password []byte, ipid string) error {
 	return err
 }
 
+// RegisterPlayerHashed is like RegisterPlayer but accepts an already-hashed
+// bcrypt password. Use this when the password was hashed at an earlier step
+// (e.g. before being stored in a pending-registration state) to avoid keeping
+// a plaintext password in memory longer than necessary.
+func RegisterPlayerHashed(username string, hashedPassword []byte, ipid string) error {
+	_, err := db.Exec("INSERT INTO USERS(USERNAME, PASSWORD, PERMISSIONS, IPID) VALUES(?, ?, '0', ?)", username, hashedPassword, ipid)
+	return err
+}
+
 // LinkIPIDToUser associates an IPID with a user account.
 // Called on every successful login so the leaderboard can show account names.
 func LinkIPIDToUser(username, ipid string) error {
