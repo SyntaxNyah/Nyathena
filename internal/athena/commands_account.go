@@ -17,6 +17,9 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>. */
 package athena
 
 import (
+	"crypto/rand"
+	"crypto/subtle"
+	"encoding/hex"
 	"fmt"
 	"regexp"
 	"strconv"
@@ -24,9 +27,19 @@ import (
 
 	"github.com/MangosArentLiterature/Athena/internal/db"
 	"github.com/MangosArentLiterature/Athena/internal/logger"
+	"golang.org/x/crypto/bcrypt"
 )
 
 var validUsernameRe = regexp.MustCompile(`^[A-Za-z0-9_]{3,20}$`)
+
+// generateCaptcha returns a random 16-character hex string used as a registration captcha token.
+func generateCaptcha() (string, error) {
+	b := make([]byte, 8)
+	if _, err := rand.Read(b); err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(b), nil
+}
 
 // Handles /register
 //
@@ -34,9 +47,22 @@ var validUsernameRe = regexp.MustCompile(`^[A-Za-z0-9_]{3,20}$`)
 // permissions — they exist purely to track in-game features such as
 // Nyathena Chip balance, playtime, and future leaderboard standings.
 // All existing moderator/admin accounts remain fully compatible.
+//
+// Registration is a two-step process:
+//  1. /register <username> <password> — validates the request and issues a captcha token.
+//  2. /captcha <token>               — confirms the captcha and finalises account creation.
 func cmdRegister(client *Client, args []string, _ string) {
 	if client.Authenticated() {
 		client.SendServerMessage("You already have an account linked to this session. Use /logout first if you want to register a different account.")
+		return
+	}
+
+	// One account per IPID: block if this connection already has a linked account.
+	existingUser, err := db.GetUsernameByIPID(client.Ipid())
+	if err == nil && existingUser != "" {
+		client.SendServerMessage(fmt.Sprintf(
+			"An account ('%v') is already registered on your connection.\nUse /login %v <password> to sign in.",
+			existingUser, existingUser))
 		return
 	}
 
@@ -57,22 +83,84 @@ func cmdRegister(client *Client, args []string, _ string) {
 		return
 	}
 
-	err := db.RegisterPlayer(username, []byte(password), client.Ipid())
+	// Generate a random captcha token and hold the registration details until confirmed.
+	// Hash the password now so no plaintext password is kept in memory after this point.
+	token, err := generateCaptcha()
 	if err != nil {
-		logger.LogErrorf("Register failed for %v (IPID %v): %v", username, client.Ipid(), err)
+		logger.LogErrorf("Failed to generate captcha for %v (IPID %v): %v", username, client.Ipid(), err)
+		client.SendServerMessage("Registration failed. Please try again.")
+		return
+	}
+	hashed, err := bcrypt.GenerateFromPassword([]byte(password), 12)
+	if err != nil {
+		logger.LogErrorf("Failed to hash password for %v (IPID %v): %v", username, client.Ipid(), err)
+		client.SendServerMessage("Registration failed. Please try again.")
+		return
+	}
+	client.SetPendingReg(username, string(hashed), token)
+
+	client.SendServerMessage(fmt.Sprintf(
+		"🔐 One last step to create account '%v'!\n\n"+
+			"To confirm you are human, please type the following command exactly:\n\n"+
+			"  /captcha %v\n\n"+
+			"This token expires when you disconnect.",
+		username, token))
+}
+
+// Handles /captcha <token>
+//
+// Completes a pending registration that was started with /register.
+// The player must supply the exact token that was issued during /register.
+func cmdCaptcha(client *Client, args []string, usage string) {
+	pendingUser, pendingHashedPass, expectedToken := client.PendingReg()
+	if pendingUser == "" {
+		client.SendServerMessage("You don't have a pending registration. Use /register <username> <password> to start one.")
+		return
+	}
+
+	// Use a constant-time comparison to prevent timing-based token guessing.
+	if subtle.ConstantTimeCompare([]byte(args[0]), []byte(expectedToken)) != 1 {
+		// Wrong token — clear the pending state so they have to restart.
+		client.SetPendingReg("", "", "")
+		client.SendServerMessage("❌ Incorrect captcha token. Please use /register <username> <password> again to get a new token.")
+		return
+	}
+
+	// Captcha correct — clear pending state before creating the account.
+	client.SetPendingReg("", "", "")
+
+	// Re-check conditions that could have changed since /register was typed.
+	if client.Authenticated() {
+		client.SendServerMessage("You are already logged in.")
+		return
+	}
+	existingUser, err := db.GetUsernameByIPID(client.Ipid())
+	if err == nil && existingUser != "" {
+		client.SendServerMessage(fmt.Sprintf(
+			"An account ('%v') was registered on your connection in the meantime. Use /login %v <password> to sign in.",
+			existingUser, existingUser))
+		return
+	}
+	if db.UserExists(pendingUser) {
+		client.SendServerMessage("That username was taken while you were completing the captcha. Please use /register <username> <password> with a different name.")
+		return
+	}
+
+	// The password was already hashed at /register time; use the pre-hashed form.
+	if err := db.RegisterPlayerHashed(pendingUser, []byte(pendingHashedPass), client.Ipid()); err != nil {
+		logger.LogErrorf("Register failed for %v (IPID %v): %v", pendingUser, client.Ipid(), err)
 		client.SendServerMessage("Registration failed. Please try again.")
 		return
 	}
 
 	// Auto-login the new account (permissions stay 0 — no extra powers).
 	client.SetAuthenticated(true)
-	client.SetModName(username)
-	// No SetPerms call needed — perms remain 0 (NONE).
+	client.SetModName(pendingUser)
 
 	// Guarantee a chip row exists (100 chips if not already seeded).
 	if config.EnableCasino {
 		if err := db.EnsureChipBalance(client.Ipid()); err != nil {
-			logger.LogErrorf("Failed to seed chip balance on register for %v: %v", username, err)
+			logger.LogErrorf("Failed to seed chip balance on register for %v: %v", pendingUser, err)
 		}
 	}
 
@@ -85,8 +173,8 @@ func cmdRegister(client *Client, args []string, _ string) {
 			"Use /account to view your profile.\n"+
 			"Use /chips to check your balance.\n"+
 			"Your account is linked to your connection — use /login <username> <password> to sign in on reconnect.",
-		username))
-	addToBuffer(client, "CMD", fmt.Sprintf("Registered player account %v.", username), false)
+		pendingUser))
+	addToBuffer(client, "CMD", fmt.Sprintf("Registered player account %v.", pendingUser), false)
 }
 
 // Handles /account

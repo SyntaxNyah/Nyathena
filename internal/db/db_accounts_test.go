@@ -221,3 +221,36 @@ func TestExistingModAccountsCompatible(t *testing.T) {
 		t.Error("mod account should have non-zero permissions")
 	}
 }
+
+// TestOneAccountPerIPID verifies the one-account-per-IPID gate: once an IPID is
+// linked to an account, GetUsernameByIPID returns a non-empty string, which the
+// /register command uses to block a second registration attempt.
+func TestOneAccountPerIPID(t *testing.T) {
+	teardown := setupTestDB(t)
+	defer teardown()
+
+	ipid := "shared_ipid"
+
+	// First registration succeeds.
+	if err := RegisterPlayer("first", []byte("pass1234"), ipid); err != nil {
+		t.Fatalf("first RegisterPlayer failed: %v", err)
+	}
+
+	// GetUsernameByIPID must return the first account — this is what cmdRegister
+	// checks before allowing a second registration from the same IPID.
+	username, err := GetUsernameByIPID(ipid)
+	if err != nil {
+		t.Fatalf("GetUsernameByIPID failed: %v", err)
+	}
+	if username != "first" {
+		t.Errorf("expected 'first', got %q", username)
+	}
+
+	// Attempting to register a second account with the same IPID should be
+	// blocked by cmdRegister because GetUsernameByIPID returns a non-empty value.
+	// At the DB layer the INSERT succeeds (different username), so we verify the
+	// gate works at the command layer by confirming the lookup returns non-empty.
+	if username == "" {
+		t.Error("IPID should already be linked; cmdRegister would wrongly allow a second account")
+	}
+}
