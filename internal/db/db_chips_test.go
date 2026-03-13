@@ -143,19 +143,29 @@ func TestSpendChipsInsufficientFunds(t *testing.T) {
 	}
 }
 
-// TestGetTopChipBalances verifies the leaderboard ordering.
+// TestGetTopChipBalances verifies the leaderboard ordering for registered players.
 func TestGetTopChipBalances(t *testing.T) {
 	teardown := setupTestDB(t)
 	defer teardown()
 
-	ipids := []string{"lb1", "lb2", "lb3"}
-	balances := []int64{500, 1000, 250}
-	for i, ipid := range ipids {
-		EnsureChipBalance(ipid)
-		extra := balances[i] - 100 // all start at 100
-		if extra > 0 {
-			if _, err := AddChips(ipid, extra); err != nil {
-				t.Fatalf("AddChips failed for %v: %v", ipid, err)
+	// Register accounts so the INNER JOIN can resolve names.
+	players := []struct {
+		username string
+		ipid     string
+		balance  int64
+	}{
+		{"lb2user", "lb2", 1000},
+		{"lb1user", "lb1", 500},
+		{"lb3user", "lb3", 250},
+	}
+	for _, p := range players {
+		if err := RegisterPlayer(p.username, []byte("pass1234"), p.ipid); err != nil {
+			t.Fatalf("RegisterPlayer %v: %v", p.username, err)
+		}
+		EnsureChipBalance(p.ipid)
+		if extra := p.balance - 100; extra > 0 {
+			if _, err := AddChips(p.ipid, extra); err != nil {
+				t.Fatalf("AddChips failed for %v: %v", p.ipid, err)
 			}
 		}
 	}
@@ -167,14 +177,14 @@ func TestGetTopChipBalances(t *testing.T) {
 	if len(entries) != 3 {
 		t.Fatalf("expected 3 entries, got %d", len(entries))
 	}
-	// Should be ordered descending: lb2=1000, lb1=500, lb3=250
+	// Should be ordered descending: lb2user=1000, lb1user=500, lb3user=250
 	expected := []struct {
-		ipid    string
-		balance int64
-	}{{"lb2", 1000}, {"lb1", 500}, {"lb3", 250}}
+		username string
+		balance  int64
+	}{{"lb2user", 1000}, {"lb1user", 500}, {"lb3user", 250}}
 	for i, e := range expected {
-		if entries[i].Ipid != e.ipid {
-			t.Errorf("entry %d: expected IPID %v, got %v", i, e.ipid, entries[i].Ipid)
+		if entries[i].Username != e.username {
+			t.Errorf("entry %d: expected username %v, got %v", i, e.username, entries[i].Username)
 		}
 		if entries[i].Balance != e.balance {
 			t.Errorf("entry %d: expected balance %d, got %d", i, e.balance, entries[i].Balance)
@@ -189,6 +199,10 @@ func TestGetTopChipBalancesLimit(t *testing.T) {
 
 	for i := 0; i < 5; i++ {
 		ipid := "limitip" + string(rune('0'+i))
+		username := "limituser" + string(rune('0'+i))
+		if err := RegisterPlayer(username, []byte("pass1234"), ipid); err != nil {
+			t.Fatalf("RegisterPlayer %v: %v", username, err)
+		}
 		EnsureChipBalance(ipid)
 		AddChips(ipid, int64(i*100))
 	}

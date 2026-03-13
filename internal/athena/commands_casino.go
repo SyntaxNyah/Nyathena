@@ -208,22 +208,10 @@ func chipsTopGlobal(client *Client, args []string) {
 		client.SendServerMessage("No chip data available.")
 		return
 	}
-
-	// Batch-resolve all IPIDs to account names in one query.
-	ipids := make([]string, len(entries))
-	for i, e := range entries {
-		ipids[i] = e.Ipid
-	}
-	names, _ := db.GetUsernamesByIPIDs(ipids)
-
 	var sb strings.Builder
 	sb.WriteString(fmt.Sprintf("\n🏆 Global Chip Leaderboard (Top %d)\n", n))
 	for i, e := range entries {
-		displayName := e.Ipid
-		if u := names[e.Ipid]; u != "" {
-			displayName = u
-		}
-		sb.WriteString(fmt.Sprintf("  %2d. %v — %d chips\n", i+1, displayName, e.Balance))
+		sb.WriteString(fmt.Sprintf("  %2d. %v — %d chips\n", i+1, e.Username, e.Balance))
 	}
 	client.SendServerMessage(sb.String())
 }
