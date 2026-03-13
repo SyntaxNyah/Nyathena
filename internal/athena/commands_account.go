@@ -144,16 +144,16 @@ func cmdPlaytimeTop(client *Client, args []string, usage string) {
 	n := 10
 	remaining := args
 
-	// Accept an optional leading "top" subcommand keyword.
-	if len(remaining) > 0 && strings.ToLower(remaining[0]) == "top" {
+	// Accept an optional leading "top" subcommand keyword (case-insensitive, no allocation).
+	if len(remaining) > 0 && strings.EqualFold(remaining[0], "top") {
 		remaining = remaining[1:]
 	}
 
-	// Accept an optional count argument.
+	// Accept an optional count argument (1–50). Any other token is a usage error.
 	if len(remaining) > 0 {
 		if v, err := strconv.Atoi(remaining[0]); err == nil && v > 0 && v <= 50 {
 			n = v
-		} else if remaining[0] != "" {
+		} else {
 			client.SendServerMessage(usage)
 			return
 		}
@@ -165,7 +165,9 @@ func cmdPlaytimeTop(client *Client, args []string, usage string) {
 		return
 	}
 
+	// Pre-size the builder: header ~35 bytes + ~35 bytes per row.
 	var sb strings.Builder
+	sb.Grow(35 + len(entries)*35)
 	sb.WriteString(fmt.Sprintf("\n⏱ Playtime Leaderboard (Top %d)\n", len(entries)))
 	for i, e := range entries {
 		displayName := e.Ipid

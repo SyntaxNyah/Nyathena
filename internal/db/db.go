@@ -896,7 +896,7 @@ func GetTopPlaytimes(n int) ([]PlaytimeEntry, error) {
 		return nil, err
 	}
 	defer rows.Close()
-	var entries []PlaytimeEntry
+	entries := make([]PlaytimeEntry, 0, n)
 	for rows.Next() {
 		var e PlaytimeEntry
 		if err := rows.Scan(&e.Ipid, &e.Username, &e.Playtime); err != nil {
