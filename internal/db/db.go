@@ -738,6 +738,42 @@ func GetPlaytime(ipid string) (int64, error) {
 	return playtime, nil
 }
 
+// GetAccountStats returns the chip balance and accumulated playtime for an IPID
+// in a single query, avoiding two separate database round-trips.
+// Returns (0, 0, nil) when the database is not initialised.
+func GetAccountStats(ipid string) (chips, playtime int64, err error) {
+	if db == nil {
+		return 0, 0, nil
+	}
+	err = db.QueryRow(
+		`SELECT COALESCE((SELECT BALANCE FROM CHIPS WHERE IPID = ?), 0),
+		        COALESCE((SELECT PLAYTIME FROM KNOWN_IPS WHERE IPID = ?), 0)`,
+		ipid, ipid).Scan(&chips, &playtime)
+	return
+}
+
+// SyncChipsForExistingPlaytime creates CHIPS rows for all KNOWN_IPS entries
+// that have accumulated PLAYTIME but do not yet have a CHIPS row. This is a
+// one-time migration for players who were active before the casino update.
+// The starting balance is the default (100) plus 1 chip per completed hour of
+// pre-existing playtime. Existing CHIPS rows are never modified.
+// Returns the number of new rows inserted.
+func SyncChipsForExistingPlaytime() (int64, error) {
+	if db == nil {
+		return 0, nil
+	}
+	res, err := db.Exec(`
+		INSERT OR IGNORE INTO CHIPS(IPID, BALANCE)
+		SELECT IPID, ? + (PLAYTIME / 3600)
+		FROM KNOWN_IPS
+		WHERE PLAYTIME > 0`, defaultChipBalance)
+	if err != nil {
+		return 0, err
+	}
+	n, _ := res.RowsAffected()
+	return n, nil
+}
+
 // PurgeKnownIPs deletes all rows from the KNOWN_IPS table.
 // It returns the number of rows removed.
 func PurgeKnownIPs() (int64, error) {
