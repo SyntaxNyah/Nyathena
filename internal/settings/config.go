@@ -92,6 +92,7 @@ type ServerConfig struct {
 	BotBanPlaytimeThreshold    int    `toml:"botban_playtime_threshold"`
 	IPHubAPIKey                string `toml:"iphub_api_key"`
 	EnableCasino               bool   `toml:"enable_casino"`
+	RegisterCaptcha            bool   `toml:"register_captcha"`
 }
 
 type LogConfig struct {
@@ -170,6 +171,7 @@ func DefaultConfig() *Config {
 			RandomSongCooldown:         5,
 			BotBanPlaytimeThreshold:    120,
 			EnableCasino:               true,
+			RegisterCaptcha:            true,
 		},
 		LogConfig{
 			BufSize:              150,

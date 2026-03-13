@@ -72,29 +72,30 @@ func TestGenerateCaptcha(t *testing.T) {
 func TestClientPendingReg(t *testing.T) {
 	c := &Client{}
 
-	// Initially all fields should be empty.
-	u, p, tok := c.PendingReg()
-	if u != "" || p != "" || tok != "" {
-		t.Errorf("expected empty pending reg, got (%q, %q, %q)", u, p, tok)
+	// Initially all fields should be zero-valued.
+	u, tok, hp := c.PendingReg()
+	if u != "" || tok != "" || hp != nil {
+		t.Errorf("expected empty pending reg, got (user=%q, tok=%q, pass=%v)", u, tok, hp)
 	}
 
 	// Set pending registration data.
-	c.SetPendingReg("alice", "s3cr3t!", "abc123def456abcd")
-	u, p, tok = c.PendingReg()
+	fakeHash := []byte("$2a$12$fakehashvalue")
+	c.SetPendingReg("alice", "abc123def456abcd", fakeHash)
+	u, tok, hp = c.PendingReg()
 	if u != "alice" {
 		t.Errorf("expected username 'alice', got %q", u)
-	}
-	if p != "s3cr3t!" {
-		t.Errorf("expected password 's3cr3t!', got %q", p)
 	}
 	if tok != "abc123def456abcd" {
 		t.Errorf("expected token 'abc123def456abcd', got %q", tok)
 	}
+	if string(hp) != string(fakeHash) {
+		t.Errorf("expected hash %q, got %q", fakeHash, hp)
+	}
 
 	// Clear pending registration.
-	c.SetPendingReg("", "", "")
-	u, p, tok = c.PendingReg()
-	if u != "" || p != "" || tok != "" {
-		t.Errorf("expected cleared pending reg, got (%q, %q, %q)", u, p, tok)
+	c.SetPendingReg("", "", nil)
+	u, tok, hp = c.PendingReg()
+	if u != "" || tok != "" || hp != nil {
+		t.Errorf("expected cleared pending reg, got (user=%q, tok=%q, pass=%v)", u, tok, hp)
 	}
 }

@@ -33,12 +33,36 @@ import (
 var validUsernameRe = regexp.MustCompile(`^[A-Za-z0-9_]{3,20}$`)
 
 // generateCaptcha returns a random 16-character hex string used as a registration captcha token.
+// Uses a stack-allocated [8]byte to avoid a heap allocation.
 func generateCaptcha() (string, error) {
-	b := make([]byte, 8)
-	if _, err := rand.Read(b); err != nil {
+	var b [8]byte
+	if _, err := rand.Read(b[:]); err != nil {
 		return "", err
 	}
-	return hex.EncodeToString(b), nil
+	return hex.EncodeToString(b[:]), nil
+}
+
+// onRegistered completes account creation after the DB row is already written:
+// auto-logs the client in, seeds chip balance, and sends the success message.
+func onRegistered(client *Client, username string) {
+	client.SetAuthenticated(true)
+	client.SetModName(username)
+	if config.EnableCasino {
+		if err := db.EnsureChipBalance(client.Ipid()); err != nil {
+			logger.LogErrorf("Failed to seed chip balance on register for %v: %v", username, err)
+		}
+	}
+	client.SendServerMessage(fmt.Sprintf(
+		"✅ Account '%v' created and logged in!\n\n"+
+			"📋 What your account tracks:\n"+
+			"  • 💰 Nyathena Chips (casino balance)\n"+
+			"  • ⏱ Playtime on this server\n"+
+			"  • 🏆 Casino leaderboard standings\n\n"+
+			"Use /account to view your profile.\n"+
+			"Use /chips to check your balance.\n"+
+			"Your account is linked to your connection — use /login <username> <password> to sign in on reconnect.",
+		username))
+	addToBuffer(client, "CMD", fmt.Sprintf("Registered player account %v.", username), false)
 }
 
 // Handles /register
@@ -46,28 +70,27 @@ func generateCaptcha() (string, error) {
 // Any player can create a free account. Accounts do not grant any extra
 // permissions — they exist purely to track in-game features such as
 // Nyathena Chip balance, playtime, and future leaderboard standings.
-// All existing moderator/admin accounts remain fully compatible.
 //
-// Registration is a two-step process:
-//  1. /register <username> <password> — validates the request and issues a captcha token.
-//  2. /captcha <token>               — confirms the captcha and finalises account creation.
+// When register_captcha is true (default) this is a two-step flow:
+//  1. /register <username> <password> — validates inputs and issues a captcha.
+//  2. /captcha <token>               — confirms the token and creates the account.
+//
+// When register_captcha is false the account is created immediately.
 func cmdRegister(client *Client, args []string, _ string) {
 	if client.Authenticated() {
 		client.SendServerMessage("You already have an account linked to this session. Use /logout first if you want to register a different account.")
 		return
 	}
 
-	// One account per IPID: block if this connection already has a linked account.
-	existingUser, err := db.GetUsernameByIPID(client.Ipid())
-	if err == nil && existingUser != "" {
+	// One account per IPID.
+	if existing, err := db.GetUsernameByIPID(client.Ipid()); err == nil && existing != "" {
 		client.SendServerMessage(fmt.Sprintf(
 			"An account ('%v') is already registered on your connection.\nUse /login %v <password> to sign in.",
-			existingUser, existingUser))
+			existing, existing))
 		return
 	}
 
-	username := args[0]
-	password := args[1]
+	username, password := args[0], args[1]
 
 	if !validUsernameRe.MatchString(username) {
 		client.SendServerMessage("Username must be 3–20 characters and may only contain letters, numbers, and underscores.")
@@ -77,27 +100,37 @@ func cmdRegister(client *Client, args []string, _ string) {
 		client.SendServerMessage("Password must be at least 6 characters.")
 		return
 	}
-
 	if db.UserExists(username) {
 		client.SendServerMessage("That username is already taken. Please choose another.")
 		return
 	}
 
-	// Generate a random captcha token and hold the registration details until confirmed.
-	// Hash the password now so no plaintext password is kept in memory after this point.
-	token, err := generateCaptcha()
-	if err != nil {
-		logger.LogErrorf("Failed to generate captcha for %v (IPID %v): %v", username, client.Ipid(), err)
-		client.SendServerMessage("Registration failed. Please try again.")
+	// When captcha is disabled, register immediately — no token generation,
+	// no pending state, no extra allocations.
+	if !config.RegisterCaptcha {
+		if err := db.RegisterPlayer(username, []byte(password), client.Ipid()); err != nil {
+			logger.LogErrorf("Register failed for %v (IPID %v): %v", username, client.Ipid(), err)
+			client.SendServerMessage("Registration failed. Please try again.")
+			return
+		}
+		onRegistered(client, username)
 		return
 	}
+
+	// Captcha enabled: hash the password now so no plaintext is kept in pending state.
 	hashed, err := bcrypt.GenerateFromPassword([]byte(password), 12)
 	if err != nil {
 		logger.LogErrorf("Failed to hash password for %v (IPID %v): %v", username, client.Ipid(), err)
 		client.SendServerMessage("Registration failed. Please try again.")
 		return
 	}
-	client.SetPendingReg(username, string(hashed), token)
+	token, err := generateCaptcha()
+	if err != nil {
+		logger.LogErrorf("Failed to generate captcha for %v (IPID %v): %v", username, client.Ipid(), err)
+		client.SendServerMessage("Registration failed. Please try again.")
+		return
+	}
+	client.SetPendingReg(username, token, hashed)
 
 	client.SendServerMessage(fmt.Sprintf(
 		"🔐 One last step to create account '%v'!\n\n"+
@@ -111,34 +144,37 @@ func cmdRegister(client *Client, args []string, _ string) {
 //
 // Completes a pending registration that was started with /register.
 // The player must supply the exact token that was issued during /register.
-func cmdCaptcha(client *Client, args []string, usage string) {
-	pendingUser, pendingHashedPass, expectedToken := client.PendingReg()
+func cmdCaptcha(client *Client, args []string, _ string) {
+	if !config.RegisterCaptcha {
+		client.SendServerMessage("Registration captcha is not enabled on this server.")
+		return
+	}
+
+	pendingUser, expectedToken, pendingHashedPass := client.PendingReg()
 	if pendingUser == "" {
 		client.SendServerMessage("You don't have a pending registration. Use /register <username> <password> to start one.")
 		return
 	}
 
-	// Use a constant-time comparison to prevent timing-based token guessing.
+	// Constant-time comparison prevents timing-based token guessing.
 	if subtle.ConstantTimeCompare([]byte(args[0]), []byte(expectedToken)) != 1 {
-		// Wrong token — clear the pending state so they have to restart.
-		client.SetPendingReg("", "", "")
+		client.SetPendingReg("", "", nil)
 		client.SendServerMessage("❌ Incorrect captcha token. Please use /register <username> <password> again to get a new token.")
 		return
 	}
 
-	// Captcha correct — clear pending state before creating the account.
-	client.SetPendingReg("", "", "")
+	// Token correct — clear pending state before touching the DB.
+	client.SetPendingReg("", "", nil)
 
-	// Re-check conditions that could have changed since /register was typed.
+	// Re-check conditions that may have changed while the captcha was pending.
 	if client.Authenticated() {
 		client.SendServerMessage("You are already logged in.")
 		return
 	}
-	existingUser, err := db.GetUsernameByIPID(client.Ipid())
-	if err == nil && existingUser != "" {
+	if existing, err := db.GetUsernameByIPID(client.Ipid()); err == nil && existing != "" {
 		client.SendServerMessage(fmt.Sprintf(
 			"An account ('%v') was registered on your connection in the meantime. Use /login %v <password> to sign in.",
-			existingUser, existingUser))
+			existing, existing))
 		return
 	}
 	if db.UserExists(pendingUser) {
@@ -146,35 +182,13 @@ func cmdCaptcha(client *Client, args []string, usage string) {
 		return
 	}
 
-	// The password was already hashed at /register time; use the pre-hashed form.
-	if err := db.RegisterPlayerHashed(pendingUser, []byte(pendingHashedPass), client.Ipid()); err != nil {
+	// Password was already bcrypt-hashed at /register time.
+	if err := db.RegisterPlayerHashed(pendingUser, pendingHashedPass, client.Ipid()); err != nil {
 		logger.LogErrorf("Register failed for %v (IPID %v): %v", pendingUser, client.Ipid(), err)
 		client.SendServerMessage("Registration failed. Please try again.")
 		return
 	}
-
-	// Auto-login the new account (permissions stay 0 — no extra powers).
-	client.SetAuthenticated(true)
-	client.SetModName(pendingUser)
-
-	// Guarantee a chip row exists (100 chips if not already seeded).
-	if config.EnableCasino {
-		if err := db.EnsureChipBalance(client.Ipid()); err != nil {
-			logger.LogErrorf("Failed to seed chip balance on register for %v: %v", pendingUser, err)
-		}
-	}
-
-	client.SendServerMessage(fmt.Sprintf(
-		"✅ Account '%v' created and logged in!\n\n"+
-			"📋 What your account tracks:\n"+
-			"  • 💰 Nyathena Chips (casino balance)\n"+
-			"  • ⏱ Playtime on this server\n"+
-			"  • 🏆 Casino leaderboard standings\n\n"+
-			"Use /account to view your profile.\n"+
-			"Use /chips to check your balance.\n"+
-			"Your account is linked to your connection — use /login <username> <password> to sign in on reconnect.",
-		pendingUser))
-	addToBuffer(client, "CMD", fmt.Sprintf("Registered player account %v.", pendingUser), false)
+	onRegistered(client, pendingUser)
 }
 
 // Handles /account
