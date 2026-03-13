@@ -52,9 +52,6 @@ var rouletteRedNumbers = map[int]bool{
 }
 
 func cmdCasinoRoulette(client *Client, args []string, _ string) {
-	if !casinoCheck(client) {
-		return
-	}
 	if len(args) < 2 || strings.ToLower(args[0]) != "bet" {
 		client.SendServerMessage("Usage: /croulette bet <red|black|even|odd|low|high|number <n>> <amount>")
 		return
@@ -188,9 +185,6 @@ func baccaratHandValue(hand []Card) int {
 }
 
 func cmdBaccarat(client *Client, args []string, _ string) {
-	if !casinoCheck(client) {
-		return
-	}
 	if len(args) < 2 {
 		client.SendServerMessage("Usage: /baccarat <player|banker|tie> <amount>")
 		return
@@ -321,9 +315,6 @@ func cmdBaccarat(client *Client, args []string, _ string) {
 // ============================================================
 
 func cmdCraps(client *Client, args []string, _ string) {
-	if !casinoCheck(client) {
-		return
-	}
 	if len(args) < 3 || strings.ToLower(args[0]) != "bet" {
 		client.SendServerMessage("Usage: /craps bet <pass|nopass> <amount>")
 		return
@@ -429,9 +420,6 @@ type CrashState struct {
 var playerCrashStates sync.Map
 
 func cmdCrash(client *Client, args []string, _ string) {
-	if !casinoCheck(client) {
-		return
-	}
 	if len(args) == 0 {
 		client.SendServerMessage("Usage: /crash bet <amount> | /crash cashout")
 		return
@@ -560,9 +548,6 @@ func minesMultiplier(safePicks, mineCount int) float64 {
 }
 
 func cmdMines(client *Client, args []string, _ string) {
-	if !casinoCheck(client) {
-		return
-	}
 	if len(args) == 0 {
 		client.SendServerMessage("Usage: /mines start <mines> <bet> | /mines pick <n> | /mines cashout | /mines quit")
 		return
@@ -724,9 +709,6 @@ var kenoPayouts = map[int]map[int]int{
 }
 
 func cmdKeno(client *Client, args []string, _ string) {
-	if !casinoCheck(client) {
-		return
-	}
 	// Usage: /keno pick <numbers...> <bet>
 	// e.g.  /keno pick 1 5 13 27 100
 	if len(args) < 3 || strings.ToLower(args[0]) != "pick" {
@@ -852,9 +834,6 @@ var wheelSegments = []wheelSegment{
 }
 
 func cmdWheel(client *Client, args []string, _ string) {
-	if !casinoCheck(client) {
-		return
-	}
 	if len(args) < 2 || strings.ToLower(args[0]) != "spin" {
 		client.SendServerMessage("Usage: /wheel spin <bet>")
 		return

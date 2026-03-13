@@ -164,9 +164,6 @@ func slotsDoSpin(client *Client, bet int64) {
 
 // cmdSlots handles /slots subcommands.
 func cmdSlots(client *Client, args []string, _ string) {
-	if !casinoCheck(client) {
-		return
-	}
 
 	if len(args) == 0 || args[0] == "spin" {
 		bet := int64(10)

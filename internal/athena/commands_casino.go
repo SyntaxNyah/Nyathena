@@ -228,6 +228,11 @@ func chipsTopGlobal(client *Client, args []string) {
 	client.SendServerMessage(sb.String())
 }
 
+// cmdRichest is a convenience alias for /chips top — shows the global chip leaderboard.
+func cmdRichest(client *Client, args []string, _ string) {
+	chipsTopGlobal(client, args)
+}
+
 func chipsTopArea(client *Client, args []string) {
 	n := 10
 	if len(args) > 0 {

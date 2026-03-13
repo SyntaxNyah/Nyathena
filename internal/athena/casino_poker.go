@@ -1057,9 +1057,6 @@ func pokerIsPlayerTurn(table *PokerTable, client *Client) bool {
 
 // cmdPoker is the dispatcher for /poker subcommands.
 func cmdPoker(client *Client, args []string, _ string) {
-	if !casinoCheck(client) {
-		return
-	}
 	if len(args) == 0 {
 		client.SendServerMessage("Usage: /poker join|ready|hand|check|call|bet <n>|raise <n>|fold|allin|status|leave")
 		return
