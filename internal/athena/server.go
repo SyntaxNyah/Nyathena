@@ -211,6 +211,16 @@ func NewServer(conf *settings.Config) (*Server, error) {
 		logger.LogInfof("Pruned %d IP(s) with less than 1 hour of playtime.", n)
 	}
 
+	// Sync chip balances for players who accumulated playtime before the casino
+	// was introduced. Uses INSERT OR IGNORE so existing balances are never touched.
+	if conf.EnableCasino {
+		if n, err := db.SyncChipsForExistingPlaytime(); err != nil {
+			logger.LogErrorf("Failed to sync chips for pre-casino playtime: %v", err)
+		} else if n > 0 {
+			logger.LogInfof("Synced chip balances for %d IP(s) with pre-casino playtime.", n)
+		}
+	}
+
 	// Pre-populate the in-memory first-seen tracker with IPs that were seen in
 	// previous server sessions.  This ensures returning players are never treated
 	// as "new" by the global new-IP rate limiter after a restart.
