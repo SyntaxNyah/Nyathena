@@ -697,6 +697,11 @@ func pktIC(client *Client, p *packet.Packet) {
 	// Quickdraw: record the reaction for any active duel.
 	quickdrawOnIC(client)
 
+	// Unscramble: check whether the IC message is the correct answer.
+	if config != nil && config.EnableCasino {
+		unscrambleOnIC(client, msgText)
+	}
+
 	// Automod: check the decoded message for banned words before broadcasting.
 	if autoModCheck(client, msgText) {
 		return

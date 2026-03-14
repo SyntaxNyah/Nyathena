@@ -302,7 +302,60 @@ Toggle whether you see gambling broadcast messages in the area chat.
 
 ---
 
-## Staff Commands (MODIFY_AREA permission required)
+## Earning Chips Without Gambling
+
+Beyond casino games, there are two non-gambling ways to earn chips.
+
+### 🔤 Unscramble Events
+
+Every **30–60 minutes** (random) the server posts a scrambled word to all players via OOC broadcast. The **first player to type the correct unscrambled word in IC chat** wins **10 chips**.
+
+- Puzzles expire after **5 minutes** if nobody answers.
+- The prize is fixed at 10 chips per event.
+- Wins are tracked per account for a dedicated leaderboard.
+
+| Command | Description |
+|---------|-------------|
+| `/unscramble` | Show your win count and the current active puzzle (if any). |
+| `/unscramble top [n]` | Show the top unscramble winners (top 10 by default, max 50). |
+
+**Example:**
+```
+🔤 UNSCRAMBLE EVENT! Unscramble this word in IC chat to win 10 chips!
+   Scrambled: TONYETAR
+   You have 5 minutes. First correct answer wins!
+
+> (player types "attorney" in IC)
+🎉 UNSCRAMBLE SOLVED! Phoenix got it right — the answer was "attorney"! +10 chips awarded.
+```
+
+---
+
+### 💼 Jobs
+
+Type a job command to earn a small chip reward. Each job has a **long cooldown** (40–60 minutes) to keep rewards sustainable and prevent spam.
+
+| Command | Reward | Cooldown | Flavour |
+|---------|--------|----------|---------|
+| `/janitor` | +3 chips | 45 min | Sweep the courthouse floors. |
+| `/busker` | +4 chips | 40 min | Play music outside for tips. |
+| `/paperboy` | +3 chips | 50 min | Deliver newspapers and briefs. |
+| `/bailiffjob` | +5 chips | 60 min | Stand guard duty in the courtroom. |
+| `/clerk` | +4 chips | 55 min | File paperwork at the records desk. |
+
+Use `/jobs` to see all available jobs, their rewards, and cooldowns in one place.
+
+**Example:**
+```
+/janitor
+🧹 You swept the courthouse floors. +3 chips | Balance: 103 chips
+
+/janitor (before cooldown expires)
+🧹 You are tired. Come back in 43m 12s to work again.
+```
+
+---
+
 
 ### `/casinoenable <true|false>`
 Enable or disable the casino for the current area.

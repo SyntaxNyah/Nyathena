@@ -58,7 +58,7 @@ const MaxChipBalance = 10_000_000
 
 // Database version.
 // This should be incremented whenever changes are made to the DB that require existing databases to upgrade.
-const ver = 9
+const ver = 10
 
 // Persistent punishment kind constants.
 const (
@@ -172,6 +172,22 @@ func Open() error {
 	if err != nil {
 		return err
 	}
+	_, err = db.Exec(`CREATE TABLE IF NOT EXISTS UNSCRAMBLE_WINS(
+		IPID TEXT PRIMARY KEY,
+		WINS INTEGER NOT NULL DEFAULT 0
+	)`)
+	if err != nil {
+		return err
+	}
+	_, err = db.Exec(`CREATE TABLE IF NOT EXISTS JOB_COOLDOWNS(
+		IPID    TEXT    NOT NULL,
+		JOB     TEXT    NOT NULL,
+		LAST_AT INTEGER NOT NULL DEFAULT 0,
+		PRIMARY KEY (IPID, JOB)
+	)`)
+	if err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -281,6 +297,28 @@ func upgradeDB(v int) error {
 			return err
 		}
 		_, err = db.Exec("PRAGMA user_version = 9")
+		if err != nil {
+			return err
+		}
+		fallthrough
+	case 9:
+		_, err := db.Exec(`CREATE TABLE IF NOT EXISTS UNSCRAMBLE_WINS(
+			IPID TEXT PRIMARY KEY,
+			WINS INTEGER NOT NULL DEFAULT 0
+		)`)
+		if err != nil {
+			return err
+		}
+		_, err = db.Exec(`CREATE TABLE IF NOT EXISTS JOB_COOLDOWNS(
+			IPID    TEXT    NOT NULL,
+			JOB     TEXT    NOT NULL,
+			LAST_AT INTEGER NOT NULL DEFAULT 0,
+			PRIMARY KEY (IPID, JOB)
+		)`)
+		if err != nil {
+			return err
+		}
+		_, err = db.Exec("PRAGMA user_version = 10")
 		if err != nil {
 			return err
 		}
@@ -1122,4 +1160,92 @@ func GetTopPlaytimes(n int) ([]PlaytimeEntry, error) {
 		entries = append(entries, e)
 	}
 	return entries, rows.Err()
+}
+
+// UnscrambleEntry holds one row from the UNSCRAMBLE_WINS leaderboard.
+type UnscrambleEntry struct {
+	// Username is the registered account name linked to the IPID, if any.
+	// Falls back to an empty string when the player has no account.
+	Username string
+	// IPID is the player's connection fingerprint, used as a display-name
+	// fallback when Username is empty.
+	IPID string
+	// Wins is the total number of unscramble puzzles solved.
+	Wins int64
+}
+
+// AddUnscrambleWin increments the win counter for the given IPID by 1.
+func AddUnscrambleWin(ipid string) error {
+if db == nil {
+return nil
+}
+_, err := db.Exec(`
+INSERT INTO UNSCRAMBLE_WINS(IPID, WINS) VALUES(?, 1)
+ON CONFLICT(IPID) DO UPDATE SET WINS = WINS + 1`, ipid)
+return err
+}
+
+// GetUnscrambleWins returns the total unscramble wins for the given IPID.
+func GetUnscrambleWins(ipid string) (int64, error) {
+if db == nil {
+return 0, nil
+}
+var wins int64
+err := db.QueryRow("SELECT WINS FROM UNSCRAMBLE_WINS WHERE IPID = ?", ipid).Scan(&wins)
+if err == sql.ErrNoRows {
+return 0, nil
+}
+return wins, err
+}
+
+// GetTopUnscrambleWins returns the top n players by unscramble wins.
+// Players without a linked account fall back to their IPID as the display name.
+func GetTopUnscrambleWins(n int) ([]UnscrambleEntry, error) {
+if db == nil {
+return nil, nil
+}
+rows, err := db.Query(`
+SELECT w.IPID, COALESCE(u.USERNAME, '') AS USERNAME, w.WINS
+FROM UNSCRAMBLE_WINS w
+LEFT JOIN USERS u ON u.IPID = w.IPID
+ORDER BY w.WINS DESC LIMIT ?`, n)
+if err != nil {
+return nil, err
+}
+defer rows.Close()
+entries := make([]UnscrambleEntry, 0, n)
+for rows.Next() {
+var e UnscrambleEntry
+if err := rows.Scan(&e.IPID, &e.Username, &e.Wins); err != nil {
+return entries, err
+}
+entries = append(entries, e)
+}
+return entries, rows.Err()
+}
+
+// CheckAndSetJobCooldown checks whether the given job is on cooldown for the
+// IPID. If it is not on cooldown, the last-use timestamp is updated atomically
+// and the function returns (false, 0). If it is on cooldown, it returns
+// (true, secondsRemaining) without modifying the database.
+func CheckAndSetJobCooldown(ipid, job string, cooldownSeconds int64) (onCooldown bool, remaining int64, err error) {
+if db == nil {
+return false, 0, nil
+}
+now := time.Now().UTC().Unix()
+var lastAt int64
+qErr := db.QueryRow("SELECT LAST_AT FROM JOB_COOLDOWNS WHERE IPID = ? AND JOB = ?", ipid, job).Scan(&lastAt)
+if qErr != nil && qErr != sql.ErrNoRows {
+return false, 0, qErr
+}
+if qErr == nil {
+rem := cooldownSeconds - (now - lastAt)
+if rem > 0 {
+return true, rem, nil
+}
+}
+_, err = db.Exec(`
+INSERT INTO JOB_COOLDOWNS(IPID, JOB, LAST_AT) VALUES(?, ?, ?)
+ON CONFLICT(IPID, JOB) DO UPDATE SET LAST_AT = excluded.LAST_AT`, ipid, job, now)
+return false, 0, err
 }

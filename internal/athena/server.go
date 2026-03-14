@@ -436,6 +436,7 @@ func NewServer(conf *settings.Config) (*Server, error) {
 	go startConnTrackerCleanup()
 	if conf.EnableCasino {
 		go startHourlyChipAward()
+		go startUnscrambleLoop()
 	}
 	return s, nil
 }
