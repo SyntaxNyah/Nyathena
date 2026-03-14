@@ -287,4 +287,3 @@ func cmdJobTop(client *Client, args []string, usage string) {
 	}
 	client.SendServerMessage(sb.String())
 }
-

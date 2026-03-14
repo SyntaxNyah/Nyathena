@@ -417,7 +417,7 @@ func (client *Client) clientCleanup() {
 
 // SendServerMessage sends a server OOC message to the client.
 func (client *Client) SendServerMessage(message string) {
-	client.SendPacket("CT", encode(config.Name), encode(message), "1")
+	client.SendPacket("CT", encodedServerName, encode(message), "1")
 }
 
 // KickForRateLimit kicks the client for exceeding the message (IC/OOC/music) rate limit.

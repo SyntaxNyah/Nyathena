@@ -258,4 +258,3 @@ func cmdUnscramble(client *Client, args []string, _ string) {
 
 	client.SendServerMessage("Usage: /unscramble [top [n]]")
 }
-
