@@ -51,7 +51,7 @@ func getCasinoState(a *area.Area) *AreaCasinoState {
 // globalDefaultMaxBet is the server-wide maximum bet enforced when an area has
 // not configured its own maxbet limit.  This prevents single bets from being
 // astronomically large regardless of the player's balance.
-const globalDefaultMaxBet = 1_000_000
+const globalDefaultMaxBet = 10_000_000
 
 // validateBet checks the bet against area min/max limits and the player's chip balance.
 // Returns (valid bool, reason string).

@@ -113,6 +113,10 @@ func printCasinoDashboard(client *Client) {
 	sb.WriteString("  /mines start <mines> <bet> | /mines pick <n> | /mines cashout | /mines quit\n")
 	sb.WriteString("  /keno pick <numbers...> <bet>\n")
 	sb.WriteString("  /wheel spin <bet>\n")
+	sb.WriteString("  /shop                    — spend chips on tags & job perks\n")
+	sb.WriteString("  /shop buy <id>            — buy an item\n")
+	sb.WriteString("  /shop items               — see your owned items\n")
+	sb.WriteString("  /settag <tag_id>|none     — equip or remove your cosmetic tag\n")
 
 	client.SendServerMessage(sb.String())
 }

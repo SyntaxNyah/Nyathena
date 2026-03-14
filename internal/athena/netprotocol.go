@@ -179,13 +179,18 @@ func pktReqDone(client *Client, _ *packet.Packet) {
 					"  • /help          — see every available command\n" +
 					"  • /casino        — open the casino dashboard (active tables, balance, game list)\n" +
 					"  • /chips         — check your chip balance\n" +
-					"  • /jobs          — list all jobs you can work to earn chips\n\n" +
+					"  • /jobs          — list all jobs you can work to earn chips\n" +
+					"  • /shop          — spend chips on permanent tags & job perks\n\n" +
 					"💰 Ways to earn chips:\n" +
-					"  • Everyone starts with 100 chips automatically.\n" +
+					"  • Everyone starts with 500 chips automatically.\n" +
 					"  • Earn 1 chip per hour of playtime.\n" +
 					"  • Work a job: /janitor /busker /paperboy /bailiffjob /clerk  (40–60 min cooldowns).\n" +
 					"  • Unscramble events every 30–60 min — type the answer in IC chat to win 10 chips!\n" +
 					"    Use /unscramble to check your wins or see if a puzzle is active right now.\n\n" +
+					"🛒 Spend your chips at /shop:\n" +
+					"  • 30 gambling-themed cosmetic tags visible in /gas & /players (from 1,000 chips)\n" +
+					"  • Job cooldown passes — permanently reduce job wait times\n" +
+					"  • Job bonus passes   — permanently earn more chips per job\n\n" +
 					"📊 Leaderboards:\n" +
 					"  • /richest           — top chip holders on the server\n" +
 					"  • /playtime top      — top players by total time spent on the server\n" +

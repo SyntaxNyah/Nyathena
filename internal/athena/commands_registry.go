@@ -1524,6 +1524,22 @@ func initCommands() {
 			reqPerms:  permissions.PermissionField["NONE"],
 			casinoCmd: true,
 		},
+		"shop": {
+			handler:   cmdShop,
+			minArgs:   0,
+			usage:     "Usage: /shop | /shop buy <item_id> | /shop items",
+			desc:      "Browse the Nyathena Shop: buy permanent cosmetic tags and job perks with chips.",
+			reqPerms:  permissions.PermissionField["NONE"],
+			casinoCmd: true,
+		},
+		"settag": {
+			handler:   cmdSetTag,
+			minArgs:   1,
+			usage:     "Usage: /settag <tag_id> | /settag none",
+			desc:      "Equip a purchased cosmetic tag to display next to your name in /gas and /players.",
+			reqPerms:  permissions.PermissionField["NONE"],
+			casinoCmd: true,
+		},
 	}
 }
 

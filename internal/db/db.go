@@ -49,7 +49,7 @@ var DBPath string
 var db *sql.DB
 
 // defaultChipBalance is the starting chip balance assigned to new players.
-const defaultChipBalance = 100
+const defaultChipBalance = 500
 
 // MaxChipBalance is the hard upper limit on any player's chip balance.
 // AddChips will silently clamp the result to this value, preventing runaway
@@ -58,7 +58,7 @@ const MaxChipBalance = 10_000_000
 
 // Database version.
 // This should be incremented whenever changes are made to the DB that require existing databases to upgrade.
-const ver = 11
+const ver = 12
 
 // Persistent punishment kind constants.
 const (
@@ -191,6 +191,21 @@ func Open() error {
 	_, err = db.Exec(`CREATE TABLE IF NOT EXISTS JOB_EARNINGS(
 		IPID  TEXT    PRIMARY KEY,
 		TOTAL INTEGER NOT NULL DEFAULT 0
+	)`)
+	if err != nil {
+		return err
+	}
+	_, err = db.Exec(`CREATE TABLE IF NOT EXISTS SHOP_PURCHASES(
+		IPID    TEXT NOT NULL,
+		ITEM_ID TEXT NOT NULL,
+		PRIMARY KEY (IPID, ITEM_ID)
+	)`)
+	if err != nil {
+		return err
+	}
+	_, err = db.Exec(`CREATE TABLE IF NOT EXISTS PLAYER_ACTIVE_TAG(
+		IPID   TEXT PRIMARY KEY,
+		TAG_ID TEXT NOT NULL DEFAULT ''
 	)`)
 	if err != nil {
 		return err
@@ -339,6 +354,27 @@ func upgradeDB(v int) error {
 			return err
 		}
 		_, err = db.Exec("PRAGMA user_version = 11")
+		if err != nil {
+			return err
+		}
+		fallthrough
+	case 11:
+		_, err := db.Exec(`CREATE TABLE IF NOT EXISTS SHOP_PURCHASES(
+			IPID    TEXT NOT NULL,
+			ITEM_ID TEXT NOT NULL,
+			PRIMARY KEY (IPID, ITEM_ID)
+		)`)
+		if err != nil {
+			return err
+		}
+		_, err = db.Exec(`CREATE TABLE IF NOT EXISTS PLAYER_ACTIVE_TAG(
+			IPID   TEXT PRIMARY KEY,
+			TAG_ID TEXT NOT NULL DEFAULT ''
+		)`)
+		if err != nil {
+			return err
+		}
+		_, err = db.Exec("PRAGMA user_version = 12")
 		if err != nil {
 			return err
 		}
@@ -1362,4 +1398,101 @@ ORDER BY j.TOTAL DESC LIMIT ?`, n)
 		entries = append(entries, e)
 	}
 	return entries, rows.Err()
+}
+
+// ── Shop / Tags ───────────────────────────────────────────────────────────────
+
+// PurchaseShopItem atomically deducts cost chips from ipid and records the
+// purchase. Returns an error if the player has insufficient funds, or if they
+// already own the item.
+func PurchaseShopItem(ipid, itemID string, cost int64) error {
+if db == nil {
+return fmt.Errorf("database unavailable")
+}
+tx, err := db.Begin()
+if err != nil {
+return err
+}
+defer tx.Rollback() //nolint:errcheck
+
+// Check current balance.
+var balance int64
+if err := tx.QueryRow("SELECT BALANCE FROM CHIPS WHERE IPID = ?", ipid).Scan(&balance); err != nil {
+return fmt.Errorf("could not read balance")
+}
+if balance < cost {
+return fmt.Errorf("insufficient chips (have %d, need %d)", balance, cost)
+}
+
+// Deduct cost.
+if _, err := tx.Exec("UPDATE CHIPS SET BALANCE = BALANCE - ? WHERE IPID = ?", cost, ipid); err != nil {
+return err
+}
+
+// Record purchase — IGNORE if already owned (caller should check HasShopItem first).
+res, err := tx.Exec("INSERT OR IGNORE INTO SHOP_PURCHASES(IPID, ITEM_ID) VALUES(?, ?)", ipid, itemID)
+if err != nil {
+return err
+}
+affected, _ := res.RowsAffected()
+if affected == 0 {
+// Item was already owned — rollback so chips are not deducted.
+_ = tx.Rollback()
+return fmt.Errorf("already owned")
+}
+
+return tx.Commit()
+}
+
+// HasShopItem returns true when ipid has purchased itemID.
+func HasShopItem(ipid, itemID string) bool {
+if db == nil {
+return false
+}
+var count int
+db.QueryRow("SELECT COUNT(*) FROM SHOP_PURCHASES WHERE IPID = ? AND ITEM_ID = ?", ipid, itemID).Scan(&count) //nolint:errcheck
+return count > 0
+}
+
+// GetPlayerShopItems returns all item IDs purchased by ipid.
+func GetPlayerShopItems(ipid string) ([]string, error) {
+if db == nil {
+return nil, nil
+}
+rows, err := db.Query("SELECT ITEM_ID FROM SHOP_PURCHASES WHERE IPID = ?", ipid)
+if err != nil {
+return nil, err
+}
+defer rows.Close()
+var items []string
+for rows.Next() {
+var id string
+if err := rows.Scan(&id); err != nil {
+return items, err
+}
+items = append(items, id)
+}
+return items, rows.Err()
+}
+
+// SetActiveTag stores the player's chosen active tag.  Pass an empty string to
+// clear the tag.
+func SetActiveTag(ipid, tagID string) error {
+if db == nil {
+return nil
+}
+_, err := db.Exec(`
+INSERT INTO PLAYER_ACTIVE_TAG(IPID, TAG_ID) VALUES(?, ?)
+ON CONFLICT(IPID) DO UPDATE SET TAG_ID = excluded.TAG_ID`, ipid, tagID)
+return err
+}
+
+// GetActiveTag returns the player's active tag ID, or "" if none is set.
+func GetActiveTag(ipid string) string {
+if db == nil {
+return ""
+}
+var tagID string
+db.QueryRow("SELECT TAG_ID FROM PLAYER_ACTIVE_TAG WHERE IPID = ?", ipid).Scan(&tagID) //nolint:errcheck
+return tagID
 }
