@@ -176,17 +176,20 @@ func pktReqDone(client *Client, _ *packet.Packet) {
 			client.SendServerMessage(
 				"🎰 Welcome! This server runs the Nyathena Casino — virtual chips, games, jobs & more.\n\n" +
 					"📖 Quick navigation:\n" +
-					"  • /help      — see every available command\n" +
-					"  • /casino    — open the casino dashboard (active tables, balance, game list)\n" +
-					"  • /chips     — check your chip balance\n" +
-					"  • /jobs      — list all jobs you can work to earn chips\n\n" +
+					"  • /help          — see every available command\n" +
+					"  • /casino        — open the casino dashboard (active tables, balance, game list)\n" +
+					"  • /chips         — check your chip balance\n" +
+					"  • /jobs          — list all jobs you can work to earn chips\n\n" +
 					"💰 Ways to earn chips:\n" +
 					"  • Everyone starts with 100 chips automatically.\n" +
-					"  • Earn 1 chip per hour of playtime (/playtime for the leaderboard).\n" +
+					"  • Earn 1 chip per hour of playtime.\n" +
 					"  • Work a job: /janitor /busker /paperboy /bailiffjob /clerk  (40–60 min cooldowns).\n" +
 					"  • Unscramble events every 30–60 min — type the answer in IC chat to win 10 chips!\n" +
-					"    Use /unscramble to see your wins or check if a puzzle is active now.\n" +
-					"  • /richest — see the global chip leaderboard.\n\n" +
+					"    Use /unscramble to check your wins or see if a puzzle is active right now.\n\n" +
+					"📊 Leaderboards:\n" +
+					"  • /richest           — top chip holders on the server\n" +
+					"  • /playtime top      — top players by total time spent on the server\n" +
+					"  • /unscramble top    — top players by unscramble event wins\n\n" +
 					"💡 Create a free account to keep your balance & appear on leaderboards:\n" +
 					"  /register <username> <password>  — create your free account\n" +
 					"  /login <username> <password>     — sign in if you already have one\n\n" +

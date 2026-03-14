@@ -19,6 +19,7 @@ package athena
 import (
 	"fmt"
 	"math/rand"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -227,7 +228,7 @@ func cmdUnscramble(client *Client, args []string, _ string) {
 	if strings.ToLower(args[0]) == "top" {
 		n := 10
 		if len(args) > 1 {
-			if v := parseInt(args[1]); v > 0 && v <= 50 {
+			if v, err := strconv.Atoi(args[1]); err == nil && v > 0 && v <= 50 {
 				n = v
 			}
 		}
@@ -257,17 +258,4 @@ func cmdUnscramble(client *Client, args []string, _ string) {
 
 	client.SendServerMessage("Usage: /unscramble [top [n]]")
 }
-
-// parseInt parses a string into an int, returning 0 on failure.
-func parseInt(s string) int {
-	n := 0
-	for _, c := range s {
-		if c < '0' || c > '9' {
-			return 0
-		}
-		n = n*10 + int(c-'0')
-	}
-	return n
-}
-
 
