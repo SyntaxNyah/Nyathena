@@ -189,7 +189,8 @@ func pktReqDone(client *Client, _ *packet.Packet) {
 					"📊 Leaderboards:\n" +
 					"  • /richest           — top chip holders on the server\n" +
 					"  • /playtime top      — top players by total time spent on the server\n" +
-					"  • /unscramble top    — top players by unscramble event wins\n\n" +
+					"  • /unscramble top    — top players by unscramble event wins\n" +
+					"  • /jobtop            — top players by chips earned from jobs\n\n" +
 					"💡 Create a free account to keep your balance & appear on leaderboards:\n" +
 					"  /register <username> <password>  — create your free account\n" +
 					"  /login <username> <password>     — sign in if you already have one\n\n" +

@@ -19,6 +19,7 @@ package athena
 import (
 	"fmt"
 	"math/rand"
+	"strconv"
 	"strings"
 
 	"github.com/MangosArentLiterature/Athena/internal/db"
@@ -45,25 +46,25 @@ var jobs = map[string]jobDef{
 	"busker": {
 		key:      "busker",
 		reward:   2, // base; actual tips are random 2–6
-		cooldown: 40 * 60, // 40 minutes
+		cooldown: 30 * 60, // 30 minutes
 		emoji:    "🎸",
 	},
 	"paperboy": {
 		key:      "paperboy",
 		reward:   3,
-		cooldown: 50 * 60, // 50 minutes
+		cooldown: 60 * 60, // 60 minutes
 		emoji:    "📰",
 	},
 	"bailiffjob": {
 		key:      "bailiffjob",
 		reward:   5,
-		cooldown: 60 * 60, // 60 minutes
+		cooldown: 120 * 60, // 2 hours
 		emoji:    "🛡️",
 	},
 	"clerk": {
 		key:      "clerk",
 		reward:   4,
-		cooldown: 55 * 60, // 55 minutes
+		cooldown: 90 * 60, // 90 minutes
 		emoji:    "📋",
 	},
 }
@@ -219,6 +220,9 @@ func awardJobChips(client *Client, j jobDef, reward int64, flavour string) {
 		client.SendServerMessage("Something went wrong awarding chips. Please try again later.")
 		return
 	}
+	if err := db.AddJobEarnings(client.Ipid(), reward); err != nil {
+		logger.LogErrorf("jobs: AddJobEarnings failed for ipid=%v job=%v: %v", client.Ipid(), j.key, err)
+	}
 	client.SendServerMessage(fmt.Sprintf(
 		"%s %s +%d chips | Balance: %d chips",
 		j.emoji, flavour, reward, newBal,
@@ -241,16 +245,46 @@ func cmdJobs(client *Client, _ []string, _ string) {
 	sb.WriteString("  " + strings.Repeat("─", 56) + "\n")
 	type row struct{ name, base, cd, note string }
 	rows := []row{
-		{"janitor",    "3 chips",  "45 min", "25% chance to find a coin (+1 bonus)"},
-		{"busker",     "2–6 chips","40 min", "Random tips; performs in area chat!"},
-		{"paperboy",   "3 chips",  "50 min", "15% chance for a generous tip (+2 bonus)"},
-		{"bailiffjob", "5 chips",  "60 min", "10% chance to catch something (+2 bonus)"},
-		{"clerk",      "4 chips",  "55 min", "15% overtime rush chance (+2 bonus)"},
+		{"busker",     "2–6 chips", "30 min",  "Random tips; performs in area chat!"},
+		{"janitor",    "3 chips",   "45 min",  "25% chance to find a coin (+1 bonus)"},
+		{"paperboy",   "3 chips",   "60 min",  "15% chance for a generous tip (+2 bonus)"},
+		{"clerk",      "4 chips",   "90 min",  "15% overtime rush chance (+2 bonus)"},
+		{"bailiffjob", "5 chips",   "2 hours", "10% chance to catch something (+2 bonus)"},
 	}
 	for _, r := range rows {
 		sb.WriteString(fmt.Sprintf("  /%-12s %-10s %-8s %s\n", r.name, r.base, r.cd, r.note))
 	}
 	sb.WriteString("\nType any of the commands above to get to work and earn chips!")
+	sb.WriteString("\n💡 Use /job top to see who has earned the most from jobs.")
+	client.SendServerMessage(sb.String())
+}
+
+// cmdJobTop handles /job top [n] — shows the job-earnings leaderboard.
+func cmdJobTop(client *Client, args []string, usage string) {
+	n := 10
+	if len(args) > 0 {
+		if v, err := strconv.Atoi(args[0]); err == nil && v > 0 && v <= 50 {
+			n = v
+		} else {
+			client.SendServerMessage(usage)
+			return
+		}
+	}
+	entries, err := db.GetTopJobEarnings(n)
+	if err != nil || len(entries) == 0 {
+		client.SendServerMessage("No job earnings data available yet.")
+		return
+	}
+	var sb strings.Builder
+	sb.Grow(40 + len(entries)*35)
+	sb.WriteString(fmt.Sprintf("\n💼 Job Earnings Leaderboard (Top %d)\n", len(entries)))
+	for i, e := range entries {
+		name := e.Username
+		if name == "" {
+			name = e.IPID
+		}
+		sb.WriteString(fmt.Sprintf("  %2d. %-20v  %d chips earned\n", i+1, name, e.Total))
+	}
 	client.SendServerMessage(sb.String())
 }
 

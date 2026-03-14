@@ -338,17 +338,18 @@ Every **30–60 minutes** (random) the server posts a scrambled word to all play
 
 ### 💼 Jobs
 
-Type a job command to earn chips. Each job has a **long cooldown** (40–60 minutes) and **some have random bonus chances** to keep things interesting.
+Type a job command to earn chips. Each job has a **unique cooldown** and **some have random bonus chances** to keep things interesting.
 
 | Command | Base Reward | Cooldown | Interactive Notes |
 |---------|-------------|----------|-------------------|
+| `/busker` | 2–6 chips | 30 min | **Random tips** (2–6 chips); performance is **announced in area OOC** so others see you! |
 | `/janitor` | 3 chips | 45 min | **25% chance** to find a lost coin (+1 bonus chip). |
-| `/busker` | 2–6 chips | 40 min | **Random tips** (2–6 chips); performance is **announced in area OOC** so others see you! |
-| `/paperboy` | 3 chips | 50 min | **15% chance** for a generous reader to tip extra (+2 bonus chips). |
-| `/bailiffjob` | 5 chips | 60 min | **10% chance** to catch suspicious activity (+2 bonus chips). |
-| `/clerk` | 4 chips | 55 min | **15% overtime rush** chance (+2 bonus chips). |
+| `/paperboy` | 3 chips | 60 min | **15% chance** for a generous reader to tip extra (+2 bonus chips). |
+| `/clerk` | 4 chips | 90 min | **15% overtime rush** chance (+2 bonus chips). |
+| `/bailiffjob` | 5 chips | 2 hours | **10% chance** to catch suspicious activity (+2 bonus chips). |
 
 Use `/jobs` to see all available jobs with their rewards and cooldowns at a glance.
+Use `/jobtop` to see who has earned the most chips from jobs.
 
 **Examples:**
 ```

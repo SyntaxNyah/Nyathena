@@ -1476,6 +1476,14 @@ func initCommands() {
 			reqPerms:  permissions.PermissionField["NONE"],
 			casinoCmd: true,
 		},
+		"jobtop": {
+			handler:   cmdJobTop,
+			minArgs:   0,
+			usage:     "Usage: /jobtop [n]",
+			desc:      "Show the job earnings leaderboard (top chip earners from jobs).",
+			reqPerms:  permissions.PermissionField["NONE"],
+			casinoCmd: true,
+		},
 		"janitor": {
 			handler:   cmdJanitor,
 			minArgs:   0,
@@ -1488,7 +1496,7 @@ func initCommands() {
 			handler:   cmdBusker,
 			minArgs:   0,
 			usage:     "Usage: /busker",
-			desc:      "Busk for tips outside the courthouse to earn chips (40-minute cooldown).",
+			desc:      "Busk for tips outside the courthouse to earn chips (30-minute cooldown).",
 			reqPerms:  permissions.PermissionField["NONE"],
 			casinoCmd: true,
 		},
@@ -1496,7 +1504,7 @@ func initCommands() {
 			handler:   cmdPaperboy,
 			minArgs:   0,
 			usage:     "Usage: /paperboy",
-			desc:      "Deliver newspapers and briefs to earn chips (50-minute cooldown).",
+			desc:      "Deliver newspapers and briefs to earn chips (60-minute cooldown).",
 			reqPerms:  permissions.PermissionField["NONE"],
 			casinoCmd: true,
 		},
@@ -1504,7 +1512,7 @@ func initCommands() {
 			handler:   cmdBailiffJob,
 			minArgs:   0,
 			usage:     "Usage: /bailiffjob",
-			desc:      "Stand guard duty as a bailiff to earn chips (60-minute cooldown).",
+			desc:      "Stand guard duty as a bailiff to earn chips (2-hour cooldown).",
 			reqPerms:  permissions.PermissionField["NONE"],
 			casinoCmd: true,
 		},
@@ -1512,7 +1520,7 @@ func initCommands() {
 			handler:   cmdClerk,
 			minArgs:   0,
 			usage:     "Usage: /clerk",
-			desc:      "File paperwork as a clerk to earn chips (55-minute cooldown).",
+			desc:      "File paperwork as a clerk to earn chips (90-minute cooldown).",
 			reqPerms:  permissions.PermissionField["NONE"],
 			casinoCmd: true,
 		},
@@ -1552,9 +1560,10 @@ func ParseCommand(client *Client, command string, args []string) {
 				"  • /chips give <uid> <amount>    — send chips to another player.\n" +
 				"  • /chips top                    — see the global chip leaderboard.\n\n" +
 				"💰 Earn Chips Without Gambling:\n" +
-				"  • /jobs                         — list all available jobs (small rewards, long cooldowns).\n" +
+				"  • /jobs                         — list all available jobs (small rewards, unique cooldowns).\n" +
 				"  • /janitor /busker /paperboy     — work a job to earn chips.\n" +
 				"  • /bailiffjob /clerk             — more jobs available.\n" +
+				"  • /jobtop                        — see the job earnings leaderboard.\n" +
 				"  • Unscramble events post every 30–60 min — answer in IC chat to win 10 chips!\n" +
 				"  • /unscramble                   — see your wins & any active puzzle.\n" +
 				"  • /unscramble top               — see the unscramble leaderboard.\n\n"

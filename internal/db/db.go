@@ -58,7 +58,7 @@ const MaxChipBalance = 10_000_000
 
 // Database version.
 // This should be incremented whenever changes are made to the DB that require existing databases to upgrade.
-const ver = 10
+const ver = 11
 
 // Persistent punishment kind constants.
 const (
@@ -184,6 +184,13 @@ func Open() error {
 		JOB     TEXT    NOT NULL,
 		LAST_AT INTEGER NOT NULL DEFAULT 0,
 		PRIMARY KEY (IPID, JOB)
+	)`)
+	if err != nil {
+		return err
+	}
+	_, err = db.Exec(`CREATE TABLE IF NOT EXISTS JOB_EARNINGS(
+		IPID  TEXT    PRIMARY KEY,
+		TOTAL INTEGER NOT NULL DEFAULT 0
 	)`)
 	if err != nil {
 		return err
@@ -319,6 +326,19 @@ func upgradeDB(v int) error {
 			return err
 		}
 		_, err = db.Exec("PRAGMA user_version = 10")
+		if err != nil {
+			return err
+		}
+		fallthrough
+	case 10:
+		_, err := db.Exec(`CREATE TABLE IF NOT EXISTS JOB_EARNINGS(
+			IPID  TEXT    PRIMARY KEY,
+			TOTAL INTEGER NOT NULL DEFAULT 0
+		)`)
+		if err != nil {
+			return err
+		}
+		_, err = db.Exec("PRAGMA user_version = 11")
 		if err != nil {
 			return err
 		}
@@ -479,7 +499,31 @@ func LinkIPIDToUser(username, ipid string) error {
 			return err
 		}
 		_, err := db.Exec("UPDATE UNSCRAMBLE_WINS SET WINS = 0 WHERE IPID = ?", oldIPID)
+		if err != nil {
+			return err
+		}
+	}
+
+	// Merge job earnings from the old IPID into the new IPID so the
+	// job-earnings leaderboard continues to reflect the player's full total.
+	var oldJobTotal int64
+	switch err := db.QueryRow("SELECT COALESCE(TOTAL, 0) FROM JOB_EARNINGS WHERE IPID = ?", oldIPID).Scan(&oldJobTotal); {
+	case err == sql.ErrNoRows:
+		oldJobTotal = 0
+	case err != nil:
 		return err
+	}
+
+	if oldJobTotal > 0 {
+		if _, err := db.Exec(`
+			INSERT INTO JOB_EARNINGS(IPID, TOTAL) VALUES(?, ?)
+			ON CONFLICT(IPID) DO UPDATE SET TOTAL = TOTAL + excluded.TOTAL`,
+			ipid, oldJobTotal); err != nil {
+			return err
+		}
+		if _, err := db.Exec("UPDATE JOB_EARNINGS SET TOTAL = 0 WHERE IPID = ?", oldIPID); err != nil {
+			return err
+		}
 	}
 
 	return nil
@@ -1270,4 +1314,52 @@ _, err = db.Exec(`
 INSERT INTO JOB_COOLDOWNS(IPID, JOB, LAST_AT) VALUES(?, ?, ?)
 ON CONFLICT(IPID, JOB) DO UPDATE SET LAST_AT = excluded.LAST_AT`, ipid, job, now)
 return false, 0, err
+}
+
+// JobEarningsEntry holds one row from the job earnings leaderboard query.
+type JobEarningsEntry struct {
+	// Username is the registered account name, or empty for anonymous players.
+	Username string
+	// IPID is the player's connection fingerprint, used as a display-name
+	// fallback when Username is empty.
+	IPID string
+	// Total is the cumulative chips earned from jobs.
+	Total int64
+}
+
+// AddJobEarnings increments the total job-earnings counter for the given IPID.
+func AddJobEarnings(ipid string, amount int64) error {
+	if db == nil {
+		return nil
+	}
+	_, err := db.Exec(`
+INSERT INTO JOB_EARNINGS(IPID, TOTAL) VALUES(?, ?)
+ON CONFLICT(IPID) DO UPDATE SET TOTAL = TOTAL + excluded.TOTAL`, ipid, amount)
+	return err
+}
+
+// GetTopJobEarnings returns the top n players by cumulative job-earned chips.
+// Players without a linked account fall back to their IPID as the display name.
+func GetTopJobEarnings(n int) ([]JobEarningsEntry, error) {
+	if db == nil {
+		return nil, nil
+	}
+	rows, err := db.Query(`
+SELECT j.IPID, COALESCE(u.USERNAME, '') AS USERNAME, j.TOTAL
+FROM JOB_EARNINGS j
+LEFT JOIN USERS u ON u.IPID = j.IPID
+ORDER BY j.TOTAL DESC LIMIT ?`, n)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	entries := make([]JobEarningsEntry, 0, n)
+	for rows.Next() {
+		var e JobEarningsEntry
+		if err := rows.Scan(&e.IPID, &e.Username, &e.Total); err != nil {
+			return entries, err
+		}
+		entries = append(entries, e)
+	}
+	return entries, rows.Err()
 }
