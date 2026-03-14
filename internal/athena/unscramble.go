@@ -40,6 +40,7 @@ const (
 // unscrambleWordList is the pool of words used for unscramble events.
 // Words are chosen to be reasonably familiar but not trivially short.
 var unscrambleWordList = []string{
+	// Law / courtroom
 	"attorney", "witness", "verdict", "courtroom", "justice",
 	"evidence", "objection", "testimony", "suspect", "alibi",
 	"motive", "defense", "prosecution", "argument", "statement",
@@ -49,8 +50,37 @@ var unscrambleWordList = []string{
 	"felony", "granted", "habeas", "inquest", "juror",
 	"litigant", "mandate", "notary", "offense", "plaintiff",
 	"rebuttal", "sidebar", "tribunal", "deponent", "subpoena",
+	// Games / fun
 	"puzzle", "scramble", "mystery", "clue", "cipher",
 	"riddle", "challenge", "trophy", "victory", "triumph",
+	// Nature
+	"mountain", "volcano", "glacier", "canyon", "prairie",
+	"tornado", "thunder", "lightning", "rainbow", "horizon",
+	"waterfall", "cavern", "forest", "desert", "island",
+	"ocean", "river", "meadow", "tundra", "swamp",
+	// Animals
+	"elephant", "penguin", "dolphin", "panther", "leopard",
+	"crocodile", "flamingo", "vulture", "antelope", "gorilla",
+	"cheetah", "lobster", "sparrow", "hamster", "porcupine",
+	"platypus", "salamander", "chameleon", "scorpion", "falcon",
+	// Science / tech
+	"chemistry", "biology", "physics", "quantum", "molecule",
+	"electron", "gravity", "velocity", "frequency", "spectrum",
+	"telescope", "microscope", "algorithm", "database", "network",
+	"satellite", "asteroid", "nebula", "polymer", "catalyst",
+	// Food
+	"spaghetti", "chocolate", "avocado", "broccoli", "cinnamon",
+	"pineapple", "blueberry", "strawberry", "raspberry", "cantaloupe",
+	"asparagus", "artichoke", "mushroom", "eggplant", "cucumber",
+	// Adjectives / misc
+	"brilliant", "enormous", "fantastic", "gorgeous", "horrible",
+	"incredible", "jealous", "knowledge", "luminous", "majestic",
+	"nervous", "obvious", "peaceful", "radiant", "splendid",
+	"terrible", "ultimate", "vibrant", "whimsical", "zealous",
+	// Sports / activity
+	"basketball", "volleyball", "football", "baseball", "swimming",
+	"marathon", "gymnast", "archery", "fencing", "wrestling",
+	"snowboard", "skateboard", "surfboard", "climbing", "cycling",
 }
 
 // ── State ────────────────────────────────────────────────────────────────────
@@ -58,9 +88,11 @@ var unscrambleWordList = []string{
 type unscrambleState struct {
 	mu       sync.Mutex
 	active   bool
-	answer   string // the correct (unscrambled) word in lowercase
-	scramble string // the scrambled version shown to players
+	answer   string    // the correct (unscrambled) word in lowercase
+	scramble string    // the scrambled version shown to players
 	expireAt time.Time
+	postedAt time.Time // when the puzzle was first announced
+	lastWord string    // the previous answer, to avoid immediate repeats
 }
 
 var unscramble = unscrambleState{}
@@ -115,11 +147,16 @@ func startUnscrambleLoop() {
 		}
 
 		word := unscrambleWordList[rand.Intn(len(unscrambleWordList))]
+		// Keep re-rolling until a different word from the previous round is chosen.
+		for len(unscrambleWordList) > 1 && word == unscramble.lastWord {
+			word = unscrambleWordList[rand.Intn(len(unscrambleWordList))]
+		}
 		shuffled := scrambleWord(word)
 		unscramble.active = true
 		unscramble.answer = strings.ToLower(word)
 		unscramble.scramble = shuffled
 		unscramble.expireAt = time.Now().Add(unscrambleTimeout)
+		unscramble.postedAt = time.Now()
 		unscramble.mu.Unlock()
 
 		sendGlobalServerMessage(fmt.Sprintf(
@@ -169,7 +206,9 @@ func unscrambleOnIC(client *Client, msgText string) {
 	}
 	// Correct answer — close the round atomically.
 	answer := unscramble.answer
+	elapsed := time.Since(unscramble.postedAt)
 	unscramble.active = false
+	unscramble.lastWord = answer
 	unscramble.mu.Unlock()
 
 	ipid := client.Ipid()
@@ -187,8 +226,8 @@ func unscrambleOnIC(client *Client, msgText string) {
 	}
 
 	sendGlobalServerMessage(fmt.Sprintf(
-		"🎉 UNSCRAMBLE SOLVED! %v got it right — the answer was \"%s\"! +%d chips awarded.",
-		displayName, answer, unscrambleReward,
+		"🎉 UNSCRAMBLE SOLVED! %v typed \"%s\" in %.2fs — +%d chips awarded!",
+		displayName, answer, elapsed.Seconds(), unscrambleReward,
 	))
 	if chipErr == nil {
 		client.SendServerMessage(fmt.Sprintf(

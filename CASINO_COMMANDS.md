@@ -316,6 +316,8 @@ Every **30–60 minutes** (random) the server posts a scrambled word to all play
 
 - Puzzles expire after **5 minutes** if nobody answers.
 - The prize is fixed at 10 chips per event.
+- Words are drawn from a large, varied pool — no two consecutive rounds use the same word.
+- The winner's **typing speed** is recorded and announced to the server.
 - Wins are tracked per account for a dedicated leaderboard.
 - If you register/login and your IPID changes, your unscramble wins are **automatically merged** onto your new connection — you never lose your score.
 
@@ -331,7 +333,7 @@ Every **30–60 minutes** (random) the server posts a scrambled word to all play
    You have 5 minutes. First correct answer wins!
 
 > (player types "attorney" in IC)
-🎉 UNSCRAMBLE SOLVED! Phoenix got it right — the answer was "attorney"! +10 chips awarded.
+🎉 UNSCRAMBLE SOLVED! Phoenix typed "attorney" in 4.32s — +10 chips awarded!
 ```
 
 ---
