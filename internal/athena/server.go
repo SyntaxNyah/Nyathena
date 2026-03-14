@@ -52,6 +52,11 @@ const (
 	secondsPerHour  = int64(3600) // seconds in one hour; used for playtime-to-chips conversions
 )
 
+// encodedServerName is the AO2-encoded form of config.Name, pre-computed once
+// at startup so that every server message avoids a repeated strings.Replacer call.
+// Set in NewServer immediately after config is wired up; never modified afterwards.
+var encodedServerName string
+
 var (
 	config                                 *settings.Config
 	characters, music, backgrounds, parrot []string
@@ -414,6 +419,7 @@ func NewServer(conf *settings.Config) (*Server, error) {
 	// Propagate to package-level globals so that existing helper functions
 	// and command handlers continue to work without modification.
 	config = s.config
+	encodedServerName = encode(s.config.Name) // cache once; config.Name never changes at runtime
 	characters = s.characters
 	charactersByName = make(map[string]int, len(s.characters))
 	for i, name := range s.characters {
@@ -436,6 +442,7 @@ func NewServer(conf *settings.Config) (*Server, error) {
 	go startConnTrackerCleanup()
 	if conf.EnableCasino {
 		go startHourlyChipAward()
+		go startUnscrambleLoop()
 	}
 	return s, nil
 }
@@ -682,38 +689,37 @@ func RequestRestart() {
 
 // writeToAll sends a message to all connected clients.
 func writeToAll(header string, contents ...string) {
-	for client := range clients.GetAllClients() {
-		if client.Uid() == -1 {
-			continue
+	clients.ForEach(func(client *Client) {
+		if client.Uid() != -1 {
+			client.SendPacket(header, contents...)
 		}
-		client.SendPacket(header, contents...)
-	}
+	})
 }
 
 // writeToArea sends a message to all clients in a given area.
 func writeToArea(area *area.Area, header string, contents ...string) {
-	for client := range clients.GetAllClients() {
+	clients.ForEach(func(client *Client) {
 		if client.Area() == area {
 			client.SendPacket(header, contents...)
 		}
-	}
+	})
 }
 
 // writeToAreaFrom sends a message to all clients in a given area, skipping
 // any recipient that has permanently ignored the sender's IPID.
 func writeToAreaFrom(senderIPID string, area *area.Area, header string, contents ...string) {
-	for client := range clients.GetAllClients() {
+	clients.ForEach(func(client *Client) {
 		if client.Area() == area && !client.IgnoresIPID(senderIPID) {
 			client.SendPacket(header, contents...)
 		}
-	}
+	})
 }
 
 // writeToAllClients writes a packet to all connected clients
 func writeToAllClients(header string, contents ...string) {
-	for client := range clients.GetAllClients() {
+	clients.ForEach(func(client *Client) {
 		client.SendPacket(header, contents...)
-	}
+	})
 }
 
 // addToBuffer writes to an area buffer according to a client's action.
@@ -868,23 +874,23 @@ func getClientsByIpid(ipid string) []*Client {
 
 // sendAreaServerMessage sends a server OOC message to all clients in an area.
 func sendAreaServerMessage(area *area.Area, message string) {
-	writeToArea(area, "CT", encode(config.Name), encode(message), "1")
+	writeToArea(area, "CT", encodedServerName, encode(message), "1")
 }
 
 // sendAreaGamblingMessage sends a gambling-result OOC message to all clients
 // in an area who have not opted out of gambling broadcasts via /gamble hide.
 func sendAreaGamblingMessage(a *area.Area, message string) {
 	encoded := encode(message)
-	for client := range clients.GetAllClients() {
+	clients.ForEach(func(client *Client) {
 		if client.Area() == a && !client.GambleHide() {
-			client.SendPacket("CT", encode(config.Name), encoded, "1")
+			client.SendPacket("CT", encodedServerName, encoded, "1")
 		}
-	}
+	})
 }
 
 // sendGlobalServerMessage broadcasts a server OOC message to every joined client.
 func sendGlobalServerMessage(message string) {
-	writeToAll("CT", encode(config.Name), encode(message), "1")
+	writeToAll("CT", encodedServerName, encode(message), "1")
 }
 
 // getRealIP extracts the real client IP address from an HTTP request.

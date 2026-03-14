@@ -14,6 +14,10 @@ This document covers the full casino system, including **Nyathena Chips** (the s
 - **Maximum balance: 10,000,000 chips (10 million).** Winnings are capped at this ceiling to prevent runaway inflation.
 - **Default maximum bet: 1,000,000 chips (1 million)** per wager when no area-specific limit is configured. Staff can raise or lower this per-area with `/casinoset maxbet`.
 
+### 🔒 Password Security
+
+Player account passwords are stored using **bcrypt** (industry-standard one-way hashing at cost factor 12). Your password is **never stored in plain text** — not in the database, not in logs, and never transmitted after initial registration. Even server administrators cannot read your password.
+
 ---
 
 ## `/chips` — Currency Commands
@@ -302,7 +306,65 @@ Toggle whether you see gambling broadcast messages in the area chat.
 
 ---
 
-## Staff Commands (MODIFY_AREA permission required)
+## Earning Chips Without Gambling
+
+Beyond casino games, there are two non-gambling ways to earn chips.
+
+### 🔤 Unscramble Events
+
+Every **30–60 minutes** (random) the server posts a scrambled word to all players via OOC broadcast. The **first player to type the correct unscrambled word in IC chat** wins **10 chips**.
+
+- Puzzles expire after **5 minutes** if nobody answers.
+- The prize is fixed at 10 chips per event.
+- Wins are tracked per account for a dedicated leaderboard.
+- If you register/login and your IPID changes, your unscramble wins are **automatically merged** onto your new connection — you never lose your score.
+
+| Command | Description |
+|---------|-------------|
+| `/unscramble` | Show your win count and the current active puzzle (if any). |
+| `/unscramble top [n]` | Show the top unscramble winners (top 10 by default, max 50). |
+
+**Example:**
+```
+🔤 UNSCRAMBLE EVENT! Unscramble this word in IC chat to win 10 chips!
+   Scrambled: TONYETAR
+   You have 5 minutes. First correct answer wins!
+
+> (player types "attorney" in IC)
+🎉 UNSCRAMBLE SOLVED! Phoenix got it right — the answer was "attorney"! +10 chips awarded.
+```
+
+---
+
+### 💼 Jobs
+
+Type a job command to earn chips. Each job has a **unique cooldown** and **some have random bonus chances** to keep things interesting.
+
+| Command | Base Reward | Cooldown | Interactive Notes |
+|---------|-------------|----------|-------------------|
+| `/busker` | 2–6 chips | 30 min | **Random tips** (2–6 chips); performance is **announced in area OOC** so others see you! |
+| `/janitor` | 3 chips | 45 min | **25% chance** to find a lost coin (+1 bonus chip). |
+| `/paperboy` | 3 chips | 60 min | **15% chance** for a generous reader to tip extra (+2 bonus chips). |
+| `/clerk` | 4 chips | 90 min | **15% overtime rush** chance (+2 bonus chips). |
+| `/bailiffjob` | 5 chips | 2 hours | **10% chance** to catch suspicious activity (+2 bonus chips). |
+
+Use `/jobs` to see all available jobs with their rewards and cooldowns at a glance.
+Use `/jobtop` to see who has earned the most chips from jobs.
+
+**Examples:**
+```
+/busker
+🎸 [Area OOC] Phoenix is busking outside the courthouse, playing a dramatic Phoenix Wright medley!
+🎸 The crowd loved your performance! Generous tips flooded in. +6 chips | Balance: 106 chips
+
+/janitor
+🧹 You swept the courthouse floors and found a lost coin on the way out! +4 chips | Balance: 110 chips
+
+/janitor (before cooldown expires)
+🧹 You are tired. Come back in 43m 12s to work again.
+```
+
+---
 
 ### `/casinoenable <true|false>`
 Enable or disable the casino for the current area.

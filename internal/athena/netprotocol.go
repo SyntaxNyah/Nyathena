@@ -174,16 +174,29 @@ func pktReqDone(client *Client, _ *packet.Packet) {
 		}()
 		if !client.Authenticated() {
 			client.SendServerMessage(
-				"🎰 Welcome! This server tracks 💰 chips & ⏱ playtime for the Casino.\n\n" +
-					"  • Everyone starts with 100 chips.\n" +
-					"  • Earn 1 chip for every hour of playtime.\n" +
-					"  • /richest  — see the top chip holders on the server.\n" +
-					"  • /playtime — see the playtime leaderboard.\n\n" +
-					"💡 Create a free account to keep your balance across reconnects & appear on leaderboards:\n" +
-					"  /register <username> <password>  — create your free account now\n" +
+				"🎰 Welcome! This server runs the Nyathena Casino — virtual chips, games, jobs & more.\n\n" +
+					"📖 Quick navigation:\n" +
+					"  • /help          — see every available command\n" +
+					"  • /casino        — open the casino dashboard (active tables, balance, game list)\n" +
+					"  • /chips         — check your chip balance\n" +
+					"  • /jobs          — list all jobs you can work to earn chips\n\n" +
+					"💰 Ways to earn chips:\n" +
+					"  • Everyone starts with 100 chips automatically.\n" +
+					"  • Earn 1 chip per hour of playtime.\n" +
+					"  • Work a job: /janitor /busker /paperboy /bailiffjob /clerk  (40–60 min cooldowns).\n" +
+					"  • Unscramble events every 30–60 min — type the answer in IC chat to win 10 chips!\n" +
+					"    Use /unscramble to check your wins or see if a puzzle is active right now.\n\n" +
+					"📊 Leaderboards:\n" +
+					"  • /richest           — top chip holders on the server\n" +
+					"  • /playtime top      — top players by total time spent on the server\n" +
+					"  • /unscramble top    — top players by unscramble event wins\n" +
+					"  • /jobtop            — top players by chips earned from jobs\n\n" +
+					"💡 Create a free account to keep your balance & appear on leaderboards:\n" +
+					"  /register <username> <password>  — create your free account\n" +
 					"  /login <username> <password>     — sign in if you already have one\n\n" +
-					"(Username: 3–20 chars, letters/numbers/underscore · Password: 6+ chars)\n\n" +
-					"🔇 Don't want to see gambling messages? Use /gamble hide to toggle them off.")
+					"(Username: 3–20 chars, letters/numbers/underscore · Password: 6+ chars)\n" +
+					"🔒 Passwords are stored with bcrypt — never in plain text.\n\n" +
+					"🔇 Don't want gambling broadcast messages? Use /gamble hide to toggle them off.")
 		}
 	}
 
@@ -696,6 +709,11 @@ func pktIC(client *Client, p *packet.Packet) {
 
 	// Quickdraw: record the reaction for any active duel.
 	quickdrawOnIC(client)
+
+	// Unscramble: check whether the IC message is the correct answer.
+	if config != nil && config.EnableCasino {
+		unscrambleOnIC(client, msgText)
+	}
 
 	// Automod: check the decoded message for banned words before broadcasting.
 	if autoModCheck(client, msgText) {

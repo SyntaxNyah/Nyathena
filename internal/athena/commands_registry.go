@@ -1460,6 +1460,70 @@ func initCommands() {
 			desc:     "Show the playtime leaderboard. Displays account names for registered players.",
 			reqPerms: permissions.PermissionField["NONE"],
 		},
+		"unscramble": {
+			handler:   cmdUnscramble,
+			minArgs:   0,
+			usage:     "Usage: /unscramble [top [n]]",
+			desc:      "Check your unscramble wins or view the unscramble leaderboard. Answer active puzzles in IC chat to win chips!",
+			reqPerms:  permissions.PermissionField["NONE"],
+			casinoCmd: true,
+		},
+		"jobs": {
+			handler:   cmdJobs,
+			minArgs:   0,
+			usage:     "Usage: /jobs",
+			desc:      "List all available jobs that earn small chip rewards.",
+			reqPerms:  permissions.PermissionField["NONE"],
+			casinoCmd: true,
+		},
+		"jobtop": {
+			handler:   cmdJobTop,
+			minArgs:   0,
+			usage:     "Usage: /jobtop [n]",
+			desc:      "Show the job earnings leaderboard (top chip earners from jobs).",
+			reqPerms:  permissions.PermissionField["NONE"],
+			casinoCmd: true,
+		},
+		"janitor": {
+			handler:   cmdJanitor,
+			minArgs:   0,
+			usage:     "Usage: /janitor",
+			desc:      "Work as a janitor to earn chips (45-minute cooldown).",
+			reqPerms:  permissions.PermissionField["NONE"],
+			casinoCmd: true,
+		},
+		"busker": {
+			handler:   cmdBusker,
+			minArgs:   0,
+			usage:     "Usage: /busker",
+			desc:      "Busk for tips outside the courthouse to earn chips (30-minute cooldown).",
+			reqPerms:  permissions.PermissionField["NONE"],
+			casinoCmd: true,
+		},
+		"paperboy": {
+			handler:   cmdPaperboy,
+			minArgs:   0,
+			usage:     "Usage: /paperboy",
+			desc:      "Deliver newspapers and briefs to earn chips (60-minute cooldown).",
+			reqPerms:  permissions.PermissionField["NONE"],
+			casinoCmd: true,
+		},
+		"bailiffjob": {
+			handler:   cmdBailiffJob,
+			minArgs:   0,
+			usage:     "Usage: /bailiffjob",
+			desc:      "Stand guard duty as a bailiff to earn chips (2-hour cooldown).",
+			reqPerms:  permissions.PermissionField["NONE"],
+			casinoCmd: true,
+		},
+		"clerk": {
+			handler:   cmdClerk,
+			minArgs:   0,
+			usage:     "Usage: /clerk",
+			desc:      "File paperwork as a clerk to earn chips (90-minute cooldown).",
+			reqPerms:  permissions.PermissionField["NONE"],
+			casinoCmd: true,
+		},
 	}
 }
 
@@ -1488,11 +1552,21 @@ func ParseCommand(client *Client, command string, args []string) {
 			header = "💡 Player Accounts (optional):\n" +
 				"  • Already have an account? Use /login <username> <password> — no new account needed.\n" +
 				"  • New here? /register <username> <password> creates a free account that tracks\n" +
-				"    chips, playtime, and casino standings. No extra permissions are granted.\n\n" +
+				"    chips, playtime, unscramble wins, and casino standings. No extra permissions granted.\n" +
+				"  • 🔒 Passwords are stored with bcrypt (industry-standard one-way hashing).\n" +
+				"    Your password is never stored in plain text.\n\n" +
 				"🎰 Casino Tips:\n" +
 				"  • /chips                        — check your chip balance.\n" +
 				"  • /chips give <uid> <amount>    — send chips to another player.\n" +
-				"  • /chips top                    — see the global chip leaderboard.\n\n"
+				"  • /chips top                    — see the global chip leaderboard.\n\n" +
+				"💰 Earn Chips Without Gambling:\n" +
+				"  • /jobs                         — list all available jobs (small rewards, unique cooldowns).\n" +
+				"  • /janitor /busker /paperboy     — work a job to earn chips.\n" +
+				"  • /bailiffjob /clerk             — more jobs available.\n" +
+				"  • /jobtop                        — see the job earnings leaderboard.\n" +
+				"  • Unscramble events post every 30–60 min — answer in IC chat to win 10 chips!\n" +
+				"  • /unscramble                   — see your wins & any active puzzle.\n" +
+				"  • /unscramble top               — see the unscramble leaderboard.\n\n"
 		}
 
 		client.SendServerMessage(header + "Recognized commands:\n" + strings.Join(s, "\n") + "\n\nTo view detailed usage on a command, do /<command> -h")
