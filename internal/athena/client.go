@@ -203,7 +203,8 @@ type Client struct {
 	pendingRegUser     string      // Username from a pending /register that is awaiting captcha confirmation
 	pendingRegPass     []byte      // bcrypt hash from a pending /register that is awaiting captcha confirmation
 	pendingRegCaptcha  string      // Expected captcha token for the pending registration
-	sessionChipsAwarded int64      // Chips already awarded mid-session (hourly ticker); subtracted at disconnect to avoid double-counting
+	sessionChipsAwarded int64     // Chips already awarded mid-session (hourly ticker); subtracted at disconnect to avoid double-counting
+	ignoredIPIDs        sync.Map  // Set of IPIDs permanently ignored by this client. Key: IPID string, Value: struct{}. Lock-free reads.
 }
 
 // NewClient returns a new client.
@@ -232,6 +233,15 @@ func (client *Client) HandleClient() {
 	// If this IPID has been tormented by automod, schedule a random disconnect.
 	if isIPIDTormented(client.Ipid()) {
 		go startTormentDisconnect(client)
+	}
+
+	// Load this client's persisted ignore list.
+	if ignoredIPs, err := db.LoadIgnoredIPIDs(client.Ipid()); err != nil {
+		logger.LogErrorf("Failed to load ignore list for %v: %v", client.Ipid(), err)
+	} else {
+		for _, ipid := range ignoredIPs {
+			client.ignoredIPIDs.Store(ipid, struct{}{})
+		}
 	}
 
 	var mc int
@@ -1813,4 +1823,22 @@ func (client *Client) AddSessionChipsAwarded(n int64) int64 {
 	defer client.mu.Unlock()
 	client.sessionChipsAwarded += n
 	return client.sessionChipsAwarded
+}
+
+// IgnoresIPID returns true if this client has permanently ignored the given IPID.
+// Uses sync.Map.Load which is essentially lock-free for keys that have been stored
+// at least once, keeping the hot per-message path free of mutex contention.
+func (client *Client) IgnoresIPID(ipid string) bool {
+	_, ok := client.ignoredIPIDs.Load(ipid)
+	return ok
+}
+
+// AddIgnoredIPID adds an IPID to this client's in-memory permanent ignore set.
+func (client *Client) AddIgnoredIPID(ipid string) {
+	client.ignoredIPIDs.Store(ipid, struct{}{})
+}
+
+// RemoveIgnoredIPID removes an IPID from this client's in-memory permanent ignore set.
+func (client *Client) RemoveIgnoredIPID(ipid string) {
+	client.ignoredIPIDs.Delete(ipid)
 }

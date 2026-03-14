@@ -58,7 +58,7 @@ const MaxChipBalance = 10_000_000
 
 // Database version.
 // This should be incremented whenever changes are made to the DB that require existing databases to upgrade.
-const ver = 8
+const ver = 9
 
 // Persistent punishment kind constants.
 const (
@@ -164,6 +164,14 @@ func Open() error {
 	if err != nil {
 		return err
 	}
+	_, err = db.Exec(`CREATE TABLE IF NOT EXISTS IGNORED_IPS(
+		IGNORER_IPID TEXT NOT NULL,
+		IGNORED_IPID TEXT NOT NULL,
+		PRIMARY KEY (IGNORER_IPID, IGNORED_IPID)
+	)`)
+	if err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -259,6 +267,20 @@ func upgradeDB(v int) error {
 			}
 		}
 		_, err := db.Exec("PRAGMA user_version = 8")
+		if err != nil {
+			return err
+		}
+		fallthrough
+	case 8:
+		_, err := db.Exec(`CREATE TABLE IF NOT EXISTS IGNORED_IPS(
+			IGNORER_IPID TEXT NOT NULL,
+			IGNORED_IPID TEXT NOT NULL,
+			PRIMARY KEY (IGNORER_IPID, IGNORED_IPID)
+		)`)
+		if err != nil {
+			return err
+		}
+		_, err = db.Exec("PRAGMA user_version = 9")
 		if err != nil {
 			return err
 		}
@@ -870,6 +892,46 @@ func LoadTormentedIPs() ([]string, error) {
 		var ipid string
 		if err := rows.Scan(&ipid); err != nil {
 			return ipids, fmt.Errorf("LoadTormentedIPs scan: %w", err)
+		}
+		ipids = append(ipids, ipid)
+	}
+	return ipids, rows.Err()
+}
+
+// AddIgnoredIP records that ignorerIPID has permanently ignored ignoredIPID.
+func AddIgnoredIP(ignorerIPID, ignoredIPID string) error {
+	if db == nil {
+		return nil
+	}
+	_, err := db.Exec("INSERT OR IGNORE INTO IGNORED_IPS(IGNORER_IPID, IGNORED_IPID) VALUES(?, ?)", ignorerIPID, ignoredIPID)
+	return err
+}
+
+// RemoveIgnoredIP removes the permanent ignore between ignorerIPID and ignoredIPID.
+func RemoveIgnoredIP(ignorerIPID, ignoredIPID string) error {
+	if db == nil {
+		return nil
+	}
+	_, err := db.Exec("DELETE FROM IGNORED_IPS WHERE IGNORER_IPID = ? AND IGNORED_IPID = ?", ignorerIPID, ignoredIPID)
+	return err
+}
+
+// LoadIgnoredIPIDs returns all IPIDs that ignorerIPID has permanently ignored.
+// Called when a client connects to pre-populate their in-memory ignore set.
+func LoadIgnoredIPIDs(ignorerIPID string) ([]string, error) {
+	if db == nil {
+		return nil, nil
+	}
+	rows, err := db.Query("SELECT IGNORED_IPID FROM IGNORED_IPS WHERE IGNORER_IPID = ?", ignorerIPID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var ipids []string
+	for rows.Next() {
+		var ipid string
+		if err := rows.Scan(&ipid); err != nil {
+			return ipids, fmt.Errorf("LoadIgnoredIPIDs scan: %w", err)
 		}
 		ipids = append(ipids, ipid)
 	}

@@ -1358,3 +1358,68 @@ func cmdCharCurse(client *Client, args []string, usage string) {
 	client.SendServerMessage(fmt.Sprintf("Forced UID %d to character %s.", uid, charName))
 	addToBuffer(client, "CMD", fmt.Sprintf("Char-cursed UID %d to character %s.", uid, charName), false)
 }
+
+// cmdIgnore permanently ignores a user based on their IPID so their IC and OOC
+// messages are no longer shown to the caller. The ignore persists across
+// reconnections. The target is warned without revealing the caller's IPID.
+func cmdIgnore(client *Client, args []string, usage string) {
+uid, err := strconv.Atoi(args[0])
+if err != nil {
+client.SendServerMessage("Invalid UID.")
+return
+}
+target, err := getClientByUid(uid)
+if err != nil {
+client.SendServerMessage("Client not found.")
+return
+}
+if target == client {
+client.SendServerMessage("You cannot ignore yourself.")
+return
+}
+
+targetIPID := target.Ipid()
+if client.IgnoresIPID(targetIPID) {
+client.SendServerMessage("You are already permanently ignoring that user.")
+return
+}
+
+client.AddIgnoredIPID(targetIPID)
+if err := db.AddIgnoredIP(client.Ipid(), targetIPID); err != nil {
+logger.LogErrorf("Failed to persist ignore for %v -> %v: %v", client.Ipid(), targetIPID, err)
+}
+
+// Warn the target without revealing the ignorer's IPID.
+target.SendServerMessage("⚠️ Warning: You have been permanently ignored by another user. This will persist across your reconnections.")
+
+client.SendServerMessage(fmt.Sprintf("You are now permanently ignoring user [%d]. This will persist across their reconnections.", uid))
+addToBuffer(client, "CMD", fmt.Sprintf("permanently ignored UID %d (IPID: %v)", uid, targetIPID), false)
+}
+
+// cmdUnignore removes a permanent IPID-based ignore for the given UID.
+func cmdUnignore(client *Client, args []string, usage string) {
+uid, err := strconv.Atoi(args[0])
+if err != nil {
+client.SendServerMessage("Invalid UID.")
+return
+}
+target, err := getClientByUid(uid)
+if err != nil {
+client.SendServerMessage("Client not found.")
+return
+}
+
+targetIPID := target.Ipid()
+if !client.IgnoresIPID(targetIPID) {
+client.SendServerMessage("You are not ignoring that user.")
+return
+}
+
+client.RemoveIgnoredIPID(targetIPID)
+if err := db.RemoveIgnoredIP(client.Ipid(), targetIPID); err != nil {
+logger.LogErrorf("Failed to remove persistent ignore for %v -> %v: %v", client.Ipid(), targetIPID, err)
+}
+
+client.SendServerMessage(fmt.Sprintf("Unignored user [%d].", uid))
+addToBuffer(client, "CMD", fmt.Sprintf("unignored UID %d (IPID: %v)", uid, targetIPID), false)
+}
