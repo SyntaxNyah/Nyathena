@@ -21,7 +21,27 @@ import (
 	"strings"
 
 	"github.com/MangosArentLiterature/Athena/internal/db"
+	"github.com/MangosArentLiterature/Athena/internal/logger"
 )
+
+// shopItemIndex provides O(1) lookup by item ID.
+// shopCategoryTagCount provides O(1) lookup of how many tags exist per category.
+// Both are computed once at package init from the static shopItems catalog.
+var (
+	shopItemIndex       map[string]shopItem
+	shopCategoryTagCount map[string]int
+)
+
+func init() {
+	shopItemIndex = make(map[string]shopItem, len(shopItems))
+	shopCategoryTagCount = make(map[string]int, len(shopCategories))
+	for _, it := range shopItems {
+		shopItemIndex[it.id] = it
+		if it.kind == shopKindTag {
+			shopCategoryTagCount[it.category]++
+		}
+	}
+}
 
 // shopItemKind classifies each item in the shop.
 type shopItemKind int
@@ -388,12 +408,8 @@ var shopItems = []shopItem{
 
 // shopItemByID returns the item with the given ID, or (shopItem{}, false) if not found.
 func shopItemByID(id string) (shopItem, bool) {
-	for _, it := range shopItems {
-		if it.id == id {
-			return it, true
-		}
-	}
-	return shopItem{}, false
+	it, ok := shopItemIndex[id]
+	return it, ok
 }
 
 // formatTagDisplay returns the bracketed tag label, e.g. "[High Roller]".
@@ -408,52 +424,44 @@ func formatTagDisplay(tagID string) string {
 	return ""
 }
 
+// getPlayerPassBonuses returns all three stacking pass values for an IPID in a
+// single database round-trip: total cooldown reduction (seconds), total job
+// bonus (chips/job), and total hourly bonus (chips/hr).
+func getPlayerPassBonuses(ipid string) (cooldown, job, hourly int64) {
+	items, err := db.GetPlayerShopItems(ipid)
+	if err != nil {
+		logger.LogErrorf("shop: GetPlayerShopItems failed for ipid=%v: %v", ipid, err)
+		return
+	}
+	for _, id := range items {
+		if it, ok := shopItemIndex[id]; ok {
+			cooldown += it.cooldownReduction
+			job += it.jobBonus
+			hourly += it.hourlyBonus
+		}
+	}
+	return
+}
+
 // getPlayerCooldownReduction returns the total job-cooldown reduction in seconds
 // for the given IPID, summing up all purchased cooldown passes.
 func getPlayerCooldownReduction(ipid string) int64 {
-	items, err := db.GetPlayerShopItems(ipid)
-	if err != nil || len(items) == 0 {
-		return 0
-	}
-	var total int64
-	for _, id := range items {
-		if it, ok := shopItemByID(id); ok {
-			total += it.cooldownReduction
-		}
-	}
-	return total
+	cooldown, _, _ := getPlayerPassBonuses(ipid)
+	return cooldown
 }
 
 // getPlayerJobBonus returns the total extra chips per job completion for the
 // given IPID, summing up all purchased job-bonus passes.
 func getPlayerJobBonus(ipid string) int64 {
-	items, err := db.GetPlayerShopItems(ipid)
-	if err != nil || len(items) == 0 {
-		return 0
-	}
-	var total int64
-	for _, id := range items {
-		if it, ok := shopItemByID(id); ok {
-			total += it.jobBonus
-		}
-	}
-	return total
+	_, job, _ := getPlayerPassBonuses(ipid)
+	return job
 }
 
 // getPlayerHourlyBonus returns the total extra chips per hour of online time
 // for the given IPID, summing up all purchased passive income passes.
 func getPlayerHourlyBonus(ipid string) int64 {
-	items, err := db.GetPlayerShopItems(ipid)
-	if err != nil || len(items) == 0 {
-		return 0
-	}
-	var total int64
-	for _, id := range items {
-		if it, ok := shopItemByID(id); ok {
-			total += it.hourlyBonus
-		}
-	}
-	return total
+	_, _, hourly := getPlayerPassBonuses(ipid)
+	return hourly
 }
 
 // ── /shop command ─────────────────────────────────────────────────────────────
@@ -520,6 +528,13 @@ func printShopOverview(client *Client) {
 		activeDisplay = t
 	}
 
+	// Fetch owned items once and build a set for O(1) category-ownership counts.
+	ownedItems, _ := db.GetPlayerShopItems(client.Ipid())
+	ownedSet := make(map[string]struct{}, len(ownedItems))
+	for _, id := range ownedItems {
+		ownedSet[id] = struct{}{}
+	}
+
 	var sb strings.Builder
 	sb.WriteString(fmt.Sprintf("\n🛒 Nyathena Shop — Balance: %d chips | Active tag: %s\n", bal, activeDisplay))
 	sb.WriteString("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n")
@@ -528,8 +543,8 @@ func printShopOverview(client *Client) {
 
 	sb.WriteString("📂 Tag Categories (use /shop <category> to browse):\n")
 	for _, cat := range shopCategories {
-		count := countTagsInCategory(cat.key)
-		owned := countOwnedInCategory(client.Ipid(), cat.key)
+		count := shopCategoryTagCount[cat.key]
+		owned := countOwnedInCategoryFromSet(ownedSet, cat.key)
 		sb.WriteString(fmt.Sprintf("  %s %-12s  — %d tags  (owned: %d)  → /shop %s\n",
 			cat.emoji, cat.displayName, count, owned, cat.key))
 	}
@@ -545,27 +560,27 @@ func printShopOverview(client *Client) {
 	client.SendServerMessage(sb.String())
 }
 
-func countTagsInCategory(cat string) int {
+// countOwnedInCategoryFromSet counts how many items in a given tag category
+// the player owns, using a pre-built owned-item set to avoid extra DB calls.
+func countOwnedInCategoryFromSet(owned map[string]struct{}, cat string) int {
 	n := 0
 	for _, it := range shopItems {
 		if it.kind == shopKindTag && it.category == cat {
-			n++
-		}
-	}
-	return n
-}
-
-func countOwnedInCategory(ipid, cat string) int {
-	n := 0
-	for _, it := range shopItems {
-		if it.kind == shopKindTag && it.category == cat && db.HasShopItem(ipid, it.id) {
-			n++
+			if _, ok := owned[it.id]; ok {
+				n++
+			}
 		}
 	}
 	return n
 }
 
 func printShopCategory(client *Client, cat shopCategoryInfo) {
+	ownedItems, _ := db.GetPlayerShopItems(client.Ipid())
+	ownedSet := make(map[string]struct{}, len(ownedItems))
+	for _, id := range ownedItems {
+		ownedSet[id] = struct{}{}
+	}
+
 	var sb strings.Builder
 	sb.WriteString(fmt.Sprintf("\n%s %s Tags — /shop buy <item_id> to purchase\n", cat.emoji, cat.displayName))
 	sb.WriteString(fmt.Sprintf("  %-28s  %-20s  %-12s  %s\n", "Item ID", "Tag", "Price", "Owned?"))
@@ -576,7 +591,7 @@ func printShopCategory(client *Client, cat shopCategoryInfo) {
 			continue
 		}
 		owned := ""
-		if db.HasShopItem(client.Ipid(), it.id) {
+		if _, ok := ownedSet[it.id]; ok {
 			owned = "✅"
 		}
 		sb.WriteString(fmt.Sprintf("  %-28s  [%-18s]  %-12d  %s\n",
@@ -587,6 +602,12 @@ func printShopCategory(client *Client, cat shopCategoryInfo) {
 }
 
 func printShopPasses(client *Client) {
+	ownedItems, _ := db.GetPlayerShopItems(client.Ipid())
+	ownedSet := make(map[string]struct{}, len(ownedItems))
+	for _, id := range ownedItems {
+		ownedSet[id] = struct{}{}
+	}
+
 	var sb strings.Builder
 	sb.WriteString("\n💼 Job Passes — Permanent job upgrades\n")
 	sb.WriteString(fmt.Sprintf("  %-26s  %-26s  %-12s  %s\n", "Item ID", "Pass Name", "Price", "Benefit"))
@@ -597,7 +618,7 @@ func printShopPasses(client *Client) {
 			continue
 		}
 		owned := ""
-		if db.HasShopItem(client.Ipid(), it.id) {
+		if _, ok := ownedSet[it.id]; ok {
 			owned = " ✅"
 		}
 		var benefit string
@@ -617,6 +638,16 @@ func printShopPasses(client *Client) {
 }
 
 func printShopPassive(client *Client) {
+	ownedItems, _ := db.GetPlayerShopItems(client.Ipid())
+	ownedSet := make(map[string]struct{}, len(ownedItems))
+	var currentBonus int64
+	for _, id := range ownedItems {
+		ownedSet[id] = struct{}{}
+		if it, ok := shopItemIndex[id]; ok {
+			currentBonus += it.hourlyBonus
+		}
+	}
+
 	var sb strings.Builder
 	sb.WriteString("\n⏱️ Passive Income Upgrades — Extra chips earned per hour online\n")
 	sb.WriteString(fmt.Sprintf("  %-26s  %-26s  %-12s  %s\n", "Item ID", "Pass Name", "Price", "Benefit"))
@@ -627,7 +658,7 @@ func printShopPassive(client *Client) {
 			continue
 		}
 		owned := ""
-		if db.HasShopItem(client.Ipid(), it.id) {
+		if _, ok := ownedSet[it.id]; ok {
 			owned = " ✅"
 		}
 		benefit := fmt.Sprintf("+%d chip/hr", it.hourlyBonus)
@@ -635,7 +666,6 @@ func printShopPassive(client *Client) {
 			it.id, it.name, it.price, benefit, owned))
 	}
 
-	currentBonus := getPlayerHourlyBonus(client.Ipid())
 	sb.WriteString(fmt.Sprintf("\nBase: 1 chip/hr | Your total: %d chip/hr (base + %d bonus)\n",
 		1+currentBonus, currentBonus))
 	sb.WriteString("💡 All four stack for a maximum of 10 chips/hr. Still a grind!\n")
@@ -704,6 +734,7 @@ func shopListOwned(client *Client) {
 	sb.WriteString("  " + strings.Repeat("─", 50) + "\n")
 
 	var tags, passes, passives []string
+	var totalCooldown, totalJobBonus, totalHourly int64
 	for _, id := range items {
 		if it, ok := shopItemByID(id); ok {
 			switch it.kind {
@@ -717,12 +748,15 @@ func shopListOwned(client *Client) {
 				var benefit string
 				if it.cooldownReduction > 0 {
 					benefit = fmt.Sprintf("−%d min cooldown", it.cooldownReduction/60)
+					totalCooldown += it.cooldownReduction
 				} else if it.jobBonus > 0 {
 					benefit = fmt.Sprintf("+%d chip/job", it.jobBonus)
+					totalJobBonus += it.jobBonus
 				}
 				passes = append(passes, fmt.Sprintf("  %-28s — %s", it.name, benefit))
 			case shopKindPassive:
 				passives = append(passives, fmt.Sprintf("  %-28s — +%d chip/hr", it.name, it.hourlyBonus))
+				totalHourly += it.hourlyBonus
 			}
 		}
 	}
@@ -741,11 +775,9 @@ func shopListOwned(client *Client) {
 		for _, p := range passes {
 			sb.WriteString(p + "\n")
 		}
-		reduction := getPlayerCooldownReduction(client.Ipid())
-		bonus := getPlayerJobBonus(client.Ipid())
-		if reduction > 0 || bonus > 0 {
+		if totalCooldown > 0 || totalJobBonus > 0 {
 			sb.WriteString(fmt.Sprintf("  ⤷ Total: −%d min cooldown | +%d chip/job\n",
-				reduction/60, bonus))
+				totalCooldown/60, totalJobBonus))
 		}
 	}
 	if len(passives) > 0 {
@@ -753,8 +785,7 @@ func shopListOwned(client *Client) {
 		for _, p := range passives {
 			sb.WriteString(p + "\n")
 		}
-		hourly := getPlayerHourlyBonus(client.Ipid())
-		sb.WriteString(fmt.Sprintf("  ⤷ Total: %d chips/hr (base 1 + %d bonus)\n", 1+hourly, hourly))
+		sb.WriteString(fmt.Sprintf("  ⤷ Total: %d chips/hr (base 1 + %d bonus)\n", 1+totalHourly, totalHourly))
 	}
 	client.SendServerMessage(sb.String())
 }
