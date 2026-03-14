@@ -406,8 +406,8 @@ func cmdCraps(client *Client, args []string, _ string) {
 
 // crashMinMultiplier and crashMaxMultiplier define the range of possible crash points.
 const (
-	crashMinMultiplier = 1.2
-	crashMaxMultiplier = 20.0
+	crashMinMultiplier = 1.1
+	crashMaxMultiplier = 8.0
 	crashGrowthPerSec  = 0.1 // multiplier increase per second
 )
 type CrashState struct {
@@ -454,8 +454,9 @@ func cmdCrash(client *Client, args []string, _ string) {
 			return
 		}
 
-		// Crash point: random between crashMinMultiplier and crashMaxMultiplier.
-		crashAt := crashMinMultiplier + rand.Float64()*(crashMaxMultiplier-crashMinMultiplier)
+		// Crash point: skewed distribution — multiply two random values so low
+		// multipliers are far more common, making the game harder to win.
+		crashAt := crashMinMultiplier + rand.Float64()*rand.Float64()*(crashMaxMultiplier-crashMinMultiplier)
 
 		state := &CrashState{
 			Bet:       amount,
