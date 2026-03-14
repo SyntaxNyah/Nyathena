@@ -31,8 +31,9 @@ import (
 // ── /chips give anti-abuse tracking ──────────────────────────────────────────
 
 const (
-	chipsGiveCooldown   = 10 * time.Minute // per-player cooldown between transfers
-	chipsGiveMax        = 500              // maximum chips transferable per transaction
+	chipsGiveCooldown        = 10 * time.Minute // per-player cooldown between transfers
+	chipsGiveMax             = 500              // maximum chips transferable per transaction
+	chipsGiveMinPlaytime     = 24 * time.Hour   // minimum total playtime to use /chips give
 )
 
 var (
@@ -293,20 +294,41 @@ func chipsGive(client *Client, args []string) {
 		return
 	}
 
+	ipid := client.Ipid()
+
+	// Require 24 hours of total playtime before a player can transfer chips.
+	// This prevents newly-created accounts from being used to funnel chips.
+	storedPlaytimeSec, ptErr := db.GetPlaytime(ipid)
+	if ptErr != nil {
+		client.SendServerMessage("Could not verify playtime. Please try again.")
+		return
+	}
+	totalPlaytime := time.Duration(storedPlaytimeSec) * time.Second
+	if connAt := client.ConnectedAt(); !connAt.IsZero() {
+		totalPlaytime += time.Since(connAt)
+	}
+	if totalPlaytime < chipsGiveMinPlaytime {
+		remaining := (chipsGiveMinPlaytime - totalPlaytime).Truncate(time.Second)
+		client.SendServerMessage(fmt.Sprintf(
+			"You need at least 24 hours of playtime to transfer chips. You still need %v.",
+			remaining,
+		))
+		return
+	}
+
 	// Check and record the cooldown atomically.  Lazily delete entries whose
 	// cooldown has already expired to keep the map bounded.
 	chipsGiveMu.Lock()
-	if last, ok := chipsGiveLastTime[client.Ipid()]; ok {
+	if last, ok := chipsGiveLastTime[ipid]; ok {
 		if elapsed := time.Since(last); elapsed < chipsGiveCooldown {
 			remaining := (chipsGiveCooldown - elapsed).Truncate(time.Second)
 			chipsGiveMu.Unlock()
 			client.SendServerMessage(fmt.Sprintf("You must wait %v before giving chips again.", remaining))
 			return
 		}
-		// Cooldown has passed — remove the stale entry now.
-		delete(chipsGiveLastTime, client.Ipid())
+		delete(chipsGiveLastTime, ipid)
 	}
-	chipsGiveLastTime[client.Ipid()] = time.Now()
+	chipsGiveLastTime[ipid] = time.Now()
 	chipsGiveMu.Unlock()
 
 	target := clients.GetClientByUID(targetUID)
@@ -314,21 +336,21 @@ func chipsGive(client *Client, args []string) {
 		client.SendServerMessage("Player not found.")
 		return
 	}
-	if target.Ipid() == client.Ipid() {
+	if target.Ipid() == ipid {
 		client.SendServerMessage("You cannot give chips to yourself.")
 		return
 	}
 
-	senderBal, err := db.SpendChips(client.Ipid(), amount)
+	senderBal, err := db.SpendChips(ipid, amount)
 	if err != nil {
 		client.SendServerMessage(fmt.Sprintf("Transfer failed: %v", err))
 		return
 	}
 	if _, err = db.AddChips(target.Ipid(), amount); err != nil {
 		// Attempt to refund the sender; log any failure so admins can investigate.
-		if _, refundErr := db.AddChips(client.Ipid(), amount); refundErr != nil {
+		if _, refundErr := db.AddChips(ipid, amount); refundErr != nil {
 			logger.LogErrorf("chips give: deducted %d chips from %v but credit to %v failed AND refund failed: %v",
-				amount, client.Ipid(), target.Ipid(), refundErr)
+				amount, ipid, target.Ipid(), refundErr)
 		}
 		client.SendServerMessage("Transfer failed: could not credit recipient.")
 		return

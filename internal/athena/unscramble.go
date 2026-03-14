@@ -31,15 +31,16 @@ import (
 // ── Constants ────────────────────────────────────────────────────────────────
 
 const (
-	unscrambleReward      = 10             // chips awarded for a correct guess
+	unscrambleReward      = 10              // chips awarded for a correct guess
 	unscrambleMinInterval = 30 * time.Minute // minimum time between events
-	unscrambleMaxInterval = 60 * time.Minute // maximum time between events
+	unscrambleMaxInterval = 3 * time.Hour    // maximum time between events (30 min-3 hr random window)
 	unscrambleTimeout     = 5 * time.Minute  // window to answer before the puzzle expires
 )
 
 // unscrambleWordList is the pool of words used for unscramble events.
 // Words are chosen to be reasonably familiar but not trivially short.
 var unscrambleWordList = []string{
+	// Law / courtroom
 	"attorney", "witness", "verdict", "courtroom", "justice",
 	"evidence", "objection", "testimony", "suspect", "alibi",
 	"motive", "defense", "prosecution", "argument", "statement",
@@ -49,48 +50,82 @@ var unscrambleWordList = []string{
 	"felony", "granted", "habeas", "inquest", "juror",
 	"litigant", "mandate", "notary", "offense", "plaintiff",
 	"rebuttal", "sidebar", "tribunal", "deponent", "subpoena",
+	// Games / fun
 	"puzzle", "scramble", "mystery", "clue", "cipher",
 	"riddle", "challenge", "trophy", "victory", "triumph",
+	// Nature
+	"mountain", "volcano", "glacier", "canyon", "prairie",
+	"tornado", "thunder", "lightning", "rainbow", "horizon",
+	"waterfall", "cavern", "forest", "desert", "island",
+	"ocean", "river", "meadow", "tundra", "swamp",
+	// Animals
+	"elephant", "penguin", "dolphin", "panther", "leopard",
+	"crocodile", "flamingo", "vulture", "antelope", "gorilla",
+	"cheetah", "lobster", "sparrow", "hamster", "porcupine",
+	"platypus", "salamander", "chameleon", "scorpion", "falcon",
+	// Science / tech
+	"chemistry", "biology", "physics", "quantum", "molecule",
+	"electron", "gravity", "velocity", "frequency", "spectrum",
+	"telescope", "microscope", "algorithm", "database", "network",
+	"satellite", "asteroid", "nebula", "polymer", "catalyst",
+	// Food
+	"spaghetti", "chocolate", "avocado", "broccoli", "cinnamon",
+	"pineapple", "blueberry", "strawberry", "raspberry", "cantaloupe",
+	"asparagus", "artichoke", "mushroom", "eggplant", "cucumber",
+	// Adjectives / misc
+	"brilliant", "enormous", "fantastic", "gorgeous", "horrible",
+	"incredible", "jealous", "knowledge", "luminous", "majestic",
+	"nervous", "obvious", "peaceful", "radiant", "splendid",
+	"terrible", "ultimate", "vibrant", "whimsical", "zealous",
+	// Sports / activity
+	"basketball", "volleyball", "football", "baseball", "swimming",
+	"marathon", "gymnast", "archery", "fencing", "wrestling",
+	"snowboard", "skateboard", "surfboard", "climbing", "cycling",
 }
 
 // ── State ────────────────────────────────────────────────────────────────────
 
 type unscrambleState struct {
-	mu       sync.Mutex
+	mu       sync.RWMutex
 	active   bool
-	answer   string // the correct (unscrambled) word in lowercase
-	scramble string // the scrambled version shown to players
-	expireAt time.Time
+	answer   string    // the correct (unscrambled) word in lowercase
+	scramble string    // the scrambled version shown to players
+	postedAt time.Time // when the puzzle was first announced
+	lastWord string    // the previous answer, to avoid immediate repeats
 }
 
 var unscramble = unscrambleState{}
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
-// scrambleWord returns a shuffled version of the input word that differs from
-// the original. Multiple attempts are made to ensure it is visibly scrambled.
+// scrambleWord returns a shuffled version of word that differs from the original.
+// A single Fisher-Yates shuffle is used; if it happens to match the original
+// (only possible for words with near-identical letters), the first two distinct
+// characters are swapped to guarantee the result is always different.
 func scrambleWord(word string) string {
-	runes := []rune(word)
-	for attempt := 0; attempt < 10; attempt++ {
-		rand.Shuffle(len(runes), func(i, j int) { runes[i], runes[j] = runes[j], runes[i] })
-		if string(runes) != word {
-			return string(runes)
+	r := []rune(word)
+	n := len(r)
+	if n <= 1 { // defensive safeguard; no words in the pool are this short
+		return word
+	}
+	rand.Shuffle(n, func(i, j int) { r[i], r[j] = r[j], r[i] })
+	if string(r) == word {
+		for i := 1; i < n; i++ {
+			if r[i] != r[0] {
+				r[0], r[i] = r[i], r[0]
+				break
+			}
 		}
 	}
-	// Fallback: reverse the word (guaranteed to differ for words length > 1).
-	for i, j := 0, len(runes)-1; i < j; i, j = i+1, j-1 {
-		runes[i], runes[j] = runes[j], runes[i]
-	}
-	return string(runes)
+	return string(r)
 }
 
 // randomInterval returns a random duration in [min, max].
 func randomInterval(min, max time.Duration) time.Duration {
-	delta := int64(max - min)
-	if delta <= 0 {
-		return min
+	if d := int64(max - min); d > 0 {
+		return min + time.Duration(rand.Int63n(d))
 	}
-	return min + time.Duration(rand.Int63n(delta))
+	return min
 }
 
 // ── Background loop ──────────────────────────────────────────────────────────
@@ -115,11 +150,15 @@ func startUnscrambleLoop() {
 		}
 
 		word := unscrambleWordList[rand.Intn(len(unscrambleWordList))]
+		// Keep re-rolling until a different word from the previous round is chosen.
+		for len(unscrambleWordList) > 1 && word == unscramble.lastWord {
+			word = unscrambleWordList[rand.Intn(len(unscrambleWordList))]
+		}
 		shuffled := scrambleWord(word)
 		unscramble.active = true
 		unscramble.answer = strings.ToLower(word)
 		unscramble.scramble = shuffled
-		unscramble.expireAt = time.Now().Add(unscrambleTimeout)
+		unscramble.postedAt = time.Now()
 		unscramble.mu.Unlock()
 
 		sendGlobalServerMessage(fmt.Sprintf(
@@ -130,20 +169,17 @@ func startUnscrambleLoop() {
 		))
 		logger.LogInfof("Unscramble: new puzzle posted — scramble=%q answer=%q", shuffled, word)
 
-		// Schedule the timeout expiry.
-		go func(answer, shuffled string) {
-			time.Sleep(unscrambleTimeout)
+		// Expire the puzzle after the timeout window.
+		time.AfterFunc(unscrambleTimeout, func() {
 			unscramble.mu.Lock()
-			if !unscramble.active || unscramble.answer != answer {
+			if !unscramble.active || unscramble.answer != word {
 				unscramble.mu.Unlock()
 				return
 			}
 			unscramble.active = false
 			unscramble.mu.Unlock()
-			sendGlobalServerMessage(fmt.Sprintf(
-				"⌛ UNSCRAMBLE EXPIRED! Nobody got it in time. The answer was: %s", answer,
-			))
-		}(word, shuffled)
+			sendGlobalServerMessage("⌛ UNSCRAMBLE EXPIRED! Nobody got it in time. The answer was: " + word)
+		})
 	}
 }
 
@@ -158,18 +194,24 @@ func unscrambleOnIC(client *Client, msgText string) {
 		return
 	}
 
+	// Fast read-only check — avoids write-lock contention on every IC message.
+	unscramble.mu.RLock()
+	active, answer := unscramble.active, unscramble.answer
+	unscramble.mu.RUnlock()
+	if !active || guess != answer {
+		return
+	}
+
+	// Correct guess — claim the round under a write lock and re-check to
+	// prevent a double-award if two players answer at the same instant.
 	unscramble.mu.Lock()
-	if !unscramble.active {
+	if !unscramble.active || unscramble.answer != answer {
 		unscramble.mu.Unlock()
 		return
 	}
-	if guess != unscramble.answer {
-		unscramble.mu.Unlock()
-		return
-	}
-	// Correct answer — close the round atomically.
-	answer := unscramble.answer
+	elapsed := time.Since(unscramble.postedAt)
 	unscramble.active = false
+	unscramble.lastWord = answer
 	unscramble.mu.Unlock()
 
 	ipid := client.Ipid()
@@ -187,8 +229,8 @@ func unscrambleOnIC(client *Client, msgText string) {
 	}
 
 	sendGlobalServerMessage(fmt.Sprintf(
-		"🎉 UNSCRAMBLE SOLVED! %v got it right — the answer was \"%s\"! +%d chips awarded.",
-		displayName, answer, unscrambleReward,
+		"🎉 UNSCRAMBLE SOLVED! %v typed \"%s\" in %.2fs — +%d chips awarded!",
+		displayName, answer, elapsed.Seconds(), unscrambleReward,
 	))
 	if chipErr == nil {
 		client.SendServerMessage(fmt.Sprintf(
@@ -210,10 +252,10 @@ func cmdUnscramble(client *Client, args []string, _ string) {
 			client.SendServerMessage("Could not retrieve your unscramble stats.")
 			return
 		}
-		unscramble.mu.Lock()
+		unscramble.mu.RLock()
 		active := unscramble.active
 		scrambled := unscramble.scramble
-		unscramble.mu.Unlock()
+		unscramble.mu.RUnlock()
 
 		msg := fmt.Sprintf("🔤 Your unscramble wins: %d", wins)
 		if active {

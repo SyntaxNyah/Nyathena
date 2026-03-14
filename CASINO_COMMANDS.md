@@ -61,6 +61,7 @@ Player account passwords are stored using **bcrypt** (industry-standard one-way 
 - Maximum 500 chips per transfer.
 - 10-minute cooldown between transfers.
 - You cannot give chips to yourself.
+- **Requires 24 hours of total playtime.** New accounts must reach 24 hours of playtime before they can transfer chips to others.
 
 ---
 
@@ -312,10 +313,12 @@ Beyond casino games, there are two non-gambling ways to earn chips.
 
 ### 🔤 Unscramble Events
 
-Every **30–60 minutes** (random) the server posts a scrambled word to all players via OOC broadcast. The **first player to type the correct unscrambled word in IC chat** wins **10 chips**.
+Every **30 minutes to 3 hours** (random) the server posts a scrambled word to all players via OOC broadcast. The **first player to type the correct unscrambled word in IC chat** wins **10 chips**. Once a player claims the reward, the round ends immediately and the server waits for the next scheduled interval before posting a new puzzle.
 
 - Puzzles expire after **5 minutes** if nobody answers.
 - The prize is fixed at 10 chips per event.
+- Words are drawn from a large, varied pool — no two consecutive rounds use the same word.
+- The winner's **typing speed** is recorded and announced to the server.
 - Wins are tracked per account for a dedicated leaderboard.
 - If you register/login and your IPID changes, your unscramble wins are **automatically merged** onto your new connection — you never lose your score.
 
@@ -331,7 +334,7 @@ Every **30–60 minutes** (random) the server posts a scrambled word to all play
    You have 5 minutes. First correct answer wins!
 
 > (player types "attorney" in IC)
-🎉 UNSCRAMBLE SOLVED! Phoenix got it right — the answer was "attorney"! +10 chips awarded.
+🎉 UNSCRAMBLE SOLVED! Phoenix typed "attorney" in 4.32s — +10 chips awarded!
 ```
 
 ---
@@ -418,6 +421,7 @@ Casino: enabled (bet: 10–500), jackpot pool: 1200
 | Slots spins | Max 5 spins per 10 seconds |
 | Chips give cooldown | 10 minutes between transfers |
 | Chips give max | 500 chips per transfer |
+| Chips give playtime gate | 24 hours total playtime required |
 | BJ/Poker turn timer | 60 seconds — auto-stand/fold |
 
 ---

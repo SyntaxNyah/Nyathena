@@ -255,11 +255,11 @@ func cmdJobs(client *Client, _ []string, _ string) {
 		sb.WriteString(fmt.Sprintf("  /%-12s %-10s %-8s %s\n", r.name, r.base, r.cd, r.note))
 	}
 	sb.WriteString("\nType any of the commands above to get to work and earn chips!")
-	sb.WriteString("\n💡 Use /job top to see who has earned the most from jobs.")
+	sb.WriteString("\n💡 Use /jobtop to see who has earned the most from jobs.")
 	client.SendServerMessage(sb.String())
 }
 
-// cmdJobTop handles /job top [n] — shows the job-earnings leaderboard.
+// cmdJobTop handles /jobtop [n] — shows the job-earnings leaderboard.
 func cmdJobTop(client *Client, args []string, usage string) {
 	n := 10
 	if len(args) > 0 {
