@@ -233,7 +233,7 @@ Bet before launch, then cash out before the multiplier crashes.
 ```
 
 - The multiplier grows every second starting at 1.00×.
-- The game crashes at a random point between 1.2× and 20×.
+- The game crashes at a random point between 1.1× and 8×, skewed heavily toward lower values.
 - If you don't `/crash cashout` before the crash, you lose your bet.
 
 ---
