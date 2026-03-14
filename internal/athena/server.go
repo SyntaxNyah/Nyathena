@@ -1442,14 +1442,23 @@ func startHourlyChipAward() {
 				continue
 			}
 			ipid := client.Ipid()
-			if _, err := db.AddChips(ipid, toAward); err != nil {
+			// Apply any passive income bonus passes the player has purchased.
+			// chipsPerHour = 1 (base) + any bonuses from passive income upgrades.
+			chipsPerHour := int64(1) + getPlayerHourlyBonus(ipid)
+			chipsToAward := toAward * chipsPerHour
+			if _, err := db.AddChips(ipid, chipsToAward); err != nil {
 				logger.LogErrorf("startHourlyChipAward: AddChips failed for %v: %v", ipid, err)
 				continue
 			}
+			// Track hours credited (not chips) so the next tick knows where to resume.
 			client.AddSessionChipsAwarded(toAward)
-			msg := hourlyChipMsg
-			if toAward != 1 {
-				msg = fmt.Sprintf("💰 You earned %d chips for being online! Balance updated.", toAward)
+			var msg string
+			if chipsToAward == 1 {
+				msg = hourlyChipMsg
+			} else if chipsPerHour > 1 {
+				msg = fmt.Sprintf("💰 You earned %d chips for being online (%d/hr with income passes)! Balance updated.", chipsToAward, chipsPerHour)
+			} else {
+				msg = fmt.Sprintf("💰 You earned %d chips for being online! Balance updated.", chipsToAward)
 			}
 			client.SendServerMessage(msg)
 		}

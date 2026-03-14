@@ -8,11 +8,11 @@ This document covers the full casino system, including **Nyathena Chips** (the s
 
 **Nyathena Chips** are a persistent virtual currency tied to your IPID (connection fingerprint).
 
-- Every new connection starts with **100 chips** automatically.
+- Every new connection starts with **500 chips** automatically.
 - Balances persist across sessions.
 - Chips cannot go negative — you can only spend what you have.
 - **Maximum balance: 10,000,000 chips (10 million).** Winnings are capped at this ceiling to prevent runaway inflation.
-- **Default maximum bet: 1,000,000 chips (1 million)** per wager when no area-specific limit is configured. Staff can raise or lower this per-area with `/casinoset maxbet`.
+- **Default maximum bet: 10,000,000 chips (10 million)** per wager when no area-specific limit is configured. Staff can raise or lower this per-area with `/casinoset maxbet`.
 
 ### 🔒 Password Security
 
@@ -351,6 +351,8 @@ Type a job command to earn chips. Each job has a **unique cooldown** and **some 
 | `/clerk` | 4 chips | 90 min | **15% overtime rush** chance (+2 bonus chips). |
 | `/bailiffjob` | 5 chips | 2 hours | **10% chance** to catch suspicious activity (+2 bonus chips). |
 
+> **Job passes** from the `/shop` can permanently reduce these cooldowns and increase chip rewards. See [/shop — Nyathena Shop](#-shop--nyathena-shop) below.
+
 Use `/jobs` to see all available jobs with their rewards and cooldowns at a glance.
 Use `/jobtop` to see who has earned the most chips from jobs.
 
@@ -365,6 +367,114 @@ Use `/jobtop` to see who has earned the most chips from jobs.
 
 /janitor (before cooldown expires)
 🧹 You are tired. Come back in 43m 12s to work again.
+```
+
+---
+
+## 🛒 `/shop` — Nyathena Shop
+
+Spend your chips on **permanent upgrades** that stay linked to your account forever.
+
+| Command | Description |
+|---------|-------------|
+| `/shop` | Browse the full shop catalog with prices and descriptions. |
+| `/shop buy <item_id>` | Purchase an item by its ID. |
+| `/shop items` | List all items you currently own. |
+| `/settag <tag_id>` | Equip a purchased cosmetic tag visible in `/gas` and `/players`. |
+| `/settag none` | Remove your active cosmetic tag. |
+
+### 🏷️ Cosmetic Tags (30 gambling-themed tags)
+
+Tags are permanent cosmetic labels that appear **next to your name** in `/gas` and `/players` — letting everyone see your level of commitment.
+
+| Item ID | Tag | Price |
+|---------|-----|-------|
+| `tag_gambler` | [Gambler] | 1,000 chips |
+| `tag_lucky` | [Lucky] | 2,500 chips |
+| `tag_risk_taker` | [Risk Taker] | 5,000 chips |
+| `tag_card_shark` | [Card Shark] | 7,500 chips |
+| `tag_high_roller` | [High Roller] | 10,000 chips |
+| `tag_patreon` | [Patreon] | 15,000 chips |
+| `tag_chip_collector` | [Chip Collector] | 25,000 chips |
+| `tag_jackpot` | [Jackpot] | 35,000 chips |
+| `tag_casino_regular` | [Casino Regular] | 50,000 chips |
+| `tag_hustler` | [Hustler] | 75,000 chips |
+| `tag_all_in` | [All In] | 100,000 chips |
+| `tag_whale` | [Whale] | 150,000 chips |
+| `tag_bluffer` | [Bluffer] | 200,000 chips |
+| `tag_odds_defier` | [Odds Defier] | 300,000 chips |
+| `tag_dealer` | [Dealer] | 400,000 chips |
+| `tag_ace` | [Ace] | 500,000 chips |
+| `tag_double_down` | [Double Down] | 600,000 chips |
+| `tag_full_house` | [Full House] | 750,000 chips |
+| `tag_flush` | [Flush] | 900,000 chips |
+| `tag_lucky_charm` | [Lucky Charm] | 1,000,000 chips |
+| `tag_bankroll` | [Bankroll] | 1,250,000 chips |
+| `tag_fortune` | [Fortune's Fave] | 1,500,000 chips |
+| `tag_degenerate` | [Degenerate] | 2,000,000 chips |
+| `tag_the_house` | [The House] | 2,500,000 chips |
+| `tag_legendary` | [Legendary] | 3,000,000 chips |
+| `tag_casino_royale` | [Casino Royale] | 4,000,000 chips |
+| `tag_diamond` | [Diamond] | 5,000,000 chips |
+| `tag_mythic` | [Mythic] | 6,000,000 chips |
+| `tag_godlike` | [Godlike] | 7,500,000 chips |
+| `tag_infinite` | [Infinite] | 10,000,000 chips |
+
+Tags are **purely cosmetic** — they have no gameplay effect. Buy them all to collect them!
+
+After purchasing a tag, it is **automatically equipped** as your active tag. You can switch at any time with `/settag <tag_id>`.
+
+### 💼 Job Passes — Cooldown Reduction (stackable)
+
+These passes permanently reduce the cooldown on **all** jobs for your account. All four stack, giving up to **50 minutes** of total reduction (with a minimum 5-minute floor per job).
+
+| Item ID | Pass Name | Price | Benefit |
+|---------|-----------|-------|---------|
+| `pass_quick` | Quick Worker Pass | 10,000 chips | −5 min from all job cooldowns |
+| `pass_speedy` | Speedy Pass | 50,000 chips | −10 min additional |
+| `pass_turbo` | Turbo Pass | 150,000 chips | −15 min additional |
+| `pass_lightning` | Lightning Pass | 500,000 chips | −20 min additional |
+
+> All four owned: **−50 minutes** off every job. Minimum cooldown is always 5 minutes.
+
+### 💼 Job Passes — Reward Bonus (stackable)
+
+These passes permanently increase the chip reward you earn from **every job**. All four stack for up to **+11 chips** per completion.
+
+| Item ID | Pass Name | Price | Benefit |
+|---------|-----------|-------|---------|
+| `pass_bonus` | Bonus Chip Pass | 25,000 chips | +1 chip per job |
+| `pass_extra` | Extra Chip Pass | 100,000 chips | +2 chips per job |
+| `pass_lucky_find` | Lucky Find Pass | 400,000 chips | +3 chips per job |
+| `pass_jackpot_seeker` | Jackpot Seeker Pass | 1,000,000 chips | +5 chips per job |
+
+> All four owned: **+11 extra chips** on every job completion.
+
+### Examples
+
+```
+/shop
+> 🛒 Nyathena Shop — Your balance: 5000 chips
+> ── 🏷️  Cosmetic Tags ──
+>   tag_gambler        [Gambler]     1000 chips
+>   ...
+
+/shop buy tag_gambler
+> ✅ Purchased [Gambler] tag for 1000 chips! It is now your active tag.
+> Balance: 4000 chips
+
+/gas
+> [Gambler] [3] Phoenix Wright   ← your tag is shown!
+
+/settag tag_high_roller
+> 🏷️ Active tag set to [High Roller].
+
+/settag none
+> 🏷️ Your active tag has been removed.
+
+/shop buy pass_quick
+> ✅ Purchased Quick Worker Pass for 10000 chips!
+> Permanent benefit: job cooldowns reduced by 5 min
 ```
 
 ---

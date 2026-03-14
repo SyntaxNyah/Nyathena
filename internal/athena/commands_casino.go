@@ -113,6 +113,13 @@ func printCasinoDashboard(client *Client) {
 	sb.WriteString("  /mines start <mines> <bet> | /mines pick <n> | /mines cashout | /mines quit\n")
 	sb.WriteString("  /keno pick <numbers...> <bet>\n")
 	sb.WriteString("  /wheel spin <bet>\n")
+	sb.WriteString("  /shop                     — shop overview (115+ tags, passes, passive income)\n")
+	sb.WriteString("  /shop <category>          — browse tags: gambling attorney anime gamer girly meme prestige\n")
+	sb.WriteString("  /shop passes              — job cooldown & reward passes\n")
+	sb.WriteString("  /shop passive             — passive income upgrades (earn more chips/hr)\n")
+	sb.WriteString("  /shop buy <id>            — buy an item\n")
+	sb.WriteString("  /shop items               — see your owned items\n")
+	sb.WriteString("  /settag <tag_id>|none     — equip or remove your cosmetic tag\n")
 
 	client.SendServerMessage(sb.String())
 }

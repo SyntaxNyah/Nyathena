@@ -187,8 +187,15 @@ func doJobClerk(client *Client) {
 // checkJobCooldown checks the cooldown for a job without setting it.
 // Returns (true, remaining) if on cooldown, (false, 0) otherwise.
 // When not on cooldown it also sets the cooldown atomically.
+// Cooldown passes owned by the player are applied automatically.
 func checkJobCooldown(client *Client, j jobDef) (bool, int64) {
-	onCooldown, remaining, err := db.CheckAndSetJobCooldown(client.Ipid(), j.key, j.cooldown)
+	reduction := getPlayerCooldownReduction(client.Ipid())
+	effectiveCooldown := j.cooldown - reduction
+	const minCooldown = int64(5 * 60) // floor at 5 minutes regardless of passes
+	if effectiveCooldown < minCooldown {
+		effectiveCooldown = minCooldown
+	}
+	onCooldown, remaining, err := db.CheckAndSetJobCooldown(client.Ipid(), j.key, effectiveCooldown)
 	if err != nil {
 		logger.LogErrorf("jobs: CheckAndSetJobCooldown failed for ipid=%v job=%v: %v", client.Ipid(), j.key, err)
 		client.SendServerMessage("Something went wrong. Please try again later.")
@@ -213,7 +220,13 @@ func sendJobCooldownMsg(client *Client, j jobDef, remaining int64) {
 }
 
 // awardJobChips credits the reward, sends the player their result, and logs it.
+// Any job-bonus passes owned by the player are applied on top of the base reward.
 func awardJobChips(client *Client, j jobDef, reward int64, flavour string) {
+	bonus := getPlayerJobBonus(client.Ipid())
+	if bonus > 0 {
+		reward += bonus
+		flavour = fmt.Sprintf("%s (Pass bonus: +%d)", flavour, bonus)
+	}
 	newBal, chipErr := db.AddChips(client.Ipid(), reward)
 	if chipErr != nil {
 		logger.LogErrorf("jobs: AddChips failed for ipid=%v job=%v: %v", client.Ipid(), j.key, chipErr)

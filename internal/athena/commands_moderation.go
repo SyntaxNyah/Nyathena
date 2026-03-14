@@ -623,7 +623,11 @@ func cmdPlayers(client *Client, args []string, _ string) {
 		if c.Hidden() {
 			b.WriteString("[HIDDEN] ")
 		}
-		fmt.Fprintf(b, "[%v] %v\n", c.Uid(), c.CurrentCharacter())
+		prefix := formatTagDisplay(db.GetActiveTag(c.Ipid()))
+		if prefix != "" {
+			prefix += " "
+		}
+		fmt.Fprintf(b, "%s[%v] %v\n", prefix, c.Uid(), c.CurrentCharacter())
 		if hasBanInfo {
 			if permissions.IsModerator(c.Perms()) {
 				fmt.Fprintf(b, "Mod: %v\n", c.ModName())

@@ -20,7 +20,7 @@ import (
 	"testing"
 )
 
-// TestEnsureChipBalanceCreatesRow verifies that a new IPID starts with 100 chips.
+// TestEnsureChipBalanceCreatesRow verifies that a new IPID starts with the default chip balance.
 func TestEnsureChipBalanceCreatesRow(t *testing.T) {
 	teardown := setupTestDB(t)
 	defer teardown()
@@ -34,8 +34,8 @@ func TestEnsureChipBalanceCreatesRow(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetChipBalance failed: %v", err)
 	}
-	if bal != 100 {
-		t.Errorf("expected starting balance of 100, got %d", bal)
+	if bal != defaultChipBalance {
+		t.Errorf("expected starting balance of %d, got %d", defaultChipBalance, bal)
 	}
 }
 
@@ -64,8 +64,9 @@ func TestEnsureChipBalanceIdempotent(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetChipBalance failed: %v", err)
 	}
-	if bal != 150 {
-		t.Errorf("expected balance 150 after AddChips(50), got %d", bal)
+	want := int64(defaultChipBalance) + 50
+	if bal != want {
+		t.Errorf("expected balance %d after AddChips(50), got %d", want, bal)
 	}
 }
 
@@ -95,13 +96,14 @@ func TestAddChips(t *testing.T) {
 	if err != nil {
 		t.Fatalf("AddChips failed: %v", err)
 	}
-	if newBal != 300 {
-		t.Errorf("expected 300 after AddChips(200) on 100, got %d", newBal)
+	want := int64(defaultChipBalance) + 200
+	if newBal != want {
+		t.Errorf("expected %d after AddChips(200), got %d", want, newBal)
 	}
 
 	stored, _ := GetChipBalance(ipid)
-	if stored != 300 {
-		t.Errorf("stored balance mismatch: expected 300, got %d", stored)
+	if stored != want {
+		t.Errorf("stored balance mismatch: expected %d, got %d", want, stored)
 	}
 }
 
@@ -117,8 +119,9 @@ func TestSpendChips(t *testing.T) {
 	if err != nil {
 		t.Fatalf("SpendChips failed: %v", err)
 	}
-	if newBal != 60 {
-		t.Errorf("expected 60 after SpendChips(40) on 100, got %d", newBal)
+	want := int64(defaultChipBalance) - 40
+	if newBal != want {
+		t.Errorf("expected %d after SpendChips(40), got %d", want, newBal)
 	}
 }
 
@@ -131,15 +134,15 @@ func TestSpendChipsInsufficientFunds(t *testing.T) {
 	ipid := "testchip5"
 	EnsureChipBalance(ipid)
 
-	_, err := SpendChips(ipid, 500)
+	_, err := SpendChips(ipid, defaultChipBalance+1)
 	if err == nil {
 		t.Fatal("expected error for insufficient chips, got nil")
 	}
 
 	// Balance must remain unchanged.
 	bal, _ := GetChipBalance(ipid)
-	if bal != 100 {
-		t.Errorf("balance should still be 100 after failed spend, got %d", bal)
+	if bal != defaultChipBalance {
+		t.Errorf("balance should still be %d after failed spend, got %d", defaultChipBalance, bal)
 	}
 }
 
@@ -149,21 +152,22 @@ func TestGetTopChipBalances(t *testing.T) {
 	defer teardown()
 
 	// Register accounts so the INNER JOIN can resolve names.
+	// Use balances well above defaultChipBalance so extra chips are always positive.
 	players := []struct {
 		username string
 		ipid     string
 		balance  int64
 	}{
-		{"lb2user", "lb2", 1000},
-		{"lb1user", "lb1", 500},
-		{"lb3user", "lb3", 250},
+		{"lb2user", "lb2", 2000},
+		{"lb1user", "lb1", 1500},
+		{"lb3user", "lb3", 750},
 	}
 	for _, p := range players {
 		if err := RegisterPlayer(p.username, []byte("pass1234"), p.ipid); err != nil {
 			t.Fatalf("RegisterPlayer %v: %v", p.username, err)
 		}
 		EnsureChipBalance(p.ipid)
-		if extra := p.balance - 100; extra > 0 {
+		if extra := p.balance - defaultChipBalance; extra > 0 {
 			if _, err := AddChips(p.ipid, extra); err != nil {
 				t.Fatalf("AddChips failed for %v: %v", p.ipid, err)
 			}
@@ -177,11 +181,11 @@ func TestGetTopChipBalances(t *testing.T) {
 	if len(entries) != 3 {
 		t.Fatalf("expected 3 entries, got %d", len(entries))
 	}
-	// Should be ordered descending: lb2user=1000, lb1user=500, lb3user=250
+	// Should be ordered descending: lb2user=2000, lb1user=1500, lb3user=750
 	expected := []struct {
 		username string
 		balance  int64
-	}{{"lb2user", 1000}, {"lb1user", 500}, {"lb3user", 250}}
+	}{{"lb2user", 2000}, {"lb1user", 1500}, {"lb3user", 750}}
 	for i, e := range expected {
 		if entries[i].Username != e.username {
 			t.Errorf("entry %d: expected username %v, got %v", i, e.username, entries[i].Username)
@@ -248,7 +252,7 @@ func TestAddChipsNearCapStaysAtCap(t *testing.T) {
 	EnsureChipBalance(ipid)
 
 	// Bring the balance to exactly MaxChipBalance.
-	if _, err := AddChips(ipid, MaxChipBalance-100); err != nil {
+	if _, err := AddChips(ipid, MaxChipBalance-defaultChipBalance); err != nil {
 		t.Fatalf("AddChips to near-cap failed: %v", err)
 	}
 
