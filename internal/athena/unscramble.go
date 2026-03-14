@@ -17,6 +17,8 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>. */
 package athena
 
 import (
+	cryptoRand "crypto/rand"
+	"encoding/binary"
 	"fmt"
 	"math/rand"
 	"strconv"
@@ -99,18 +101,76 @@ var unscramble = unscrambleState{}
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
-// scrambleWord returns a shuffled version of the input word that differs from
-// the original. Multiple attempts are made to ensure it is visibly scrambled.
+// scrambleWord returns a highly randomised version of the input word that
+// differs from the original. A crypto-seeded RNG is created fresh for each
+// call, and a random strategy is chosen each attempt, so the same word
+// produces a different-looking scramble every single time.
 func scrambleWord(word string) string {
 	runes := []rune(word)
-	for attempt := 0; attempt < 10; attempt++ {
-		rand.Shuffle(len(runes), func(i, j int) { runes[i], runes[j] = runes[j], runes[i] })
-		if string(runes) != word {
-			return string(runes)
+	n := len(runes)
+	if n <= 1 {
+		return word
+	}
+
+	// Seed a local RNG from crypto/rand for true per-call uniqueness.
+	var seedBytes [8]byte
+	if _, err := cryptoRand.Read(seedBytes[:]); err != nil {
+		// Fallback: use current time if crypto/rand is unavailable.
+		binary.LittleEndian.PutUint64(seedBytes[:], uint64(time.Now().UnixNano()))
+	}
+	rng := rand.New(rand.NewSource(int64(binary.LittleEndian.Uint64(seedBytes[:]))))
+
+	for attempt := 0; attempt < 30; attempt++ {
+		result := make([]rune, n)
+		copy(result, runes)
+
+		// Pick a random strategy (more passes = more chaotic result).
+		passes := 1 + rng.Intn(3) // 1–3 passes
+		for p := 0; p < passes; p++ {
+			switch rng.Intn(5) {
+			case 0:
+				// Full Fisher-Yates shuffle.
+				rng.Shuffle(n, func(i, j int) { result[i], result[j] = result[j], result[i] })
+			case 1:
+				// Reverse the entire slice.
+				for i, j := 0, n-1; i < j; i, j = i+1, j-1 {
+					result[i], result[j] = result[j], result[i]
+				}
+			case 2:
+				// Rotate left by a random non-zero offset.
+				k := 1 + rng.Intn(n-1)
+				result = append(result[k:], result[:k]...)
+			case 3:
+				// Interleave: weave the first half with the second half.
+				mid := (n + 1) / 2
+				out := make([]rune, 0, n)
+				for i := 0; i < mid; i++ {
+					out = append(out, result[i])
+					if mid+i < n {
+						out = append(out, result[mid+i])
+					}
+				}
+				result = out
+			case 4:
+				// Shuffle then reverse a random inner sub-segment.
+				rng.Shuffle(n, func(i, j int) { result[i], result[j] = result[j], result[i] })
+				start := rng.Intn(n)
+				end := start + rng.Intn(n-start)
+				for i, j := start, end; i < j; i, j = i+1, j-1 {
+					result[i], result[j] = result[j], result[i]
+				}
+			}
+		}
+
+		if string(result) != word {
+			return string(result)
 		}
 	}
-	// Fallback: reverse the word (guaranteed to differ for words length > 1).
-	for i, j := 0, len(runes)-1; i < j; i, j = i+1, j-1 {
+
+	// Guaranteed fallback: reverse. Note: for palindromes this will match the
+	// original, but no words in the pool are palindromes and 30 attempts above
+	// make it extremely unlikely to reach this path regardless.
+	for i, j := 0, n-1; i < j; i, j = i+1, j-1 {
 		runes[i], runes[j] = runes[j], runes[i]
 	}
 	return string(runes)
