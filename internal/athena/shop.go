@@ -27,87 +27,313 @@ import (
 type shopItemKind int
 
 const (
-	shopKindTag  shopItemKind = iota // cosmetic tag shown in /gas and /players
-	shopKindPass                     // permanent perk (job cooldown / bonus)
+	shopKindTag     shopItemKind = iota // cosmetic tag shown in /gas and /players
+	shopKindPass                        // permanent perk (job cooldown / bonus)
+	shopKindPassive                     // permanent passive income (extra chips/hour)
 )
+
+// shopCategoryInfo describes a browseable tag category.
+type shopCategoryInfo struct {
+	key         string
+	displayName string
+	emoji       string
+}
+
+// shopCategories lists tag categories in display order.
+var shopCategories = []shopCategoryInfo{
+	{"gambling", "Gambling", "🎰"},
+	{"attorney", "Ace Attorney", "⚖️"},
+	{"anime", "Anime", "🌸"},
+	{"gamer", "Gamer", "🎮"},
+	{"girly", "Girly", "🌷"},
+	{"meme", "Silly & Memes", "😂"},
+	{"prestige", "Prestige", "👑"},
+}
 
 // shopItem describes a single purchasable item.
 type shopItem struct {
 	id                string
 	name              string
 	kind              shopItemKind
+	category          string // tag category key (tag items only); "" for passes
 	price             int64
 	description       string
 	cooldownReduction int64 // seconds to shave off ALL job cooldowns (passes only)
 	jobBonus          int64 // extra chips awarded per job completion (passes only)
+	hourlyBonus       int64 // extra chips awarded per hour online (passive only)
 }
 
 // shopItems is the master catalog.  All entries are displayed by /shop.
 var shopItems = []shopItem{
-	// ── Cosmetic Tags (30 total, gambling-themed, ascending price) ────────────
 
-	{id: "tag_gambler", name: "Gambler", kind: shopKindTag, price: 1_000,
-		description: "Show the [Gambler] tag — the first step on every high roller's journey."},
-	{id: "tag_lucky", name: "Lucky", kind: shopKindTag, price: 2_500,
-		description: "Show the [Lucky] tag — fortune smiles on you."},
-	{id: "tag_risk_taker", name: "Risk Taker", kind: shopKindTag, price: 5_000,
-		description: "Show the [Risk Taker] tag — you live on the edge."},
-	{id: "tag_card_shark", name: "Card Shark", kind: shopKindTag, price: 7_500,
-		description: "Show the [Card Shark] tag — the cards bend to your will."},
-	{id: "tag_high_roller", name: "High Roller", kind: shopKindTag, price: 10_000,
-		description: "Show the [High Roller] tag — big bets, bigger wins."},
-	{id: "tag_patreon", name: "Patreon", kind: shopKindTag, price: 15_000,
-		description: "Show the [Patreon] tag — a proud supporter of the casino."},
-	{id: "tag_chip_collector", name: "Chip Collector", kind: shopKindTag, price: 25_000,
-		description: "Show the [Chip Collector] tag — you have amassed a serious stack."},
-	{id: "tag_jackpot", name: "Jackpot", kind: shopKindTag, price: 35_000,
-		description: "Show the [Jackpot] tag — you've hit it big."},
-	{id: "tag_casino_regular", name: "Casino Regular", kind: shopKindTag, price: 50_000,
-		description: "Show the [Casino Regular] tag — the staff know your name."},
-	{id: "tag_hustler", name: "Hustler", kind: shopKindTag, price: 75_000,
-		description: "Show the [Hustler] tag — always working the angles."},
-	{id: "tag_all_in", name: "All In", kind: shopKindTag, price: 100_000,
-		description: "Show the [All In] tag — no half measures."},
-	{id: "tag_whale", name: "Whale", kind: shopKindTag, price: 150_000,
-		description: "Show the [Whale] tag — you move markets with your bets."},
-	{id: "tag_bluffer", name: "Bluffer", kind: shopKindTag, price: 200_000,
-		description: "Show the [Bluffer] tag — your poker face is legendary."},
-	{id: "tag_odds_defier", name: "Odds Defier", kind: shopKindTag, price: 300_000,
-		description: "Show the [Odds Defier] tag — statistics fear you."},
-	{id: "tag_dealer", name: "Dealer", kind: shopKindTag, price: 400_000,
-		description: "Show the [Dealer] tag — you know where every card is."},
-	{id: "tag_ace", name: "Ace", kind: shopKindTag, price: 500_000,
-		description: "Show the [Ace] tag — always the highest card in the deck."},
-	{id: "tag_double_down", name: "Double Down", kind: shopKindTag, price: 600_000,
-		description: "Show the [Double Down] tag — you never back away from a good hand."},
-	{id: "tag_full_house", name: "Full House", kind: shopKindTag, price: 750_000,
-		description: "Show the [Full House] tag — a powerful hand, a powerful player."},
-	{id: "tag_flush", name: "Flush", kind: shopKindTag, price: 900_000,
-		description: "Show the [Flush] tag — all the right suits, all the right moves."},
-	{id: "tag_lucky_charm", name: "Lucky Charm", kind: shopKindTag, price: 1_000_000,
-		description: "Show the [Lucky Charm] tag — a million chips of proof."},
-	{id: "tag_bankroll", name: "Bankroll", kind: shopKindTag, price: 1_250_000,
-		description: "Show the [Bankroll] tag — your wealth speaks for itself."},
-	{id: "tag_fortune", name: "Fortune's Fave", kind: shopKindTag, price: 1_500_000,
-		description: "Show the [Fortune's Fave] tag — the universe bends your way."},
-	{id: "tag_degenerate", name: "Degenerate", kind: shopKindTag, price: 2_000_000,
-		description: "Show the [Degenerate] tag — you wear it as a badge of honour."},
-	{id: "tag_the_house", name: "The House", kind: shopKindTag, price: 2_500_000,
-		description: "Show the [The House] tag — the house always wins, and you are the house."},
-	{id: "tag_legendary", name: "Legendary", kind: shopKindTag, price: 3_000_000,
-		description: "Show the [Legendary] tag — stories are told about players like you."},
-	{id: "tag_casino_royale", name: "Casino Royale", kind: shopKindTag, price: 4_000_000,
-		description: "Show the [Casino Royale] tag — the ultimate casino experience."},
-	{id: "tag_diamond", name: "Diamond", kind: shopKindTag, price: 5_000_000,
-		description: "Show the [Diamond] tag — rare, brilliant, and impossibly valuable."},
-	{id: "tag_mythic", name: "Mythic", kind: shopKindTag, price: 6_000_000,
-		description: "Show the [Mythic] tag — spoken of in hushed reverence."},
-	{id: "tag_godlike", name: "Godlike", kind: shopKindTag, price: 7_500_000,
-		description: "Show the [Godlike] tag — mortals cannot comprehend your wins."},
-	{id: "tag_infinite", name: "Infinite", kind: shopKindTag, price: 10_000_000,
-		description: "Show the [Infinite] tag — the ultimate flex. You have truly seen it all."},
+	// ══════════════════════════════════════════════════════════════════════════
+	// 🎰 GAMBLING TAGS (30 total, existing)
+	// ══════════════════════════════════════════════════════════════════════════
 
-	// ── Job Passes (cooldown reduction — all stack, up to 50 min total reduction) ─
+	{id: "tag_gambler", name: "Gambler", kind: shopKindTag, category: "gambling", price: 1_000,
+		description: "The first step on every high roller's journey."},
+	{id: "tag_lucky", name: "Lucky", kind: shopKindTag, category: "gambling", price: 2_500,
+		description: "Fortune smiles on you."},
+	{id: "tag_risk_taker", name: "Risk Taker", kind: shopKindTag, category: "gambling", price: 5_000,
+		description: "You live on the edge."},
+	{id: "tag_card_shark", name: "Card Shark", kind: shopKindTag, category: "gambling", price: 7_500,
+		description: "The cards bend to your will."},
+	{id: "tag_high_roller", name: "High Roller", kind: shopKindTag, category: "gambling", price: 10_000,
+		description: "Big bets, bigger wins."},
+	{id: "tag_patreon", name: "Patreon", kind: shopKindTag, category: "gambling", price: 15_000,
+		description: "A proud supporter of the casino."},
+	{id: "tag_chip_collector", name: "Chip Collector", kind: shopKindTag, category: "gambling", price: 25_000,
+		description: "You have amassed a serious stack."},
+	{id: "tag_jackpot", name: "Jackpot", kind: shopKindTag, category: "gambling", price: 35_000,
+		description: "You've hit it big."},
+	{id: "tag_casino_regular", name: "Casino Regular", kind: shopKindTag, category: "gambling", price: 50_000,
+		description: "The staff know your name."},
+	{id: "tag_hustler", name: "Hustler", kind: shopKindTag, category: "gambling", price: 75_000,
+		description: "Always working the angles."},
+	{id: "tag_all_in", name: "All In", kind: shopKindTag, category: "gambling", price: 100_000,
+		description: "No half measures."},
+	{id: "tag_whale", name: "Whale", kind: shopKindTag, category: "gambling", price: 150_000,
+		description: "You move markets with your bets."},
+	{id: "tag_bluffer", name: "Bluffer", kind: shopKindTag, category: "gambling", price: 200_000,
+		description: "Your poker face is legendary."},
+	{id: "tag_odds_defier", name: "Odds Defier", kind: shopKindTag, category: "gambling", price: 300_000,
+		description: "Statistics fear you."},
+	{id: "tag_dealer", name: "Dealer", kind: shopKindTag, category: "gambling", price: 400_000,
+		description: "You know where every card is."},
+	{id: "tag_ace", name: "Ace", kind: shopKindTag, category: "gambling", price: 500_000,
+		description: "Always the highest card in the deck."},
+	{id: "tag_double_down", name: "Double Down", kind: shopKindTag, category: "gambling", price: 600_000,
+		description: "You never back away from a good hand."},
+	{id: "tag_full_house", name: "Full House", kind: shopKindTag, category: "gambling", price: 750_000,
+		description: "A powerful hand, a powerful player."},
+	{id: "tag_flush", name: "Flush", kind: shopKindTag, category: "gambling", price: 900_000,
+		description: "All the right suits, all the right moves."},
+	{id: "tag_lucky_charm", name: "Lucky Charm", kind: shopKindTag, category: "gambling", price: 1_000_000,
+		description: "A million chips of proof."},
+	{id: "tag_bankroll", name: "Bankroll", kind: shopKindTag, category: "gambling", price: 1_250_000,
+		description: "Your wealth speaks for itself."},
+	{id: "tag_fortune", name: "Fortune's Fave", kind: shopKindTag, category: "gambling", price: 1_500_000,
+		description: "The universe bends your way."},
+	{id: "tag_degenerate", name: "Degenerate", kind: shopKindTag, category: "gambling", price: 2_000_000,
+		description: "You wear it as a badge of honour."},
+	{id: "tag_the_house", name: "The House", kind: shopKindTag, category: "gambling", price: 2_500_000,
+		description: "The house always wins, and you are the house."},
+	{id: "tag_legendary", name: "Legendary", kind: shopKindTag, category: "gambling", price: 3_000_000,
+		description: "Stories are told about players like you."},
+	{id: "tag_casino_royale", name: "Casino Royale", kind: shopKindTag, category: "gambling", price: 4_000_000,
+		description: "The ultimate casino experience."},
+	{id: "tag_diamond", name: "Diamond", kind: shopKindTag, category: "gambling", price: 5_000_000,
+		description: "Rare, brilliant, and impossibly valuable."},
+	{id: "tag_mythic", name: "Mythic", kind: shopKindTag, category: "gambling", price: 6_000_000,
+		description: "Spoken of in hushed reverence."},
+	{id: "tag_godlike", name: "Godlike", kind: shopKindTag, category: "gambling", price: 7_500_000,
+		description: "Mortals cannot comprehend your wins."},
+	{id: "tag_infinite", name: "Infinite", kind: shopKindTag, category: "gambling", price: 10_000_000,
+		description: "The ultimate flex. You have truly seen it all."},
+
+	// ══════════════════════════════════════════════════════════════════════════
+	// ⚖️ ACE ATTORNEY TAGS (15 tags)
+	// ══════════════════════════════════════════════════════════════════════════
+
+	{id: "tag_objection", name: "Objection!", kind: shopKindTag, category: "attorney", price: 500,
+		description: "The classic battlecry. Every good attorney has one."},
+	{id: "tag_take_that", name: "Take That!", kind: shopKindTag, category: "attorney", price: 500,
+		description: "Slam that evidence on the bench."},
+	{id: "tag_hold_it", name: "Hold It!", kind: shopKindTag, category: "attorney", price: 500,
+		description: "Wait just a moment there!"},
+	{id: "tag_attorney", name: "Attorney at Law", kind: shopKindTag, category: "attorney", price: 1_500,
+		description: "You passed the bar. Somehow."},
+	{id: "tag_detective", name: "Detective", kind: shopKindTag, category: "attorney", price: 2_000,
+		description: "On the case and eating burgers."},
+	{id: "tag_prosecutor", name: "Prosecutor", kind: shopKindTag, category: "attorney", price: 5_000,
+		description: "A perfect win record — until now."},
+	{id: "tag_defense", name: "Defense Attorney", kind: shopKindTag, category: "attorney", price: 8_000,
+		description: "Fighting for the truth, one contradiction at a time."},
+	{id: "tag_co_counsel", name: "Co-Counsel", kind: shopKindTag, category: "attorney", price: 12_000,
+		description: "Supporting the defense from the sidelines."},
+	{id: "tag_steel_samurai", name: "Steel Samurai", kind: shopKindTag, category: "attorney", price: 25_000,
+		description: "Hero of justice and children everywhere!"},
+	{id: "tag_magatama", name: "Magatama", kind: shopKindTag, category: "attorney", price: 75_000,
+		description: "The Magatama reveals the locks around your secrets."},
+	{id: "tag_chords_of_steel", name: "Chords of Steel", kind: shopKindTag, category: "attorney", price: 150_000,
+		description: "RAAAHHH! Your voice shakes the courtroom."},
+	{id: "tag_ladder_or_step", name: "Ladder or Step?", kind: shopKindTag, category: "attorney", price: 500_000,
+		description: "The greatest philosophical debate of our time."},
+	{id: "tag_turnabout", name: "Turnabout", kind: shopKindTag, category: "attorney", price: 1_000_000,
+		description: "Every case ends in a turnabout when you're involved."},
+	{id: "tag_psyche_lock", name: "Psyche-Lock", kind: shopKindTag, category: "attorney", price: 2_500_000,
+		description: "The chains of deception cannot hold against you."},
+	{id: "tag_godot_coffee", name: "One Thousand Blends", kind: shopKindTag, category: "attorney", price: 5_000_000,
+		description: "You've had exactly 1000 cups of coffee today. This one is number 17."},
+
+	// ══════════════════════════════════════════════════════════════════════════
+	// 🌸 ANIME TAGS (15 tags)
+	// ══════════════════════════════════════════════════════════════════════════
+
+	{id: "tag_weeb", name: "Weeb", kind: shopKindTag, category: "anime", price: 100,
+		description: "Embrace the culture. No shame."},
+	{id: "tag_otaku", name: "Otaku", kind: shopKindTag, category: "anime", price: 250,
+		description: "You've watched more anime than you've slept."},
+	{id: "tag_senpai", name: "Senpai", kind: shopKindTag, category: "anime", price: 500,
+		description: "Notice me."},
+	{id: "tag_kawaii", name: "Kawaii", kind: shopKindTag, category: "anime", price: 1_000,
+		description: "Unbearably cute in every possible way."},
+	{id: "tag_chibi", name: "Chibi", kind: shopKindTag, category: "anime", price: 1_500,
+		description: "Small but incredibly powerful (and adorable)."},
+	{id: "tag_isekai", name: "Isekai Survivor", kind: shopKindTag, category: "anime", price: 4_000,
+		description: "Reincarnated into a courtroom with a truck-kun origin story."},
+	{id: "tag_tsundere", name: "Tsundere", kind: shopKindTag, category: "anime", price: 8_000,
+		description: "It's not like I want to be here or anything. Baka."},
+	{id: "tag_yandere", name: "Yandere", kind: shopKindTag, category: "anime", price: 12_000,
+		description: "I'll do anything for my beloved. Anything."},
+	{id: "tag_kuudere", name: "Kuudere", kind: shopKindTag, category: "anime", price: 15_000,
+		description: "Cool, calm, emotionally unreachable."},
+	{id: "tag_waifu_haver", name: "Waifu Haver", kind: shopKindTag, category: "anime", price: 20_000,
+		description: "You have chosen your side and you will defend it."},
+	{id: "tag_nakama", name: "Nakama", kind: shopKindTag, category: "anime", price: 35_000,
+		description: "The power of friendship is real and it lives here."},
+	{id: "tag_sensei", name: "Sensei", kind: shopKindTag, category: "anime", price: 60_000,
+		description: "You have much to teach, and even more to learn."},
+	{id: "tag_final_boss", name: "Final Boss", kind: shopKindTag, category: "anime", price: 200_000,
+		description: "The true challenge was you all along."},
+	{id: "tag_transcended", name: "Transcended", kind: shopKindTag, category: "anime", price: 750_000,
+		description: "Beyond mortal understanding. You have achieved something."},
+	{id: "tag_protagonist", name: "Protagonist", kind: shopKindTag, category: "anime", price: 2_000_000,
+		description: "You are the main character and the plot bends around you."},
+
+	// ══════════════════════════════════════════════════════════════════════════
+	// 🎮 GAMER TAGS (15 tags)
+	// ══════════════════════════════════════════════════════════════════════════
+
+	{id: "tag_noob", name: "Noob", kind: shopKindTag, category: "gamer", price: 100,
+		description: "Proudly new. At least you're honest."},
+	{id: "tag_gg", name: "GG EZ", kind: shopKindTag, category: "gamer", price: 200,
+		description: "Good game. Easy game. No contest."},
+	{id: "tag_touch_grass", name: "Touch Grass", kind: shopKindTag, category: "gamer", price: 300,
+		description: "A reminder from your past self. You haven't listened."},
+	{id: "tag_tryhard", name: "Tryhard", kind: shopKindTag, category: "gamer", price: 500,
+		description: "You take every game seriously. Every. Single. One."},
+	{id: "tag_afk", name: "AFK", kind: shopKindTag, category: "gamer", price: 750,
+		description: "Away from keyboard. Spiritually, at least."},
+	{id: "tag_pro_gamer", name: "Pro Gamer", kind: shopKindTag, category: "gamer", price: 3_000,
+		description: "A certified professional. Certification may not be real."},
+	{id: "tag_speedrunner", name: "Speedrunner", kind: shopKindTag, category: "gamer", price: 10_000,
+		description: "Optimised pathing. Any% or bust."},
+	{id: "tag_no_lifer", name: "No Lifer", kind: shopKindTag, category: "gamer", price: 20_000,
+		description: "You live in the server. You have no other home."},
+	{id: "tag_esports", name: "Esports Ready", kind: shopKindTag, category: "gamer", price: 40_000,
+		description: "Sponsor me. I'm ready."},
+	{id: "tag_pvp_god", name: "PvP God", kind: shopKindTag, category: "gamer", price: 100_000,
+		description: "No mercy. No remorse. No defeats."},
+	{id: "tag_git_gud", name: "Git Gud", kind: shopKindTag, category: "gamer", price: 200_000,
+		description: "You've said this to others. Now it's on your profile."},
+	{id: "tag_game_dev", name: "Game Dev", kind: shopKindTag, category: "gamer", price: 400_000,
+		description: "Making games instead of playing them. Probably."},
+	{id: "tag_world_first", name: "World First", kind: shopKindTag, category: "gamer", price: 1_500_000,
+		description: "First in the world to do something impressive. Allegedly."},
+	{id: "tag_one_more_run", name: "One More Run", kind: shopKindTag, category: "gamer", price: 4_000_000,
+		description: "You said this 7 hours ago. You are still here."},
+	{id: "tag_gaming_chair", name: "Gaming Chair", kind: shopKindTag, category: "gamer", price: 8_000_000,
+		description: "The source of all your power. Don't question it."},
+
+	// ══════════════════════════════════════════════════════════════════════════
+	// 🌷 GIRLY TAGS (12 tags)
+	// ══════════════════════════════════════════════════════════════════════════
+
+	{id: "tag_princess", name: "Princess", kind: shopKindTag, category: "girly", price: 200,
+		description: "Royalty, obviously."},
+	{id: "tag_fairy", name: "Fairy", kind: shopKindTag, category: "girly", price: 500,
+		description: "Delicate, magical, and 100% real."},
+	{id: "tag_queen", name: "Queen", kind: shopKindTag, category: "girly", price: 2_000,
+		description: "Step aside, there's a queen coming through."},
+	{id: "tag_sparkle", name: "Sparkle", kind: shopKindTag, category: "girly", price: 4_000,
+		description: "Everything you touch turns into glitter. A blessing and a curse."},
+	{id: "tag_bubblegum", name: "Bubblegum", kind: shopKindTag, category: "girly", price: 6_000,
+		description: "Sweet, bright, and impossible to ignore."},
+	{id: "tag_cottagecore", name: "Cottagecore", kind: shopKindTag, category: "girly", price: 10_000,
+		description: "Living in a cute cottage surrounded by mushrooms and frogs."},
+	{id: "tag_pastel", name: "Pastel Queen", kind: shopKindTag, category: "girly", price: 25_000,
+		description: "Every colour is soft. Every vibe is immaculate."},
+	{id: "tag_boss_babe", name: "Boss Babe", kind: shopKindTag, category: "girly", price: 60_000,
+		description: "Running things. Taking names. Looking great doing it."},
+	{id: "tag_enchantress", name: "Enchantress", kind: shopKindTag, category: "girly", price: 150_000,
+		description: "Mystical, powerful, and impossible to resist."},
+	{id: "tag_sorceress", name: "Sorceress", kind: shopKindTag, category: "girly", price: 400_000,
+		description: "You didn't need a magic wand. You never did."},
+	{id: "tag_femme_fatale", name: "Femme Fatale", kind: shopKindTag, category: "girly", price: 1_200_000,
+		description: "Devastating and utterly unforgettable."},
+	{id: "tag_divine_feminine", name: "Divine Feminine", kind: shopKindTag, category: "girly", price: 6_000_000,
+		description: "You have transcended the ordinary. A force of nature made manifest."},
+
+	// ══════════════════════════════════════════════════════════════════════════
+	// 😂 SILLY & MEME TAGS (18 tags)
+	// ══════════════════════════════════════════════════════════════════════════
+
+	{id: "tag_bruh", name: "Bruh", kind: shopKindTag, category: "meme", price: 100,
+		description: "Bruh."},
+	{id: "tag_npc", name: "NPC", kind: shopKindTag, category: "meme", price: 150,
+		description: "Following the script. No agency detected."},
+	{id: "tag_sus", name: "Sus", kind: shopKindTag, category: "meme", price: 200,
+		description: "Very suspicious. Among us in this courtroom."},
+	{id: "tag_no_cap", name: "No Cap", kind: shopKindTag, category: "meme", price: 300,
+		description: "Absolutely telling the truth. On everything."},
+	{id: "tag_ratio", name: "L+Ratio", kind: shopKindTag, category: "meme", price: 500,
+		description: "You have been ratio'd. Or you are the ratio."},
+	{id: "tag_skill_issue", name: "Skill Issue", kind: shopKindTag, category: "meme", price: 750,
+		description: "The diagnosis is in. The prognosis is practice more."},
+	{id: "tag_based", name: "Based", kind: shopKindTag, category: "meme", price: 2_000,
+		description: "Certified based. No further explanation needed."},
+	{id: "tag_copium", name: "Copium", kind: shopKindTag, category: "meme", price: 4_000,
+		description: "Huffing copium through a garden hose. It's fine."},
+	{id: "tag_sigma", name: "Sigma", kind: shopKindTag, category: "meme", price: 7_500,
+		description: "You grind. You do not simp. You follow the sigma path."},
+	{id: "tag_chronically_online", name: "Chronically Online", kind: shopKindTag, category: "meme", price: 12_000,
+		description: "You know every meme format and you use them all wrong."},
+	{id: "tag_gigachad", name: "Gigachad", kind: shopKindTag, category: "meme", price: 50_000,
+		description: "The jawline. The confidence. The absolute unit."},
+	{id: "tag_main_character", name: "Main Character", kind: shopKindTag, category: "meme", price: 100_000,
+		description: "The plot revolves around you. The NPCs can tell."},
+	{id: "tag_goat", name: "GOAT", kind: shopKindTag, category: "meme", price: 250_000,
+		description: "Greatest Of All Time. It's confirmed."},
+	{id: "tag_rizz", name: "Infinite Rizz", kind: shopKindTag, category: "meme", price: 500_000,
+		description: "Unspoken rizz so powerful it bends reality."},
+	{id: "tag_giga_brain", name: "Giga Brain", kind: shopKindTag, category: "meme", price: 1_000_000,
+		description: "Thinking on a level most cannot comprehend."},
+	{id: "tag_meme_lord", name: "Meme Lord", kind: shopKindTag, category: "meme", price: 2_500_000,
+		description: "You have mastered the art. You are the meme."},
+	{id: "tag_404_not_found", name: "404 Not Found", kind: shopKindTag, category: "meme", price: 5_000_000,
+		description: "Error: player not found. And yet here you are."},
+	{id: "tag_exists_confused", name: "Exists & Confused", kind: shopKindTag, category: "meme", price: 9_999_999,
+		description: "You are here. You don't know why. You spent 10 million chips on this tag."},
+
+	// ══════════════════════════════════════════════════════════════════════════
+	// 👑 PRESTIGE TAGS (10 tags)
+	// ══════════════════════════════════════════════════════════════════════════
+
+	{id: "tag_newcomer", name: "Newcomer", kind: shopKindTag, category: "prestige", price: 100,
+		description: "Just arrived. Everything is new and exciting."},
+	{id: "tag_regular", name: "Regular", kind: shopKindTag, category: "prestige", price: 1_000,
+		description: "A known face around here. Reliably present."},
+	{id: "tag_veteran", name: "Veteran", kind: shopKindTag, category: "prestige", price: 10_000,
+		description: "You have seen things. You remain unfazed."},
+	{id: "tag_elite", name: "Elite", kind: shopKindTag, category: "prestige", price: 40_000,
+		description: "Not everyone makes it here. You did."},
+	{id: "tag_champion", name: "Champion", kind: shopKindTag, category: "prestige", price: 125_000,
+		description: "A champion in every sense. Feared and respected."},
+	{id: "tag_grandmaster", name: "Grandmaster", kind: shopKindTag, category: "prestige", price: 500_000,
+		description: "The highest conventional rank. But there is always further to go."},
+	{id: "tag_lord", name: "Lord", kind: shopKindTag, category: "prestige", price: 1_000_000,
+		description: "A title earned by those who rule through wealth and presence."},
+	{id: "tag_overlord", name: "Overlord", kind: shopKindTag, category: "prestige", price: 3_500_000,
+		description: "You are not just a lord. You lord over lords."},
+	{id: "tag_demon_king", name: "Demon King", kind: shopKindTag, category: "prestige", price: 7_000_000,
+		description: "The final form. All who oppose you have been defeated."},
+	{id: "tag_absolute_unit", name: "Absolute Unit", kind: shopKindTag, category: "prestige", price: 10_000_000,
+		description: "There are no words. You are simply an absolute unit."},
+
+	// ══════════════════════════════════════════════════════════════════════════
+	// 💼 JOB PASSES — Cooldown Reduction (all stack, up to 50 min total)
+	// ══════════════════════════════════════════════════════════════════════════
 
 	{id: "pass_quick", name: "Quick Worker Pass", kind: shopKindPass, price: 10_000,
 		cooldownReduction: 5 * 60,
@@ -117,12 +343,14 @@ var shopItems = []shopItem{
 		description: "Permanently reduces ALL job cooldowns by an additional 10 minutes."},
 	{id: "pass_turbo", name: "Turbo Pass", kind: shopKindPass, price: 150_000,
 		cooldownReduction: 15 * 60,
-		description: "Permanently reduces ALL job cooldowns by an additional 15 minutes. (Stack with Quick & Speedy for up to 30 min off!)"},
+		description: "Permanently reduces ALL job cooldowns by an additional 15 minutes."},
 	{id: "pass_lightning", name: "Lightning Pass", kind: shopKindPass, price: 500_000,
 		cooldownReduction: 20 * 60,
-		description: "Permanently reduces ALL job cooldowns by an additional 20 minutes. (Full stack = 50 min off, minimum 5 min cooldown.)"},
+		description: "Permanently reduces ALL job cooldowns by an additional 20 minutes. (Full stack = −50 min, floor 5 min.)"},
 
-	// ── Job Passes (reward bonus — all stack) ─────────────────────────────────
+	// ══════════════════════════════════════════════════════════════════════════
+	// 💼 JOB PASSES — Reward Bonus (all stack, up to +11 chips/job)
+	// ══════════════════════════════════════════════════════════════════════════
 
 	{id: "pass_bonus", name: "Bonus Chip Pass", kind: shopKindPass, price: 25_000,
 		jobBonus:    1,
@@ -135,7 +363,27 @@ var shopItems = []shopItem{
 		description: "Permanently earn +3 extra chips on every job completion."},
 	{id: "pass_jackpot_seeker", name: "Jackpot Seeker Pass", kind: shopKindPass, price: 1_000_000,
 		jobBonus:    5,
-		description: "Permanently earn +5 extra chips on every job completion. (Full stack = +11 chips per job!)"},
+		description: "Permanently earn +5 extra chips on every job completion. (Full stack = +11 chips/job!)"},
+
+	// ══════════════════════════════════════════════════════════════════════════
+	// ⏱️ PASSIVE INCOME — Extra chips per hour online (all stack)
+	// ══════════════════════════════════════════════════════════════════════════
+
+	// Passive income passes are additive (not multiplicative) — the "2x/3x/5x/10x"
+	// names refer to the total chips/hr when all lower passes are also owned.
+	// hourlyBonus is the raw number of extra chips/hr this pass contributes.
+	{id: "pass_income_2x", name: "Income Doubler", kind: shopKindPassive, price: 30_000,
+		hourlyBonus:  1,
+		description: "Permanently earn +1 chip per hour online (doubles the base 1 chip/hr to 2 chips/hr)."},
+	{id: "pass_income_3x", name: "Income Tripler", kind: shopKindPassive, price: 100_000,
+		hourlyBonus:  1,
+		description: "Permanently earn +1 more chip per hour online (adds to Doubler for 3 chips/hr total)."},
+	{id: "pass_income_5x", name: "5x Income Booster", kind: shopKindPassive, price: 500_000,
+		hourlyBonus:  2,
+		description: "Permanently earn +2 more chips per hour online (adds to Doubler+Tripler for 5 chips/hr total)."},
+	{id: "pass_income_10x", name: "10x Income Booster", kind: shopKindPassive, price: 2_000_000,
+		hourlyBonus:  5,
+		description: "Permanently earn +5 more chips per hour online (10 chips/hr total with all four). Still a slog!"},
 }
 
 // shopItemByID returns the item with the given ID, or (shopItem{}, false) if not found.
@@ -192,13 +440,30 @@ func getPlayerJobBonus(ipid string) int64 {
 	return total
 }
 
+// getPlayerHourlyBonus returns the total extra chips per hour of online time
+// for the given IPID, summing up all purchased passive income passes.
+func getPlayerHourlyBonus(ipid string) int64 {
+	items, err := db.GetPlayerShopItems(ipid)
+	if err != nil || len(items) == 0 {
+		return 0
+	}
+	var total int64
+	for _, id := range items {
+		if it, ok := shopItemByID(id); ok {
+			total += it.hourlyBonus
+		}
+	}
+	return total
+}
+
 // ── /shop command ─────────────────────────────────────────────────────────────
 
 // cmdShop handles the /shop command.
 //
-//	/shop              — show the catalog
-//	/shop buy <id>     — purchase an item
-//	/shop items        — list your owned items
+//	/shop                  — show overview with category list
+//	/shop <category>       — browse items in a category
+//	/shop buy <id>         — purchase an item
+//	/shop items            — list your owned items
 func cmdShop(client *Client, args []string, _ string) {
 	if !config.EnableCasino {
 		client.SendServerMessage("The casino (and shop) is not enabled on this server.")
@@ -206,54 +471,127 @@ func cmdShop(client *Client, args []string, _ string) {
 	}
 
 	if len(args) == 0 {
-		printShopCatalog(client)
+		printShopOverview(client)
 		return
 	}
 
-	switch strings.ToLower(args[0]) {
+	sub := strings.ToLower(args[0])
+
+	// Check if arg matches a category key first.
+	for _, cat := range shopCategories {
+		if sub == cat.key {
+			printShopCategory(client, cat)
+			return
+		}
+	}
+
+	switch sub {
+	case "passes":
+		printShopPasses(client)
+	case "passive":
+		printShopPassive(client)
 	case "buy":
 		if len(args) < 2 {
-			client.SendServerMessage("Usage: /shop buy <item_id>  — use /shop to see available IDs.")
+			client.SendServerMessage("Usage: /shop buy <item_id>  — use /shop to see category names.")
 			return
 		}
 		shopBuy(client, args[1])
 	case "items", "owned", "inventory":
 		shopListOwned(client)
 	default:
-		client.SendServerMessage("Usage: /shop | /shop buy <item_id> | /shop items")
+		client.SendServerMessage(
+			"Usage:\n" +
+				"  /shop                 — shop overview & categories\n" +
+				"  /shop <category>      — browse a tag category\n" +
+				"    Categories: gambling attorney anime gamer girly meme prestige\n" +
+				"  /shop passes          — job passes (cooldown & bonus)\n" +
+				"  /shop passive         — passive income upgrades\n" +
+				"  /shop buy <item_id>   — purchase an item\n" +
+				"  /shop items           — view your owned items & active tag\n" +
+				"  /settag <id>|none     — equip or remove your active tag")
 	}
 }
 
-func printShopCatalog(client *Client) {
+func printShopOverview(client *Client) {
 	bal, _ := db.GetChipBalance(client.Ipid())
+	activeTag := db.GetActiveTag(client.Ipid())
+	activeDisplay := "(none)"
+	if t := formatTagDisplay(activeTag); t != "" {
+		activeDisplay = t
+	}
 
 	var sb strings.Builder
-	sb.WriteString(fmt.Sprintf("\n🛒 Nyathena Shop — Your balance: %d chips\n", bal))
+	sb.WriteString(fmt.Sprintf("\n🛒 Nyathena Shop — Balance: %d chips | Active tag: %s\n", bal, activeDisplay))
 	sb.WriteString("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n")
-	sb.WriteString("Spend your chips on permanent cosmetic tags and job perks!\n")
-	sb.WriteString("All purchases are PERMANENT and linked to your account.\n")
-	sb.WriteString("  Buy with:  /shop buy <item_id>\n")
-	sb.WriteString("  Your items: /shop items\n")
-	sb.WriteString("  Set tag:   /settag <tag_id>  or  /settag none  to remove\n\n")
+	sb.WriteString("Buy permanent cosmetic tags and grinding upgrades with chips!\n")
+	sb.WriteString("All purchases are PERMANENT and linked to your account.\n\n")
 
-	sb.WriteString("── 🏷️  Cosmetic Tags (visible in /gas and /players) ──\n")
-	sb.WriteString(fmt.Sprintf("  %-26s  %-18s  %s\n", "Item ID", "Tag", "Price"))
-	sb.WriteString("  " + strings.Repeat("─", 62) + "\n")
+	sb.WriteString("📂 Tag Categories (use /shop <category> to browse):\n")
+	for _, cat := range shopCategories {
+		count := countTagsInCategory(cat.key)
+		owned := countOwnedInCategory(client.Ipid(), cat.key)
+		sb.WriteString(fmt.Sprintf("  %s %-12s  — %d tags  (owned: %d)  → /shop %s\n",
+			cat.emoji, cat.displayName, count, owned, cat.key))
+	}
+
+	sb.WriteString("\n💼 Upgrades:\n")
+	sb.WriteString("  /shop passes   — job cooldown & reward passes\n")
+	sb.WriteString("  /shop passive  — passive income upgrades (more chips/hour)\n")
+
+	sb.WriteString("\n🛒 Commands:\n")
+	sb.WriteString("  /shop buy <item_id>   — purchase an item by ID\n")
+	sb.WriteString("  /shop items           — list your owned items\n")
+	sb.WriteString("  /settag <id>|none     — equip or remove your active tag\n")
+	client.SendServerMessage(sb.String())
+}
+
+func countTagsInCategory(cat string) int {
+	n := 0
 	for _, it := range shopItems {
-		if it.kind != shopKindTag {
+		if it.kind == shopKindTag && it.category == cat {
+			n++
+		}
+	}
+	return n
+}
+
+func countOwnedInCategory(ipid, cat string) int {
+	n := 0
+	for _, it := range shopItems {
+		if it.kind == shopKindTag && it.category == cat && db.HasShopItem(ipid, it.id) {
+			n++
+		}
+	}
+	return n
+}
+
+func printShopCategory(client *Client, cat shopCategoryInfo) {
+	var sb strings.Builder
+	sb.WriteString(fmt.Sprintf("\n%s %s Tags — /shop buy <item_id> to purchase\n", cat.emoji, cat.displayName))
+	sb.WriteString(fmt.Sprintf("  %-28s  %-20s  %-12s  %s\n", "Item ID", "Tag", "Price", "Owned?"))
+	sb.WriteString("  " + strings.Repeat("─", 72) + "\n")
+
+	for _, it := range shopItems {
+		if it.kind != shopKindTag || it.category != cat.key {
 			continue
 		}
 		owned := ""
 		if db.HasShopItem(client.Ipid(), it.id) {
-			owned = " ✅"
+			owned = "✅"
 		}
-		sb.WriteString(fmt.Sprintf("  %-26s  [%-16s]  %d chips%s\n",
+		sb.WriteString(fmt.Sprintf("  %-28s  [%-18s]  %-12d  %s\n",
 			it.id, it.name, it.price, owned))
 	}
+	sb.WriteString("\nBuy with: /shop buy <item_id>    Back to overview: /shop\n")
+	client.SendServerMessage(sb.String())
+}
 
-	sb.WriteString("\n── 💼 Job Passes (permanent bonuses for all jobs) ──\n")
-	sb.WriteString(fmt.Sprintf("  %-26s  %-28s  %s\n", "Item ID", "Pass Name", "Price"))
-	sb.WriteString("  " + strings.Repeat("─", 72) + "\n")
+func printShopPasses(client *Client) {
+	var sb strings.Builder
+	sb.WriteString("\n💼 Job Passes — Permanent job upgrades\n")
+	sb.WriteString(fmt.Sprintf("  %-26s  %-26s  %-12s  %s\n", "Item ID", "Pass Name", "Price", "Benefit"))
+	sb.WriteString("  " + strings.Repeat("─", 80) + "\n")
+
 	for _, it := range shopItems {
 		if it.kind != shopKindPass {
 			continue
@@ -264,30 +602,60 @@ func printShopCatalog(client *Client) {
 		}
 		var benefit string
 		if it.cooldownReduction > 0 {
-			benefit = fmt.Sprintf("-%d min cooldown", it.cooldownReduction/60)
+			benefit = fmt.Sprintf("−%dm cooldown", it.cooldownReduction/60)
 		} else if it.jobBonus > 0 {
 			benefit = fmt.Sprintf("+%d chip/job", it.jobBonus)
 		}
-		sb.WriteString(fmt.Sprintf("  %-26s  %-28s  %d chips%s\n  %-26s  %s\n",
-			it.id, it.name, it.price, owned,
-			"", benefit))
+		sb.WriteString(fmt.Sprintf("  %-26s  %-26s  %-12d  %s%s\n",
+			it.id, it.name, it.price, benefit, owned))
 	}
 
-	sb.WriteString("\n💡 Tags stack — buy them all for a richer display!\n")
-	sb.WriteString("💡 Job passes stack — max cooldown reduction is 50 min (5 min floor per job).\n")
-	sb.WriteString("💡 Bonus passes stack — max +11 chips per job when all 4 are owned.\n")
+	sb.WriteString("\n💡 Cooldown passes stack — max −50 min (5 min floor per job).\n")
+	sb.WriteString("💡 Bonus passes stack — max +11 chips/job with all 4 owned.\n")
+	sb.WriteString("Buy with: /shop buy <item_id>\n")
+	client.SendServerMessage(sb.String())
+}
+
+func printShopPassive(client *Client) {
+	var sb strings.Builder
+	sb.WriteString("\n⏱️ Passive Income Upgrades — Extra chips earned per hour online\n")
+	sb.WriteString(fmt.Sprintf("  %-26s  %-26s  %-12s  %s\n", "Item ID", "Pass Name", "Price", "Benefit"))
+	sb.WriteString("  " + strings.Repeat("─", 80) + "\n")
+
+	for _, it := range shopItems {
+		if it.kind != shopKindPassive {
+			continue
+		}
+		owned := ""
+		if db.HasShopItem(client.Ipid(), it.id) {
+			owned = " ✅"
+		}
+		benefit := fmt.Sprintf("+%d chip/hr", it.hourlyBonus)
+		sb.WriteString(fmt.Sprintf("  %-26s  %-26s  %-12d  %s%s\n",
+			it.id, it.name, it.price, benefit, owned))
+	}
+
+	currentBonus := getPlayerHourlyBonus(client.Ipid())
+	sb.WriteString(fmt.Sprintf("\nBase: 1 chip/hr | Your total: %d chip/hr (base + %d bonus)\n",
+		1+currentBonus, currentBonus))
+	sb.WriteString("💡 All four stack for a maximum of 10 chips/hr. Still a grind!\n")
+	sb.WriteString("Buy with: /shop buy <item_id>\n")
 	client.SendServerMessage(sb.String())
 }
 
 func shopBuy(client *Client, itemID string) {
 	it, ok := shopItemByID(itemID)
 	if !ok {
-		client.SendServerMessage(fmt.Sprintf("Unknown item '%v'. Use /shop to see all item IDs.", itemID))
+		client.SendServerMessage(fmt.Sprintf("Unknown item '%v'. Use /shop to browse categories.", itemID))
 		return
 	}
 
 	if db.HasShopItem(client.Ipid(), it.id) {
-		client.SendServerMessage(fmt.Sprintf("You already own '%v'. Use /settag %v to equip it.", it.name, it.id))
+		if it.kind == shopKindTag {
+			client.SendServerMessage(fmt.Sprintf("You already own [%v]. Use /settag %v to equip it.", it.name, it.id))
+		} else {
+			client.SendServerMessage(fmt.Sprintf("You already own '%v'.", it.name))
+		}
 		return
 	}
 
@@ -298,14 +666,14 @@ func shopBuy(client *Client, itemID string) {
 
 	newBal, _ := db.GetChipBalance(client.Ipid())
 
-	if it.kind == shopKindTag {
-		// Auto-equip the tag on purchase.
+	switch it.kind {
+	case shopKindTag:
 		_ = db.SetActiveTag(client.Ipid(), it.id)
 		client.SendServerMessage(fmt.Sprintf(
 			"✅ Purchased [%v] tag for %d chips! It is now your active tag.\n"+
 				"Use /settag <id> to switch tags, or /settag none to remove it.\n"+
 				"Balance: %d chips", it.name, it.price, newBal))
-	} else {
+	case shopKindPass:
 		var benefit string
 		if it.cooldownReduction > 0 {
 			benefit = fmt.Sprintf("job cooldowns reduced by %d min", it.cooldownReduction/60)
@@ -313,9 +681,13 @@ func shopBuy(client *Client, itemID string) {
 			benefit = fmt.Sprintf("+%d chip bonus per job", it.jobBonus)
 		}
 		client.SendServerMessage(fmt.Sprintf(
-			"✅ Purchased %v for %d chips!\n"+
-				"Permanent benefit: %v\n"+
-				"Balance: %d chips", it.name, it.price, benefit, newBal))
+			"✅ Purchased %v for %d chips!\nPermanent benefit: %v\nBalance: %d chips",
+			it.name, it.price, benefit, newBal))
+	case shopKindPassive:
+		totalHourly := 1 + getPlayerHourlyBonus(client.Ipid())
+		client.SendServerMessage(fmt.Sprintf(
+			"✅ Purchased %v for %d chips!\nPermanent benefit: +%d chip/hr (you now earn %d chips/hr total)\nBalance: %d chips",
+			it.name, it.price, it.hourlyBonus, totalHourly, newBal))
 	}
 }
 
@@ -331,29 +703,32 @@ func shopListOwned(client *Client) {
 	sb.WriteString("\n🛒 Your Shop Items\n")
 	sb.WriteString("  " + strings.Repeat("─", 50) + "\n")
 
-	var tags, passes []string
+	var tags, passes, passives []string
 	for _, id := range items {
 		if it, ok := shopItemByID(id); ok {
-			if it.kind == shopKindTag {
+			switch it.kind {
+			case shopKindTag:
 				active := ""
 				if id == activeTag {
 					active = " ← active"
 				}
-				tags = append(tags, fmt.Sprintf("  [%-16s] — %s%s", it.name, it.id, active))
-			} else {
+				tags = append(tags, fmt.Sprintf("  [%-18s] — %s%s", it.name, it.id, active))
+			case shopKindPass:
 				var benefit string
 				if it.cooldownReduction > 0 {
-					benefit = fmt.Sprintf("-%d min cooldown", it.cooldownReduction/60)
+					benefit = fmt.Sprintf("−%d min cooldown", it.cooldownReduction/60)
 				} else if it.jobBonus > 0 {
 					benefit = fmt.Sprintf("+%d chip/job", it.jobBonus)
 				}
 				passes = append(passes, fmt.Sprintf("  %-28s — %s", it.name, benefit))
+			case shopKindPassive:
+				passives = append(passives, fmt.Sprintf("  %-28s — +%d chip/hr", it.name, it.hourlyBonus))
 			}
 		}
 	}
 
 	if len(tags) > 0 {
-		sb.WriteString("🏷️  Tags:\n")
+		sb.WriteString(fmt.Sprintf("🏷️  Tags (%d owned):\n", len(tags)))
 		for _, t := range tags {
 			sb.WriteString(t + "\n")
 		}
@@ -362,16 +737,24 @@ func shopListOwned(client *Client) {
 		}
 	}
 	if len(passes) > 0 {
-		sb.WriteString("💼 Passes:\n")
+		sb.WriteString("💼 Job Passes:\n")
 		for _, p := range passes {
 			sb.WriteString(p + "\n")
 		}
 		reduction := getPlayerCooldownReduction(client.Ipid())
 		bonus := getPlayerJobBonus(client.Ipid())
 		if reduction > 0 || bonus > 0 {
-			sb.WriteString(fmt.Sprintf("  Total effect: -%d min cooldown | +%d chip/job\n",
+			sb.WriteString(fmt.Sprintf("  ⤷ Total: −%d min cooldown | +%d chip/job\n",
 				reduction/60, bonus))
 		}
+	}
+	if len(passives) > 0 {
+		sb.WriteString("⏱️  Passive Income:\n")
+		for _, p := range passives {
+			sb.WriteString(p + "\n")
+		}
+		hourly := getPlayerHourlyBonus(client.Ipid())
+		sb.WriteString(fmt.Sprintf("  ⤷ Total: %d chips/hr (base 1 + %d bonus)\n", 1+hourly, hourly))
 	}
 	client.SendServerMessage(sb.String())
 }

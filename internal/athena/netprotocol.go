@@ -180,17 +180,19 @@ func pktReqDone(client *Client, _ *packet.Packet) {
 					"  • /casino        — open the casino dashboard (active tables, balance, game list)\n" +
 					"  • /chips         — check your chip balance\n" +
 					"  • /jobs          — list all jobs you can work to earn chips\n" +
-					"  • /shop          — spend chips on permanent tags & job perks\n\n" +
+					"  • /shop          — spend chips on permanent tags & upgrades\n\n" +
 					"💰 Ways to earn chips:\n" +
 					"  • Everyone starts with 500 chips automatically.\n" +
-					"  • Earn 1 chip per hour of playtime.\n" +
+					"  • Earn 1 chip per hour of playtime (more with /shop passive upgrades!).\n" +
 					"  • Work a job: /janitor /busker /paperboy /bailiffjob /clerk  (40–60 min cooldowns).\n" +
 					"  • Unscramble events every 30–60 min — type the answer in IC chat to win 10 chips!\n" +
 					"    Use /unscramble to check your wins or see if a puzzle is active right now.\n\n" +
 					"🛒 Spend your chips at /shop:\n" +
-					"  • 30 gambling-themed cosmetic tags visible in /gas & /players (from 1,000 chips)\n" +
-					"  • Job cooldown passes — permanently reduce job wait times\n" +
-					"  • Job bonus passes   — permanently earn more chips per job\n\n" +
+					"  • 115+ cosmetic tags in 7 categories visible in /gas & /players (from 100 chips!)\n" +
+					"    Categories: gambling ⚖️ attorney 🌸 anime 🎮 gamer 🌷 girly 😂 meme 👑 prestige\n" +
+					"  • Job passes   — permanently reduce job cooldowns or earn more chips per job\n" +
+					"  • Passive income — permanently earn up to 10× more chips per hour online\n" +
+					"  → /shop <category> to browse  |  /shop buy <id> to purchase\n\n" +
 					"📊 Leaderboards:\n" +
 					"  • /richest           — top chip holders on the server\n" +
 					"  • /playtime top      — top players by total time spent on the server\n" +
