@@ -18,20 +18,20 @@ package athena
 
 import (
 	"fmt"
+	"math/rand"
 	"strings"
 
 	"github.com/MangosArentLiterature/Athena/internal/db"
 	"github.com/MangosArentLiterature/Athena/internal/logger"
 )
 
-// jobDef describes a single player job: the internal key, the chip reward, and
-// the cooldown in seconds.  Small rewards + long delays keep inflation low.
+// jobDef describes a single player job: the internal key, the base chip reward,
+// and the cooldown in seconds.  Small rewards + long delays keep inflation low.
 type jobDef struct {
 	key      string // stored in JOB_COOLDOWNS; must be stable
-	reward   int64  // chips awarded per use
+	reward   int64  // base chips awarded per use
 	cooldown int64  // seconds between uses
 	emoji    string
-	flavour  string // short flavour text shown on success
 }
 
 // jobs is the registry of all available player jobs.
@@ -41,102 +41,216 @@ var jobs = map[string]jobDef{
 		reward:   3,
 		cooldown: 45 * 60, // 45 minutes
 		emoji:    "🧹",
-		flavour:  "You swept the courthouse floors.",
 	},
 	"busker": {
 		key:      "busker",
-		reward:   4,
+		reward:   2, // base; actual tips are random 2–6
 		cooldown: 40 * 60, // 40 minutes
 		emoji:    "🎸",
-		flavour:  "You played music outside the courthouse for tips.",
 	},
 	"paperboy": {
 		key:      "paperboy",
 		reward:   3,
 		cooldown: 50 * 60, // 50 minutes
 		emoji:    "📰",
-		flavour:  "You delivered legal briefs and newspapers around the block.",
 	},
 	"bailiffjob": {
 		key:      "bailiffjob",
 		reward:   5,
 		cooldown: 60 * 60, // 60 minutes
 		emoji:    "🛡️",
-		flavour:  "You stood guard duty in the courtroom gallery.",
 	},
 	"clerk": {
 		key:      "clerk",
 		reward:   4,
 		cooldown: 55 * 60, // 55 minutes
 		emoji:    "📋",
-		flavour:  "You filed paperwork at the records desk.",
 	},
 }
 
-// doJob performs the named job for the client, checking and updating the
-// cooldown, awarding chips, and messaging the player.
-func doJob(client *Client, jobName string) {
-	j, ok := jobs[jobName]
-	if !ok {
-		client.SendServerMessage("Unknown job.")
+// ── Per-job interactive handlers ─────────────────────────────────────────────
+
+// doJobJanitor handles the janitor job: flat 3-chip reward with a 25% chance
+// to find a lost coin worth 1 bonus chip.
+func doJobJanitor(client *Client) {
+	j := jobs["janitor"]
+	if onCooldown, remaining := checkJobCooldown(client, j); onCooldown {
+		sendJobCooldownMsg(client, j, remaining)
+		return
+	}
+	reward := j.reward
+	msg := "You swept the courthouse floors."
+	if rand.Intn(4) == 0 { // 25% chance
+		reward++
+		msg = "You swept the courthouse floors and found a lost coin on the way out!"
+	}
+	awardJobChips(client, j, reward, msg)
+}
+
+// doJobBusker handles the busker job: tips are randomised 2–6 chips and the
+// performance is announced in the area's OOC chat so others can see it.
+func doJobBusker(client *Client) {
+	j := jobs["busker"]
+	if onCooldown, remaining := checkJobCooldown(client, j); onCooldown {
+		sendJobCooldownMsg(client, j, remaining)
 		return
 	}
 
+	// Pick a random performance and tip amount.
+	songs := []string{
+		"a slow courtroom ballad",
+		"an upbeat jazzy tune",
+		"a dramatic Phoenix Wright medley",
+		"a haunting violin piece",
+		"a crowd-pleasing pop melody",
+	}
+	song := songs[rand.Intn(len(songs))]
+	reward := int64(2 + rand.Intn(5)) // 2–6 chips
+
+	name := client.OOCName()
+	// Broadcast the performance to everyone in the area.
+	sendAreaServerMessage(client.Area(), fmt.Sprintf(
+		"🎸 %v is busking outside the courthouse, playing %s!", name, song,
+	))
+
+	var tipMsg string
+	switch {
+	case reward >= 5:
+		tipMsg = fmt.Sprintf("The crowd loved your performance of %s! Generous tips flooded in.", song)
+	case reward >= 4:
+		tipMsg = fmt.Sprintf("Your performance of %s drew a decent crowd. A few people tipped.", song)
+	default:
+		tipMsg = fmt.Sprintf("You played %s to a sparse audience. A couple of coins clinked into your case.", song)
+	}
+	awardJobChips(client, j, reward, tipMsg)
+}
+
+// doJobPaperboy handles the paperboy job: flat 3-chip reward with a 15% chance
+// for a generous reader to tip an extra 2 chips.
+func doJobPaperboy(client *Client) {
+	j := jobs["paperboy"]
+	if onCooldown, remaining := checkJobCooldown(client, j); onCooldown {
+		sendJobCooldownMsg(client, j, remaining)
+		return
+	}
+	reward := j.reward
+	msg := "You delivered legal briefs and newspapers around the block."
+	if rand.Intn(100) < 15 { // 15% chance
+		reward += 2
+		msg = "You delivered papers and a grateful attorney handed you a generous tip!"
+	}
+	awardJobChips(client, j, reward, msg)
+}
+
+// doJobBailiff handles the bailiff job: flat 5-chip reward with a 10% chance
+// to catch something suspicious and earn a 2-chip bonus.
+func doJobBailiff(client *Client) {
+	j := jobs["bailiffjob"]
+	if onCooldown, remaining := checkJobCooldown(client, j); onCooldown {
+		sendJobCooldownMsg(client, j, remaining)
+		return
+	}
+	reward := j.reward
+	msg := "You stood guard duty in the courtroom gallery."
+	if rand.Intn(10) == 0 { // 10% chance
+		reward += 2
+		incidents := []string{
+			"You spotted someone trying to sneak evidence out and stopped them. Well done!",
+			"You caught a spectator attempting to disrupt the proceedings. Composure maintained.",
+			"You noticed suspicious behaviour in the gallery and diffused the situation swiftly.",
+		}
+		msg = incidents[rand.Intn(len(incidents))]
+	}
+	awardJobChips(client, j, reward, msg)
+}
+
+// doJobClerk handles the clerk job: flat 4-chip reward with a 15% chance for
+// an "overtime rush" that bumps the reward by 2 chips.
+func doJobClerk(client *Client) {
+	j := jobs["clerk"]
+	if onCooldown, remaining := checkJobCooldown(client, j); onCooldown {
+		sendJobCooldownMsg(client, j, remaining)
+		return
+	}
+	reward := j.reward
+	msg := "You filed paperwork at the records desk."
+	if rand.Intn(100) < 15 { // 15% chance
+		reward += 2
+		msg = "Overtime rush at the records desk! You powered through a mountain of filings."
+	}
+	awardJobChips(client, j, reward, msg)
+}
+
+// ── Shared helpers ────────────────────────────────────────────────────────────
+
+// checkJobCooldown checks the cooldown for a job without setting it.
+// Returns (true, remaining) if on cooldown, (false, 0) otherwise.
+// When not on cooldown it also sets the cooldown atomically.
+func checkJobCooldown(client *Client, j jobDef) (bool, int64) {
 	onCooldown, remaining, err := db.CheckAndSetJobCooldown(client.Ipid(), j.key, j.cooldown)
 	if err != nil {
 		logger.LogErrorf("jobs: CheckAndSetJobCooldown failed for ipid=%v job=%v: %v", client.Ipid(), j.key, err)
 		client.SendServerMessage("Something went wrong. Please try again later.")
-		return
+		return true, 0
 	}
-	if onCooldown {
-		mins := remaining / 60
-		secs := remaining % 60
-		if mins > 0 {
-			client.SendServerMessage(fmt.Sprintf(
-				"%s You are tired. Come back in %dm %ds to work again.", j.emoji, mins, secs,
-			))
-		} else {
-			client.SendServerMessage(fmt.Sprintf(
-				"%s You are tired. Come back in %ds to work again.", j.emoji, secs,
-			))
-		}
-		return
-	}
+	return onCooldown, remaining
+}
 
-	newBal, chipErr := db.AddChips(client.Ipid(), j.reward)
+// sendJobCooldownMsg formats and sends a cooldown notice to the client.
+func sendJobCooldownMsg(client *Client, j jobDef, remaining int64) {
+	mins := remaining / 60
+	secs := remaining % 60
+	if mins > 0 {
+		client.SendServerMessage(fmt.Sprintf(
+			"%s You are tired. Come back in %dm %ds to work again.", j.emoji, mins, secs,
+		))
+	} else {
+		client.SendServerMessage(fmt.Sprintf(
+			"%s You are tired. Come back in %ds to work again.", j.emoji, secs,
+		))
+	}
+}
+
+// awardJobChips credits the reward, sends the player their result, and logs it.
+func awardJobChips(client *Client, j jobDef, reward int64, flavour string) {
+	newBal, chipErr := db.AddChips(client.Ipid(), reward)
 	if chipErr != nil {
 		logger.LogErrorf("jobs: AddChips failed for ipid=%v job=%v: %v", client.Ipid(), j.key, chipErr)
 		client.SendServerMessage("Something went wrong awarding chips. Please try again later.")
 		return
 	}
-
 	client.SendServerMessage(fmt.Sprintf(
 		"%s %s +%d chips | Balance: %d chips",
-		j.emoji, j.flavour, j.reward, newBal,
+		j.emoji, flavour, reward, newBal,
 	))
 }
 
 // ── Command handlers ─────────────────────────────────────────────────────────
 
-func cmdJanitor(client *Client, _ []string, _ string) { doJob(client, "janitor") }
-func cmdBusker(client *Client, _ []string, _ string)  { doJob(client, "busker") }
-func cmdPaperboy(client *Client, _ []string, _ string) { doJob(client, "paperboy") }
-func cmdBailiffJob(client *Client, _ []string, _ string) { doJob(client, "bailiffjob") }
-func cmdClerk(client *Client, _ []string, _ string)   { doJob(client, "clerk") }
+func cmdJanitor(client *Client, _ []string, _ string)    { doJobJanitor(client) }
+func cmdBusker(client *Client, _ []string, _ string)     { doJobBusker(client) }
+func cmdPaperboy(client *Client, _ []string, _ string)   { doJobPaperboy(client) }
+func cmdBailiffJob(client *Client, _ []string, _ string) { doJobBailiff(client) }
+func cmdClerk(client *Client, _ []string, _ string)      { doJobClerk(client) }
 
 // cmdJobs lists all available jobs and their rewards/cooldowns.
 func cmdJobs(client *Client, _ []string, _ string) {
 	var sb strings.Builder
-	sb.WriteString("\n💼 Available Jobs (small chip rewards, long cooldowns)\n")
-	sb.WriteString(fmt.Sprintf("  %-12s  %-6s  %s\n", "Command", "Reward", "Cooldown"))
-	sb.WriteString("  " + strings.Repeat("─", 38) + "\n")
-	order := []string{"janitor", "busker", "paperboy", "bailiffjob", "clerk"}
-	for _, name := range order {
-		j := jobs[name]
-		cooldownMins := j.cooldown / 60
-		sb.WriteString(fmt.Sprintf("  %s /%-10s  +%-4d   %d min\n",
-			j.emoji, name, j.reward, cooldownMins))
+	sb.WriteString("\n💼 Available Jobs (earn chips with a cooldown per job)\n")
+	sb.WriteString(fmt.Sprintf("  %-12s  %-10s  %-8s  %s\n", "Command", "Base", "Cooldown", "Notes"))
+	sb.WriteString("  " + strings.Repeat("─", 56) + "\n")
+	type row struct{ name, base, cd, note string }
+	rows := []row{
+		{"janitor",    "3 chips",  "45 min", "25% chance to find a coin (+1 bonus)"},
+		{"busker",     "2–6 chips","40 min", "Random tips; performs in area chat!"},
+		{"paperboy",   "3 chips",  "50 min", "15% chance for a generous tip (+2 bonus)"},
+		{"bailiffjob", "5 chips",  "60 min", "10% chance to catch something (+2 bonus)"},
+		{"clerk",      "4 chips",  "55 min", "15% overtime rush chance (+2 bonus)"},
 	}
-	sb.WriteString("\nType any of the commands above to work and earn chips!")
+	for _, r := range rows {
+		sb.WriteString(fmt.Sprintf("  /%-12s %-10s %-8s %s\n", r.name, r.base, r.cd, r.note))
+	}
+	sb.WriteString("\nType any of the commands above to get to work and earn chips!")
 	client.SendServerMessage(sb.String())
 }
+

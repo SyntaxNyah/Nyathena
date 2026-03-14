@@ -439,28 +439,50 @@ func LinkIPIDToUser(username, ipid string) error {
 	var oldPlaytime int64
 	switch err := db.QueryRow("SELECT COALESCE(PLAYTIME, 0) FROM KNOWN_IPS WHERE IPID = ?", oldIPID).Scan(&oldPlaytime); {
 	case err == sql.ErrNoRows:
-		// No playtime recorded for old IPID — nothing to transfer.
-		return nil
+		oldPlaytime = 0
 	case err != nil:
 		return err
 	}
-	if oldPlaytime == 0 {
-		return nil
+
+	if oldPlaytime > 0 {
+		// Merge old playtime into the new IPID. UPSERT ensures the row is created
+		// if it does not yet exist in KNOWN_IPS (defensive; in practice MarkIPKnown
+		// is called on every connection before /login can be issued).
+		now := time.Now().Unix()
+		if _, err := db.Exec(`
+			INSERT INTO KNOWN_IPS (IPID, FIRST_SEEN, LAST_SEEN, PLAYTIME)
+			VALUES (?, ?, ?, ?)
+			ON CONFLICT(IPID) DO UPDATE SET PLAYTIME = PLAYTIME + excluded.PLAYTIME`,
+			ipid, now, now, oldPlaytime); err != nil {
+			return err
+		}
+		if _, err := db.Exec("UPDATE KNOWN_IPS SET PLAYTIME = 0 WHERE IPID = ?", oldIPID); err != nil {
+			return err
+		}
 	}
 
-	// Merge old playtime into the new IPID. UPSERT ensures the row is created
-	// if it does not yet exist in KNOWN_IPS (defensive; in practice MarkIPKnown
-	// is called on every connection before /login can be issued).
-	now := time.Now().Unix()
-	if _, err := db.Exec(`
-		INSERT INTO KNOWN_IPS (IPID, FIRST_SEEN, LAST_SEEN, PLAYTIME)
-		VALUES (?, ?, ?, ?)
-		ON CONFLICT(IPID) DO UPDATE SET PLAYTIME = PLAYTIME + excluded.PLAYTIME`,
-		ipid, now, now, oldPlaytime); err != nil {
+	// Merge unscramble wins from the old IPID into the new IPID so the
+	// leaderboard continues to reflect the player's full win count.
+	var oldWins int64
+	switch err := db.QueryRow("SELECT COALESCE(WINS, 0) FROM UNSCRAMBLE_WINS WHERE IPID = ?", oldIPID).Scan(&oldWins); {
+	case err == sql.ErrNoRows:
+		oldWins = 0
+	case err != nil:
 		return err
 	}
-	_, err := db.Exec("UPDATE KNOWN_IPS SET PLAYTIME = 0 WHERE IPID = ?", oldIPID)
-	return err
+
+	if oldWins > 0 {
+		if _, err := db.Exec(`
+			INSERT INTO UNSCRAMBLE_WINS(IPID, WINS) VALUES(?, ?)
+			ON CONFLICT(IPID) DO UPDATE SET WINS = WINS + excluded.WINS`,
+			ipid, oldWins); err != nil {
+			return err
+		}
+		_, err := db.Exec("UPDATE UNSCRAMBLE_WINS SET WINS = 0 WHERE IPID = ?", oldIPID)
+		return err
+	}
+
+	return nil
 }
 
 // GetUsernameByIPID returns the username whose account is linked to the given IPID.

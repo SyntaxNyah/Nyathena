@@ -14,6 +14,10 @@ This document covers the full casino system, including **Nyathena Chips** (the s
 - **Maximum balance: 10,000,000 chips (10 million).** Winnings are capped at this ceiling to prevent runaway inflation.
 - **Default maximum bet: 1,000,000 chips (1 million)** per wager when no area-specific limit is configured. Staff can raise or lower this per-area with `/casinoset maxbet`.
 
+### 🔒 Password Security
+
+Player account passwords are stored using **bcrypt** (industry-standard one-way hashing at cost factor 12). Your password is **never stored in plain text** — not in the database, not in logs, and never transmitted after initial registration. Even server administrators cannot read your password.
+
 ---
 
 ## `/chips` — Currency Commands
@@ -313,6 +317,7 @@ Every **30–60 minutes** (random) the server posts a scrambled word to all play
 - Puzzles expire after **5 minutes** if nobody answers.
 - The prize is fixed at 10 chips per event.
 - Wins are tracked per account for a dedicated leaderboard.
+- If you register/login and your IPID changes, your unscramble wins are **automatically merged** onto your new connection — you never lose your score.
 
 | Command | Description |
 |---------|-------------|
@@ -333,29 +338,32 @@ Every **30–60 minutes** (random) the server posts a scrambled word to all play
 
 ### 💼 Jobs
 
-Type a job command to earn a small chip reward. Each job has a **long cooldown** (40–60 minutes) to keep rewards sustainable and prevent spam.
+Type a job command to earn chips. Each job has a **long cooldown** (40–60 minutes) and **some have random bonus chances** to keep things interesting.
 
-| Command | Reward | Cooldown | Flavour |
-|---------|--------|----------|---------|
-| `/janitor` | +3 chips | 45 min | Sweep the courthouse floors. |
-| `/busker` | +4 chips | 40 min | Play music outside for tips. |
-| `/paperboy` | +3 chips | 50 min | Deliver newspapers and briefs. |
-| `/bailiffjob` | +5 chips | 60 min | Stand guard duty in the courtroom. |
-| `/clerk` | +4 chips | 55 min | File paperwork at the records desk. |
+| Command | Base Reward | Cooldown | Interactive Notes |
+|---------|-------------|----------|-------------------|
+| `/janitor` | 3 chips | 45 min | **25% chance** to find a lost coin (+1 bonus chip). |
+| `/busker` | 2–6 chips | 40 min | **Random tips** (2–6 chips); performance is **announced in area OOC** so others see you! |
+| `/paperboy` | 3 chips | 50 min | **15% chance** for a generous reader to tip extra (+2 bonus chips). |
+| `/bailiffjob` | 5 chips | 60 min | **10% chance** to catch suspicious activity (+2 bonus chips). |
+| `/clerk` | 4 chips | 55 min | **15% overtime rush** chance (+2 bonus chips). |
 
-Use `/jobs` to see all available jobs, their rewards, and cooldowns in one place.
+Use `/jobs` to see all available jobs with their rewards and cooldowns at a glance.
 
-**Example:**
+**Examples:**
 ```
+/busker
+🎸 [Area OOC] Phoenix is busking outside the courthouse, playing a dramatic Phoenix Wright medley!
+🎸 The crowd loved your performance! Generous tips flooded in. +6 chips | Balance: 106 chips
+
 /janitor
-🧹 You swept the courthouse floors. +3 chips | Balance: 103 chips
+🧹 You swept the courthouse floors and found a lost coin on the way out! +4 chips | Balance: 110 chips
 
 /janitor (before cooldown expires)
 🧹 You are tired. Come back in 43m 12s to work again.
 ```
 
 ---
-
 
 ### `/casinoenable <true|false>`
 Enable or disable the casino for the current area.

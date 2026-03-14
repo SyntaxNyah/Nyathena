@@ -179,10 +179,15 @@ func pktReqDone(client *Client, _ *packet.Packet) {
 					"  • Earn 1 chip for every hour of playtime.\n" +
 					"  • /richest  — see the top chip holders on the server.\n" +
 					"  • /playtime — see the playtime leaderboard.\n\n" +
+					"💰 More ways to earn chips (no gambling required):\n" +
+					"  • /jobs — list all jobs (earn 3–5 chips per job, 40–60 min cooldown).\n" +
+					"  • Unscramble events fire every 30–60 min — first to type the answer in IC wins 10 chips!\n" +
+					"  • /unscramble — check your wins or see if a puzzle is active right now.\n\n" +
 					"💡 Create a free account to keep your balance across reconnects & appear on leaderboards:\n" +
 					"  /register <username> <password>  — create your free account now\n" +
 					"  /login <username> <password>     — sign in if you already have one\n\n" +
-					"(Username: 3–20 chars, letters/numbers/underscore · Password: 6+ chars)\n\n" +
+					"(Username: 3–20 chars, letters/numbers/underscore · Password: 6+ chars)\n" +
+					"🔒 Passwords are stored with bcrypt — your password is never kept in plain text.\n\n" +
 					"🔇 Don't want to see gambling messages? Use /gamble hide to toggle them off.")
 		}
 	}
