@@ -31,8 +31,9 @@ import (
 // ── /chips give anti-abuse tracking ──────────────────────────────────────────
 
 const (
-	chipsGiveCooldown   = 10 * time.Minute // per-player cooldown between transfers
-	chipsGiveMax        = 500              // maximum chips transferable per transaction
+	chipsGiveCooldown        = 10 * time.Minute // per-player cooldown between transfers
+	chipsGiveMax             = 500              // maximum chips transferable per transaction
+	chipsGiveMinPlaytime     = 24 * time.Hour   // minimum total playtime to use /chips give
 )
 
 var (
@@ -290,6 +291,26 @@ func chipsGive(client *Client, args []string) {
 	}
 	if amount > chipsGiveMax {
 		client.SendServerMessage(fmt.Sprintf("You can transfer at most %d chips at a time.", chipsGiveMax))
+		return
+	}
+
+	// Require 24 hours of total playtime before a player can transfer chips.
+	// This prevents newly-created accounts from being used to funnel chips.
+	storedPlaytime, ptErr := db.GetPlaytime(client.Ipid())
+	if ptErr != nil {
+		client.SendServerMessage("Could not verify playtime. Please try again.")
+		return
+	}
+	totalPlaytime := time.Duration(storedPlaytime) * time.Second
+	if connAt := client.ConnectedAt(); !connAt.IsZero() {
+		totalPlaytime += time.Since(connAt)
+	}
+	if totalPlaytime < chipsGiveMinPlaytime {
+		remaining := (chipsGiveMinPlaytime - totalPlaytime).Truncate(time.Second)
+		client.SendServerMessage(fmt.Sprintf(
+			"You need at least 24 hours of playtime to transfer chips. You still need %v.",
+			remaining,
+		))
 		return
 	}
 

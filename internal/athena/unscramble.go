@@ -33,9 +33,9 @@ import (
 // ── Constants ────────────────────────────────────────────────────────────────
 
 const (
-	unscrambleReward      = 10             // chips awarded for a correct guess
+	unscrambleReward      = 10              // chips awarded for a correct guess
 	unscrambleMinInterval = 30 * time.Minute // minimum time between events
-	unscrambleMaxInterval = 60 * time.Minute // maximum time between events
+	unscrambleMaxInterval = 3 * time.Hour    // maximum time between events (30 min–3 hr random window)
 	unscrambleTimeout     = 5 * time.Minute  // window to answer before the puzzle expires
 )
 
