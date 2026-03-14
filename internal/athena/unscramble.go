@@ -270,10 +270,4 @@ func parseInt(s string) int {
 	return n
 }
 
-// min returns the smaller of a and b.
-func min(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
-}
+

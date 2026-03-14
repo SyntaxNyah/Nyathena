@@ -174,21 +174,25 @@ func pktReqDone(client *Client, _ *packet.Packet) {
 		}()
 		if !client.Authenticated() {
 			client.SendServerMessage(
-				"🎰 Welcome! This server tracks 💰 chips & ⏱ playtime for the Casino.\n\n" +
-					"  • Everyone starts with 100 chips.\n" +
-					"  • Earn 1 chip for every hour of playtime.\n" +
-					"  • /richest  — see the top chip holders on the server.\n" +
-					"  • /playtime — see the playtime leaderboard.\n\n" +
-					"💰 More ways to earn chips (no gambling required):\n" +
-					"  • /jobs — list all jobs (earn 3–5 chips per job, 40–60 min cooldown).\n" +
-					"  • Unscramble events fire every 30–60 min — first to type the answer in IC wins 10 chips!\n" +
-					"  • /unscramble — check your wins or see if a puzzle is active right now.\n\n" +
-					"💡 Create a free account to keep your balance across reconnects & appear on leaderboards:\n" +
-					"  /register <username> <password>  — create your free account now\n" +
+				"🎰 Welcome! This server runs the Nyathena Casino — virtual chips, games, jobs & more.\n\n" +
+					"📖 Quick navigation:\n" +
+					"  • /help      — see every available command\n" +
+					"  • /casino    — open the casino dashboard (active tables, balance, game list)\n" +
+					"  • /chips     — check your chip balance\n" +
+					"  • /jobs      — list all jobs you can work to earn chips\n\n" +
+					"💰 Ways to earn chips:\n" +
+					"  • Everyone starts with 100 chips automatically.\n" +
+					"  • Earn 1 chip per hour of playtime (/playtime for the leaderboard).\n" +
+					"  • Work a job: /janitor /busker /paperboy /bailiffjob /clerk  (40–60 min cooldowns).\n" +
+					"  • Unscramble events every 30–60 min — type the answer in IC chat to win 10 chips!\n" +
+					"    Use /unscramble to see your wins or check if a puzzle is active now.\n" +
+					"  • /richest — see the global chip leaderboard.\n\n" +
+					"💡 Create a free account to keep your balance & appear on leaderboards:\n" +
+					"  /register <username> <password>  — create your free account\n" +
 					"  /login <username> <password>     — sign in if you already have one\n\n" +
 					"(Username: 3–20 chars, letters/numbers/underscore · Password: 6+ chars)\n" +
-					"🔒 Passwords are stored with bcrypt — your password is never kept in plain text.\n\n" +
-					"🔇 Don't want to see gambling messages? Use /gamble hide to toggle them off.")
+					"🔒 Passwords are stored with bcrypt — never in plain text.\n\n" +
+					"🔇 Don't want gambling broadcast messages? Use /gamble hide to toggle them off.")
 		}
 	}
 
