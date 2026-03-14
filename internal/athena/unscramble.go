@@ -17,8 +17,6 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>. */
 package athena
 
 import (
-	cryptoRand "crypto/rand"
-	"encoding/binary"
 	"fmt"
 	"math/rand"
 	"strconv"
@@ -35,7 +33,7 @@ import (
 const (
 	unscrambleReward      = 10              // chips awarded for a correct guess
 	unscrambleMinInterval = 30 * time.Minute // minimum time between events
-	unscrambleMaxInterval = 3 * time.Hour    // maximum time between events (30 min–3 hr random window)
+	unscrambleMaxInterval = 3 * time.Hour    // maximum time between events (30 min-3 hr random window)
 	unscrambleTimeout     = 5 * time.Minute  // window to answer before the puzzle expires
 )
 
@@ -88,11 +86,10 @@ var unscrambleWordList = []string{
 // ── State ────────────────────────────────────────────────────────────────────
 
 type unscrambleState struct {
-	mu       sync.Mutex
+	mu       sync.RWMutex
 	active   bool
 	answer   string    // the correct (unscrambled) word in lowercase
 	scramble string    // the scrambled version shown to players
-	expireAt time.Time
 	postedAt time.Time // when the puzzle was first announced
 	lastWord string    // the previous answer, to avoid immediate repeats
 }
@@ -101,88 +98,34 @@ var unscramble = unscrambleState{}
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
-// scrambleWord returns a highly randomised version of the input word that
-// differs from the original. A crypto-seeded RNG is created fresh for each
-// call, and a random strategy is chosen each attempt, so the same word
-// produces a different-looking scramble every single time.
+// scrambleWord returns a shuffled version of word that differs from the original.
+// A single Fisher-Yates shuffle is used; if it happens to match the original
+// (only possible for words with near-identical letters), the first two distinct
+// characters are swapped to guarantee the result is always different.
 func scrambleWord(word string) string {
-	runes := []rune(word)
-	n := len(runes)
-	if n <= 1 {
+	r := []rune(word)
+	n := len(r)
+	if n <= 1 { // defensive safeguard; no words in the pool are this short
 		return word
 	}
-
-	// Seed a local RNG from crypto/rand for true per-call uniqueness.
-	var seedBytes [8]byte
-	if _, err := cryptoRand.Read(seedBytes[:]); err != nil {
-		// Fallback: use current time if crypto/rand is unavailable.
-		binary.LittleEndian.PutUint64(seedBytes[:], uint64(time.Now().UnixNano()))
-	}
-	rng := rand.New(rand.NewSource(int64(binary.LittleEndian.Uint64(seedBytes[:]))))
-
-	for attempt := 0; attempt < 30; attempt++ {
-		result := make([]rune, n)
-		copy(result, runes)
-
-		// Pick a random strategy (more passes = more chaotic result).
-		passes := 1 + rng.Intn(3) // 1–3 passes
-		for p := 0; p < passes; p++ {
-			switch rng.Intn(5) {
-			case 0:
-				// Full Fisher-Yates shuffle.
-				rng.Shuffle(n, func(i, j int) { result[i], result[j] = result[j], result[i] })
-			case 1:
-				// Reverse the entire slice.
-				for i, j := 0, n-1; i < j; i, j = i+1, j-1 {
-					result[i], result[j] = result[j], result[i]
-				}
-			case 2:
-				// Rotate left by a random non-zero offset.
-				k := 1 + rng.Intn(n-1)
-				result = append(result[k:], result[:k]...)
-			case 3:
-				// Interleave: weave the first half with the second half.
-				mid := (n + 1) / 2
-				out := make([]rune, 0, n)
-				for i := 0; i < mid; i++ {
-					out = append(out, result[i])
-					if mid+i < n {
-						out = append(out, result[mid+i])
-					}
-				}
-				result = out
-			case 4:
-				// Shuffle then reverse a random inner sub-segment.
-				rng.Shuffle(n, func(i, j int) { result[i], result[j] = result[j], result[i] })
-				start := rng.Intn(n)
-				end := start + rng.Intn(n-start)
-				for i, j := start, end; i < j; i, j = i+1, j-1 {
-					result[i], result[j] = result[j], result[i]
-				}
+	rand.Shuffle(n, func(i, j int) { r[i], r[j] = r[j], r[i] })
+	if string(r) == word {
+		for i := 1; i < n; i++ {
+			if r[i] != r[0] {
+				r[0], r[i] = r[i], r[0]
+				break
 			}
 		}
-
-		if string(result) != word {
-			return string(result)
-		}
 	}
-
-	// Guaranteed fallback: reverse. Note: for palindromes this will match the
-	// original, but no words in the pool are palindromes and 30 attempts above
-	// make it extremely unlikely to reach this path regardless.
-	for i, j := 0, n-1; i < j; i, j = i+1, j-1 {
-		runes[i], runes[j] = runes[j], runes[i]
-	}
-	return string(runes)
+	return string(r)
 }
 
 // randomInterval returns a random duration in [min, max].
 func randomInterval(min, max time.Duration) time.Duration {
-	delta := int64(max - min)
-	if delta <= 0 {
-		return min
+	if d := int64(max - min); d > 0 {
+		return min + time.Duration(rand.Int63n(d))
 	}
-	return min + time.Duration(rand.Int63n(delta))
+	return min
 }
 
 // ── Background loop ──────────────────────────────────────────────────────────
@@ -215,7 +158,6 @@ func startUnscrambleLoop() {
 		unscramble.active = true
 		unscramble.answer = strings.ToLower(word)
 		unscramble.scramble = shuffled
-		unscramble.expireAt = time.Now().Add(unscrambleTimeout)
 		unscramble.postedAt = time.Now()
 		unscramble.mu.Unlock()
 
@@ -227,20 +169,17 @@ func startUnscrambleLoop() {
 		))
 		logger.LogInfof("Unscramble: new puzzle posted — scramble=%q answer=%q", shuffled, word)
 
-		// Schedule the timeout expiry.
-		go func(answer, shuffled string) {
-			time.Sleep(unscrambleTimeout)
+		// Expire the puzzle after the timeout window.
+		time.AfterFunc(unscrambleTimeout, func() {
 			unscramble.mu.Lock()
-			if !unscramble.active || unscramble.answer != answer {
+			if !unscramble.active || unscramble.answer != word {
 				unscramble.mu.Unlock()
 				return
 			}
 			unscramble.active = false
 			unscramble.mu.Unlock()
-			sendGlobalServerMessage(fmt.Sprintf(
-				"⌛ UNSCRAMBLE EXPIRED! Nobody got it in time. The answer was: %s", answer,
-			))
-		}(word, shuffled)
+			sendGlobalServerMessage("⌛ UNSCRAMBLE EXPIRED! Nobody got it in time. The answer was: " + word)
+		})
 	}
 }
 
@@ -255,17 +194,21 @@ func unscrambleOnIC(client *Client, msgText string) {
 		return
 	}
 
+	// Fast read-only check — avoids write-lock contention on every IC message.
+	unscramble.mu.RLock()
+	active, answer := unscramble.active, unscramble.answer
+	unscramble.mu.RUnlock()
+	if !active || guess != answer {
+		return
+	}
+
+	// Correct guess — claim the round under a write lock and re-check to
+	// prevent a double-award if two players answer at the same instant.
 	unscramble.mu.Lock()
-	if !unscramble.active {
+	if !unscramble.active || unscramble.answer != answer {
 		unscramble.mu.Unlock()
 		return
 	}
-	if guess != unscramble.answer {
-		unscramble.mu.Unlock()
-		return
-	}
-	// Correct answer — close the round atomically.
-	answer := unscramble.answer
 	elapsed := time.Since(unscramble.postedAt)
 	unscramble.active = false
 	unscramble.lastWord = answer
@@ -309,10 +252,10 @@ func cmdUnscramble(client *Client, args []string, _ string) {
 			client.SendServerMessage("Could not retrieve your unscramble stats.")
 			return
 		}
-		unscramble.mu.Lock()
+		unscramble.mu.RLock()
 		active := unscramble.active
 		scrambled := unscramble.scramble
-		unscramble.mu.Unlock()
+		unscramble.mu.RUnlock()
 
 		msg := fmt.Sprintf("🔤 Your unscramble wins: %d", wins)
 		if active {
