@@ -392,16 +392,16 @@ var shopItems = []shopItem{
 	// Passive income passes are additive (not multiplicative) — the "2x/3x/5x/10x"
 	// names refer to the total chips/hr when all lower passes are also owned.
 	// hourlyBonus is the raw number of extra chips/hr this pass contributes.
-	{id: "pass_income_2x", name: "Income Doubler", kind: shopKindPassive, price: 30_000,
+	{id: "pass_income_2x", name: "Income Doubler", kind: shopKindPassive, price: 3_000,
 		hourlyBonus:  1,
 		description: "Permanently earn +1 chip per hour online (doubles the base 1 chip/hr to 2 chips/hr)."},
-	{id: "pass_income_3x", name: "Income Tripler", kind: shopKindPassive, price: 100_000,
+	{id: "pass_income_3x", name: "Income Tripler", kind: shopKindPassive, price: 10_000,
 		hourlyBonus:  1,
 		description: "Permanently earn +1 more chip per hour online (adds to Doubler for 3 chips/hr total)."},
-	{id: "pass_income_5x", name: "5x Income Booster", kind: shopKindPassive, price: 500_000,
+	{id: "pass_income_5x", name: "5x Income Booster", kind: shopKindPassive, price: 50_000,
 		hourlyBonus:  2,
 		description: "Permanently earn +2 more chips per hour online (adds to Doubler+Tripler for 5 chips/hr total)."},
-	{id: "pass_income_10x", name: "10x Income Booster", kind: shopKindPassive, price: 2_000_000,
+	{id: "pass_income_10x", name: "10x Income Booster", kind: shopKindPassive, price: 200_000,
 		hourlyBonus:  5,
 		description: "Permanently earn +5 more chips per hour online (10 chips/hr total with all four). Still a slog!"},
 }
