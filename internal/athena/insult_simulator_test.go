@@ -51,6 +51,10 @@ func TestIsimPickFragments(t *testing.T) {
 		t.Fatalf("isimFragmentsPerRound (%d) exceeds pool size (%d)",
 			isimFragmentsPerRound, len(insultFragments))
 	}
+	if numInsultFragments != len(insultFragments) {
+		t.Fatalf("numInsultFragments constant (%d) is out of sync with len(insultFragments) (%d)",
+			numInsultFragments, len(insultFragments))
+	}
 
 	frags := isimPickFragments()
 	if len(frags) != isimFragmentsPerRound {

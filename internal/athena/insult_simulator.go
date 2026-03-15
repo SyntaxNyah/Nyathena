@@ -49,6 +49,17 @@ const isimRules = `⚔️ INSULT DUEL HAS BEGUN! ⚔️
 • Each player starts with %d HP. First to reach 0 HP loses.
 • The loser receives a random punishment. Choose your words carefully! 😈`
 
+// isimRulesMsg is isimRules pre-formatted once at startup; all substitution
+// values are compile-time constants so the string never changes.
+var isimRulesMsg = fmt.Sprintf(isimRules,
+	isimFragmentsPerRound, isimMaxPicksPerRound,
+	int(isimPickTimeout.Seconds()), isimStartingHP)
+
+// numInsultFragments is the compile-time length of insultFragments.
+// It is used by isimPickFragments to avoid a heap allocation for the index
+// permutation.
+const numInsultFragments = 30 // keep in sync with len(insultFragments)
+
 // ── Fragment pool ────────────────────────────────────────────────────────────
 
 // insultFragments is the pool of insult fragment phrases used to build insults.
@@ -107,6 +118,7 @@ type isimDuel struct {
 	challenged *isimPlayer
 	round      int
 	resolved   bool
+	pickDone   chan struct{} // buffered(1); a value is sent when both players have picked
 }
 
 // isimState is the mutex-protected global state for all insult duels.
@@ -151,11 +163,18 @@ func randomIsimPunishment() PunishmentType {
 // ── Helper ───────────────────────────────────────────────────────────────────
 
 // isimPickFragments returns a slice of isimFragmentsPerRound randomly sampled
-// (without replacement) fragment strings.
+// (without replacement) fragment strings. It performs a partial Fisher-Yates
+// shuffle over a stack-allocated index array to avoid the heap allocation that
+// rand.Perm would require.
 func isimPickFragments() []string {
-	perm := rand.Perm(len(insultFragments))
+	var perm [numInsultFragments]int
+	for i := range perm {
+		perm[i] = i
+	}
 	out := make([]string, isimFragmentsPerRound)
-	for i := 0; i < isimFragmentsPerRound; i++ {
+	for i := range out {
+		j := i + rand.Intn(numInsultFragments-i)
+		perm[i], perm[j] = perm[j], perm[i]
 		out[i] = insultFragments[perm[i]]
 	}
 	return out
@@ -271,13 +290,17 @@ func isimChallenge(client *Client, targetUID int) {
 	addToBuffer(client, "INSULTSIM",
 		fmt.Sprintf("Challenged UID %d (%v) to an insult duel", targetUID, targetName), false)
 
-	go isimExpireChallenge(challengerUID, targetUID, challengerName, targetName)
+	// time.AfterFunc fires the expiry callback without holding a goroutine
+	// open for the full 30-second window.
+	time.AfterFunc(isimChallengeTimeout, func() {
+		isimExpireChallenge(challengerUID, targetUID, challengerName, targetName)
+	})
 }
 
-// isimExpireChallenge expires a challenge after isimChallengeTimeout.
+// isimExpireChallenge is scheduled by time.AfterFunc; it runs in its own
+// short-lived goroutine only after the timeout fires (no goroutine is held
+// open during the wait).
 func isimExpireChallenge(challengerUID, targetUID int, challengerName, targetName string) {
-	time.Sleep(isimChallengeTimeout)
-
 	isimGlobal.mu.Lock()
 	if cUID, ok := isimGlobal.pendingChallenges[targetUID]; !ok || cUID != challengerUID {
 		isimGlobal.mu.Unlock()
@@ -341,11 +364,8 @@ func isimAccept(client *Client) {
 		fmt.Sprintf("Accepted insult duel from UID %d (%v)", challengerUID, challengerName), false)
 
 	// Send rules to both players.
-	rulesMsg := fmt.Sprintf(isimRules,
-		isimFragmentsPerRound, isimMaxPicksPerRound,
-		int(isimPickTimeout.Seconds()), isimStartingHP)
-	challenger.SendServerMessage(rulesMsg)
-	client.SendServerMessage(rulesMsg)
+	challenger.SendServerMessage(isimRulesMsg)
+	client.SendServerMessage(isimRulesMsg)
 
 	go isimRunRound(duel, challengerName, challengedName)
 }
@@ -434,12 +454,13 @@ func isimPick(client *Client, args []string) {
 		picks = picks[:isimMaxPicksPerRound]
 	}
 
-	// Deduplicate picks.
-	seen := make(map[int]struct{}, len(picks))
+	// Deduplicate picks using a tiny stack-allocated bool array; picks are
+	// bounded to [1, isimFragmentsPerRound] so no heap allocation is needed.
+	var seen [isimFragmentsPerRound + 1]bool
 	deduped := picks[:0]
 	for _, p := range picks {
-		if _, dup := seen[p]; !dup {
-			seen[p] = struct{}{}
+		if !seen[p] {
+			seen[p] = true
 			deduped = append(deduped, p)
 		}
 	}
@@ -451,13 +472,18 @@ func isimPick(client *Client, args []string) {
 	// Check if both players have picked.
 	other := isimOtherPlayer(duel, uid)
 	bothPicked := other.picked
+	pickDone := duel.pickDone
 	isimGlobal.mu.Unlock()
 
 	client.SendServerMessage(fmt.Sprintf("⚔️ Picks recorded: %v. Waiting for your opponent...", picks))
 
 	if bothPicked {
-		// Both players have picked; resolve the round.
-		isimResolveRound(duel)
+		// Signal isimRunRound to resolve immediately rather than waiting for
+		// the timeout goroutine.
+		select {
+		case pickDone <- struct{}{}:
+		default:
+		}
 	}
 }
 
@@ -471,20 +497,23 @@ func isimRunRound(duel *isimDuel, challengerName, challengedName string) {
 		return
 	}
 	round := duel.round
-	// Deal fresh fragments to each player.
+	// Reset picks for this round.
 	duel.challenger.fragments = isimPickFragments()
 	duel.challenger.picks = nil
 	duel.challenger.picked = false
 	duel.challenged.fragments = isimPickFragments()
 	duel.challenged.picks = nil
 	duel.challenged.picked = false
+	// Fresh buffered channel for this round's early-completion signal.
+	duel.pickDone = make(chan struct{}, 1)
 	challengerUID := duel.challenger.uid
 	challengedUID := duel.challenged.uid
 	challengerFrags := duel.challenger.fragments
 	challengedFrags := duel.challenged.fragments
+	pickDone := duel.pickDone
 	isimGlobal.mu.Unlock()
 
-	// Send fragments to each player.
+	// Send fragments to each player privately.
 	if c, err := getClientByUid(challengerUID); err == nil {
 		c.SendServerMessage(fmt.Sprintf("⚔️ ROUND %d — %s\n%s", round, challengerName, isimFragmentListMessage(challengerFrags)))
 	}
@@ -492,36 +521,43 @@ func isimRunRound(duel *isimDuel, challengerName, challengedName string) {
 		c.SendServerMessage(fmt.Sprintf("⚔️ ROUND %d — %s\n%s", round, challengedName, isimFragmentListMessage(challengedFrags)))
 	}
 
-	// Wait for picks or timeout.
-	time.Sleep(isimPickTimeout)
-
-	isimGlobal.mu.Lock()
-	if duel.resolved {
+	// Wait for both players to pick or for the per-round timeout.
+	// Using time.NewTimer lets us stop the timer immediately when both pick,
+	// so the round resolves without waiting the full 45 seconds.
+	timer := time.NewTimer(isimPickTimeout)
+	select {
+	case <-pickDone:
+		// Stop the timer and drain its channel in case it fired concurrently.
+		if !timer.Stop() {
+			select {
+			case <-timer.C:
+			default:
+			}
+		}
+	case <-timer.C:
+		// Force any player who has not yet picked.
+		isimGlobal.mu.Lock()
+		if !duel.challenger.picked {
+			duel.challenger.picked = true
+		}
+		if !duel.challenged.picked {
+			duel.challenged.picked = true
+		}
 		isimGlobal.mu.Unlock()
-		return
 	}
-	// Force any player who hasn't picked to pick nothing.
-	if !duel.challenger.picked {
-		duel.challenger.picked = true
-	}
-	if !duel.challenged.picked {
-		duel.challenged.picked = true
-	}
-	isimGlobal.mu.Unlock()
 
 	isimResolveRound(duel)
 }
 
 // isimResolveRound calculates damage for the current round and advances the game.
-// It is safe to call from multiple goroutines; the first call wins.
+// Called exclusively from isimRunRound after the pick window closes.
 func isimResolveRound(duel *isimDuel) {
 	isimGlobal.mu.Lock()
 	if duel.resolved {
 		isimGlobal.mu.Unlock()
 		return
 	}
-	// Verify both picked before resolving (guards against races between
-	// the timeout goroutine and a late pick call).
+	// Safety: should never be false given the call site, but guard anyway.
 	if !duel.challenger.picked || !duel.challenged.picked {
 		isimGlobal.mu.Unlock()
 		return
