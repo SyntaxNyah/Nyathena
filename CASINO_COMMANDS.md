@@ -232,9 +232,14 @@ Bet before launch, then cash out before the multiplier crashes.
 /crash cashout        — cash out at the current multiplier
 ```
 
-- The multiplier grows every second starting at 1.00×.
-- The game crashes at a random point between 1.1× and 8×, skewed heavily toward lower values.
+- The multiplier grows every second starting at 1.05×.
+- The game crashes at a random point between 1.05× and 6×, skewed **very** heavily toward lower values (four-random-product distribution).
+- **House edge: 20%** — all payouts are multiplied by 0.80.
 - If you don't `/crash cashout` before the crash, you lose your bet.
+
+**⚠️ Anti-cheese rules (no more instant-cashout spam):**
+- **Minimum hold time: 5 seconds** — you cannot cash out within the first 5 seconds after betting. Attempting to do so counts as a loss ("rocket explodes on the launchpad").
+- **45-second cooldown between bets** — after a round ends (win or lose), you must wait 45 seconds before starting a new crash game.
 
 ---
 
@@ -304,6 +309,67 @@ Toggle whether you see gambling broadcast messages in the area chat.
 - Run once to **hide** all gambling result announcements (wheel spins, slot wins, roulette results, etc.) from your chat.
 - Run again to **show** them again.
 - This setting lasts until you disconnect.
+
+---
+
+### 🍻 The Bar — `/bar`
+
+Visit the bar for drinks with **massive variance** — every drink carries real risk of a big loss or a big gain. No safe options here!
+
+```
+/bar menu              — show all available drinks with costs
+/bar buy <drink>       — order a drink (costs chips, rolls a random effect)
+```
+
+**⚠️ All drinks have risk! You can lose chips on any drink, including the cheap ones.**
+
+| Drink | Cost | Risk Level | Notes |
+|-------|------|------------|-------|
+| `beer` | 50 | Low-Moderate | 20% chance of a skunked batch (loss) |
+| `wine` | 100 | Low-Moderate | 25% sommelier incident risk |
+| `whiskey` | 250 | Moderate | 25% drunk loss risk |
+| `tequila` | 150 | High | 50/50 — glory or regret |
+| `vodka` | 200 | Moderate | 3-way outcome: legend/cough/meh |
+| `rum` | 200 | Moderate | 33% cursed pirate risk |
+| `gin` | 300 | Moderate | 25% botanical allergy risk |
+| `mojito` | 350 | Moderate | 25% sentient mint risk |
+| `mead` | 200 | Moderate | 25% monk curse risk |
+| `sake` | 400 | High | 5-way outcome including tragic arc |
+| `champagne` | 800 | Moderate-High | 25% trophy destruction risk |
+| `margarita` | 300 | Moderate | 20% catastrophic brain freeze |
+| `moonshine` | 100 | Very High | 50/50 — see future or lose everything |
+| `absinthe` | 500 | Very High | 5-way including Green Fairy robbery |
+| `fireball` | 300 | High | 33% mouth fire (loss) |
+| `jagerbomb` | 250 | Moderate | 25% vibration accident |
+| `longisland` | 600 | Extreme | 4–7 random swings, net result unknown |
+| `cosmo` | 350 | Moderate | 25% villain robbery risk |
+| `pina` | 400 | Moderate | 25% imaginary ocean chip loss |
+| `mystery` | 1,000 | Extreme | 5-way: huge jackpot or big loss or nothing |
+| `poison` | 50 | Extreme | 85% lose, 15% jackpot of 3k–10k chips |
+| `doubletrouble` | 500 | Very High | 50/50 — 3× win or extra loss |
+| `dragonblood` | 750 | Very High | 6-way with massive swings |
+| `cursedwine` | 600 | Very High | 5-way haunted vintage |
+| `goldenelixir` | 2,000 | Extreme | 10% legendary jackpot, 30% brutal loss |
+| `roulettebrew` | 400 | Very High | Literally a roulette spin in drink form |
+| `blackout` | 300 | Extreme | 8-way: memory gaps, big wins or losses |
+| `thundermead` | 450 | Very High | 5-way electrified mead chaos |
+| `devilswhiskey` | 350 | Very High | Devil's cut (mostly loss-skewed) |
+| `angelwine` | 800 | High | 5-way celestial judgment |
+| `ghostshot` | 200 | High | 5-way spectral outcomes |
+| `electriclemonade` | 350 | High | 5-way voltage surge |
+| `voiddrink` | 1,500 | Extreme | 10% void jackpot, 30% consumed by void |
+| `luckybrew` | 250 | Very High | 6-way pure luck — clover decides your fate |
+
+**Examples:**
+```
+/bar menu
+/bar buy beer
+/bar buy mystery
+/bar buy goldenelixir
+/bar buy voiddrink
+```
+
+> Tip: use `/gamble hide` to suppress bar public announcements in the area chat.
 
 ---
 
@@ -533,6 +599,8 @@ Casino: enabled (bet: 10–500), jackpot pool: 1200
 | Chips give max | 500 chips per transfer |
 | Chips give playtime gate | 24 hours total playtime required |
 | BJ/Poker turn timer | 60 seconds — auto-stand/fold |
+| Crash cooldown | 45 seconds between bets |
+| Crash minimum hold | Must hold for 5 seconds before cashout (instant cashout = loss) |
 
 ---
 

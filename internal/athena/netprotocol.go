@@ -48,6 +48,34 @@ var tstNavRegex = regexp.MustCompile(`[<>]([[:digit:]]+)?`)
 // maxShownameLength is the maximum number of characters allowed in a showname.
 const maxShownameLength = 30
 
+// casinoWelcomeMsg is the on-join welcome message shown to unauthenticated players when the
+// casino is enabled. Defined as a compile-time constant so there is zero runtime allocation
+// on every player join.
+const casinoWelcomeMsg = "🎰 Welcome! This server runs the Nyathena Casino — virtual chips, games, jobs & more.\n\n" +
+	"📖 Quick navigation:\n" +
+	"  • /help          — see every available command\n" +
+	"  • /casino        — open the casino dashboard (active tables, balance, game list)\n" +
+	"  • /chips         — check your chip balance\n" +
+	"  • /jobs          — list all jobs you can work to earn chips\n" +
+	"  • /shop          — spend chips on permanent tags & upgrades\n\n" +
+	"💰 Ways to earn chips:\n" +
+	"  • Everyone starts with 500 chips automatically.\n" +
+	"  • Earn 1 chip per hour of playtime (more with /shop passive upgrades!).\n" +
+	"  • Work a job: /janitor /busker /paperboy /bailiffjob /clerk  (40–60 min cooldowns).\n" +
+	"  • Unscramble events every 30–60 min — type the answer in IC chat to win 10 chips!\n\n" +
+	"🍻 THE BAR — /bar menu | /bar buy <drink>\n" +
+	"  34 drinks, every one with RISK and HUGE variance. Big wins or big losses!\n" +
+	"  beer wine tequila moonshine absinthe mystery poison dragonblood goldenelixir voiddrink\n" +
+	"  angelwine devilswhiskey ... use /bar menu to see them all!\n\n" +
+	"🛒 Spend your chips at /shop:\n" +
+	"  • 115+ cosmetic tags in 7 categories (from 100 chips!) · job passes · passive income\n" +
+	"  → /shop <category> to browse  |  /shop buy <id> to purchase\n\n" +
+	"📊 Leaderboards: /richest  /playtime top  /unscramble top  /jobtop\n\n" +
+	"👗 Wardrobe: /favourite <char> · /wardrobe · /wardrobe <char>  (save favourite characters!)\n\n" +
+	"💡 /register <username> <password>  |  /login <username> <password>\n" +
+	"🔒 Passwords stored with bcrypt — never in plain text.\n" +
+	"🔇 Use /gamble hide to toggle gambling broadcast messages."
+
 // validDeskMods is the set of accepted values for args[0] (desk_mod) in MS packets.
 // Defined at package level to avoid a slice allocation on every IC message.
 var validDeskMods = []string{"chat", "0", "1", "2", "3", "4", "5"}
@@ -173,44 +201,7 @@ func pktReqDone(client *Client, _ *packet.Packet) {
 			}
 		}()
 		if !client.Authenticated() {
-			client.SendServerMessage(
-				"🎰 Welcome! This server runs the Nyathena Casino — virtual chips, games, jobs & more.\n\n" +
-					"📖 Quick navigation:\n" +
-					"  • /help          — see every available command\n" +
-					"  • /casino        — open the casino dashboard (active tables, balance, game list)\n" +
-					"  • /chips         — check your chip balance\n" +
-					"  • /jobs          — list all jobs you can work to earn chips\n" +
-					"  • /shop          — spend chips on permanent tags & upgrades\n\n" +
-					"💰 Ways to earn chips:\n" +
-					"  • Everyone starts with 500 chips automatically.\n" +
-					"  • Earn 1 chip per hour of playtime (more with /shop passive upgrades!).\n" +
-					"  • Work a job: /janitor /busker /paperboy /bailiffjob /clerk  (40–60 min cooldowns).\n" +
-					"  • Unscramble events every 30–60 min — type the answer in IC chat to win 10 chips!\n" +
-					"    Use /unscramble to check your wins or see if a puzzle is active right now.\n\n" +
-					"🛒 Spend your chips at /shop:\n" +
-					"  • 115+ cosmetic tags in 7 categories visible in /gas & /players (from 100 chips!)\n" +
-					"    Categories: gambling ⚖️ attorney 🌸 anime 🎮 gamer 🌷 girly 😂 meme 👑 prestige\n" +
-					"  • Job passes   — permanently reduce job cooldowns or earn more chips per job\n" +
-					"  • Passive income — permanently earn up to 10× more chips per hour online\n" +
-					"  → /shop <category> to browse  |  /shop buy <id> to purchase\n\n" +
-					"📊 Leaderboards:\n" +
-					"  • /richest           — top chip holders on the server\n" +
-					"  • /playtime top      — top players by total time spent on the server\n" +
-					"  • /unscramble top    — top players by unscramble event wins\n" +
-					"  • /jobtop            — top players by chips earned from jobs\n\n" +
-					"👗 NEW — Wardrobe (Character Favourites):\n" +
-					"  Ever been overwhelmed by the huge character list and only want to swap to a select few?\n" +
-					"  Your personal Wardrobe lets you save favourite characters and swap to them in one command!\n" +
-					"  • /favourite <char>   — add or remove a character from your favourites (toggles).\n" +
-					"  • /wardrobe           — see your saved favourites list.\n" +
-					"  • /wardrobe <char>    — instantly swap to a character from your wardrobe.\n" +
-					"  Wardrobe is tied to your free account — register once and your favourites persist!\n\n" +
-					"💡 Create a free account to keep your balance, wardrobe & appear on leaderboards:\n" +
-					"  /register <username> <password>  — create your free account\n" +
-					"  /login <username> <password>     — sign in if you already have one\n\n" +
-					"(Username: 3–20 chars, letters/numbers/underscore · Password: 6+ chars)\n" +
-					"🔒 Passwords are stored with bcrypt — never in plain text.\n\n" +
-					"🔇 Don't want gambling broadcast messages? Use /gamble hide to toggle them off.")
+			client.SendServerMessage(casinoWelcomeMsg)
 		}
 	}
 

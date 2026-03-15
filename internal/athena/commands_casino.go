@@ -43,6 +43,36 @@ var (
 
 // ── /casino ───────────────────────────────────────────────────────────────────
 
+// casinoCmdsSection is the static commands listing shown in the casino dashboard.
+// Pre-computed once at package init to avoid repeated string allocations.
+var casinoCmdsSection string
+
+func init() {
+	var sb strings.Builder
+	sb.Grow(900)
+	sb.WriteString("\n── Commands ──\n")
+	sb.WriteString("  /bj join|bet|deal|hit|stand|double|split|insurance|status|leave\n")
+	sb.WriteString("  /poker join|ready|hand|check|call|bet|raise|fold|allin|status|leave\n")
+	sb.WriteString("  /slots spin [amount]|max|jackpot|stats\n")
+	sb.WriteString("  /croulette bet <type> <amount>\n")
+	sb.WriteString("  /baccarat <player|banker|tie> <amount>\n")
+	sb.WriteString("  /craps bet <pass|nopass> <amount>\n")
+	sb.WriteString("  /crash bet <amount> | /crash cashout\n")
+	sb.WriteString("  /mines start <mines> <bet> | /mines pick <n> | /mines cashout | /mines quit\n")
+	sb.WriteString("  /keno pick <numbers...> <bet>\n")
+	sb.WriteString("  /wheel spin <bet>\n")
+	sb.WriteString(fmt.Sprintf("\n🍻 THE BAR — /bar menu | /bar buy <drink>\n  %d drinks, ALL with risk & huge variance!\n", len(barMenu)))
+	sb.WriteString("  beer wine whiskey tequila vodka rum gin mojito mead sake champagne margarita\n")
+	sb.WriteString("  moonshine absinthe fireball jagerbomb longisland cosmo pina mystery poison\n")
+	sb.WriteString("  doubletrouble dragonblood cursedwine goldenelixir roulettebrew blackout\n")
+	sb.WriteString("  thundermead devilswhiskey angelwine ghostshot electriclemonade voiddrink luckybrew\n")
+	sb.WriteString("\n── Other ──\n")
+	sb.WriteString("  /rob [bank|casino|vault|atm|store|mint|armored|museum]\n")
+	sb.WriteString("  /shop · /shop <category> · /shop passes · /shop passive · /shop buy <id>\n")
+	sb.WriteString("  /settag <tag_id>|none\n")
+	casinoCmdsSection = sb.String()
+}
+
 // cmdCasino is the top-level casino dashboard command.
 // Subcommands: status
 func cmdCasino(client *Client, args []string, _ string) {
@@ -76,6 +106,7 @@ func printCasinoDashboard(client *Client) {
 	bal, _ := db.GetChipBalance(client.Ipid())
 
 	var sb strings.Builder
+	sb.Grow(1600)
 	sb.WriteString(fmt.Sprintf("\n🎰 Casino Dashboard — %v\n", a.Name()))
 	sb.WriteString(fmt.Sprintf("  Status:  %v\n", boolStr(enabled, "OPEN", "CLOSED")))
 	if minBet > 0 || maxBet > 0 {
@@ -102,25 +133,7 @@ func printCasinoDashboard(client *Client) {
 	}
 	sb.WriteString("\n── Slots Stats ──\n")
 	sb.WriteString(fmt.Sprintf("  Spins: %d  Payout: %d  Jackpots: %d\n", stats.TotalSpins, stats.TotalPayout, stats.Jackpots))
-	sb.WriteString("\n── Commands ──\n")
-	sb.WriteString("  /bj join|bet|deal|hit|stand|double|split|insurance|status|leave\n")
-	sb.WriteString("  /poker join|ready|hand|check|call|bet|raise|fold|allin|status|leave\n")
-	sb.WriteString("  /slots spin [amount]|max|jackpot|stats\n")
-	sb.WriteString("  /croulette bet <type> <amount>\n")
-	sb.WriteString("  /baccarat <player|banker|tie> <amount>\n")
-	sb.WriteString("  /craps bet <pass|nopass> <amount>\n")
-	sb.WriteString("  /crash bet <amount> | /crash cashout\n")
-	sb.WriteString("  /mines start <mines> <bet> | /mines pick <n> | /mines cashout | /mines quit\n")
-	sb.WriteString("  /keno pick <numbers...> <bet>\n")
-	sb.WriteString("  /wheel spin <bet>\n")
-	sb.WriteString("  /rob [bank|casino|vault|atm|store|mint|armored|museum] — heist! 20% success, brutal punishments on fail\n")
-	sb.WriteString("  /shop                     — shop overview (115+ tags, passes, passive income)\n")
-	sb.WriteString("  /shop <category>          — browse tags: gambling attorney anime gamer girly meme prestige\n")
-	sb.WriteString("  /shop passes              — job cooldown & reward passes\n")
-	sb.WriteString("  /shop passive             — passive income upgrades (earn more chips/hr)\n")
-	sb.WriteString("  /shop buy <id>            — buy an item\n")
-	sb.WriteString("  /shop items               — see your owned items\n")
-	sb.WriteString("  /settag <tag_id>|none     — equip or remove your cosmetic tag\n")
+	sb.WriteString(casinoCmdsSection)
 
 	client.SendServerMessage(sb.String())
 }
