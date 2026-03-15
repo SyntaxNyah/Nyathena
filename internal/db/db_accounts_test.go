@@ -489,7 +489,6 @@ func TestLinkIPIDToUserChipsOldWinsWhenLower(t *testing.T) {
 	}
 }
 
-
 // linked to an account, GetUsernameByIPID returns a non-empty string, which the
 // /register command uses to block a second registration attempt.
 func TestOneAccountPerIPID(t *testing.T) {

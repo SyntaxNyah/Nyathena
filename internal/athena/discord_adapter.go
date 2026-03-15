@@ -56,15 +56,16 @@ func findClientByArg(arg string) *Client {
 	}
 	// Fall back to OOC name search.
 	arg = strings.ToLower(arg)
-	for c := range clients.GetAllClients() {
-		if c.Uid() == -1 {
-			continue
+	var found *Client
+	clients.ForEach(func(c *Client) {
+		if found != nil || c.Uid() == -1 {
+			return
 		}
 		if strings.EqualFold(c.OOCName(), arg) || strings.EqualFold(c.CurrentCharacter(), arg) {
-			return c
+			found = c
 		}
-	}
-	return nil
+	})
+	return found
 }
 
 // GetPlayers returns information about all connected players.

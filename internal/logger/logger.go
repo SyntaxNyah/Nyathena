@@ -37,39 +37,68 @@ const (
 	Fatal
 )
 
+// levelToString maps a LogLevel to its display name.
+// Indexed by the iota value so lookup is O(1) with no hash overhead.
+var levelToString = [5]string{
+	Debug:   "DEBUG",
+	Info:    "INFO",
+	Warning: "WARN",
+	Error:   "ERROR",
+	Fatal:   "FATAL",
+}
+
 var (
-	levelToString = map[LogLevel]string{
-		Debug:   "DEBUG",
-		Info:    "INFO",
-		Warning: "WARN",
-		Error:   "ERROR",
-		Fatal:   "FATAL",
-	}
 	LogPath              string
 	LogStdOut            bool
 	LogFile              bool
 	CurrentLevel         LogLevel
 	outputLock           sync.Mutex
-	fileLock             sync.Mutex
-	networkLogLock       sync.Mutex
 	DebugNetwork         bool
 	EnableAreaLogging    bool
 	EnableNetworkLogging bool
 	areaLogLocks         sync.Map // Map of area names to their respective locks
+
+	// Persistent file handles – kept open between writes to avoid
+	// the overhead of os.OpenFile + Close on every log message.
+	serverLogMu       sync.Mutex
+	serverLogFile     *os.File
+	serverLogFilePath string
+
+	auditLogMu       sync.Mutex
+	auditLogFile     *os.File
+	auditLogFilePath string
+
+	networkLogMu       sync.Mutex
+	networkLogFile     *os.File
+	networkLogFilePath string
+
+	// areaLogFiles stores the open file handle for each area, keyed by
+	// sanitized area name. Access is serialised by the per-area mutex
+	// returned by getAreaLock, so no additional lock is needed here.
+	areaLogFiles sync.Map // map[string]*areaLogState
 )
+
+// areaLogState holds the open file handle and the path it was opened for.
+// When either the LogPath or the calendar date changes the file is closed and
+// reopened so that daily rotation and test isolation both work correctly.
+type areaLogState struct {
+	f        *os.File
+	filePath string
+}
 
 // log writes a message to standard output and/or the log file if the level matches the server's set log level.
 func log(level LogLevel, s string) {
 	if level < CurrentLevel {
 		return
 	}
+	msg := fmt.Sprintf("%v: %v: %v\n", time.Now().UTC().Format(time.StampMilli), levelToString[level], s)
 	if LogStdOut {
 		outputLock.Lock()
-		fmt.Printf("%v: %v: %v\n", time.Now().UTC().Format(time.StampMilli), levelToString[level], s)
+		fmt.Print(msg)
 		outputLock.Unlock()
 	}
 	if LogFile {
-		WriteLog(fmt.Sprintf("%v: %v: %v\n", time.Now().UTC().Format(time.StampMilli), levelToString[level], s))
+		WriteLog(msg)
 	}
 }
 
@@ -80,6 +109,9 @@ func LogDebug(s string) {
 
 // LogDebugf prints a debug message to stdout. Arguments are handled in the manner of fmt.Printf.
 func LogDebugf(format string, v ...interface{}) {
+	if Debug < CurrentLevel {
+		return
+	}
 	log(Debug, fmt.Sprintf(format, v...))
 }
 
@@ -90,6 +122,9 @@ func LogInfo(s string) {
 
 // LogInfof prints an info message to stdout. Arguments are handled in the manner of fmt.Printf.
 func LogInfof(format string, v ...interface{}) {
+	if Info < CurrentLevel {
+		return
+	}
 	log(Info, fmt.Sprintf(format, v...))
 }
 
@@ -100,6 +135,9 @@ func LogWarning(s string) {
 
 // LogWarningf prints a warning message to stdout. Arguments are handled in the manner of fmt.Printf.
 func LogWarningf(format string, v ...interface{}) {
+	if Warning < CurrentLevel {
+		return
+	}
 	log(Warning, fmt.Sprintf(format, v...))
 }
 
@@ -110,6 +148,9 @@ func LogError(s string) {
 
 // LogErrorf prints an error message to stdout. Arguments are handled in the manner of fmt.Printf.
 func LogErrorf(format string, v ...interface{}) {
+	if Error < CurrentLevel {
+		return
+	}
 	log(Error, fmt.Sprintf(format, v...))
 }
 
@@ -125,8 +166,8 @@ func LogFatalf(format string, v ...interface{}) {
 
 // WriteReport flushes a given area buffer to a report file.
 func WriteReport(name string, buffer []string) {
-	fileLock.Lock()
-	defer fileLock.Unlock()
+	auditLogMu.Lock()
+	defer auditLogMu.Unlock()
 	fname := fmt.Sprintf("report-%v-%v.log", time.Now().UTC().Format("2006-01-02T150405Z"), name)
 	fcontents := []byte(strings.Join(buffer, "\n"))
 	err := webhook.PostReport(fname, string(fcontents))
@@ -143,59 +184,127 @@ func WriteReport(name string, buffer []string) {
 
 // WriteNetworkLog writes a packet log entry (HDID, IPID, direction, content) to the network log file.
 // Each entry includes a timestamp so that packet sequences can be reconstructed for incident review.
+// The file handle is kept open between calls to avoid per-write open/close syscall overhead.
 func WriteNetworkLog(ipid, hdid, direction, content string) {
 	if !EnableNetworkLogging {
 		return
 	}
-	networkLogLock.Lock()
-	defer networkLogLock.Unlock()
-	f, err := os.OpenFile(LogPath+"/network.log", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
-	if err != nil {
-		LogError(err.Error())
-		return
+	networkLogMu.Lock()
+	defer networkLogMu.Unlock()
+
+	target := LogPath + "/network.log"
+	if networkLogFile == nil || networkLogFilePath != target {
+		if networkLogFile != nil {
+			networkLogFile.Close()
+		}
+		f, err := os.OpenFile(target, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
+		if err != nil {
+			LogError(err.Error())
+			return
+		}
+		networkLogFile = f
+		networkLogFilePath = target
 	}
-	defer f.Close()
+
 	timestamp := time.Now().UTC().Format("2006-01-02T15:04:05.000Z")
-	_, err = f.WriteString(fmt.Sprintf("[%v] %v | IPID:%v | HDID:%v | %v\n", timestamp, direction, ipid, hdid, content))
-	if err != nil {
+	if _, err := networkLogFile.WriteString(fmt.Sprintf("[%v] %v | IPID:%v | HDID:%v | %v\n", timestamp, direction, ipid, hdid, content)); err != nil {
 		LogError(err.Error())
+		networkLogFile.Close()
+		networkLogFile = nil
 	}
 }
 
 // WriteAudit writes a line to the server's audit log.
+// The file handle is kept open between calls to avoid per-write open/close syscall overhead.
 func WriteAudit(s string) {
-	fileLock.Lock()
-	defer fileLock.Unlock()
-	f, err := os.OpenFile(LogPath+"/audit.log", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0755)
-	if err != nil {
-		LogError(err.Error())
-		return
+	auditLogMu.Lock()
+	defer auditLogMu.Unlock()
+
+	target := LogPath + "/audit.log"
+	if auditLogFile == nil || auditLogFilePath != target {
+		if auditLogFile != nil {
+			auditLogFile.Close()
+		}
+		f, err := os.OpenFile(target, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0755)
+		if err != nil {
+			LogError(err.Error())
+			return
+		}
+		auditLogFile = f
+		auditLogFilePath = target
 	}
-	defer f.Close()
-	_, err = f.WriteString(fmt.Sprintf("[%v] %v\n", time.Now().UTC().Format("2006/01/02"), s))
-	if err != nil {
+
+	if _, err := auditLogFile.WriteString(fmt.Sprintf("[%v] %v\n", time.Now().UTC().Format("2006/01/02"), s)); err != nil {
 		LogError(err.Error())
-		return
+		auditLogFile.Close()
+		auditLogFile = nil
 	}
 }
 
 // WriteLog writes a line to the server's log file.
+// The file handle is kept open between calls to avoid per-write open/close syscall overhead.
 func WriteLog(s string) {
-	fileLock.Lock()
-	defer fileLock.Unlock()
-	f, err := os.OpenFile(LogPath+"/server.log", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0755)
-	if err != nil {
-		LogFile = false //prevents infinite recursion if can't open log file
-		LogError(err.Error())
-		return
+	serverLogMu.Lock()
+	defer serverLogMu.Unlock()
+
+	target := LogPath + "/server.log"
+	if serverLogFile == nil || serverLogFilePath != target {
+		if serverLogFile != nil {
+			serverLogFile.Close()
+		}
+		f, err := os.OpenFile(target, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0755)
+		if err != nil {
+			LogFile = false // prevents infinite recursion if log file cannot be opened
+			LogError(err.Error())
+			return
+		}
+		serverLogFile = f
+		serverLogFilePath = target
 	}
-	defer f.Close()
-	_, err = f.WriteString(s)
-	if err != nil {
+
+	if _, err := serverLogFile.WriteString(s); err != nil {
 		LogFile = false
+		serverLogFile.Close()
+		serverLogFile = nil
 		LogError(err.Error())
-		return
 	}
+}
+
+// CloseLogFiles flushes and closes all persistently-open log file handles.
+// Call this during a clean server shutdown to ensure all pending writes are committed.
+func CloseLogFiles() {
+	serverLogMu.Lock()
+	if serverLogFile != nil {
+		serverLogFile.Close()
+		serverLogFile = nil
+		serverLogFilePath = ""
+	}
+	serverLogMu.Unlock()
+
+	auditLogMu.Lock()
+	if auditLogFile != nil {
+		auditLogFile.Close()
+		auditLogFile = nil
+		auditLogFilePath = ""
+	}
+	auditLogMu.Unlock()
+
+	networkLogMu.Lock()
+	if networkLogFile != nil {
+		networkLogFile.Close()
+		networkLogFile = nil
+		networkLogFilePath = ""
+	}
+	networkLogMu.Unlock()
+
+	// Close all open area log file handles.
+	areaLogFiles.Range(func(key, value any) bool {
+		if state, ok := value.(*areaLogState); ok && state.f != nil {
+			state.f.Close()
+		}
+		areaLogFiles.Delete(key)
+		return true
+	})
 }
 
 // sanitizeAreaName converts an area name to a safe folder name
@@ -235,7 +344,10 @@ func getAreaLock(areaName string) *sync.Mutex {
 	return lock.(*sync.Mutex)
 }
 
-// WriteAreaLog writes a log entry to an area's daily log file
+// WriteAreaLog writes a log entry to an area's daily log file.
+// The file handle is kept open between calls to avoid per-write open/close syscall
+// overhead. The handle is automatically closed and reopened when the calendar date
+// or LogPath changes (daily rotation and test isolation).
 func WriteAreaLog(areaName, logEntry string) {
 	if !EnableAreaLogging {
 		return
@@ -246,22 +358,35 @@ func WriteAreaLog(areaName, logEntry string) {
 	lock.Lock()
 	defer lock.Unlock()
 
-	// Generate daily log file name
+	// Generate daily log file name.
 	today := time.Now().Format("2006-01-02")
 	filename := filepath.Join(LogPath, safeAreaName, fmt.Sprintf("%s-%s.txt", safeAreaName, today))
 
-	// Open or create the file with append mode
-	f, err := os.OpenFile(filename, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
-	if err != nil {
-		LogErrorf("Failed to open area log file %s: %v", filename, err)
-		return
+	// Load the cached file state for this area (if any).
+	var state *areaLogState
+	if v, ok := areaLogFiles.Load(safeAreaName); ok {
+		state = v.(*areaLogState)
 	}
-	defer f.Close()
 
-	// Write the log entry with a newline
-	_, err = f.WriteString(logEntry + "\n")
-	if err != nil {
+	// Reopen the file if the path has changed (new day or LogPath changed).
+	if state == nil || state.filePath != filename {
+		if state != nil && state.f != nil {
+			state.f.Close()
+		}
+		f, err := os.OpenFile(filename, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
+		if err != nil {
+			LogErrorf("Failed to open area log file %s: %v", filename, err)
+			return
+		}
+		state = &areaLogState{f: f, filePath: filename}
+		areaLogFiles.Store(safeAreaName, state)
+	}
+
+	// Write the log entry.
+	if _, err := state.f.WriteString(logEntry + "\n"); err != nil {
 		LogErrorf("Failed to write to area log file %s: %v", filename, err)
-		return
+		state.f.Close()
+		state.f = nil
+		areaLogFiles.Delete(safeAreaName)
 	}
 }

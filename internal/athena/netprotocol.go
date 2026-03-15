@@ -579,18 +579,21 @@ func pktIC(client *Client, p *packet.Packet) {
 		}
 		client.SetPairWantedID(pid)
 		pairing := false
-		for c := range clients.GetAllClients() {
+		clients.ForEach(func(c *Client) {
+			if pairing {
+				return
+			}
 			isForce := client.ForcePairUID() >= 0 && client.ForcePairUID() == c.Uid() &&
 				c.ForcePairUID() >= 0 && c.ForcePairUID() == client.Uid()
 			// If the client has a stored pair partner, skip any client that isn't
 			// that specific partner to prevent false matches from position overlap.
 			if client.ForcePairUID() >= 0 && !isForce {
-				continue
+				return
 			}
 			// Also guard the candidate: if c is already UID-committed to a different partner,
 			// it must not be matched by anyone other than that partner.
 			if c.ForcePairUID() >= 0 && c.ForcePairUID() != client.Uid() {
-				continue
+				return
 			}
 			if c.CharID() == pid && c.PairWantedID() == client.CharID() && (isForce || c.Pos() == client.Pos()) {
 				pairinfo := c.PairInfo()
@@ -599,9 +602,8 @@ func pktIC(client *Client, p *packet.Packet) {
 				args[20] = pairinfo.offset
 				args[21] = pairinfo.flip
 				pairing = true
-				break
 			}
-		}
+		})
 		if !pairing {
 			args[16] = "-1^"
 			args[17] = ""
@@ -857,11 +859,15 @@ func pktOOC(client *Client, p *packet.Packet) {
 	} else if strings.TrimSpace(p.Body[1]) == "" {
 		return
 	}
-	for c := range clients.GetAllClients() {
+	var usernameTaken bool
+	clients.ForEach(func(c *Client) {
 		if c.OOCName() == p.Body[0] && c != client {
-			client.SendServerMessage("That username is already taken.")
-			return
+			usernameTaken = true
 		}
+	})
+	if usernameTaken {
+		client.SendServerMessage("That username is already taken.")
+		return
 	}
 	client.SetOocName(username)
 
@@ -1033,24 +1039,34 @@ func pktCaseAnn(client *Client, p *packet.Packet) {
 	newPacket := fmt.Sprintf("CASEA#CASE ANNOUNCEMENT: %v in %v needs players for %v#%v#1#%%",
 		client.CurrentCharacter(), client.Area().Name(), p.Body[0], strings.Join(p.Body[1:], "#")) // Due to a bug, old client versions require this packet to have an extra arg.
 
-	for c := range clients.GetAllClients() {
-		if c == client {
-			continue
+	// Pre-parse the requested role flags once so we don't re-parse per recipient.
+	// Use a fixed-size array to avoid any heap allocation; bail out immediately
+	// on any malformed value (preserves original behaviour).
+	var alertRoles [4]bool
+	nRoles := 0
+	for i, r := range p.Body[1:] {
+		if i >= 4 {
+			break
 		}
-		for i, r := range p.Body[1:] {
-			if i >= 4 {
-				break
-			}
-			b, err := strconv.ParseBool(r)
-			if err != nil {
-				return
-			}
-			if b && c.AlertRole(i) {
+		b, err := strconv.ParseBool(r)
+		if err != nil {
+			return
+		}
+		alertRoles[i] = b
+		nRoles++
+	}
+
+	clients.ForEach(func(c *Client) {
+		if c == client {
+			return
+		}
+		for i := 0; i < nRoles; i++ {
+			if alertRoles[i] && c.AlertRole(i) {
 				c.write(newPacket)
 				break
 			}
 		}
-	}
+	})
 }
 
 // decoder and encoder are package-level, pre-compiled replacers for the AO2 percent-encoding scheme.
