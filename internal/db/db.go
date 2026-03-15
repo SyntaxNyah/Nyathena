@@ -58,7 +58,10 @@ const MaxChipBalance = 10_000_000
 
 // Database version.
 // This should be incremented whenever changes are made to the DB that require existing databases to upgrade.
-const ver = 12
+const ver = 13
+
+// MaxFavourites is the maximum number of favourite characters a player can save.
+const MaxFavourites = 20
 
 // Persistent punishment kind constants.
 const (
@@ -206,6 +209,15 @@ func Open() error {
 	_, err = db.Exec(`CREATE TABLE IF NOT EXISTS PLAYER_ACTIVE_TAG(
 		IPID   TEXT PRIMARY KEY,
 		TAG_ID TEXT NOT NULL DEFAULT ''
+	)`)
+	if err != nil {
+		return err
+	}
+	_, err = db.Exec(`CREATE TABLE IF NOT EXISTS FAVOURITES(
+		USERNAME  TEXT NOT NULL,
+		CHAR_NAME TEXT NOT NULL,
+		ADDED_AT  INTEGER NOT NULL DEFAULT 0,
+		PRIMARY KEY (USERNAME, CHAR_NAME)
 	)`)
 	if err != nil {
 		return err
@@ -375,6 +387,21 @@ func upgradeDB(v int) error {
 			return err
 		}
 		_, err = db.Exec("PRAGMA user_version = 12")
+		if err != nil {
+			return err
+		}
+		fallthrough
+	case 12:
+		_, err := db.Exec(`CREATE TABLE IF NOT EXISTS FAVOURITES(
+			USERNAME  TEXT NOT NULL,
+			CHAR_NAME TEXT NOT NULL,
+			ADDED_AT  INTEGER NOT NULL DEFAULT 0,
+			PRIMARY KEY (USERNAME, CHAR_NAME)
+		)`)
+		if err != nil {
+			return err
+		}
+		_, err = db.Exec("PRAGMA user_version = 13")
 		if err != nil {
 			return err
 		}
@@ -1520,4 +1547,65 @@ return ""
 var tagID string
 db.QueryRow("SELECT TAG_ID FROM PLAYER_ACTIVE_TAG WHERE IPID = ?", ipid).Scan(&tagID) //nolint:errcheck
 return tagID
+}
+
+// AddFavourite adds a character to the player's wardrobe favourites.
+// Returns an error if the character is already in the list or the limit is exceeded.
+func AddFavourite(username, charName string) error {
+	if db == nil {
+		return nil
+	}
+	var count int
+	if err := db.QueryRow("SELECT COUNT(*) FROM FAVOURITES WHERE USERNAME = ?", username).Scan(&count); err != nil {
+		return err
+	}
+	if count >= MaxFavourites {
+		return fmt.Errorf("favourite limit reached (%d)", MaxFavourites)
+	}
+	_, err := db.Exec(
+		"INSERT INTO FAVOURITES(USERNAME, CHAR_NAME, ADDED_AT) VALUES(?, ?, ?)",
+		username, charName, time.Now().Unix(),
+	)
+	return err
+}
+
+// RemoveFavourite removes a character from the player's wardrobe favourites.
+func RemoveFavourite(username, charName string) error {
+	if db == nil {
+		return nil
+	}
+	_, err := db.Exec("DELETE FROM FAVOURITES WHERE USERNAME = ? AND CHAR_NAME = ?", username, charName)
+	return err
+}
+
+// GetFavourites returns all favourite character names for the given username,
+// ordered by the time they were added.
+func GetFavourites(username string) ([]string, error) {
+	if db == nil {
+		return nil, nil
+	}
+	rows, err := db.Query("SELECT CHAR_NAME FROM FAVOURITES WHERE USERNAME = ? ORDER BY ADDED_AT ASC", username)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var chars []string
+	for rows.Next() {
+		var name string
+		if err := rows.Scan(&name); err != nil {
+			return chars, err
+		}
+		chars = append(chars, name)
+	}
+	return chars, rows.Err()
+}
+
+// IsFavourite returns true if charName is in the player's favourites list.
+func IsFavourite(username, charName string) (bool, error) {
+	if db == nil {
+		return false, nil
+	}
+	var count int
+	err := db.QueryRow("SELECT COUNT(*) FROM FAVOURITES WHERE USERNAME = ? AND CHAR_NAME = ?", username, charName).Scan(&count)
+	return count > 0, err
 }

@@ -198,7 +198,14 @@ func pktReqDone(client *Client, _ *packet.Packet) {
 					"  • /playtime top      — top players by total time spent on the server\n" +
 					"  • /unscramble top    — top players by unscramble event wins\n" +
 					"  • /jobtop            — top players by chips earned from jobs\n\n" +
-					"💡 Create a free account to keep your balance & appear on leaderboards:\n" +
+					"👗 NEW — Wardrobe (Character Favourites):\n" +
+					"  Ever been overwhelmed by the huge character list and only want to swap to a select few?\n" +
+					"  Your personal Wardrobe lets you save favourite characters and swap to them in one command!\n" +
+					"  • /favourite <char>   — add or remove a character from your favourites (toggles).\n" +
+					"  • /wardrobe           — see your saved favourites list.\n" +
+					"  • /wardrobe <char>    — instantly swap to a character from your wardrobe.\n" +
+					"  Wardrobe is tied to your free account — register once and your favourites persist!\n\n" +
+					"💡 Create a free account to keep your balance, wardrobe & appear on leaderboards:\n" +
 					"  /register <username> <password>  — create your free account\n" +
 					"  /login <username> <password>     — sign in if you already have one\n\n" +
 					"(Username: 3–20 chars, letters/numbers/underscore · Password: 6+ chars)\n" +
