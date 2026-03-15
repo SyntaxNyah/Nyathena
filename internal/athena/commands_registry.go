@@ -1386,7 +1386,7 @@ func initCommands() {
 			handler:   cmdBar,
 			minArgs:   0,
 			usage:     "Usage: /bar menu | /bar buy <drink>",
-			desc:      "Visit the bar! Buy alcoholic drinks with wacky or positive chip effects. Use /bar menu to see all 20 drinks.",
+		desc:      fmt.Sprintf("Visit the bar! %d drinks each with RISK and wild variance — huge wins or big losses. Use /bar menu to see all drinks.", len(barMenu)),
 			reqPerms:  permissions.PermissionField["NONE"],
 			casinoCmd: true,
 		},

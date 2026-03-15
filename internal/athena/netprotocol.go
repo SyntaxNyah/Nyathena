@@ -187,6 +187,13 @@ func pktReqDone(client *Client, _ *packet.Packet) {
 					"  • Work a job: /janitor /busker /paperboy /bailiffjob /clerk  (40–60 min cooldowns).\n" +
 					"  • Unscramble events every 30–60 min — type the answer in IC chat to win 10 chips!\n" +
 					"    Use /unscramble to check your wins or see if a puzzle is active right now.\n\n" +
+					"🍻 THE BAR — /bar menu | /bar buy <drink>\n" +
+					"  35+ drinks, every one with RISK and HUGE variance. Sometimes you win big, sometimes\n" +
+					"  you lose big. That's the bar. Try: beer wine tequila moonshine absinthe mystery\n" +
+					"  poison dragonblood goldenelixir voiddrink angelwine devilswhiskey... and many more!\n\n" +
+					"🚀 CRASH — /crash bet <amount> (⚠️ Anti-cheese: 45s cooldown + 5s min hold time)\n" +
+					"  Bet, wait at least 5 seconds, then cash out before the crash. Multiplier: 1.05×–6×.\n" +
+					"  House edge: 20%. Instant cashouts are DISABLED — the rocket needs time to fly!\n\n" +
 					"🛒 Spend your chips at /shop:\n" +
 					"  • 115+ cosmetic tags in 7 categories visible in /gas & /players (from 100 chips!)\n" +
 					"    Categories: gambling ⚖️ attorney 🌸 anime 🎮 gamer 🌷 girly 😂 meme 👑 prestige\n" +
