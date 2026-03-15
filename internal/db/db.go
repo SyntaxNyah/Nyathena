@@ -58,7 +58,13 @@ const MaxChipBalance = 10_000_000
 
 // Database version.
 // This should be incremented whenever changes are made to the DB that require existing databases to upgrade.
-const ver = 12
+const ver = 13
+
+// MaxFavourites is the maximum number of favourite characters a player can save.
+const MaxFavourites = 100
+
+// ErrFavouriteLimitReached is returned by AddFavourite when the player's wardrobe is full.
+var ErrFavouriteLimitReached = fmt.Errorf("wardrobe full: limit is %d favourites", MaxFavourites)
 
 // Persistent punishment kind constants.
 const (
@@ -206,6 +212,15 @@ func Open() error {
 	_, err = db.Exec(`CREATE TABLE IF NOT EXISTS PLAYER_ACTIVE_TAG(
 		IPID   TEXT PRIMARY KEY,
 		TAG_ID TEXT NOT NULL DEFAULT ''
+	)`)
+	if err != nil {
+		return err
+	}
+	_, err = db.Exec(`CREATE TABLE IF NOT EXISTS FAVOURITES(
+		USERNAME  TEXT NOT NULL,
+		CHAR_NAME TEXT NOT NULL,
+		ADDED_AT  INTEGER NOT NULL DEFAULT 0,
+		PRIMARY KEY (USERNAME, CHAR_NAME)
 	)`)
 	if err != nil {
 		return err
@@ -375,6 +390,21 @@ func upgradeDB(v int) error {
 			return err
 		}
 		_, err = db.Exec("PRAGMA user_version = 12")
+		if err != nil {
+			return err
+		}
+		fallthrough
+	case 12:
+		_, err := db.Exec(`CREATE TABLE IF NOT EXISTS FAVOURITES(
+			USERNAME  TEXT NOT NULL,
+			CHAR_NAME TEXT NOT NULL,
+			ADDED_AT  INTEGER NOT NULL DEFAULT 0,
+			PRIMARY KEY (USERNAME, CHAR_NAME)
+		)`)
+		if err != nil {
+			return err
+		}
+		_, err = db.Exec("PRAGMA user_version = 13")
 		if err != nil {
 			return err
 		}
@@ -1520,4 +1550,84 @@ return ""
 var tagID string
 db.QueryRow("SELECT TAG_ID FROM PLAYER_ACTIVE_TAG WHERE IPID = ?", ipid).Scan(&tagID) //nolint:errcheck
 return tagID
+}
+
+// AddFavourite adds a character to the player's wardrobe favourites.
+// Returns ErrFavouriteLimitReached when the cap is hit; a UNIQUE-constraint
+// error if the character is already saved; or nil on success.
+// The limit check and insert are performed in a single atomic statement,
+// eliminating the TOCTOU window present in a separate SELECT + INSERT pair.
+//
+// Row-affected semantics:
+//   - rows=1, err=nil  → inserted successfully.
+//   - rows=0, err=nil  → WHERE (count < limit) was false; limit reached.
+//   - rows=0, err!=nil → UNIQUE constraint violation (duplicate) or other DB error.
+//
+// Only the limit-reached path (rows=0, err=nil) is unambiguous: a UNIQUE
+// violation always produces a non-nil error, never silently zero rows.
+func AddFavourite(username, charName string) error {
+	if db == nil {
+		return nil
+	}
+	res, err := db.Exec(`
+		INSERT INTO FAVOURITES(USERNAME, CHAR_NAME, ADDED_AT)
+		SELECT ?, ?, ?
+		WHERE (SELECT COUNT(*) FROM FAVOURITES WHERE USERNAME = ?) < ?`,
+		username, charName, time.Now().Unix(), username, MaxFavourites,
+	)
+	if err != nil {
+		return err
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return ErrFavouriteLimitReached
+	}
+	return nil
+}
+
+// RemoveFavourite removes a character from the player's wardrobe favourites.
+func RemoveFavourite(username, charName string) error {
+	if db == nil {
+		return nil
+	}
+	_, err := db.Exec("DELETE FROM FAVOURITES WHERE USERNAME = ? AND CHAR_NAME = ?", username, charName)
+	return err
+}
+
+// GetFavourites returns all favourite character names for the given username,
+// ordered by the time they were added. The returned slice is pre-allocated to
+// MaxFavourites capacity to avoid incremental re-allocations.
+func GetFavourites(username string) ([]string, error) {
+	if db == nil {
+		return nil, nil
+	}
+	rows, err := db.Query(
+		"SELECT CHAR_NAME FROM FAVOURITES WHERE USERNAME = ? ORDER BY ADDED_AT ASC",
+		username,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	chars := make([]string, 0, MaxFavourites)
+	for rows.Next() {
+		var name string
+		if err := rows.Scan(&name); err != nil {
+			return chars, err
+		}
+		chars = append(chars, name)
+	}
+	return chars, rows.Err()
+}
+
+// IsFavourite returns true if charName is in the player's favourites list.
+func IsFavourite(username, charName string) (bool, error) {
+	if db == nil {
+		return false, nil
+	}
+	var count int
+	err := db.QueryRow(
+		"SELECT COUNT(*) FROM FAVOURITES WHERE USERNAME = ? AND CHAR_NAME = ?",
+		username, charName,
+	).Scan(&count)
+	return count > 0, err
 }

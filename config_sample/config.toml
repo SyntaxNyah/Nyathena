@@ -368,8 +368,8 @@ iphub_api_key = ""
 #   • All existing chip balances and player account data in the database are
 #     preserved and will be fully accessible if you re-enable this setting later.
 #
-# Default: true
-enable_casino = true
+# Default: false
+enable_casino = false
 
 # Require players to complete a random captcha when registering a new account.
 # When true, /register issues a one-time token that the player must echo back

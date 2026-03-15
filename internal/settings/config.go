@@ -170,7 +170,7 @@ func DefaultConfig() *Config {
 			AutoModAction:              "ban",
 			RandomSongCooldown:         5,
 			BotBanPlaytimeThreshold:    120,
-			EnableCasino:               true,
+			EnableCasino:               false,
 			RegisterCaptcha:            true,
 		},
 		LogConfig{

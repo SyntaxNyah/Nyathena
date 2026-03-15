@@ -21,6 +21,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/MangosArentLiterature/Athena/internal/db"
 	"github.com/MangosArentLiterature/Athena/internal/permissions"
 	"github.com/MangosArentLiterature/Athena/internal/sliceutil"
 )
@@ -1381,6 +1382,14 @@ func initCommands() {
 			reqPerms:  permissions.PermissionField["NONE"],
 			casinoCmd: true,
 		},
+		"rob": {
+			handler:   cmdRob,
+			minArgs:   0,
+			usage:     "Usage: /rob [bank|casino|vault|atm|store|mint|armored|museum]",
+			desc:      "Attempt to rob a location for chips. 20% success rate — catastrophic failures drain your chips and may mute you.",
+			reqPerms:  permissions.PermissionField["NONE"],
+			casinoCmd: true,
+		},
 		"gamble": {
 			handler:   cmdGamble,
 			minArgs:   1,
@@ -1540,6 +1549,22 @@ func initCommands() {
 			reqPerms:  permissions.PermissionField["NONE"],
 			casinoCmd: true,
 		},
+		"favourite": {
+			handler:   cmdFavourite,
+			minArgs:   1,
+			usage:     "Usage: /favourite <char name>",
+			desc:      "Toggle a character in your wardrobe favourites. Add or remove with the same command.",
+			reqPerms:  permissions.PermissionField["NONE"],
+			casinoCmd: true,
+		},
+		"wardrobe": {
+			handler:   cmdWardrobe,
+			minArgs:   0,
+			usage:     "Usage: /wardrobe | /wardrobe <char name>",
+			desc:      "View your saved favourite characters, or swap to one instantly.",
+			reqPerms:  permissions.PermissionField["NONE"],
+			casinoCmd: true,
+		},
 	}
 }
 
@@ -1564,6 +1589,14 @@ func ParseCommand(client *Client, command string, args []string) {
 		var header string
 		if client.Authenticated() {
 			header = fmt.Sprintf("Logged in as: %v\n\n", client.ModName())
+			if casinoEnabled {
+				header += "👗 Your Wardrobe (Favourites):\n" +
+					"  Ever feel overwhelmed by the huge character list? Save your go-to characters!\n" +
+					"  • /favourite <char>   — add or remove a character from your wardrobe (toggles).\n" +
+					"  • /wardrobe           — view all your saved favourites.\n" +
+					"  • /wardrobe <char>    — instantly swap to any character in your wardrobe.\n" +
+					fmt.Sprintf("  You can save up to %d characters. Favourites are tied to your account.\n\n", db.MaxFavourites)
+			}
 		} else if casinoEnabled {
 			header = "💡 Player Accounts (optional):\n" +
 				"  • Already have an account? Use /login <username> <password> — no new account needed.\n" +
@@ -1571,6 +1604,13 @@ func ParseCommand(client *Client, command string, args []string) {
 				"    chips, playtime, unscramble wins, and casino standings. No extra permissions granted.\n" +
 				"  • 🔒 Passwords are stored with bcrypt (industry-standard one-way hashing).\n" +
 				"    Your password is never stored in plain text.\n\n" +
+				"👗 Wardrobe (requires free account):\n" +
+				"  Ever been overwhelmed by the huge character list? Your Wardrobe lets you save a\n" +
+				"  personal shortlist of favourite characters and swap to them instantly!\n" +
+				"  • /favourite <char>   — add or remove a character from your saved favourites.\n" +
+				"  • /wardrobe           — view your personal favourites list.\n" +
+				"  • /wardrobe <char>    — swap to any character in your wardrobe in one command.\n" +
+				fmt.Sprintf("  Save up to %d characters — no more scrolling through the entire list!\n\n", db.MaxFavourites) +
 				"🎰 Casino Tips:\n" +
 				"  • /chips                        — check your chip balance.\n" +
 				"  • /chips give <uid> <amount>    — send chips to another player.\n" +
