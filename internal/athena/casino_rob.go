@@ -31,7 +31,7 @@ import (
 // ============================================================
 
 // robCooldown is the mandatory wait between /rob attempts per player.
-const robCooldown = 20 * time.Minute
+const robCooldown = 1 * time.Hour
 
 // robMinBalance is the minimum chip balance required to attempt a rob.
 // Prevents players with nothing to lose from spamming the command.
@@ -151,6 +151,11 @@ func robSuccess(client *Client, location string, bal int64) {
 		fmt.Sprintf("🏎️ VROOM! You grabbed %d chips from %s and the getaway driver was waiting right outside. Perfect heist.", steal, location),
 		fmt.Sprintf("🕵️ MASTER THIEF! Disguised as a maintenance worker, you walked out of %s with %d chips in a toolbox.", location, steal),
 		fmt.Sprintf("😎 IN AND OUT! %d chips lifted from %s without a single camera catching your face. Legendary.", steal, location),
+		fmt.Sprintf("🤝 INSIDE JOB! Your contact on the inside propped open the back door. Walked out of %s with %d chips like you owned the place.", location, steal),
+		fmt.Sprintf("🪄 MAGIC HANDS! The lock at %s clicked open on the first try. You don't even know how. Scooped up %d chips and vanished.", location, steal),
+		fmt.Sprintf("🔥 FIRE DRILL SPECIAL! The entire staff of %s evacuated just as you arrived. %d chips, zero witnesses.", location, steal),
+		fmt.Sprintf("📦 BRILLIANT DISGUISE! You mailed yourself inside %s in a cardboard box. Grabbed %d chips and mailed yourself back out. Nobody questioned it.", location, steal),
+		fmt.Sprintf("😴 NIGHT SHIFT! The only guard at %s was asleep at his desk. You stole %d chips, tucked him in, and left a thank-you note.", location, steal),
 	}
 	msg := messages[rand.Intn(len(messages))]
 	client.SendServerMessage(fmt.Sprintf("%s\n💰 New balance: %d chips", msg, newBal))
@@ -160,14 +165,14 @@ func robSuccess(client *Client, location string, bal int64) {
 
 // ── Failure (80% chance) ──────────────────────────────────────────────────────
 
-// robFailure picks and applies one of eight catastrophic failure outcomes.
+// robFailure picks and applies one of twenty catastrophic failure outcomes.
 func robFailure(client *Client, location string, bal int64) {
 	ipid := client.Ipid()
 	failRoll := rand.Float64()
 
 	switch {
-	// ── Outcome 1 (30%) ── Lose 50%, OOC mute 5 min ──────────────────────────
-	case failRoll < 0.30:
+	// ── Outcome 1 (8%) ── Lose 50%, OOC mute 5 min ───────────────────────────
+	case failRoll < 0.08:
 		lose := bal / 2
 		newBal := drainChips(ipid, lose)
 		applyMute(client, OOCMuted, 5*time.Minute)
@@ -175,13 +180,13 @@ func robFailure(client *Client, location string, bal int64) {
 			fmt.Sprintf("🚨 ROB FAIL: %s was tackled outside %s and lost %d chips!", client.OOCName(), location, lose))
 		client.SendServerMessage(fmt.Sprintf(
 			"🚨 BUSTED! Security tackled you as you fled %s.\n"+
-				"You dropped the bag. Legal fees wiped half your chips (--%d chips).\n"+
+				"You dropped the bag. Legal fees wiped half your chips (-%d chips).\n"+
 				"The cops also confiscated your phone — you're OOC muted for 5 minutes.\n"+
 				"💀 New balance: %d chips",
 			location, lose, newBal))
 
-	// ── Outcome 2 (20%) ── Lose 75% ──────────────────────────────────────────
-	case failRoll < 0.50:
+	// ── Outcome 2 (8%) ── Lose 75% ───────────────────────────────────────────
+	case failRoll < 0.16:
 		lose := (bal * 3) / 4
 		newBal := drainChips(ipid, lose)
 		sendAreaGamblingMessage(client.Area(),
@@ -193,8 +198,8 @@ func robFailure(client *Client, location string, bal int64) {
 				"💀 New balance: %d chips",
 			location, lose, newBal))
 
-	// ── Outcome 3 (15%) ── Lose 90% ──────────────────────────────────────────
-	case failRoll < 0.65:
+	// ── Outcome 3 (7%) ── Lose 90% ───────────────────────────────────────────
+	case failRoll < 0.23:
 		lose := (bal * 9) / 10
 		newBal := drainChips(ipid, lose)
 		sendAreaGamblingMessage(client.Area(),
@@ -205,8 +210,8 @@ func robFailure(client *Client, location string, bal int64) {
 				"💀 New balance: %d chips",
 			location, lose, newBal))
 
-	// ── Outcome 4 (10%) ── Lose EVERYTHING (down to 1 chip) ─────────────────
-	case failRoll < 0.75:
+	// ── Outcome 4 (5%) ── Lose EVERYTHING (down to 1 chip) ──────────────────
+	case failRoll < 0.28:
 		lose := bal - 1
 		if lose < 0 {
 			lose = 0
@@ -222,8 +227,8 @@ func robFailure(client *Client, location string, bal int64) {
 				"💀 New balance: 1 chip",
 			location))
 
-	// ── Outcome 5 (10%) ── Lose 60%, IC mute 3 min ───────────────────────────
-	case failRoll < 0.85:
+	// ── Outcome 5 (7%) ── Lose 60%, IC mute 3 min ────────────────────────────
+	case failRoll < 0.35:
 		lose := (bal * 6) / 10
 		newBal := drainChips(ipid, lose)
 		applyMute(client, ICMuted, 3*time.Minute)
@@ -236,8 +241,8 @@ func robFailure(client *Client, location string, bal int64) {
 				"💀 New balance: %d chips",
 			location, lose, newBal))
 
-	// ── Outcome 6 (5%) ── Lose 95%, OOC mute 10 min ──────────────────────────
-	case failRoll < 0.90:
+	// ── Outcome 6 (4%) ── Lose 95%, OOC mute 10 min ─────────────────────────
+	case failRoll < 0.39:
 		lose := (bal * 19) / 20
 		newBal := drainChips(ipid, lose)
 		applyMute(client, OOCMuted, 10*time.Minute)
@@ -251,7 +256,7 @@ func robFailure(client *Client, location string, bal int64) {
 			location, newBal))
 
 	// ── Outcome 7 (5%) ── Lose 40% ───────────────────────────────────────────
-	case failRoll < 0.95:
+	case failRoll < 0.44:
 		lose := (bal * 2) / 5
 		newBal := drainChips(ipid, lose)
 		sendAreaGamblingMessage(client.Area(),
@@ -264,7 +269,7 @@ func robFailure(client *Client, location string, bal int64) {
 			location, lose, newBal))
 
 	// ── Outcome 8 (5%) ── Lose 70%, IC mute 2 min ────────────────────────────
-	default:
+	case failRoll < 0.49:
 		lose := (bal * 7) / 10
 		newBal := drainChips(ipid, lose)
 		applyMute(client, ICMuted, 2*time.Minute)
@@ -274,6 +279,185 @@ func robFailure(client *Client, location string, bal int64) {
 			"🐕 THE DOG. Nobody warned you about the dog at %s.\n"+
 				"Vet bills for the dog (yes, really), damages, and hush money totalled %d chips.\n"+
 				"You can't speak for the next 2 minutes — IC muted.\n"+
+				"💀 New balance: %d chips",
+			location, lose, newBal))
+
+	// ── Outcome 9 (7%) ── Lose 55% ───────────────────────────────────────────
+	case failRoll < 0.56:
+		lose := (bal * 55) / 100
+		newBal := drainChips(ipid, lose)
+		sendAreaGamblingMessage(client.Area(),
+			fmt.Sprintf("👗 ROB FAIL: %s robbed the wrong building — it was a costume shop! -%d chips.", client.OOCName(), lose))
+		client.SendServerMessage(fmt.Sprintf(
+			"👗 WRONG BUILDING! You confidently walked into what you thought was %s.\n"+
+				"It was a costume shop. You stole a rack of Halloween wigs.\n"+
+				"By the time you realised, the actual security from next door had surrounded you.\n"+
+				"Legal settlement and embarrassment tax: %d chips.\n"+
+				"💀 New balance: %d chips",
+			location, lose, newBal))
+
+	// ── Outcome 10 (6%) ── Lose 65% ──────────────────────────────────────────
+	case failRoll < 0.62:
+		lose := (bal * 65) / 100
+		newBal := drainChips(ipid, lose)
+		sendAreaGamblingMessage(client.Area(),
+			fmt.Sprintf("🔔 ROB FAIL: %s tripped the fire alarm at %s and got caught in the evacuation! -%d chips.", client.OOCName(), location, lose))
+		client.SendServerMessage(fmt.Sprintf(
+			"🔔 FIRE ALARM! You bumped a sensor at %s and set off the building-wide alarm.\n"+
+				"Everyone evacuated — including you — and the fire department found you still clutching a half-open vault door.\n"+
+				"Fines, damages, and the cost of the emergency response: %d chips.\n"+
+				"💀 New balance: %d chips",
+			location, lose, newBal))
+
+	// ── Outcome 11 (5%) ── Lose 45%, IC mute 5 min ───────────────────────────
+	case failRoll < 0.67:
+		lose := (bal * 45) / 100
+		newBal := drainChips(ipid, lose)
+		applyMute(client, ICMuted, 5*time.Minute)
+		sendAreaGamblingMessage(client.Area(),
+			fmt.Sprintf("🤧 ROB FAIL: %s sneezed at exactly the wrong moment inside %s! -%d chips.", client.OOCName(), location, lose))
+		client.SendServerMessage(fmt.Sprintf(
+			"🤧 ACHOO! You were crouched silently in the vents above %s when your nose decided NOW was the time.\n"+
+				"Every guard in the building heard it. You were caught, mid-sneeze, dangling from a ceiling tile.\n"+
+				"Medical bills (you broke your nose on the floor) plus fines: %d chips.\n"+
+				"Your sinuses are still recovering — IC muted for 5 minutes.\n"+
+				"💀 New balance: %d chips",
+			location, lose, newBal))
+
+	// ── Outcome 12 (5%) ── Lose 80% ──────────────────────────────────────────
+	case failRoll < 0.72:
+		lose := (bal * 4) / 5
+		newBal := drainChips(ipid, lose)
+		sendAreaGamblingMessage(client.Area(),
+			fmt.Sprintf("📞 ROB FAIL: %s accidentally called 911 instead of the getaway driver from %s! -%d chips.", client.OOCName(), location, lose))
+		client.SendServerMessage(fmt.Sprintf(
+			"📞 WRONG NUMBER! While fleeing %s you tried to call your getaway driver.\n"+
+				"You called 911 instead. The dispatcher was very helpful and dispatched six units immediately.\n"+
+				"You stayed on the line for 40 seconds before you realised.\n"+
+				"Legal fees and the dispatcher's therapy bill: %d chips.\n"+
+				"💀 New balance: %d chips",
+			location, lose, newBal))
+
+	// ── Outcome 13 (4%) ── Lose 35% ──────────────────────────────────────────
+	case failRoll < 0.76:
+		lose := (bal * 35) / 100
+		newBal := drainChips(ipid, lose)
+		sendAreaGamblingMessage(client.Area(),
+			fmt.Sprintf("🚗 ROB FAIL: The getaway car outside %s had a flat tyre. %s had to take the bus. -%d chips.", location, client.OOCName(), lose))
+		client.SendServerMessage(fmt.Sprintf(
+			"🚗 FLAT TYRE! You sprinted out of %s with the loot and found your getaway car listing sideways on a flat.\n"+
+				"You had to take the bus home. The bus driver recognised you from the news.\n"+
+				"He didn't say anything, but the look he gave you cost you %d chips in sheer spiritual damage.\n"+
+				"💀 New balance: %d chips",
+			location, lose, newBal))
+
+	// ── Outcome 14 (4%) ── Lose 85%, OOC mute 7 min ─────────────────────────
+	case failRoll < 0.80:
+		lose := (bal * 85) / 100
+		newBal := drainChips(ipid, lose)
+		applyMute(client, OOCMuted, 7*time.Minute)
+		sendAreaGamblingMessage(client.Area(),
+			fmt.Sprintf("📺 ROB FAIL: A news crew was filming outside %s when %s came sprinting out! -%d chips.", location, client.OOCName(), lose))
+		client.SendServerMessage(fmt.Sprintf(
+			"📺 LIVE ON AIR! A local news crew was doing a feel-good piece outside %s.\n"+
+				"You burst through the doors, cash bag over your shoulder, directly into the shot.\n"+
+				"The anchor said \"...and there you have it.\" The clip went global.\n"+
+				"Lawyers, PR crisis management, and the anchor's book deal cut: %d chips.\n"+
+				"You're OOC-gagged for 7 minutes — your publicist says no interviews.\n"+
+				"💀 New balance: %d chips",
+			location, lose, newBal))
+
+	// ── Outcome 15 (4%) ── Lose 20% ──────────────────────────────────────────
+	case failRoll < 0.84:
+		lose := bal / 5
+		newBal := drainChips(ipid, lose)
+		sendAreaGamblingMessage(client.Area(),
+			fmt.Sprintf("🏜️ ROB FAIL: The vault at %s was already empty when %s arrived. -%d chips.", location, client.OOCName(), lose))
+		client.SendServerMessage(fmt.Sprintf(
+			"🏜️ ALREADY ROBBED! You got all the way into the vault at %s and found... nothing.\n"+
+				"Some other crew beat you by about four minutes. You saw their tyre tracks leaving.\n"+
+				"You still had to pay the locksmith, and you broke your favourite crowbar.\n"+
+				"Wasted expenses: %d chips.\n"+
+				"💀 New balance: %d chips",
+			location, lose, newBal))
+
+	// ── Outcome 16 (3%) ── Lose EVERYTHING (IRS), OOC mute 5 min ─────────────
+	case failRoll < 0.87:
+		lose := bal - 1
+		if lose < 0 {
+			lose = 0
+		}
+		drainChips(ipid, lose)
+		applyMute(client, OOCMuted, 5*time.Minute)
+		sendAreaGamblingMessage(client.Area(),
+			fmt.Sprintf("🧾 ROB FAIL: A time-travelling IRS agent audited %s ON THE SPOT at %s. Lost everything!", client.OOCName(), location))
+		client.SendServerMessage(fmt.Sprintf(
+			"🧾 TIME-TRAVELLING IRS AGENT! You had just cracked the vault at %s.\n"+
+				"A figure in a grey suit materialised from thin air, showed you a badge dated 2047, and said:\n"+
+				"\"We've been watching your chip transactions across multiple timelines.\"\n"+
+				"Every chip, seized retroactively. You have 1 chip left (pre-1985 earnings, non-taxable).\n"+
+				"You're OOC-gagged for 5 minutes while they finish the audit.\n"+
+				"💀 New balance: 1 chip",
+			location))
+
+	// ── Outcome 17 (3%) ── Lose 25% ──────────────────────────────────────────
+	case failRoll < 0.90:
+		lose := bal / 4
+		newBal := drainChips(ipid, lose)
+		sendAreaGamblingMessage(client.Area(),
+			fmt.Sprintf("💬 ROB FAIL: The security guard at %s just wanted to talk to %s. It went poorly. -%d chips.", location, client.OOCName(), lose))
+		client.SendServerMessage(fmt.Sprintf(
+			"💬 THE GUARD WANTED TO CHAT! The security guard at %s didn't tackle you — he just wanted to talk.\n"+
+				"He asked about your feelings, your goals, and whether you'd considered a career in hospitality.\n"+
+				"You were so disarmed by his sincerity that you ended up in a two-hour heart-to-heart.\n"+
+				"By the end you'd voluntarily donated %d chips to his retirement fund. You feel weird about it.\n"+
+				"💀 New balance: %d chips",
+			location, lose, newBal))
+
+	// ── Outcome 18 (3%) ── Lose 60%, IC mute 4 min ───────────────────────────
+	case failRoll < 0.93:
+		lose := (bal * 3) / 5
+		newBal := drainChips(ipid, lose)
+		applyMute(client, ICMuted, 4*time.Minute)
+		sendAreaGamblingMessage(client.Area(),
+			fmt.Sprintf("🧼 ROB FAIL: %s slipped on a wet floor sign at %s and got concussed. -%d chips.", client.OOCName(), location, lose))
+		client.SendServerMessage(fmt.Sprintf(
+			"🧼 WET FLOOR! You were this close to the exit at %s when you hit a freshly mopped patch.\n"+
+				"The wet floor sign was right there. In fact, you landed on it.\n"+
+				"Concussion, three cracked ribs, and the janitor's legal claim: %d chips.\n"+
+				"Your brain is rattled — IC muted for 4 minutes.\n"+
+				"💀 New balance: %d chips",
+			location, lose, newBal))
+
+	// ── Outcome 19 (3%) ── Lose 70%, OOC mute 6 min ─────────────────────────
+	case failRoll < 0.96:
+		lose := (bal * 7) / 10
+		newBal := drainChips(ipid, lose)
+		applyMute(client, OOCMuted, 6*time.Minute)
+		sendAreaGamblingMessage(client.Area(),
+			fmt.Sprintf("📱 ROB FAIL: %s went viral on a livestream mid-heist at %s! -%d chips.", client.OOCName(), location, lose))
+		client.SendServerMessage(fmt.Sprintf(
+			"📱 LIVESTREAMED! Some influencer was doing a vlog outside %s and caught your entire heist on camera.\n"+
+				"Peak concurrent viewers: 340,000. Comments were mostly laughing emojis.\n"+
+				"The clip was used as evidence, memed into oblivion, and sold as an NFT.\n"+
+				"Lawyers and reputation repair: %d chips.\n"+
+				"You're OOC-gagged for 6 minutes on your publicist's orders.\n"+
+				"💀 New balance: %d chips",
+			location, lose, newBal))
+
+	// ── Outcome 20 (4%) ── Lose 80%, OOC mute 8 min ─────────────────────────
+	default:
+		lose := (bal * 4) / 5
+		newBal := drainChips(ipid, lose)
+		applyMute(client, OOCMuted, 8*time.Minute)
+		sendAreaGamblingMessage(client.Area(),
+			fmt.Sprintf("🕵️ ROB FAIL: %s's getaway driver at %s turned out to be an undercover cop! -%d chips.", client.OOCName(), location, lose))
+		client.SendServerMessage(fmt.Sprintf(
+			"🕵️ UNDERCOVER COP! Your getaway driver outside %s was very chatty on the drive over.\n"+
+				"Suspiciously chatty. Also he was wearing a wire. Also he arrested you at the lights.\n"+
+				"He gave you a 10/10 for audacity on his incident report.\n"+
+				"Legal fees, impound fees, and the fine for littering (you dropped a chip): %d chips.\n"+
+				"OOC-gagged for 8 minutes — your lawyer says say nothing.\n"+
 				"💀 New balance: %d chips",
 			location, lose, newBal))
 	}
