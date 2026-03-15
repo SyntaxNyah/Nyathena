@@ -61,7 +61,10 @@ const MaxChipBalance = 10_000_000
 const ver = 13
 
 // MaxFavourites is the maximum number of favourite characters a player can save.
-const MaxFavourites = 20
+const MaxFavourites = 100
+
+// ErrFavouriteLimitReached is returned by AddFavourite when the player's wardrobe is full.
+var ErrFavouriteLimitReached = fmt.Errorf("wardrobe full: limit is %d favourites", MaxFavourites)
 
 // Persistent punishment kind constants.
 const (
@@ -1550,23 +1553,35 @@ return tagID
 }
 
 // AddFavourite adds a character to the player's wardrobe favourites.
-// Returns an error if the character is already in the list or the limit is exceeded.
+// Returns ErrFavouriteLimitReached when the cap is hit; a UNIQUE-constraint
+// error if the character is already saved; or nil on success.
+// The limit check and insert are performed in a single atomic statement,
+// eliminating the TOCTOU window present in a separate SELECT + INSERT pair.
+//
+// Row-affected semantics:
+//   - rows=1, err=nil  → inserted successfully.
+//   - rows=0, err=nil  → WHERE (count < limit) was false; limit reached.
+//   - rows=0, err!=nil → UNIQUE constraint violation (duplicate) or other DB error.
+//
+// Only the limit-reached path (rows=0, err=nil) is unambiguous: a UNIQUE
+// violation always produces a non-nil error, never silently zero rows.
 func AddFavourite(username, charName string) error {
 	if db == nil {
 		return nil
 	}
-	var count int
-	if err := db.QueryRow("SELECT COUNT(*) FROM FAVOURITES WHERE USERNAME = ?", username).Scan(&count); err != nil {
+	res, err := db.Exec(`
+		INSERT INTO FAVOURITES(USERNAME, CHAR_NAME, ADDED_AT)
+		SELECT ?, ?, ?
+		WHERE (SELECT COUNT(*) FROM FAVOURITES WHERE USERNAME = ?) < ?`,
+		username, charName, time.Now().Unix(), username, MaxFavourites,
+	)
+	if err != nil {
 		return err
 	}
-	if count >= MaxFavourites {
-		return fmt.Errorf("favourite limit reached (%d)", MaxFavourites)
+	if n, _ := res.RowsAffected(); n == 0 {
+		return ErrFavouriteLimitReached
 	}
-	_, err := db.Exec(
-		"INSERT INTO FAVOURITES(USERNAME, CHAR_NAME, ADDED_AT) VALUES(?, ?, ?)",
-		username, charName, time.Now().Unix(),
-	)
-	return err
+	return nil
 }
 
 // RemoveFavourite removes a character from the player's wardrobe favourites.
@@ -1579,17 +1594,21 @@ func RemoveFavourite(username, charName string) error {
 }
 
 // GetFavourites returns all favourite character names for the given username,
-// ordered by the time they were added.
+// ordered by the time they were added. The returned slice is pre-allocated to
+// MaxFavourites capacity to avoid incremental re-allocations.
 func GetFavourites(username string) ([]string, error) {
 	if db == nil {
 		return nil, nil
 	}
-	rows, err := db.Query("SELECT CHAR_NAME FROM FAVOURITES WHERE USERNAME = ? ORDER BY ADDED_AT ASC", username)
+	rows, err := db.Query(
+		"SELECT CHAR_NAME FROM FAVOURITES WHERE USERNAME = ? ORDER BY ADDED_AT ASC",
+		username,
+	)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var chars []string
+	chars := make([]string, 0, MaxFavourites)
 	for rows.Next() {
 		var name string
 		if err := rows.Scan(&name); err != nil {
@@ -1606,6 +1625,9 @@ func IsFavourite(username, charName string) (bool, error) {
 		return false, nil
 	}
 	var count int
-	err := db.QueryRow("SELECT COUNT(*) FROM FAVOURITES WHERE USERNAME = ? AND CHAR_NAME = ?", username, charName).Scan(&count)
+	err := db.QueryRow(
+		"SELECT COUNT(*) FROM FAVOURITES WHERE USERNAME = ? AND CHAR_NAME = ?",
+		username, charName,
+	).Scan(&count)
 	return count > 0, err
 }

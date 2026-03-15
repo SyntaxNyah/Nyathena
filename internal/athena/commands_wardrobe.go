@@ -17,6 +17,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>. */
 package athena
 
 import (
+	"errors"
 	"fmt"
 	"strings"
 
@@ -42,8 +43,8 @@ func cmdFavourite(client *Client, args []string, _ string) {
 		client.SendServerMessage(fmt.Sprintf("Character \"%v\" was not found in the character list.", charName))
 		return
 	}
-	// Use the canonical character name from the list so that the stored name
-	// always matches the exact casing in characters[].
+	// Use the canonical character name from the list so the stored name always
+	// matches the exact casing in characters[].
 	canonicalName := characters[charID]
 	username := client.ModName()
 
@@ -63,7 +64,7 @@ func cmdFavourite(client *Client, args []string, _ string) {
 	}
 
 	if err := db.AddFavourite(username, canonicalName); err != nil {
-		if strings.Contains(err.Error(), "favourite limit reached") {
+		if errors.Is(err, db.ErrFavouriteLimitReached) {
 			client.SendServerMessage(fmt.Sprintf(
 				"Your wardrobe is full! You can save up to %d favourites.\n"+
 					"Use /favourite <char> on an existing favourite to remove it.", db.MaxFavourites))
@@ -92,70 +93,77 @@ func cmdWardrobe(client *Client, args []string, _ string) {
 	}
 
 	username := client.ModName()
+
+	// ── Swap path ────────────────────────────────────────────────────────────
+	// Resolve character and check membership with a single indexed DB lookup
+	// instead of fetching the entire favourites list just to scan it.
+	if len(args) > 0 {
+		charName := strings.Join(args, " ")
+		charID := getCharacterID(charName)
+		if charID == -1 {
+			client.SendServerMessage(fmt.Sprintf("Character \"%v\" was not found in the character list.", charName))
+			return
+		}
+		canonicalName := characters[charID]
+
+		isFav, err := db.IsFavourite(username, canonicalName)
+		if err != nil {
+			client.SendServerMessage("Failed to check wardrobe. Please try again.")
+			return
+		}
+		if !isFav {
+			client.SendServerMessage(fmt.Sprintf(
+				"\"%v\" is not in your wardrobe.\n"+
+					"Use /favourite %v to add them first, then /wardrobe %v to swap.",
+				canonicalName, canonicalName, canonicalName))
+			return
+		}
+
+		// Respect char-stuck punishment.
+		if stuckID := client.charStuckID(); stuckID >= 0 && charID != stuckID {
+			client.SendServerMessage(fmt.Sprintf(
+				"You are character stuck as %v and cannot change characters.", characters[stuckID]))
+			return
+		}
+
+		if client.Area().IsTaken(charID) && client.CharID() != charID {
+			client.SendServerMessage(fmt.Sprintf(
+				"Character \"%v\" is already taken in this area.", canonicalName))
+			return
+		}
+
+		client.ChangeCharacter(charID)
+		client.SendServerMessage(fmt.Sprintf("👗 Swapped to %v from your wardrobe!", canonicalName))
+		return
+	}
+
+	// ── List path ─────────────────────────────────────────────────────────────
 	favourites, err := db.GetFavourites(username)
 	if err != nil {
 		client.SendServerMessage("Failed to load wardrobe. Please try again.")
 		return
 	}
 
-	// No argument: show the list.
-	if len(args) == 0 {
-		if len(favourites) == 0 {
-			client.SendServerMessage(
-				"👗 Your wardrobe is empty!\n\n" +
-					"Add characters with /favourite <char name>.\n" +
-					"Then use /wardrobe <char name> to swap to them instantly.")
-			return
-		}
-		var sb strings.Builder
-		sb.WriteString(fmt.Sprintf("👗 Your Wardrobe (%d/%d):\n", len(favourites), db.MaxFavourites))
-		for i, name := range favourites {
-			sb.WriteString(fmt.Sprintf("  %2d. %v\n", i+1, name))
-		}
-		sb.WriteString("\nUse /wardrobe <char name> to swap to any character above.\n")
-		sb.WriteString("Use /favourite <char name> to add or remove characters.")
-		client.SendServerMessage(sb.String())
+	if len(favourites) == 0 {
+		client.SendServerMessage(
+			"👗 Your wardrobe is empty!\n\n" +
+				"Add characters with /favourite <char name>.\n" +
+				"Then use /wardrobe <char name> to swap to them instantly.")
 		return
 	}
 
-	// Argument provided: swap to that character.
-	charName := strings.Join(args, " ")
-	charID := getCharacterID(charName)
-	if charID == -1 {
-		client.SendServerMessage(fmt.Sprintf("Character \"%v\" was not found in the character list.", charName))
-		return
+	// Pre-size the builder. Estimates per segment:
+	//   25 B  — header line "👗 Your Wardrobe (N/100):\n"
+	//   35 B  — per entry "  NN. <char name>\n"  (avg ~12-char name + index + spacing)
+	//   90 B  — two footer lines
+	var sb strings.Builder
+	sb.Grow(25 + len(favourites)*35 + 90)
+	fmt.Fprintf(&sb, "👗 Your Wardrobe (%d/%d):\n", len(favourites), db.MaxFavourites)
+	for i, name := range favourites {
+		fmt.Fprintf(&sb, "  %2d. %v\n", i+1, name)
 	}
-	canonicalName := characters[charID]
-
-	// Verify the character is in the player's favourites.
-	isFav := false
-	for _, name := range favourites {
-		if strings.EqualFold(name, canonicalName) {
-			isFav = true
-			break
-		}
-	}
-	if !isFav {
-		client.SendServerMessage(fmt.Sprintf(
-			"\"%v\" is not in your wardrobe.\n"+
-				"Use /favourite %v to add them first, then /wardrobe %v to swap.",
-			canonicalName, canonicalName, canonicalName))
-		return
-	}
-
-	// Respect char-stuck punishment.
-	if stuckID := client.charStuckID(); stuckID >= 0 && charID != stuckID {
-		client.SendServerMessage(fmt.Sprintf(
-			"You are character stuck as %v and cannot change characters.", characters[stuckID]))
-		return
-	}
-
-	if client.Area().IsTaken(charID) && client.CharID() != charID {
-		client.SendServerMessage(fmt.Sprintf(
-			"Character \"%v\" is already taken in this area.", canonicalName))
-		return
-	}
-
-	client.ChangeCharacter(charID)
-	client.SendServerMessage(fmt.Sprintf("👗 Swapped to %v from your wardrobe!", canonicalName))
+	sb.WriteString("\nUse /wardrobe <char name> to swap to any character above.\n")
+	sb.WriteString("Use /favourite <char name> to add or remove characters.")
+	client.SendServerMessage(sb.String())
 }
+
