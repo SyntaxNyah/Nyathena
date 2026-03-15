@@ -564,9 +564,9 @@ func LinkIPIDToUser(username, ipid string) error {
 
 	// Migrate chip balance from the old IPID to the new IPID so that players
 	// never lose their earned chips when reconnecting from a different IP address.
-	// The new IPID may already have a default starting balance (e.g. 500 chips
-	// assigned by EnsureChipBalance on connect), so we keep whichever balance is
-	// higher rather than blindly replacing or summing (which could inflate chips).
+	// The new IPID may have a default starting balance seeded by EnsureChipBalance,
+	// but the old IPID's earned balance is always the canonical value and must
+	// replace any placeholder on the new IPID unconditionally.
 	var oldChips int64
 	switch err := db.QueryRow("SELECT COALESCE(BALANCE, 0) FROM CHIPS WHERE IPID = ?", oldIPID).Scan(&oldChips); {
 	case err == sql.ErrNoRows:
@@ -578,7 +578,7 @@ func LinkIPIDToUser(username, ipid string) error {
 	if oldChips > 0 {
 		if _, err := db.Exec(`
 			INSERT INTO CHIPS(IPID, BALANCE) VALUES(?, ?)
-			ON CONFLICT(IPID) DO UPDATE SET BALANCE = MAX(BALANCE, excluded.BALANCE)`,
+			ON CONFLICT(IPID) DO UPDATE SET BALANCE = excluded.BALANCE`,
 			ipid, oldChips); err != nil {
 			return err
 		}
