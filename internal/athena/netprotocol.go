@@ -742,7 +742,7 @@ func pktIC(client *Client, p *packet.Packet) {
 		return
 	}
 
-	writeToAreaFrom(client.Ipid(), client.Area(), "MS", args...)
+	writeToAreaFrom(client.Ipid(), permissions.IsModerator(client.Perms()), client.Area(), "MS", args...)
 	addToBuffer(client, "IC", "\""+args[4]+"\"", false)
 }
 
@@ -927,7 +927,7 @@ func pktOOC(client *Client, p *packet.Packet) {
 		handleTormentedOOC(client, encode(client.OOCName()), msg)
 		return
 	}
-	writeToAreaFrom(client.Ipid(), client.Area(), "CT", encode(client.OOCName()), msg, "0")
+	writeToAreaFrom(client.Ipid(), permissions.IsModerator(client.Perms()), client.Area(), "CT", encode(client.OOCName()), msg, "0")
 	addToBuffer(client, "OOC", "\""+msg+"\"", false)
 }
 

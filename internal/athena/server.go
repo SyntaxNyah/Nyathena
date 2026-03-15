@@ -713,9 +713,11 @@ func writeToArea(area *area.Area, header string, contents ...string) {
 
 // writeToAreaFrom sends a message to all clients in a given area, skipping
 // any recipient that has permanently ignored the sender's IPID.
-func writeToAreaFrom(senderIPID string, area *area.Area, header string, contents ...string) {
+// If senderIsMod is true the ignore list is bypassed so moderator messages
+// always reach every client in the area.
+func writeToAreaFrom(senderIPID string, senderIsMod bool, area *area.Area, header string, contents ...string) {
 	clients.ForEach(func(client *Client) {
-		if client.Area() == area && !client.IgnoresIPID(senderIPID) {
+		if client.Area() == area && (senderIsMod || !client.IgnoresIPID(senderIPID)) {
 			client.SendPacket(header, contents...)
 		}
 	})
