@@ -654,9 +654,10 @@ func cmdLovebomb(client *Client, args []string, usage string) {
 			// /lovebomb global off — remove from everyone in area
 			var count int
 			var report string
-			for c := range clients.GetAllClients() {
-				if c.Area() != client.Area() || !c.HasPunishment(PunishmentLovebomb) {
-					continue
+			targetArea := client.Area()
+			clients.ForEach(func(c *Client) {
+				if c.Area() != targetArea || !c.HasPunishment(PunishmentLovebomb) {
+					return
 				}
 				c.RemovePunishment(PunishmentLovebomb)
 				if err := db.DeleteTextPunishment(c.Ipid(), int(PunishmentLovebomb)); err != nil {
@@ -665,7 +666,7 @@ func cmdLovebomb(client *Client, args []string, usage string) {
 				c.SendServerMessage("Love bomb punishment has been removed.")
 				count++
 				report += fmt.Sprintf("%v, ", c.Uid())
-			}
+			})
 			report = strings.TrimSuffix(report, ", ")
 			client.SendServerMessage(fmt.Sprintf("Removed lovebomb from %v clients in area.", count))
 			addToBuffer(client, "CMD", fmt.Sprintf("Removed area lovebomb from %v.", report), false)
@@ -675,17 +676,19 @@ func cmdLovebomb(client *Client, args []string, usage string) {
 		// /lovebomb global — apply to all non-moderators in area (excluding issuer)
 		var count int
 		var report string
-		for c := range clients.GetAllClients() {
-			if c.Area() != client.Area() || c.Uid() == client.Uid() {
-				continue
+		issuerUID := client.Uid()
+		targetArea := client.Area()
+		clients.ForEach(func(c *Client) {
+			if c.Area() != targetArea || c.Uid() == issuerUID {
+				return
 			}
 			if permissions.IsModerator(c.Perms()) {
-				continue
+				return
 			}
 			apply(c, -1)
 			count++
 			report += fmt.Sprintf("%v, ", c.Uid())
-		}
+		})
 		report = strings.TrimSuffix(report, ", ")
 		client.SendServerMessage(fmt.Sprintf("Applied lovebomb to %v non-moderator clients in area.", count))
 		addToBuffer(client, "CMD", fmt.Sprintf("Applied area lovebomb to %v.", report), false)

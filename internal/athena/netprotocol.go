@@ -136,7 +136,7 @@ func pktReqChar(client *Client, _ *packet.Packet) {
 
 // Handles RM#%
 func pktReqAM(client *Client, _ *packet.Packet) {
-	client.write(fmt.Sprintf("SM#%v#%v#%%", areaNames, strings.Join(music, "#")))
+	client.write(smPacket)
 }
 
 // Handles RD#%
@@ -410,14 +410,14 @@ func pktIC(client *Client, p *packet.Packet) {
 					// allocating a full slice — O(N) single pass, zero extra heap.
 					var chosen *Client
 					n := 0
-					for c := range clients.GetAllClients() {
+					clients.ForEach(func(c *Client) {
 						if c.Area() == client.Area() && c.Uid() != client.Uid() {
 							n++
 							if rand.Intn(n) == 0 {
 								chosen = c
 							}
 						}
-					}
+					})
 					if chosen != nil {
 						targetShowname = clientDisplayName(chosen)
 					}
@@ -991,12 +991,13 @@ func pktModcall(client *Client, p *packet.Packet) {
 		s = p.Body[0]
 	}
 	addToBuffer(client, "MOD", fmt.Sprintf("Called moderator for reason: %v", s), false)
-	for c := range clients.GetAllClients() {
+	modcallMsg := fmt.Sprintf("MODCALL\n----------\nArea: %v\nUser: [%v] %v\nIPID: %v\nReason: %v",
+		client.Area().Name(), client.Uid(), client.CurrentCharacter(), client.Ipid(), s)
+	clients.ForEach(func(c *Client) {
 		if c.Authenticated() && permissions.IsModerator(c.Perms()) {
-			c.SendPacket("ZZ", fmt.Sprintf("MODCALL\n----------\nArea: %v\nUser: [%v] %v\nIPID: %v\nReason: %v",
-				client.Area().Name(), client.Uid(), client.CurrentCharacter(), client.Ipid(), s))
+			c.SendPacket("ZZ", modcallMsg)
 		}
-	}
+	})
 	if enableDiscord {
 		err := webhook.PostModcall(client.CurrentCharacter(), client.Area().Name(), s)
 		if err != nil {

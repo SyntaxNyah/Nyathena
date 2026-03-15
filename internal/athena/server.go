@@ -63,6 +63,7 @@ var (
 	charactersByName                       map[string]int // O(1) lookup: lowercase name → character ID
 	areas                                  []*area.Area
 	areaNames                              string
+	smPacket                               string // pre-built SM#<areas>#<music>#% packet; built once at startup
 	bgListStr                              string // pre-built background list for /bglist; zero alloc per call
 	areaIndexMap                           map[*area.Area]int // pre-computed index lookup for O(1) getAreaIndex
 	roles                                  []permissions.Role
@@ -437,6 +438,10 @@ func NewServer(conf *settings.Config) (*Server, error) {
 	enableDiscord = s.enableDiscord
 	tournamentParticipants = s.tournamentParticipants
 
+	// Pre-build the SM packet (sent to every client on join) once at startup
+	// so that pktReqAM performs a single write with no allocations.
+	smPacket = buildSMPacket(s.areaNames, s.music)
+
 	initCommands()
 	initAutoMod(conf)
 	go startConnTrackerCleanup()
@@ -672,9 +677,9 @@ func HandleWS(w http.ResponseWriter, r *http.Request) {
 
 // CleanupServer closes all connections to the server and closes the database.
 func (s *Server) CleanupServer() {
-	for client := range clients.GetAllClients() {
+	clients.ForEach(func(client *Client) {
 		client.conn.Close()
-	}
+	})
 	db.Close()
 }
 
@@ -758,9 +763,9 @@ func getAreaIndex(a *area.Area) int {
 
 // sendPlayerListToClient sends PR and PU packets for all currently joined players to a new client.
 func sendPlayerListToClient(newClient *Client) {
-	for c := range clients.GetAllClients() {
+	clients.ForEach(func(c *Client) {
 		if c.Uid() == -1 || c == newClient || c.Hidden() {
-			continue
+			return
 		}
 		uid := strconv.Itoa(c.Uid())
 		newClient.SendPacket("PR", uid, "0")
@@ -770,7 +775,7 @@ func sendPlayerListToClient(newClient *Client) {
 		newClient.SendPacket("PU", uid, "1", c.CurrentCharacter())
 		newClient.SendPacket("PU", uid, "2", decode(c.Showname()))
 		newClient.SendPacket("PU", uid, "3", strconv.Itoa(getAreaIndex(c.Area())))
-	}
+	})
 }
 
 // broadcastPlayerJoin sends PR and PU packets to all clients when a new player joins.
@@ -863,13 +868,7 @@ func getClientByUid(uid int) (*Client, error) {
 
 // getClientsByIpid returns all clients with the given ipid.
 func getClientsByIpid(ipid string) []*Client {
-	var returnlist []*Client
-	for c := range clients.GetAllClients() {
-		if c.Ipid() == ipid {
-			returnlist = append(returnlist, c)
-		}
-	}
-	return returnlist
+	return clients.GetByIPID(ipid)
 }
 
 // sendAreaServerMessage sends a server OOC message to all clients in an area.
@@ -1408,6 +1407,25 @@ func estimateJoinedLen(ss []string) int {
 	return n
 }
 
+// buildSMPacket constructs the full SM#<areas>#<music>#% packet string that is
+// sent verbatim to every client on join. Building it once at startup avoids a
+// strings.Join allocation on every connection.
+func buildSMPacket(areaNamesStr string, musicList []string) string {
+	// SM# + areaNames + # + music[0] + # + ... + music[n-1] + #%
+	// pre-size: len("SM#") + len(areaNamesStr) + len("#") + joined music + len("#%")
+	size := 3 + len(areaNamesStr) + 1 + estimateJoinedLen(musicList) + 2
+	var b strings.Builder
+	b.Grow(size)
+	b.WriteString("SM#")
+	b.WriteString(areaNamesStr)
+	for _, m := range musicList {
+		b.WriteByte('#')
+		b.WriteString(m)
+	}
+	b.WriteString("#%")
+	return b.String()
+}
+
 // hourlyChipMsg is the notification sent when a player earns exactly 1 chip from the
 // hourly ticker.  Defined as a constant to avoid a fmt.Sprintf allocation every tick.
 const hourlyChipMsg = "💰 You earned 1 chip for being online! Balance updated."
@@ -1431,15 +1449,15 @@ func startHourlyChipAward() {
 		// Capture now once so all per-client calculations use the same instant,
 		// avoiding N repeated time.Now() syscalls inside the loop.
 		now := time.Now()
-		for client := range clients.GetAllClients() {
+		clients.ForEach(func(client *Client) {
 			connAt := client.ConnectedAt()
 			if connAt.IsZero() {
-				continue
+				return
 			}
 			sessionHours := int64(now.Sub(connAt).Seconds()) / secondsPerHour
 			toAward := sessionHours - client.SessionChipsAwarded()
 			if toAward <= 0 {
-				continue
+				return
 			}
 			ipid := client.Ipid()
 			// Apply any passive income bonus passes the player has purchased.
@@ -1448,7 +1466,7 @@ func startHourlyChipAward() {
 			chipsToAward := toAward * chipsPerHour
 			if _, err := db.AddChips(ipid, chipsToAward); err != nil {
 				logger.LogErrorf("startHourlyChipAward: AddChips failed for %v: %v", ipid, err)
-				continue
+				return
 			}
 			// Track hours credited (not chips) so the next tick knows where to resume.
 			client.AddSessionChipsAwarded(toAward)
@@ -1461,6 +1479,6 @@ func startHourlyChipAward() {
 				msg = fmt.Sprintf("💰 You earned %d chips for being online! Balance updated.", chipsToAward)
 			}
 			client.SendServerMessage(msg)
-		}
+		})
 	}
 }

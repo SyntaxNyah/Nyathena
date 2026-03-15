@@ -87,9 +87,10 @@ func ListenInput() {
 				logger.LogInfo("Not enough arguments for command say. Usage: say <message>.")
 				break
 			}
-			for c := range clients.GetAllClients() {
-				c.SendServerMessage(cmd[1])
-			}
+			msg := cmd[1]
+			clients.ForEach(func(c *Client) {
+				c.SendServerMessage(msg)
+			})
 		default:
 			logger.LogInfo("Unrecognized command")
 		}
