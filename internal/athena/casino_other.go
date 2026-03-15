@@ -1973,12 +1973,25 @@ func cmdBar(client *Client, args []string, _ string) {
 		return
 	}
 
+	// Enforce the 20-second cooldown between drink purchases.
+	if limited, remaining := client.CheckBarDrinkCooldown(); limited {
+		unit := "seconds"
+		if remaining == 1 {
+			unit = "second"
+		}
+		client.SendServerMessage(fmt.Sprintf("You're still feeling the last drink. Wait %d %s before ordering another.", remaining, unit))
+		return
+	}
+
 	// Deduct the drink cost first.
 	bal, err := db.SpendChips(client.Ipid(), drink.cost)
 	if err != nil {
 		client.SendServerMessage(fmt.Sprintf("You can't afford that drink! Your balance: %d chips (cost: %d).", bal, drink.cost))
 		return
 	}
+
+	// Start the cooldown now that the purchase is confirmed.
+	client.SetLastBarDrinkTime()
 
 	// Roll the effect.
 	effect := drink.roll()

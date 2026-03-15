@@ -193,6 +193,7 @@ type Client struct {
 	rawPktCount        int         // Packet count in the current raw-rate-limit window
 	rawPktWindowStart  time.Time   // Start time of the current raw-rate-limit window
 	lastModcallTime    time.Time   // Tracks last modcall time for cooldown
+	lastBarDrinkTime   time.Time   // Tracks last /bar buy time for cooldown
 	lastRandomCharTime time.Time   // Tracks last /randomchar time for cooldown
 	lastRandomBgTime   time.Time   // Tracks last /randombg time for cooldown
 	lastRandomSongTime time.Time   // Tracks last /randomsong time for cooldown
@@ -1311,6 +1312,31 @@ func (client *Client) CheckModcallCooldown() (bool, int) {
 func (client *Client) SetLastModcallTime() {
 	client.mu.Lock()
 	client.lastModcallTime = time.Now()
+	client.mu.Unlock()
+}
+
+const barDrinkCooldown = 20 * time.Second
+
+// CheckBarDrinkCooldown checks if the client is within the bar drink cooldown period.
+// Returns true (and the remaining seconds, rounded up) if the client must wait, false otherwise.
+func (client *Client) CheckBarDrinkCooldown() (bool, int) {
+	client.mu.Lock()
+	defer client.mu.Unlock()
+	if client.lastBarDrinkTime.IsZero() {
+		return false, 0
+	}
+	elapsed := time.Since(client.lastBarDrinkTime)
+	if elapsed < barDrinkCooldown {
+		remaining := int(math.Ceil((barDrinkCooldown - elapsed).Seconds()))
+		return true, remaining
+	}
+	return false, 0
+}
+
+// SetLastBarDrinkTime records the current time as the client's last /bar buy time.
+func (client *Client) SetLastBarDrinkTime() {
+	client.mu.Lock()
+	client.lastBarDrinkTime = time.Now()
 	client.mu.Unlock()
 }
 
