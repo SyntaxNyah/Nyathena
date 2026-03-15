@@ -408,7 +408,8 @@ func cmdCraps(client *Client, args []string, _ string) {
 const (
 	crashMinMultiplier = 1.1
 	crashMaxMultiplier = 8.0
-	crashGrowthPerSec  = 0.1 // multiplier increase per second
+	crashGrowthPerSec  = 0.1  // multiplier increase per second
+	crashHouseEdge     = 0.92 // 8% house edge applied to all crash payouts
 )
 type CrashState struct {
 	Bet       int64
@@ -454,9 +455,9 @@ func cmdCrash(client *Client, args []string, _ string) {
 			return
 		}
 
-		// Crash point: skewed distribution — multiply two random values so low
-		// multipliers are far more common, making the game harder to win.
-		crashAt := crashMinMultiplier + rand.Float64()*rand.Float64()*(crashMaxMultiplier-crashMinMultiplier)
+		// Crash point: skewed distribution — multiply three random values so low
+		// multipliers are even more common, making the game harder to win.
+		crashAt := crashMinMultiplier + rand.Float64()*rand.Float64()*rand.Float64()*(crashMaxMultiplier-crashMinMultiplier)
 
 		state := &CrashState{
 			Bet:       amount,
@@ -494,7 +495,7 @@ func cmdCrash(client *Client, args []string, _ string) {
 			return
 		}
 
-		payout := int64(float64(state.Bet) * current)
+		payout := int64(float64(state.Bet) * current * crashHouseEdge)
 		bal, _ := db.AddChips(client.Ipid(), payout)
 		sendAreaGamblingMessage(client.Area(),
 			fmt.Sprintf("🚀 Crash: %s cashed out at %.2fx for %d chips!",
@@ -879,4 +880,461 @@ func cmdWheel(client *Client, args []string, _ string) {
 		fmt.Sprintf("🎡 Wheel: %s spun and got %s! %s", client.OOCName(), seg.Label, result))
 	client.SendServerMessage(fmt.Sprintf(
 		"🎡 Prize Wheel | Landed on: %s | %s | Balance: %d", seg.Label, result, bal))
+}
+
+// ============================================================
+// /bar — Bar
+// ============================================================
+
+// barDrinkEffect holds the outcome of buying a bar drink.
+type barDrinkEffect struct {
+	chipDelta int64  // positive = gain, negative = loss (applied on top of the drink cost)
+	msg       string // private message to the buyer
+	areaMsg   string // public message broadcast to the area (empty = no broadcast)
+}
+
+// barDrink describes a single drink available at the bar.
+type barDrink struct {
+	id    string
+	emoji string
+	cost  int64
+	desc  string
+	roll  func() barDrinkEffect
+}
+
+// barMenu lists all available drinks in order.
+var barMenu = []barDrink{
+	{
+		id: "beer", emoji: "🍺", cost: 50,
+		desc: "A cold pint of beer. Simple, reliable, gets the job done.",
+		roll: func() barDrinkEffect {
+			gain := 50 + rand.Int63n(151)
+			return barDrinkEffect{
+				chipDelta: gain,
+				msg:       fmt.Sprintf("You crack open a cold one. Ahhh, refreshing! Found some loose change in the coaster. +%d chips!", gain),
+			}
+		},
+	},
+	{
+		id: "wine", emoji: "🍷", cost: 100,
+		desc: "A glass of fine red wine. Sophisticated.",
+		roll: func() barDrinkEffect {
+			gain := 100 + rand.Int63n(301)
+			return barDrinkEffect{
+				chipDelta: gain,
+				msg:       fmt.Sprintf("You swirl, sniff, and sip. Exquisite. The sommelier slips you a tip. +%d chips!", gain),
+			}
+		},
+	},
+	{
+		id: "whiskey", emoji: "🥃", cost: 250,
+		desc: "Whiskey on the rocks. Smooth and steady.",
+		roll: func() barDrinkEffect {
+			gain := 300 + rand.Int63n(301)
+			return barDrinkEffect{
+				chipDelta: gain,
+				msg:       fmt.Sprintf("You nurse the whiskey slowly. The ice clinks. Steady gains. +%d chips!", gain),
+			}
+		},
+	},
+	{
+		id: "tequila", emoji: "🥃", cost: 150,
+		desc: "A shot of tequila. Salt, lime, regret — or glory.",
+		roll: func() barDrinkEffect {
+			if rand.Intn(2) == 0 {
+				gain := int64(300 + rand.Intn(501))
+				return barDrinkEffect{
+					chipDelta: gain,
+					msg:       fmt.Sprintf("YOLO! You slam the shot. Lime in the eye, but WHO CARES — you feel INVINCIBLE! +%d chips!", gain),
+					areaMsg:   "is doing tequila shots and screaming victory! 🥃🍋",
+				}
+			}
+			loss := int64(100 + rand.Intn(151))
+			return barDrinkEffect{
+				chipDelta: -loss,
+				msg:       fmt.Sprintf("You lick salt, down the shot, and immediately regret it. The room spins. -%d chips (oops).", loss),
+				areaMsg:   "just did a tequila shot and immediately fell off their stool. 😵",
+			}
+		},
+	},
+	{
+		id: "vodka", emoji: "🍸", cost: 200,
+		desc: "A straight shot of vodka. No chaser. No mercy.",
+		roll: func() barDrinkEffect {
+			r := rand.Intn(3)
+			if r == 0 {
+				gain := int64(600 + rand.Intn(601))
+				return barDrinkEffect{
+					chipDelta: gain,
+					msg:       fmt.Sprintf("You down it without blinking. RESPECT. Someone buys you a round back. +%d chips!", gain),
+					areaMsg:   "slammed a vodka shot without even flinching. Absolute legend. 🍸",
+				}
+			} else if r == 1 {
+				loss := int64(150 + rand.Intn(101))
+				return barDrinkEffect{
+					chipDelta: -loss,
+					msg:       fmt.Sprintf("You cough. You splutter. You drop your chips. -%d chips. Should've ordered a mixer.", loss),
+					areaMsg:   "coughed violently after a straight vodka shot. 😬",
+				}
+			}
+			gain := int64(50 + rand.Intn(201))
+			return barDrinkEffect{
+				chipDelta: gain,
+				msg:       fmt.Sprintf("Smooth. You barely feel it. A nearby gambler flips you a chip. +%d chips.", gain),
+			}
+		},
+	},
+	{
+		id: "rum", emoji: "🍹", cost: 200,
+		desc: "Dark rum, straight from the barrel. Arr, ye feel lucky?",
+		roll: func() barDrinkEffect {
+			gain := int64(150 + rand.Intn(501))
+			return barDrinkEffect{
+				chipDelta: gain,
+				msg:       fmt.Sprintf("Ye raise yer glass to the sea! The pirate gods smile upon ye! +%d chips, ye scallywag!", gain),
+				areaMsg:   "is channeling their inner pirate with a glass of dark rum. 🏴‍☠️",
+			}
+		},
+	},
+	{
+		id: "gin", emoji: "🍸", cost: 300,
+		desc: "Gin and tonic, garnished with lime. Classy.",
+		roll: func() barDrinkEffect {
+			gain := 400 + rand.Int63n(401)
+			return barDrinkEffect{
+				chipDelta: gain,
+				msg:       fmt.Sprintf("You sip elegantly. The botanical notes dance on your tongue. Quite civilised! +%d chips!", gain),
+			}
+		},
+	},
+	{
+		id: "mojito", emoji: "🍹", cost: 350,
+		desc: "Fresh mint mojito. Cool, crisp, summer vibes.",
+		roll: func() barDrinkEffect {
+			gain := 500 + rand.Int63n(501)
+			return barDrinkEffect{
+				chipDelta: gain,
+				msg:       fmt.Sprintf("You slurp the mojito through a tiny straw. Instant paradise! +%d chips!", gain),
+			}
+		},
+	},
+	{
+		id: "mead", emoji: "🍯", cost: 200,
+		desc: "Ancient honey mead, brewed by monks. For the bold.",
+		roll: func() barDrinkEffect {
+			gain := 200 + rand.Int63n(401)
+			return barDrinkEffect{
+				chipDelta: gain,
+				msg:       fmt.Sprintf("You lift the tankard and drink deep! 'TIS GOOD MEAD! +%d chips, brave warrior!", gain),
+				areaMsg:   "is drinking mead like a medieval champion. ⚔️🍯",
+			}
+		},
+	},
+	{
+		id: "sake", emoji: "🍶", cost: 400,
+		desc: "Hot sake served in a tiny cup. Anime approved.",
+		roll: func() barDrinkEffect {
+			r := rand.Intn(4)
+			if r == 0 {
+				gain := int64(1000 + rand.Intn(1001))
+				return barDrinkEffect{
+					chipDelta: gain,
+					msg:       fmt.Sprintf("*cherry blossoms fall* You close your eyes. The sake reveals your true power. NANI?! +%d chips!!", gain),
+					areaMsg:   "just had a dramatic anime moment with sake and unlocked their true potential!! ✨🍶",
+				}
+			}
+			gain := int64(400 + rand.Intn(401))
+			return barDrinkEffect{
+				chipDelta: gain,
+				msg:       fmt.Sprintf("Itadakimasu! The warm sake fills you with calm confidence. +%d chips.", gain),
+			}
+		},
+	},
+	{
+		id: "champagne", emoji: "🥂", cost: 800,
+		desc: "A flute of premium champagne. Pop it like you mean it.",
+		roll: func() barDrinkEffect {
+			gain := 800 + rand.Int63n(1201)
+			return barDrinkEffect{
+				chipDelta: gain,
+				msg:       fmt.Sprintf("The cork POPS and flies across the room! Bubbles everywhere! Time to celebrate! +%d chips! 🥂", gain),
+				areaMsg:   "is popping champagne and celebrating like they already won! 🥂✨",
+			}
+		},
+	},
+	{
+		id: "margarita", emoji: "🍹", cost: 300,
+		desc: "Frozen margarita on the rocks. Brain freeze risk included.",
+		roll: func() barDrinkEffect {
+			if rand.Intn(5) == 0 {
+				return barDrinkEffect{
+					chipDelta: -50,
+					msg:       "BRAIN FREEZE! You clutch your head dramatically. Lost 50 chips in the chaos.",
+					areaMsg:   "got a brain freeze from their margarita and is doing the brain-freeze dance. 🧠❄️",
+				}
+			}
+			gain := 350 + rand.Int63n(351)
+			return barDrinkEffect{
+				chipDelta: gain,
+				msg:       fmt.Sprintf("Salt on the rim, perfect sip. Olé! +%d chips!", gain),
+			}
+		},
+	},
+	{
+		id: "moonshine", emoji: "🫙", cost: 100,
+		desc: "Illegal backwoods moonshine. Handle with extreme caution.",
+		roll: func() barDrinkEffect {
+			if rand.Intn(2) == 0 {
+				gain := int64(500 + rand.Intn(1501))
+				return barDrinkEffect{
+					chipDelta: gain,
+					msg:       fmt.Sprintf("You take a swig. Nothing happens. Then EVERYTHING happens. You see the future! +%d chips!!!", gain),
+					areaMsg:   "just drank moonshine and is now vibrating at a frequency only dogs can hear. 🫙⚡",
+				}
+			}
+			loss := int64(200 + rand.Intn(301))
+			return barDrinkEffect{
+				chipDelta: -loss,
+				msg:       fmt.Sprintf("That was... NOT water. You wake up three hours later with no eyebrows. -%d chips.", loss),
+				areaMsg:   "drank the moonshine and is now questioning all of their life choices. 🫙💀",
+			}
+		},
+	},
+	{
+		id: "absinthe", emoji: "💚", cost: 500,
+		desc: "The Green Fairy. You will see things. Wonderful, terrible things.",
+		roll: func() barDrinkEffect {
+			r := rand.Intn(5)
+			switch r {
+			case 0:
+				gain := int64(2000 + rand.Intn(2001))
+				return barDrinkEffect{
+					chipDelta: gain,
+					msg:       fmt.Sprintf("The Green Fairy appears and hands you a SACK OF CHIPS! +%d chips!!! 🧚", gain),
+					areaMsg:   "drank absinthe and is now having a full conversation with a fairy who is apparently VERY generous. 💚🧚",
+				}
+			case 1:
+				loss := int64(300 + rand.Intn(401))
+				return barDrinkEffect{
+					chipDelta: -loss,
+					msg:       fmt.Sprintf("The Green Fairy STEALS your chips and vanishes. '✨ Bye! ✨' -%d chips. You've been robbed by a hallucination.", loss),
+					areaMsg:   "was robbed by their own absinthe hallucination. The Green Fairy strikes again. 💚😱",
+				}
+			case 2:
+				gain := int64(500 + rand.Intn(501))
+				return barDrinkEffect{
+					chipDelta: gain,
+					msg:       fmt.Sprintf("Reality flickers. A phantom roulette table appears and you WIN. Was it real? Does it matter? +%d chips!", gain),
+					areaMsg:   "just won at a ghost casino that may or may not exist. 💚🎰",
+				}
+			case 3:
+				return barDrinkEffect{
+					msg:     "You drink. Time stops. You stare at your hand for 47 minutes. Nothing happens chip-wise, but you've achieved enlightenment.",
+					areaMsg: "has achieved enlightenment via absinthe and is now transcending material concerns like chips. 💚🧘",
+				}
+			default:
+				gain := int64(800 + rand.Intn(1201))
+				return barDrinkEffect{
+					chipDelta: gain,
+					msg:       fmt.Sprintf("Somewhere between the third vision and the talking wall, you find a stash of chips. +%d chips! 💚", gain),
+				}
+			}
+		},
+	},
+	{
+		id: "fireball", emoji: "🔥", cost: 300,
+		desc: "Fireball cinnamon whiskey. HOT HOT HOT.",
+		roll: func() barDrinkEffect {
+			if rand.Intn(3) == 0 {
+				loss := int64(150 + rand.Intn(201))
+				return barDrinkEffect{
+					chipDelta: -loss,
+					msg:       fmt.Sprintf("🔥 IT BURNS! YOUR MOUTH IS ON FIRE! You breathe out like a dragon and accidentally singe your chips. -%d chips.", loss),
+					areaMsg:   "just drank Fireball and is currently breathing fire at the bar. 🔥🐉",
+				}
+			}
+			gain := int64(400 + rand.Intn(601))
+			return barDrinkEffect{
+				chipDelta: gain,
+				msg:       fmt.Sprintf("🔥 YOU'RE ON FIRE! HOT STREAK ACTIVATED! The heat surges through your veins and manifests as chips! +%d chips!", gain),
+				areaMsg:   "drank Fireball and is now on an absolute hot streak! 🔥💰",
+			}
+		},
+	},
+	{
+		id: "jagerbomb", emoji: "💣", cost: 250,
+		desc: "A Jägerbomb. Jäger dropped in an energy drink. Let's GO.",
+		roll: func() barDrinkEffect {
+			gain := 200 + rand.Int63n(401)
+			return barDrinkEffect{
+				chipDelta: gain,
+				msg:       fmt.Sprintf("💥 BOOM! You feel the energy course through you! HYPERACTIVE GAMBLING ACTIVATED! +%d chips!", gain),
+				areaMsg:   "just slammed a Jägerbomb and has way too much energy right now. 💣⚡",
+			}
+		},
+	},
+	{
+		id: "longisland", emoji: "🧋", cost: 600,
+		desc: "Long Island Iced Tea. Looks like tea. IS NOT TEA. Hits like a freight train.",
+		roll: func() barDrinkEffect {
+			total := int64(0)
+			var parts []string
+			for i := 0; i < 3+rand.Intn(3); i++ {
+				delta := int64(rand.Intn(600)) - 150 // range: -150 to +449
+				total += delta
+				if delta >= 0 {
+					parts = append(parts, fmt.Sprintf("+%d", delta))
+				} else {
+					parts = append(parts, fmt.Sprintf("%d", delta))
+				}
+			}
+			summary := strings.Join(parts, ", ")
+			return barDrinkEffect{
+				chipDelta: total,
+				msg:       fmt.Sprintf("It tastes EXACTLY like iced tea... until it doesn't. The cocktail makes several decisions for you: [%s] = %+d chips net.", summary, total),
+				areaMsg:   "ordered what they THOUGHT was iced tea and is now regretting every choice that led here. 🧋😵",
+			}
+		},
+	},
+	{
+		id: "cosmo", emoji: "🍸", cost: 350,
+		desc: "Cosmopolitan. Pink, fabulous, and deceptively strong.",
+		roll: func() barDrinkEffect {
+			gain := 400 + rand.Int63n(501)
+			return barDrinkEffect{
+				chipDelta: gain,
+				msg:       fmt.Sprintf("Fabulous! You sip the cosmo and feel absolutely iconic. The bar applauds. +%d chips! 🩷", gain),
+				areaMsg:   "is sipping a Cosmopolitan and radiating main character energy. 🍸🩷",
+			}
+		},
+	},
+	{
+		id: "pina", emoji: "🍍", cost: 400,
+		desc: "Piña Colada. If you like tropical vibes and coconut.",
+		roll: func() barDrinkEffect {
+			gain := 350 + rand.Int63n(451)
+			return barDrinkEffect{
+				chipDelta: gain,
+				msg:       fmt.Sprintf("You close your eyes and imagine a beach. The bartender snaps you out of it but slides you some chips. +%d chips! 🏖️", gain),
+			}
+		},
+	},
+	{
+		id: "mystery", emoji: "❓", cost: 1000,
+		desc: "The Mystery Brew. Nobody knows what's in it. Not even the bartender.",
+		roll: func() barDrinkEffect {
+			r := rand.Intn(10)
+			switch {
+			case r <= 1: // 20%: big jackpot
+				gain := int64(5000 + rand.Intn(10001))
+				return barDrinkEffect{
+					chipDelta: gain,
+					msg:       fmt.Sprintf("❓ The brew GLOWS. Your eyes go white. You levitate slightly. When you land, there are %d chips in your pocket. WHAT WAS IN THAT THING?!", gain),
+					areaMsg:   "just drank the Mystery Brew and ascended to a higher plane of chip ownership. ❓✨💰",
+				}
+			case r <= 3: // 20%: big loss
+				loss := int64(500 + rand.Intn(1001))
+				return barDrinkEffect{
+					chipDelta: -loss,
+					msg:       fmt.Sprintf("❓ The brew tastes like despair, old copper coins, and something that might have been alive. -%d chips just... disappear. Gone. Into the void.", loss),
+					areaMsg:   "drank the Mystery Brew and something unspeakable happened. ❓💀",
+				}
+			case r <= 5: // 20%: nothing
+				return barDrinkEffect{
+					msg:     "❓ The brew looks ominous. You sip it cautiously. It tastes like... tap water? Nothing happens. You've been cheated by the universe.",
+					areaMsg: "drank the Mystery Brew. Nothing happened. They seem deeply unsatisfied. ❓🤷",
+				}
+			case r <= 7: // 20%: moderate gain
+				gain := int64(1000 + rand.Intn(2001))
+				return barDrinkEffect{
+					chipDelta: gain,
+					msg:       fmt.Sprintf("❓ The brew shimmers. You hear distant chanting. Chips materialize from thin air. +%d chips. Don't question it.", gain),
+				}
+			default: // 20%: small gain + wacky message
+				gain := int64(500 + rand.Intn(501))
+				return barDrinkEffect{
+					chipDelta: gain,
+					msg:       fmt.Sprintf("❓ You taste elderflower, lightning, three kinds of cheese, and existential dread. Somehow, +%d chips. How. WHY.", gain),
+					areaMsg:   "just experienced something profoundly weird via the Mystery Brew. ❓🧪",
+				}
+			}
+		},
+	},
+}
+
+// barDrinkIndex maps drink ID to *barDrink for O(1) lookup.
+var barDrinkIndex = func() map[string]*barDrink {
+	m := make(map[string]*barDrink, len(barMenu))
+	for i := range barMenu {
+		m[barMenu[i].id] = &barMenu[i]
+	}
+	return m
+}()
+
+func printBarMenu(client *Client) {
+	bal, _ := db.GetChipBalance(client.Ipid())
+	var sb strings.Builder
+	sb.WriteString("\n🍻 ═══════════ THE NYATHENA BAR ═══════════ 🍻\n")
+	sb.WriteString(fmt.Sprintf("  Your balance: %d chips\n\n", bal))
+	sb.WriteString(fmt.Sprintf("  %-14s %-6s  %s\n", "DRINK", "COST", "DESCRIPTION"))
+	sb.WriteString("  ──────────────────────────────────────────────────────\n")
+	for _, d := range barMenu {
+		sb.WriteString(fmt.Sprintf("  %s %-12s %-6d  %s\n", d.emoji, d.id, d.cost, d.desc))
+	}
+	sb.WriteString("\n  Use /bar buy <drink> to order. Effects are random!\n")
+	sb.WriteString("═══════════════════════════════════════════════════════\n")
+	client.SendServerMessage(sb.String())
+}
+
+func cmdBar(client *Client, args []string, _ string) {
+	if len(args) == 0 || strings.ToLower(args[0]) == "menu" {
+		printBarMenu(client)
+		return
+	}
+	if strings.ToLower(args[0]) != "buy" || len(args) < 2 {
+		client.SendServerMessage("Usage: /bar menu | /bar buy <drink>")
+		return
+	}
+
+	drinkID := strings.ToLower(args[1])
+	drink, ok := barDrinkIndex[drinkID]
+	if !ok {
+		client.SendServerMessage(fmt.Sprintf("Unknown drink '%s'. Use /bar menu to see what's available.", drinkID))
+		return
+	}
+
+	// Deduct the drink cost first.
+	bal, err := db.SpendChips(client.Ipid(), drink.cost)
+	if err != nil {
+		client.SendServerMessage(fmt.Sprintf("You can't afford that drink! Your balance: %d chips (cost: %d).", bal, drink.cost))
+		return
+	}
+
+	// Roll the effect.
+	effect := drink.roll()
+
+	// Apply net chip delta (could be positive gain or additional loss).
+	finalBal := bal
+	if effect.chipDelta > 0 {
+		finalBal, _ = db.AddChips(client.Ipid(), effect.chipDelta)
+	} else if effect.chipDelta < 0 {
+		spent := -effect.chipDelta
+		newBal, spendErr := db.SpendChips(client.Ipid(), spent)
+		if spendErr != nil {
+			// Not enough chips for the penalty — drain to zero instead.
+			finalBal = 0
+			db.SpendChips(client.Ipid(), bal) //nolint:errcheck
+		} else {
+			finalBal = newBal
+		}
+	}
+
+	// Broadcast to area if the drink has a public message.
+	if effect.areaMsg != "" {
+		sendAreaGamblingMessage(client.Area(),
+			fmt.Sprintf("🍻 %s %s", client.OOCName(), effect.areaMsg))
+	}
+
+	client.SendServerMessage(fmt.Sprintf(
+		"%s %s\n%s\nBalance: %d chips", drink.emoji, drink.id, effect.msg, finalBal))
 }

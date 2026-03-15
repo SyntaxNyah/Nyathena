@@ -1382,6 +1382,14 @@ func initCommands() {
 			reqPerms:  permissions.PermissionField["NONE"],
 			casinoCmd: true,
 		},
+		"bar": {
+			handler:   cmdBar,
+			minArgs:   0,
+			usage:     "Usage: /bar menu | /bar buy <drink>",
+			desc:      "Visit the bar! Buy alcoholic drinks with wacky or positive chip effects. Use /bar menu to see all 20 drinks.",
+			reqPerms:  permissions.PermissionField["NONE"],
+			casinoCmd: true,
+		},
 		"rob": {
 			handler:   cmdRob,
 			minArgs:   0,
