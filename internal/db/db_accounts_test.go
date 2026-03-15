@@ -391,8 +391,8 @@ func TestLinkIPIDToUserMergesChips(t *testing.T) {
 	}
 }
 
-// TestLinkIPIDToUserChipsKeepsHigher verifies that when both IPIDs already have
-// chips, the new IPID retains the higher of the two balances (no inflation).
+// TestLinkIPIDToUserChipsKeepsHigher verifies that when the old IPID has more
+// chips than the new IPID, the old (larger) balance is preserved on migration.
 func TestLinkIPIDToUserChipsKeepsHigher(t *testing.T) {
 	teardown := setupTestDB(t)
 	defer teardown()
@@ -440,7 +440,55 @@ func TestLinkIPIDToUserChipsKeepsHigher(t *testing.T) {
 	}
 }
 
-// TestOneAccountPerIPID verifies the one-account-per-IPID gate: once an IPID is
+// TestLinkIPIDToUserChipsOldWinsWhenLower verifies the fix for the bug where a
+// player who had spent chips (old balance < default) would have their balance
+// silently reset to the default 500 when logging in from a new IP address.
+// The old IPID's earned balance must always replace the new IPID's placeholder.
+func TestLinkIPIDToUserChipsOldWinsWhenLower(t *testing.T) {
+	teardown := setupTestDB(t)
+	defer teardown()
+
+	if err := RegisterPlayer("lowchip", []byte("pass1234"), "lc_old"); err != nil {
+		t.Fatalf("RegisterPlayer failed: %v", err)
+	}
+	if err := EnsureChipBalance("lc_old"); err != nil {
+		t.Fatalf("EnsureChipBalance (old) failed: %v", err)
+	}
+	// Spend most of the default balance; old IPID now has less than the default.
+	spendAmount := int64(defaultChipBalance) - 160
+	if _, err := SpendChips("lc_old", spendAmount); err != nil {
+		t.Fatalf("SpendChips failed: %v", err)
+	}
+	wantBalance := int64(160)
+
+	// New IPID gets the full default balance from EnsureChipBalance.
+	if err := EnsureChipBalance("lc_new"); err != nil {
+		t.Fatalf("EnsureChipBalance (new) failed: %v", err)
+	}
+
+	if err := LinkIPIDToUser("lowchip", "lc_new"); err != nil {
+		t.Fatalf("LinkIPIDToUser failed: %v", err)
+	}
+
+	// New IPID must carry the old (lower) earned balance, not the default.
+	newBal, err := GetChipBalance("lc_new")
+	if err != nil {
+		t.Fatalf("GetChipBalance (new) failed: %v", err)
+	}
+	if newBal != wantBalance {
+		t.Errorf("expected new IPID chip balance=%d (old earned value), got %d (was reset to default)", wantBalance, newBal)
+	}
+
+	// Old IPID balance must be zeroed out.
+	oldBal, err := GetChipBalance("lc_old")
+	if err != nil {
+		t.Fatalf("GetChipBalance (old) failed: %v", err)
+	}
+	if oldBal != 0 {
+		t.Errorf("expected old IPID chip balance=0 after migration, got %d", oldBal)
+	}
+}
+
 // linked to an account, GetUsernameByIPID returns a non-empty string, which the
 // /register command uses to block a second registration attempt.
 func TestOneAccountPerIPID(t *testing.T) {

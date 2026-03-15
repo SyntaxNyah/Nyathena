@@ -245,13 +245,13 @@ func chipsTopArea(client *Client, args []string) {
 	myArea := client.Area()
 	var ipids []string
 	var clientsInArea []*Client
-	for c := range clients.GetAllClients() {
+	clients.ForEach(func(c *Client) {
 		if c.Area() != myArea || c.Uid() == -1 {
-			continue
+			return
 		}
 		ipids = append(ipids, c.Ipid())
 		clientsInArea = append(clientsInArea, c)
-	}
+	})
 	if len(clientsInArea) == 0 {
 		client.SendServerMessage("No players in this area.")
 		return

@@ -681,6 +681,7 @@ func (s *Server) CleanupServer() {
 		client.conn.Close()
 	})
 	db.Close()
+	logger.CloseLogFiles()
 }
 
 // CleanupServer closes all connections on the active server instance.
