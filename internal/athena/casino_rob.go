@@ -33,14 +33,62 @@ import (
 // robCooldown is the mandatory wait between /rob attempts per player.
 const robCooldown = 1 * time.Hour
 
-// robMinBalance is the minimum chip balance required to attempt a rob.
-// Prevents players with nothing to lose from spamming the command.
-const robMinBalance = 100
+const (
+	// robMinBalance is the minimum chip balance required to attempt a rob.
+	// Prevents players with nothing to lose from spamming the command.
+	robMinBalance = 100
+
+	// robStealMin / robStealMax clamp the haul on a successful heist.
+	robStealMin = 50
+	robStealMax = 5000
+)
 
 var (
 	robMu       sync.Mutex
-	robLastTime = make(map[string]time.Time) // ipid → last successful attempt time
+	robLastTime = make(map[string]time.Time) // ipid → last attempt time
 )
+
+// robDefaultTargets is selected from when no target keyword is supplied.
+// Declared at package level to avoid a heap allocation on every default call.
+var robDefaultTargets = [7]string{
+	"First National Bank", "casino vault", "high-security vault",
+	"the ATM", "corner store", "national mint", "armored truck",
+}
+
+// robSuccessFormats holds the format strings for successful heist flavour messages.
+// All take args (location string, steal int64); %[1]s = location, %[2]d = steal.
+// Declared at package level so robSuccess performs exactly one fmt.Sprintf per call.
+var robSuccessFormats = [10]string{
+	"🎉 CLEAN GETAWAY! You slipped past every guard at %[1]s and made off with %[2]d chips! The crew is celebrating.",
+	"💰 BIG SCORE! You cracked the safe at %[1]s and scooped up %[2]d chips before the silent alarm even triggered.",
+	"🏎️ VROOM! You grabbed %[2]d chips from %[1]s and the getaway driver was waiting right outside. Perfect heist.",
+	"🕵️ MASTER THIEF! Disguised as a maintenance worker, you walked out of %[1]s with %[2]d chips in a toolbox.",
+	"😎 IN AND OUT! %[2]d chips lifted from %[1]s without a single camera catching your face. Legendary.",
+	"🤝 INSIDE JOB! Your contact on the inside propped open the back door. Walked out of %[1]s with %[2]d chips like you owned the place.",
+	"🪄 MAGIC HANDS! The lock at %[1]s clicked open on the first try. You don't even know how. Scooped up %[2]d chips and vanished.",
+	"🔥 FIRE DRILL SPECIAL! The entire staff of %[1]s evacuated just as you arrived. %[2]d chips, zero witnesses.",
+	"📦 BRILLIANT DISGUISE! You mailed yourself inside %[1]s in a cardboard box. Grabbed %[2]d chips and mailed yourself back out. Nobody questioned it.",
+	"😴 NIGHT SHIFT! The only guard at %[1]s was asleep at his desk. You stole %[2]d chips, tucked him in, and left a thank-you note.",
+}
+
+// init starts a background goroutine that evicts expired cooldown entries once
+// per robCooldown, preventing unbounded map growth on busy servers.
+func init() {
+	go func() {
+		t := time.NewTicker(robCooldown)
+		defer t.Stop()
+		for range t.C {
+			now := time.Now()
+			robMu.Lock()
+			for ipid, last := range robLastTime {
+				if now.Sub(last) >= robCooldown {
+					delete(robLastTime, ipid)
+				}
+			}
+			robMu.Unlock()
+		}
+	}()
+}
 
 // robTargetName converts a user-supplied keyword into a flavour location name.
 func robTargetName(target string) string {
@@ -62,11 +110,7 @@ func robTargetName(target string) string {
 	case "museum":
 		return "museum exhibit"
 	default:
-		targets := []string{
-			"First National Bank", "casino vault", "high-security vault",
-			"the ATM", "corner store", "national mint", "armored truck",
-		}
-		return targets[rand.Intn(len(targets))]
+		return robDefaultTargets[rand.Intn(len(robDefaultTargets))]
 	}
 }
 
@@ -105,7 +149,6 @@ func cmdRob(client *Client, args []string, _ string) {
 				"🚔 You're still on parole. Wait %v before attempting another rob.", remaining))
 			return
 		}
-		delete(robLastTime, ipid)
 	}
 	robLastTime[ipid] = time.Now()
 	robMu.Unlock()
@@ -119,8 +162,7 @@ func cmdRob(client *Client, args []string, _ string) {
 
 	// ── Outcome roll ──────────────────────────────────────────────────────────
 	// 20% chance of success; 80% chance of a catastrophic failure.
-	roll := rand.Float64()
-	if roll < 0.20 {
+	if rand.Intn(100) < 20 {
 		robSuccess(client, location, bal)
 	} else {
 		robFailure(client, location, bal)
@@ -131,33 +173,18 @@ func cmdRob(client *Client, args []string, _ string) {
 
 // robSuccess handles a successful heist: award a random chip haul.
 func robSuccess(client *Client, location string, bal int64) {
-	// Steal between 5% and 20% of current balance, clamped to [50, 5000].
-	minSteal := int64(50)
-	maxSteal := int64(5000)
+	// Steal between 5% and 20% of current balance, clamped to [robStealMin, robStealMax].
 	steal := int64(float64(bal) * (0.05 + rand.Float64()*0.15))
-	if steal < minSteal {
-		steal = minSteal
-	}
-	if steal > maxSteal {
-		steal = maxSteal
+	if steal < robStealMin {
+		steal = robStealMin
+	} else if steal > robStealMax {
+		steal = robStealMax
 	}
 
 	newBal, _ := db.AddChips(client.Ipid(), steal)
 
-	// Pick a random flavour message.
-	messages := []string{
-		fmt.Sprintf("🎉 CLEAN GETAWAY! You slipped past every guard at %s and made off with %d chips! The crew is celebrating.", location, steal),
-		fmt.Sprintf("💰 BIG SCORE! You cracked the safe at %s and scooped up %d chips before the silent alarm even triggered.", location, steal),
-		fmt.Sprintf("🏎️ VROOM! You grabbed %d chips from %s and the getaway driver was waiting right outside. Perfect heist.", steal, location),
-		fmt.Sprintf("🕵️ MASTER THIEF! Disguised as a maintenance worker, you walked out of %s with %d chips in a toolbox.", location, steal),
-		fmt.Sprintf("😎 IN AND OUT! %d chips lifted from %s without a single camera catching your face. Legendary.", steal, location),
-		fmt.Sprintf("🤝 INSIDE JOB! Your contact on the inside propped open the back door. Walked out of %s with %d chips like you owned the place.", location, steal),
-		fmt.Sprintf("🪄 MAGIC HANDS! The lock at %s clicked open on the first try. You don't even know how. Scooped up %d chips and vanished.", location, steal),
-		fmt.Sprintf("🔥 FIRE DRILL SPECIAL! The entire staff of %s evacuated just as you arrived. %d chips, zero witnesses.", location, steal),
-		fmt.Sprintf("📦 BRILLIANT DISGUISE! You mailed yourself inside %s in a cardboard box. Grabbed %d chips and mailed yourself back out. Nobody questioned it.", location, steal),
-		fmt.Sprintf("😴 NIGHT SHIFT! The only guard at %s was asleep at his desk. You stole %d chips, tucked him in, and left a thank-you note.", location, steal),
-	}
-	msg := messages[rand.Intn(len(messages))]
+	// Select one format string and do a single Sprintf call.
+	msg := fmt.Sprintf(robSuccessFormats[rand.Intn(len(robSuccessFormats))], location, steal)
 	client.SendServerMessage(fmt.Sprintf("%s\n💰 New balance: %d chips", msg, newBal))
 	sendAreaGamblingMessage(client.Area(),
 		fmt.Sprintf("🔓 ROB: %s successfully robbed %s for %d chips!", client.OOCName(), location, steal))
@@ -168,11 +195,11 @@ func robSuccess(client *Client, location string, bal int64) {
 // robFailure picks and applies one of twenty catastrophic failure outcomes.
 func robFailure(client *Client, location string, bal int64) {
 	ipid := client.Ipid()
-	failRoll := rand.Float64()
+	roll := rand.Intn(100) // integer in [0, 99]; each case threshold is the cumulative %
 
 	switch {
 	// ── Outcome 1 (8%) ── Lose 50%, OOC mute 5 min ───────────────────────────
-	case failRoll < 0.08:
+	case roll < 8:
 		lose := bal / 2
 		newBal := drainChips(ipid, lose)
 		applyMute(client, OOCMuted, 5*time.Minute)
@@ -186,7 +213,7 @@ func robFailure(client *Client, location string, bal int64) {
 			location, lose, newBal))
 
 	// ── Outcome 2 (8%) ── Lose 75% ───────────────────────────────────────────
-	case failRoll < 0.16:
+	case roll < 16:
 		lose := (bal * 3) / 4
 		newBal := drainChips(ipid, lose)
 		sendAreaGamblingMessage(client.Area(),
@@ -199,7 +226,7 @@ func robFailure(client *Client, location string, bal int64) {
 			location, lose, newBal))
 
 	// ── Outcome 3 (7%) ── Lose 90% ───────────────────────────────────────────
-	case failRoll < 0.23:
+	case roll < 23:
 		lose := (bal * 9) / 10
 		newBal := drainChips(ipid, lose)
 		sendAreaGamblingMessage(client.Area(),
@@ -211,12 +238,8 @@ func robFailure(client *Client, location string, bal int64) {
 			location, lose, newBal))
 
 	// ── Outcome 4 (5%) ── Lose EVERYTHING (down to 1 chip) ──────────────────
-	case failRoll < 0.28:
-		lose := bal - 1
-		if lose < 0 {
-			lose = 0
-		}
-		drainChips(ipid, lose)
+	case roll < 28:
+		drainChips(ipid, bal-1)
 		sendAreaGamblingMessage(client.Area(),
 			fmt.Sprintf("☠️ ROB FAIL: %s got absolutely COOKED trying to rob %s. Lost EVERYTHING!", client.OOCName(), location))
 		client.SendServerMessage(fmt.Sprintf(
@@ -228,7 +251,7 @@ func robFailure(client *Client, location string, bal int64) {
 			location))
 
 	// ── Outcome 5 (7%) ── Lose 60%, IC mute 3 min ────────────────────────────
-	case failRoll < 0.35:
+	case roll < 35:
 		lose := (bal * 6) / 10
 		newBal := drainChips(ipid, lose)
 		applyMute(client, ICMuted, 3*time.Minute)
@@ -242,7 +265,7 @@ func robFailure(client *Client, location string, bal int64) {
 			location, lose, newBal))
 
 	// ── Outcome 6 (4%) ── Lose 95%, OOC mute 10 min ─────────────────────────
-	case failRoll < 0.39:
+	case roll < 39:
 		lose := (bal * 19) / 20
 		newBal := drainChips(ipid, lose)
 		applyMute(client, OOCMuted, 10*time.Minute)
@@ -256,7 +279,7 @@ func robFailure(client *Client, location string, bal int64) {
 			location, newBal))
 
 	// ── Outcome 7 (5%) ── Lose 40% ───────────────────────────────────────────
-	case failRoll < 0.44:
+	case roll < 44:
 		lose := (bal * 2) / 5
 		newBal := drainChips(ipid, lose)
 		sendAreaGamblingMessage(client.Area(),
@@ -269,7 +292,7 @@ func robFailure(client *Client, location string, bal int64) {
 			location, lose, newBal))
 
 	// ── Outcome 8 (5%) ── Lose 70%, IC mute 2 min ────────────────────────────
-	case failRoll < 0.49:
+	case roll < 49:
 		lose := (bal * 7) / 10
 		newBal := drainChips(ipid, lose)
 		applyMute(client, ICMuted, 2*time.Minute)
@@ -283,7 +306,7 @@ func robFailure(client *Client, location string, bal int64) {
 			location, lose, newBal))
 
 	// ── Outcome 9 (7%) ── Lose 55% ───────────────────────────────────────────
-	case failRoll < 0.56:
+	case roll < 56:
 		lose := (bal * 55) / 100
 		newBal := drainChips(ipid, lose)
 		sendAreaGamblingMessage(client.Area(),
@@ -297,7 +320,7 @@ func robFailure(client *Client, location string, bal int64) {
 			location, lose, newBal))
 
 	// ── Outcome 10 (6%) ── Lose 65% ──────────────────────────────────────────
-	case failRoll < 0.62:
+	case roll < 62:
 		lose := (bal * 65) / 100
 		newBal := drainChips(ipid, lose)
 		sendAreaGamblingMessage(client.Area(),
@@ -310,7 +333,7 @@ func robFailure(client *Client, location string, bal int64) {
 			location, lose, newBal))
 
 	// ── Outcome 11 (5%) ── Lose 45%, IC mute 5 min ───────────────────────────
-	case failRoll < 0.67:
+	case roll < 67:
 		lose := (bal * 45) / 100
 		newBal := drainChips(ipid, lose)
 		applyMute(client, ICMuted, 5*time.Minute)
@@ -325,7 +348,7 @@ func robFailure(client *Client, location string, bal int64) {
 			location, lose, newBal))
 
 	// ── Outcome 12 (5%) ── Lose 80% ──────────────────────────────────────────
-	case failRoll < 0.72:
+	case roll < 72:
 		lose := (bal * 4) / 5
 		newBal := drainChips(ipid, lose)
 		sendAreaGamblingMessage(client.Area(),
@@ -339,7 +362,7 @@ func robFailure(client *Client, location string, bal int64) {
 			location, lose, newBal))
 
 	// ── Outcome 13 (4%) ── Lose 35% ──────────────────────────────────────────
-	case failRoll < 0.76:
+	case roll < 76:
 		lose := (bal * 35) / 100
 		newBal := drainChips(ipid, lose)
 		sendAreaGamblingMessage(client.Area(),
@@ -352,7 +375,7 @@ func robFailure(client *Client, location string, bal int64) {
 			location, lose, newBal))
 
 	// ── Outcome 14 (4%) ── Lose 85%, OOC mute 7 min ─────────────────────────
-	case failRoll < 0.80:
+	case roll < 80:
 		lose := (bal * 85) / 100
 		newBal := drainChips(ipid, lose)
 		applyMute(client, OOCMuted, 7*time.Minute)
@@ -368,7 +391,7 @@ func robFailure(client *Client, location string, bal int64) {
 			location, lose, newBal))
 
 	// ── Outcome 15 (4%) ── Lose 20% ──────────────────────────────────────────
-	case failRoll < 0.84:
+	case roll < 84:
 		lose := bal / 5
 		newBal := drainChips(ipid, lose)
 		sendAreaGamblingMessage(client.Area(),
@@ -382,12 +405,8 @@ func robFailure(client *Client, location string, bal int64) {
 			location, lose, newBal))
 
 	// ── Outcome 16 (3%) ── Lose EVERYTHING (IRS), OOC mute 5 min ─────────────
-	case failRoll < 0.87:
-		lose := bal - 1
-		if lose < 0 {
-			lose = 0
-		}
-		drainChips(ipid, lose)
+	case roll < 87:
+		drainChips(ipid, bal-1)
 		applyMute(client, OOCMuted, 5*time.Minute)
 		sendAreaGamblingMessage(client.Area(),
 			fmt.Sprintf("🧾 ROB FAIL: A time-travelling IRS agent audited %s ON THE SPOT at %s. Lost everything!", client.OOCName(), location))
@@ -401,7 +420,7 @@ func robFailure(client *Client, location string, bal int64) {
 			location))
 
 	// ── Outcome 17 (3%) ── Lose 25% ──────────────────────────────────────────
-	case failRoll < 0.90:
+	case roll < 90:
 		lose := bal / 4
 		newBal := drainChips(ipid, lose)
 		sendAreaGamblingMessage(client.Area(),
@@ -415,7 +434,7 @@ func robFailure(client *Client, location string, bal int64) {
 			location, lose, newBal))
 
 	// ── Outcome 18 (3%) ── Lose 60%, IC mute 4 min ───────────────────────────
-	case failRoll < 0.93:
+	case roll < 93:
 		lose := (bal * 3) / 5
 		newBal := drainChips(ipid, lose)
 		applyMute(client, ICMuted, 4*time.Minute)
@@ -430,7 +449,7 @@ func robFailure(client *Client, location string, bal int64) {
 			location, lose, newBal))
 
 	// ── Outcome 19 (3%) ── Lose 70%, OOC mute 6 min ─────────────────────────
-	case failRoll < 0.96:
+	case roll < 96:
 		lose := (bal * 7) / 10
 		newBal := drainChips(ipid, lose)
 		applyMute(client, OOCMuted, 6*time.Minute)
