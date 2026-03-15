@@ -77,9 +77,22 @@ func cmdAllowIniswap(client *Client, args []string, _ string) {
 // Handles /areainfo
 
 func cmdAreaInfo(client *Client, _ []string, _ string) {
-	out := fmt.Sprintf("\nBG: %v\nEvi mode: %v\nAllow iniswap: %v\nNon-interrupting pres: %v\nCMs allowed: %v\nForce BG list: %v\nBG locked: %v\nMusic locked: %v\nSpectate mode: %v",
-		client.Area().Background(), client.Area().EvidenceMode().String(), client.Area().IniswapAllowed(), client.Area().NoInterrupt(),
-		client.Area().CMsAllowed(), client.Area().ForceBGList(), client.Area().LockBG(), client.Area().LockMusic(), client.Area().SpectateMode())
+	a := client.Area()
+	casinoStatus := "disabled"
+	if a.CasinoEnabled() {
+		minBet := a.CasinoMinBet()
+		maxBet := a.CasinoMaxBet()
+		casinoStatus = "enabled"
+		if minBet > 0 || maxBet > 0 {
+			casinoStatus = fmt.Sprintf("enabled (bet: %d–%d)", minBet, maxBet)
+		}
+		if a.CasinoJackpot() {
+			casinoStatus += fmt.Sprintf(", jackpot pool: %d", a.CasinoJackpotPool())
+		}
+	}
+	out := fmt.Sprintf("\nBG: %v\nEvi mode: %v\nAllow iniswap: %v\nNon-interrupting pres: %v\nCMs allowed: %v\nForce BG list: %v\nBG locked: %v\nMusic locked: %v\nSpectate mode: %v\nCasino: %v",
+		a.Background(), a.EvidenceMode().String(), a.IniswapAllowed(), a.NoInterrupt(),
+		a.CMsAllowed(), a.ForceBGList(), a.LockBG(), a.LockMusic(), a.SpectateMode(), casinoStatus)
 	client.SendServerMessage(out)
 }
 
@@ -107,6 +120,10 @@ func cmdBg(client *Client, args []string, _ string) {
 
 func cmdCharSelect(client *Client, args []string, _ string) {
 	if len(args) == 0 {
+		if stuckID := client.charStuckID(); stuckID >= 0 {
+			client.SendServerMessage(fmt.Sprintf("You are character stuck as %v and cannot return to character select.", characters[stuckID]))
+			return
+		}
 		client.ChangeCharacter(-1)
 		client.SendPacket("DONE")
 	} else {
@@ -216,13 +233,13 @@ func cmdForceRandomChar(client *Client, args []string, _ string) {
 	// No UID provided — target all players in the current area.
 	var count int
 	var reportBuilder strings.Builder
-	for c := range clients.GetAllClients() {
+	clients.ForEach(func(c *Client) {
 		if c.Area() != client.Area() {
-			continue
+			return
 		}
 		newid := getRandomFreeChar(c)
 		if newid == -1 {
-			continue
+			return
 		}
 		c.ChangeCharacter(newid)
 		if c != client {
@@ -233,7 +250,7 @@ func cmdForceRandomChar(client *Client, args []string, _ string) {
 		}
 		reportBuilder.WriteString(fmt.Sprintf("%v", c.Uid()))
 		count++
-	}
+	})
 	if count > 0 {
 		client.SendServerMessage(fmt.Sprintf("Forced %v player(s) in the area to a random character.", count))
 		addToBuffer(client, "CMD", fmt.Sprintf("Force random char on %v user(s) (%v) in area.", count, reportBuilder.String()), false)
@@ -344,6 +361,16 @@ func cmdSetEviMod(client *Client, args []string, _ string) {
 	addToBuffer(client, "CMD", fmt.Sprintf("Set the evidence mode to %v.", args[0]), false)
 }
 
+// Handles /bglist
+
+func cmdBgList(client *Client, _ []string, _ string) {
+	if len(backgrounds) == 0 {
+		client.SendServerMessage("No backgrounds are available.")
+		return
+	}
+	client.SendServerMessage(bgListStr)
+}
+
 // Handles /forcebglist
 
 func cmdForceBGList(client *Client, args []string, _ string) {
@@ -449,11 +476,12 @@ func cmdLock(client *Client, args []string, _ string) {
 		sendAreaServerMessage(client.Area(), fmt.Sprintf("%v locked the area.", client.OOCName()))
 		addToBuffer(client, "CMD", "Locked the area.", false)
 	}
-	for c := range clients.GetAllClients() {
-		if c.Area() == client.Area() {
-			c.Area().AddInvited(c.Uid())
+	targetArea := client.Area()
+	clients.ForEach(func(c *Client) {
+		if c.Area() == targetArea {
+			targetArea.AddInvited(c.Uid())
 		}
-	}
+	})
 	sendLockArup()
 }
 
@@ -579,32 +607,30 @@ func cmdSummon(client *Client, args []string, usage string) {
 		return
 	}
 	wantedArea := areas[areaID]
-	
-	// Get all connected clients
-	allClients := clients.GetAllClients()
-	
+	wantedAreaName := wantedArea.Name()
+
 	var count int
 	var reportBuilder strings.Builder
-	
+
 	// Move each client to the target area
-	for c := range allClients {
+	clients.ForEach(func(c *Client) {
 		if !c.ChangeArea(wantedArea) {
-			continue
+			return
 		}
-		
+
 		// Send appropriate message based on whether this is the admin
 		if c == client {
-			c.SendServerMessage(fmt.Sprintf("Summoned all users to %v.", wantedArea.Name()))
+			c.SendServerMessage(fmt.Sprintf("Summoned all users to %v.", wantedAreaName))
 		} else {
-			c.SendServerMessage(fmt.Sprintf("You were summoned to %v.", wantedArea.Name()))
+			c.SendServerMessage(fmt.Sprintf("You were summoned to %v.", wantedAreaName))
 		}
-		
+
 		if reportBuilder.Len() > 0 {
 			reportBuilder.WriteString(", ")
 		}
 		reportBuilder.WriteString(fmt.Sprintf("%v", c.Uid()))
 		count++
-	}
+	})
 	
 	report := reportBuilder.String()
 	if count > 0 {
@@ -742,6 +768,99 @@ func cmdSwapEvi(client *Client, args []string, _ string) {
 		addToBuffer(client, "CMD", fmt.Sprintf("Swapped posistions of evidence %v and %v.", evi1, evi2), false)
 	} else {
 		client.SendServerMessage("Invalid arguments.")
+	}
+}
+
+// Handles /testify
+
+func cmdTestify(client *Client, _ []string, _ string) {
+	if !client.HasCMPermission() {
+		client.SendServerMessage("You do not have permission to use that command.")
+		return
+	}
+	if client.Area().TstState() != area.TRIdle {
+		client.SendServerMessage("The recorder is currently active.")
+		return
+	}
+	client.Area().TstClear()
+	client.Area().SetTstState(area.TRRecording)
+	client.SendServerMessage("Recording testimony.")
+}
+
+// Handles /pause (stops testimony recording)
+
+func cmdPause(client *Client, _ []string, _ string) {
+	if !client.HasCMPermission() {
+		client.SendServerMessage("You do not have permission to use that command.")
+		return
+	}
+	client.Area().SetTstState(area.TRIdle)
+	client.SendServerMessage("Recorder stopped.")
+	client.Area().TstJump(0)
+	writeToArea(client.Area(), "RT", "testimony1#1")
+}
+
+// Handles /examine
+
+func cmdExamine(client *Client, _ []string, _ string) {
+	if !client.Area().HasTestimony() {
+		client.SendServerMessage("No testimony recorded.")
+		return
+	}
+	client.Area().SetTstState(area.TRPlayback)
+	client.SendServerMessage("Starting cross-examination.")
+	writeToArea(client.Area(), "RT", "testimony2")
+	writeToArea(client.Area(), "MS", client.Area().CurrentTstStatement())
+}
+
+// Handles /update
+
+func cmdUpdate(client *Client, _ []string, _ string) {
+	if !client.HasCMPermission() {
+		client.SendServerMessage("You do not have permission to use that command.")
+		return
+	}
+	if client.Area().TstState() != area.TRPlayback {
+		client.SendServerMessage("The recorder is not in playback mode.")
+		return
+	}
+	client.Area().SetTstState(area.TRUpdating)
+	client.SendServerMessage("Send the new statement in IC to update the current one.")
+}
+
+// Handles /add
+
+func cmdAdd(client *Client, _ []string, _ string) {
+	if !client.HasCMPermission() {
+		client.SendServerMessage("You do not have permission to use that command.")
+		return
+	}
+	if client.Area().TstState() != area.TRPlayback {
+		client.SendServerMessage("The recorder is not in playback mode.")
+		return
+	}
+	client.Area().SetTstState(area.TRInserting)
+	client.SendServerMessage("Send the new statement in IC to add it to the testimony.")
+}
+
+// Handles /delete
+
+func cmdDelete(client *Client, _ []string, _ string) {
+	if !client.HasCMPermission() {
+		client.SendServerMessage("You do not have permission to use that command.")
+		return
+	}
+	if client.Area().TstState() != area.TRPlayback {
+		client.SendServerMessage("The recorder is not in playback mode.")
+		return
+	}
+	if client.Area().CurrentTstIndex() > 0 {
+		err := client.Area().TstRemove()
+		if err != nil {
+			client.SendServerMessage("Failed to delete statement.")
+		}
+	} else {
+		client.SendServerMessage("Cannot delete the testimony title.")
 	}
 }
 

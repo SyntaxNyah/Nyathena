@@ -47,13 +47,24 @@ import (
 	"nhooyr.io/websocket"
 )
 
-const version = "v1.0.2"
+const (
+	version         = "v1.0.2"
+	secondsPerHour  = int64(3600) // seconds in one hour; used for playtime-to-chips conversions
+)
+
+// encodedServerName is the AO2-encoded form of config.Name, pre-computed once
+// at startup so that every server message avoids a repeated strings.Replacer call.
+// Set in NewServer immediately after config is wired up; never modified afterwards.
+var encodedServerName string
 
 var (
 	config                                 *settings.Config
 	characters, music, backgrounds, parrot []string
+	charactersByName                       map[string]int // O(1) lookup: lowercase name → character ID
 	areas                                  []*area.Area
 	areaNames                              string
+	smPacket                               string // pre-built SM#<areas>#<music>#% packet; built once at startup
+	bgListStr                              string // pre-built background list for /bglist; zero alloc per call
 	areaIndexMap                           map[*area.Area]int // pre-computed index lookup for O(1) getAreaIndex
 	roles                                  []permissions.Role
 	uids                                   uidmanager.UidManager
@@ -69,8 +80,10 @@ var (
 	connTracker = struct {
 		mu         sync.Mutex
 		timestamps map[string][]time.Time // ipid -> connection attempt timestamps
+		rejections map[string]int         // ipid -> consecutive rejection count
 	}{
 		timestamps: make(map[string][]time.Time),
+		rejections: make(map[string]int),
 	}
 
 	// ipModcallTracker tracks the last modcall time per IP across connections.
@@ -168,6 +181,7 @@ type Server struct {
 	parrot                 []string
 	areas                  []*area.Area
 	areaNames              string
+	bgListStr              string
 	areaIndexMap           map[*area.Area]int
 	roles                  []permissions.Role
 	uids                   uidmanager.UidManager
@@ -204,6 +218,16 @@ func NewServer(conf *settings.Config) (*Server, error) {
 		logger.LogErrorf("Failed to prune low-playtime IPs: %v", err)
 	} else if n > 0 {
 		logger.LogInfof("Pruned %d IP(s) with less than 1 hour of playtime.", n)
+	}
+
+	// Sync chip balances for players who accumulated playtime before the casino
+	// was introduced. Uses INSERT OR IGNORE so existing balances are never touched.
+	if conf.EnableCasino {
+		if n, err := db.SyncChipsForExistingPlaytime(); err != nil {
+			logger.LogErrorf("Failed to sync chips for pre-casino playtime: %v", err)
+		} else if n > 0 {
+			logger.LogInfof("Synced chip balances for %d IP(s) with pre-casino playtime.", n)
+		}
 	}
 
 	// Pre-populate the in-memory first-seen tracker with IPs that were seen in
@@ -279,6 +303,16 @@ func NewServer(conf *settings.Config) (*Server, error) {
 	} else if len(s.backgrounds) == 0 {
 		return nil, fmt.Errorf("empty background list")
 	}
+	var bgBuilder strings.Builder
+	bgBuilder.Grow(len("Available backgrounds:\n") + estimateJoinedLen(s.backgrounds))
+	bgBuilder.WriteString("Available backgrounds:\n")
+	for i, bg := range s.backgrounds {
+		if i > 0 {
+			bgBuilder.WriteByte('\n')
+		}
+		bgBuilder.WriteString(bg)
+	}
+	s.bgListStr = bgBuilder.String()
 
 	s.parrot, err = settings.LoadFile("/parrot.txt")
 	if err != nil {
@@ -386,21 +420,35 @@ func NewServer(conf *settings.Config) (*Server, error) {
 	// Propagate to package-level globals so that existing helper functions
 	// and command handlers continue to work without modification.
 	config = s.config
+	encodedServerName = encode(s.config.Name) // cache once; config.Name never changes at runtime
 	characters = s.characters
+	charactersByName = make(map[string]int, len(s.characters))
+	for i, name := range s.characters {
+		charactersByName[strings.ToLower(name)] = i
+	}
 	music = s.music
 	backgrounds = s.backgrounds
 	parrot = s.parrot
 	areas = s.areas
 	areaNames = s.areaNames
+	bgListStr = s.bgListStr
 	areaIndexMap = s.areaIndexMap
 	roles = s.roles
 	uids = s.uids
 	enableDiscord = s.enableDiscord
 	tournamentParticipants = s.tournamentParticipants
 
+	// Pre-build the SM packet (sent to every client on join) once at startup
+	// so that pktReqAM performs a single write with no allocations.
+	smPacket = buildSMPacket(s.areaNames, s.music)
+
 	initCommands()
 	initAutoMod(conf)
 	go startConnTrackerCleanup()
+	if conf.EnableCasino {
+		go startHourlyChipAward()
+		go startUnscrambleLoop()
+	}
 	return s, nil
 }
 
@@ -455,9 +503,13 @@ func (s *Server) ListenTCP() {
 		if err != nil {
 			logger.LogError(err.Error())
 		}
-		ipid := getIpid(conn.RemoteAddr().String())
-		if checkConnRateLimit(ipid) {
+		rawAddr := conn.RemoteAddr().String()
+		ipid := getIpid(rawAddr)
+		if reject, autoban := checkConnRateLimit(ipid); reject {
 			logger.LogInfof("Connection from %v rejected (connection rate limit exceeded)", ipid)
+			if autoban {
+				go autobanFlooder(ipid, "connection flooding")
+			}
 			conn.Close()
 			continue
 		}
@@ -466,20 +518,38 @@ func (s *Server) ListenTCP() {
 			conn.Close()
 			continue
 		}
-		recordIPFirstSeen(ipid)
-		// Persist the IP and update its last-seen timestamp for all connections
-		// (new and returning). The upsert keeps FIRST_SEEN intact for existing rows.
-		go func(id string) {
-			if err := db.MarkIPKnown(id); err != nil {
-				logger.LogErrorf("Failed to update known IP %s: %v", id, err)
-			}
-		}(ipid)
-		if logger.DebugNetwork {
-			logger.LogDebugf("Connection received from %v", ipid)
-		}
-		client := NewClient(conn, ipid)
-		go client.HandleClient()
+		// The firewall check may block on a network round-trip to IPHub.
+		// Dispatch everything after the fast in-memory checks into its own
+		// goroutine so the accept loop is never stalled waiting for the API.
+		go acceptTCPConnection(conn, extractIP(rawAddr), ipid)
 	}
+}
+
+// acceptTCPConnection completes the setup for a single accepted TCP connection.
+// It runs in its own goroutine so that an IPHub API call (when the firewall is
+// active) never stalls the ListenTCP accept loop.
+// HandleClient is called without `go` because this goroutine IS the connection
+// goroutine — it blocks for the lifetime of the connection, which is the
+// standard one-goroutine-per-connection pattern in Go.
+func acceptTCPConnection(conn net.Conn, rawIP, ipid string) {
+	if checkFirewallForIP(rawIP, ipid) {
+		logger.LogInfof("Connection from %v rejected (VPN/proxy detected by IPHub firewall)", ipid)
+		conn.Close()
+		return
+	}
+	recordIPFirstSeen(ipid)
+	// Persist the IP and update its last-seen timestamp for all connections
+	// (new and returning). The upsert keeps FIRST_SEEN intact for existing rows.
+	go func() {
+		if err := db.MarkIPKnown(ipid); err != nil {
+			logger.LogErrorf("Failed to update known IP %s: %v", ipid, err)
+		}
+	}()
+	if logger.DebugNetwork {
+		logger.LogDebugf("Connection received from %v", ipid)
+	}
+	client := NewClient(conn, ipid)
+	client.HandleClient()
 }
 
 // ListenTCP starts the TCP listener on the active server instance.
@@ -550,9 +620,13 @@ func ListenWSS() { server.ListenWSS() }
 
 // HandleWS handles a websocket connection.
 func HandleWS(w http.ResponseWriter, r *http.Request) {
-	ipid := getIpid(getRealIP(r))
-	if checkConnRateLimit(ipid) {
+	rawIP := getRealIP(r)
+	ipid := getIpid(rawIP)
+	if reject, autoban := checkConnRateLimit(ipid); reject {
 		logger.LogInfof("Connection from %v rejected (connection rate limit exceeded)", ipid)
+		if autoban {
+			go autobanFlooder(ipid, "connection flooding")
+		}
 		http.Error(w, "Too many connections", http.StatusTooManyRequests)
 		return
 	}
@@ -574,6 +648,11 @@ func HandleWS(w http.ResponseWriter, r *http.Request) {
 	if checkGlobalNewIPRateLimit(ipid) {
 		logger.LogInfof("Connection from new IP %v rejected (global new IP rate limit exceeded)", ipid)
 		http.Error(w, "Too many connections", http.StatusTooManyRequests)
+		return
+	}
+	if checkFirewallForIP(extractIP(rawIP), ipid) {
+		logger.LogInfof("Connection from %v rejected (VPN/proxy detected by IPHub firewall)", ipid)
+		http.Error(w, "Forbidden", http.StatusForbidden)
 		return
 	}
 	recordIPFirstSeen(ipid)
@@ -598,10 +677,11 @@ func HandleWS(w http.ResponseWriter, r *http.Request) {
 
 // CleanupServer closes all connections to the server and closes the database.
 func (s *Server) CleanupServer() {
-	for client := range clients.GetAllClients() {
+	clients.ForEach(func(client *Client) {
 		client.conn.Close()
-	}
+	})
 	db.Close()
+	logger.CloseLogFiles()
 }
 
 // CleanupServer closes all connections on the active server instance.
@@ -615,28 +695,37 @@ func RequestRestart() {
 
 // writeToAll sends a message to all connected clients.
 func writeToAll(header string, contents ...string) {
-	for client := range clients.GetAllClients() {
-		if client.Uid() == -1 {
-			continue
+	clients.ForEach(func(client *Client) {
+		if client.Uid() != -1 {
+			client.SendPacket(header, contents...)
 		}
-		client.SendPacket(header, contents...)
-	}
+	})
 }
 
 // writeToArea sends a message to all clients in a given area.
 func writeToArea(area *area.Area, header string, contents ...string) {
-	for client := range clients.GetAllClients() {
+	clients.ForEach(func(client *Client) {
 		if client.Area() == area {
 			client.SendPacket(header, contents...)
 		}
-	}
+	})
+}
+
+// writeToAreaFrom sends a message to all clients in a given area, skipping
+// any recipient that has permanently ignored the sender's IPID.
+func writeToAreaFrom(senderIPID string, area *area.Area, header string, contents ...string) {
+	clients.ForEach(func(client *Client) {
+		if client.Area() == area && !client.IgnoresIPID(senderIPID) {
+			client.SendPacket(header, contents...)
+		}
+	})
 }
 
 // writeToAllClients writes a packet to all connected clients
 func writeToAllClients(header string, contents ...string) {
-	for client := range clients.GetAllClients() {
+	clients.ForEach(func(client *Client) {
 		client.SendPacket(header, contents...)
-	}
+	})
 }
 
 // addToBuffer writes to an area buffer according to a client's action.
@@ -675,9 +764,9 @@ func getAreaIndex(a *area.Area) int {
 
 // sendPlayerListToClient sends PR and PU packets for all currently joined players to a new client.
 func sendPlayerListToClient(newClient *Client) {
-	for c := range clients.GetAllClients() {
-		if c.Uid() == -1 || c == newClient {
-			continue
+	clients.ForEach(func(c *Client) {
+		if c.Uid() == -1 || c == newClient || c.Hidden() {
+			return
 		}
 		uid := strconv.Itoa(c.Uid())
 		newClient.SendPacket("PR", uid, "0")
@@ -687,11 +776,15 @@ func sendPlayerListToClient(newClient *Client) {
 		newClient.SendPacket("PU", uid, "1", c.CurrentCharacter())
 		newClient.SendPacket("PU", uid, "2", decode(c.Showname()))
 		newClient.SendPacket("PU", uid, "3", strconv.Itoa(getAreaIndex(c.Area())))
-	}
+	})
 }
 
 // broadcastPlayerJoin sends PR and PU packets to all clients when a new player joins.
+// Hidden players are not broadcast.
 func broadcastPlayerJoin(client *Client) {
+	if client.Hidden() {
+		return
+	}
 	uid := strconv.Itoa(client.Uid())
 	writeToAll("PR", uid, "0")
 	if client.OOCName() != "" {
@@ -703,11 +796,12 @@ func broadcastPlayerJoin(client *Client) {
 }
 
 // sendPlayerArup sends a player ARUP to all connected clients.
+// Visible (non-hidden) player counts are read from each area's pre-maintained counter.
 func sendPlayerArup() {
 	plCounts := make([]string, 1, 1+len(areas))
 	plCounts[0] = "0"
 	for _, a := range areas {
-		plCounts = append(plCounts, strconv.Itoa(a.PlayerCount()))
+		plCounts = append(plCounts, strconv.Itoa(a.VisiblePlayerCount()))
 	}
 	writeToAll("ARUP", plCounts...)
 }
@@ -775,23 +869,28 @@ func getClientByUid(uid int) (*Client, error) {
 
 // getClientsByIpid returns all clients with the given ipid.
 func getClientsByIpid(ipid string) []*Client {
-	var returnlist []*Client
-	for c := range clients.GetAllClients() {
-		if c.Ipid() == ipid {
-			returnlist = append(returnlist, c)
-		}
-	}
-	return returnlist
+	return clients.GetByIPID(ipid)
 }
 
 // sendAreaServerMessage sends a server OOC message to all clients in an area.
 func sendAreaServerMessage(area *area.Area, message string) {
-	writeToArea(area, "CT", encode(config.Name), encode(message), "1")
+	writeToArea(area, "CT", encodedServerName, encode(message), "1")
+}
+
+// sendAreaGamblingMessage sends a gambling-result OOC message to all clients
+// in an area who have not opted out of gambling broadcasts via /gamble hide.
+func sendAreaGamblingMessage(a *area.Area, message string) {
+	encoded := encode(message)
+	clients.ForEach(func(client *Client) {
+		if client.Area() == a && !client.GambleHide() {
+			client.SendPacket("CT", encodedServerName, encoded, "1")
+		}
+	})
 }
 
 // sendGlobalServerMessage broadcasts a server OOC message to every joined client.
 func sendGlobalServerMessage(message string) {
-	writeToAll("CT", encode(config.Name), encode(message), "1")
+	writeToAll("CT", encodedServerName, encode(message), "1")
 }
 
 // getRealIP extracts the real client IP address from an HTTP request.
@@ -829,18 +928,21 @@ func getRealIP(r *http.Request) string {
 func getIpid(s string) string {
 	// For privacy and ease of use, AO servers traditionally use a hashed version of a client's IP address to identify a client.
 	// Athena uses the MD5 hash of the IP address, encoded in base64.
-
-	// Extract just the IP address, removing the port if present
-	// Use net.SplitHostPort which correctly handles both IPv4 and IPv6 addresses
-	ip, _, err := net.SplitHostPort(s)
-	if err != nil {
-		// If there's an error, the input doesn't have a port, so use it as-is
-		ip = s
-	}
-
+	ip := extractIP(s)
 	hash := md5.Sum([]byte(ip))
 	ipid := base64.StdEncoding.EncodeToString(hash[:])
 	return ipid[:len(ipid)-2] // Removes the trailing padding.
+}
+
+// extractIP returns the plain IP address from a "host:port" string (or plain IP).
+// It mirrors the extraction logic inside getIpid so callers can obtain the raw IP
+// without re-parsing the same string.
+func extractIP(s string) string {
+	ip, _, err := net.SplitHostPort(s)
+	if err != nil {
+		return s
+	}
+	return ip
 }
 
 // getParrotMsg returns a random string from the server's parrot list.
@@ -851,10 +953,13 @@ func getParrotMsg() string {
 
 // checkConnRateLimit checks whether the given ipid has exceeded the connection rate limit.
 // It records every connection attempt (including rejected ones) in the sliding window.
-// Returns true if the connection should be rejected.
-func checkConnRateLimit(ipid string) bool {
+// Returns rejected=true if the connection should be rejected.
+// Returns autoban=true when conn_flood_autoban is enabled and the rejection count hits
+// the threshold exactly this call — the caller should ban the IP asynchronously.
+// Both values are determined under a single lock acquisition.
+func checkConnRateLimit(ipid string) (rejected, autoban bool) {
 	if config.ConnRateLimit <= 0 {
-		return false
+		return false, false
 	}
 
 	connTracker.mu.Lock()
@@ -881,7 +986,17 @@ func checkConnRateLimit(ipid string) bool {
 	times = append(times, now)
 	connTracker.timestamps[ipid] = times
 
-	return len(times) > config.ConnRateLimit
+	if len(times) <= config.ConnRateLimit {
+		return false, false
+	}
+
+	// Connection is rejected. Check whether the auto-ban threshold has been reached.
+	// Use == (not >=) so the autoban goroutine is spawned exactly once per flood.
+	if config.ConnFloodAutoban && config.ConnFloodAutobanThreshold > 0 {
+		connTracker.rejections[ipid]++
+		autoban = connTracker.rejections[ipid] == config.ConnFloodAutobanThreshold
+	}
+	return true, autoban
 }
 
 // forgetIP removes an IPID from the in-memory first-seen tracker and from the
@@ -891,6 +1006,10 @@ func forgetIP(ipid string) {
 	ipFirstSeenTracker.mu.Lock()
 	delete(ipFirstSeenTracker.times, ipid)
 	ipFirstSeenTracker.mu.Unlock()
+
+	connTracker.mu.Lock()
+	delete(connTracker.rejections, ipid)
+	connTracker.mu.Unlock()
 
 	go func() {
 		if err := db.RemoveKnownIP(ipid); err != nil {
@@ -942,12 +1061,10 @@ func isIPIDTormented(ipid string) bool {
 	return ok
 }
 
-// autoBanPacketFlooder adds a temporary ban for an IP that has exceeded the raw packet rate limit.
-// This is only triggered by raw packet flooding (sending hundreds of packets per second),
-// which is characteristic of bots/DDoS tools. IC/OOC/music message rate limit violations
-// result in a kick, not a ban (see KickForRateLimit).
-// If the IP is already banned, no additional ban is added.
-func autoBanPacketFlooder(ipid string) {
+// autobanFlooder bans an IP for the given flood reason using the configured default ban
+// duration. reason should be a short description, e.g. "packet flooding".
+// No-op if the IP is already banned or the ban cannot be recorded.
+func autobanFlooder(ipid, reason string) {
 	banned, _, err := db.IsBanned(db.IPID, ipid)
 	if err != nil || banned {
 		return
@@ -956,14 +1073,23 @@ func autoBanPacketFlooder(ipid string) {
 	if err != nil {
 		return
 	}
-	expiry := time.Now().UTC().Add(dur).Unix()
-	_, err = db.AddBan(ipid, "", time.Now().UTC().Unix(), expiry, "Automatic ban: packet flooding", "Server")
+	now := time.Now().UTC()
+	_, err = db.AddBan(ipid, "", now.Unix(), now.Add(dur).Unix(), "Automatic ban: "+reason, "Server")
 	if err != nil {
-		logger.LogErrorf("Failed to auto-ban packet flooder %v: %v", ipid, err)
+		logger.LogErrorf("Failed to auto-ban %v (%s): %v", ipid, reason, err)
 		return
 	}
 	forgetIP(ipid)
-	logger.LogInfof("Auto-banned %v for packet flooding", ipid)
+	logger.LogInfof("Auto-banned %v for %s", ipid, reason)
+}
+
+// autoBanPacketFlooder bans an IP that exceeded the raw packet rate limit.
+// This is only triggered by raw packet flooding (sending hundreds of packets per second),
+// which is characteristic of bots/DDoS tools. IC/OOC/music message rate limit violations
+// result in a kick, not a ban (see KickForRateLimit).
+// If the IP is already banned, no additional ban is added.
+func autoBanPacketFlooder(ipid string) {
+	autobanFlooder(ipid, "packet flooding")
 }
 
 // startConnTrackerCleanup periodically removes stale entries from the connection tracker
@@ -986,6 +1112,9 @@ func startConnTrackerCleanup() {
 			}
 			if i == len(times) {
 				delete(connTracker.timestamps, ipid)
+				// Also clear rejection counts for IPs with no recent connection attempts,
+				// so short-lived flooders that stop connecting don't accumulate forever.
+				delete(connTracker.rejections, ipid)
 			} else if i > 0 {
 				connTracker.timestamps[ipid] = times[i:]
 			}
@@ -1264,4 +1393,93 @@ func checkGlobalNewIPRateLimit(ipid string) bool {
 	globalNewIPTracker.timestamps = times
 
 	return len(times) >= config.GlobalNewIPRateLimit
+}
+
+// estimateJoinedLen returns the total byte length of all strings in ss joined by newlines.
+// Used to pre-size a strings.Builder, avoiding intermediate reallocations.
+func estimateJoinedLen(ss []string) int {
+	if len(ss) == 0 {
+		return 0
+	}
+	n := len(ss) - 1 // separators
+	for _, s := range ss {
+		n += len(s)
+	}
+	return n
+}
+
+// buildSMPacket constructs the full SM#<areas>#<music>#% packet string that is
+// sent verbatim to every client on join. Building it once at startup avoids a
+// strings.Join allocation on every connection.
+func buildSMPacket(areaNamesStr string, musicList []string) string {
+	// SM# + areaNames + # + music[0] + # + ... + music[n-1] + #%
+	// pre-size: len("SM#") + len(areaNamesStr) + len("#") + joined music + len("#%")
+	size := 3 + len(areaNamesStr) + 1 + estimateJoinedLen(musicList) + 2
+	var b strings.Builder
+	b.Grow(size)
+	b.WriteString("SM#")
+	b.WriteString(areaNamesStr)
+	for _, m := range musicList {
+		b.WriteByte('#')
+		b.WriteString(m)
+	}
+	b.WriteString("#%")
+	return b.String()
+}
+
+// hourlyChipMsg is the notification sent when a player earns exactly 1 chip from the
+// hourly ticker.  Defined as a constant to avoid a fmt.Sprintf allocation every tick.
+const hourlyChipMsg = "💰 You earned 1 chip for being online! Balance updated."
+
+// startHourlyChipAward runs in the background and awards 1 chip to every connected
+// player for each hour of online time they have accumulated during the current session.
+// This ensures players receive their hourly chip without needing to disconnect first.
+// Awards are tracked per-client in sessionChipsAwarded so the disconnect handler does
+// not double-count chips that have already been granted.
+//
+// EnsureChipBalance is intentionally not called here: chip rows are seeded at connect
+// time (pktReqDone), so by the time a player has been online for a full hour the row
+// is guaranteed to exist.
+func startHourlyChipAward() {
+	ticker := time.NewTicker(time.Hour)
+	defer ticker.Stop()
+	for range ticker.C {
+		if config == nil || !config.EnableCasino {
+			continue
+		}
+		// Capture now once so all per-client calculations use the same instant,
+		// avoiding N repeated time.Now() syscalls inside the loop.
+		now := time.Now()
+		clients.ForEach(func(client *Client) {
+			connAt := client.ConnectedAt()
+			if connAt.IsZero() {
+				return
+			}
+			sessionHours := int64(now.Sub(connAt).Seconds()) / secondsPerHour
+			toAward := sessionHours - client.SessionChipsAwarded()
+			if toAward <= 0 {
+				return
+			}
+			ipid := client.Ipid()
+			// Apply any passive income bonus passes the player has purchased.
+			// chipsPerHour = 1 (base) + any bonuses from passive income upgrades.
+			chipsPerHour := int64(1) + getPlayerHourlyBonus(ipid)
+			chipsToAward := toAward * chipsPerHour
+			if _, err := db.AddChips(ipid, chipsToAward); err != nil {
+				logger.LogErrorf("startHourlyChipAward: AddChips failed for %v: %v", ipid, err)
+				return
+			}
+			// Track hours credited (not chips) so the next tick knows where to resume.
+			client.AddSessionChipsAwarded(toAward)
+			var msg string
+			if chipsToAward == 1 {
+				msg = hourlyChipMsg
+			} else if chipsPerHour > 1 {
+				msg = fmt.Sprintf("💰 You earned %d chips for being online (%d/hr with income passes)! Balance updated.", chipsToAward, chipsPerHour)
+			} else {
+				msg = fmt.Sprintf("💰 You earned %d chips for being online! Balance updated.", chipsToAward)
+			}
+			client.SendServerMessage(msg)
+		})
+	}
 }

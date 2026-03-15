@@ -68,8 +68,10 @@ type ServerConfig struct {
 	RateLimit             int    `toml:"message_rate_limit"`
 	RateLimitWindow       int    `toml:"message_rate_limit_window"`
 	ModcallCooldown       int    `toml:"modcall_cooldown"`
-	ConnRateLimit         int    `toml:"connection_rate_limit"`
-	ConnRateLimitWindow   int    `toml:"connection_rate_limit_window"`
+	ConnRateLimit              int    `toml:"connection_rate_limit"`
+	ConnRateLimitWindow        int    `toml:"connection_rate_limit_window"`
+	ConnFloodAutoban           bool   `toml:"conn_flood_autoban"`
+	ConnFloodAutobanThreshold  int    `toml:"conn_flood_autoban_threshold"`
 	PacketFloodAutoban         bool   `toml:"packet_flood_autoban"`
 	RawPacketRateLimit         int    `toml:"raw_packet_rate_limit"`
 	RawPacketRateLimitWindow   float64 `toml:"raw_packet_rate_limit_window"`
@@ -88,6 +90,9 @@ type ServerConfig struct {
 	AutoModAction              string `toml:"automod_action"`
 	RandomSongCooldown         int    `toml:"random_song_cooldown"`
 	BotBanPlaytimeThreshold    int    `toml:"botban_playtime_threshold"`
+	IPHubAPIKey                string `toml:"iphub_api_key"`
+	EnableCasino               bool   `toml:"enable_casino"`
+	RegisterCaptcha            bool   `toml:"register_captcha"`
 }
 
 type LogConfig struct {
@@ -143,8 +148,10 @@ func DefaultConfig() *Config {
 			RateLimit:             20,
 			RateLimitWindow:       10,
 			ModcallCooldown:       0,
-			ConnRateLimit:         10,
-			ConnRateLimitWindow:   10,
+			ConnRateLimit:              10,
+			ConnRateLimitWindow:        10,
+			ConnFloodAutoban:           true,
+			ConnFloodAutobanThreshold:  6,
 			PacketFloodAutoban:         true,
 			RawPacketRateLimit:         20,
 			RawPacketRateLimitWindow:   2,
@@ -163,6 +170,8 @@ func DefaultConfig() *Config {
 			AutoModAction:              "ban",
 			RandomSongCooldown:         5,
 			BotBanPlaytimeThreshold:    120,
+			EnableCasino:               false,
+			RegisterCaptcha:            true,
 		},
 		LogConfig{
 			BufSize:              150,

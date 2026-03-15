@@ -48,6 +48,10 @@ var tstNavRegex = regexp.MustCompile(`[<>]([[:digit:]]+)?`)
 // maxShownameLength is the maximum number of characters allowed in a showname.
 const maxShownameLength = 30
 
+// validDeskMods is the set of accepted values for args[0] (desk_mod) in MS packets.
+// Defined at package level to avoid a slice allocation on every IC message.
+var validDeskMods = []string{"chat", "0", "1", "2", "3", "4", "5"}
+
 type pktMapValue struct {
 	Args     int
 	MustJoin bool
@@ -132,7 +136,7 @@ func pktReqChar(client *Client, _ *packet.Packet) {
 
 // Handles RM#%
 func pktReqAM(client *Client, _ *packet.Packet) {
-	client.write(fmt.Sprintf("SM#%v#%v#%%", areaNames, strings.Join(music, "#")))
+	client.write(smPacket)
 }
 
 // Handles RD#%
@@ -159,6 +163,57 @@ func pktReqDone(client *Client, _ *packet.Packet) {
 		client.SendServerMessage(config.Motd)
 	}
 	client.restorePunishments()
+
+	// Casino on-join setup: seed chip balance and prompt unregistered players.
+	if config.EnableCasino {
+		ipid := client.Ipid()
+		go func() {
+			if err := db.EnsureChipBalance(ipid); err != nil {
+				logger.LogErrorf("Failed to seed chip balance for %v: %v", ipid, err)
+			}
+		}()
+		if !client.Authenticated() {
+			client.SendServerMessage(
+				"🎰 Welcome! This server runs the Nyathena Casino — virtual chips, games, jobs & more.\n\n" +
+					"📖 Quick navigation:\n" +
+					"  • /help          — see every available command\n" +
+					"  • /casino        — open the casino dashboard (active tables, balance, game list)\n" +
+					"  • /chips         — check your chip balance\n" +
+					"  • /jobs          — list all jobs you can work to earn chips\n" +
+					"  • /shop          — spend chips on permanent tags & upgrades\n\n" +
+					"💰 Ways to earn chips:\n" +
+					"  • Everyone starts with 500 chips automatically.\n" +
+					"  • Earn 1 chip per hour of playtime (more with /shop passive upgrades!).\n" +
+					"  • Work a job: /janitor /busker /paperboy /bailiffjob /clerk  (40–60 min cooldowns).\n" +
+					"  • Unscramble events every 30–60 min — type the answer in IC chat to win 10 chips!\n" +
+					"    Use /unscramble to check your wins or see if a puzzle is active right now.\n\n" +
+					"🛒 Spend your chips at /shop:\n" +
+					"  • 115+ cosmetic tags in 7 categories visible in /gas & /players (from 100 chips!)\n" +
+					"    Categories: gambling ⚖️ attorney 🌸 anime 🎮 gamer 🌷 girly 😂 meme 👑 prestige\n" +
+					"  • Job passes   — permanently reduce job cooldowns or earn more chips per job\n" +
+					"  • Passive income — permanently earn up to 10× more chips per hour online\n" +
+					"  → /shop <category> to browse  |  /shop buy <id> to purchase\n\n" +
+					"📊 Leaderboards:\n" +
+					"  • /richest           — top chip holders on the server\n" +
+					"  • /playtime top      — top players by total time spent on the server\n" +
+					"  • /unscramble top    — top players by unscramble event wins\n" +
+					"  • /jobtop            — top players by chips earned from jobs\n\n" +
+					"👗 NEW — Wardrobe (Character Favourites):\n" +
+					"  Ever been overwhelmed by the huge character list and only want to swap to a select few?\n" +
+					"  Your personal Wardrobe lets you save favourite characters and swap to them in one command!\n" +
+					"  • /favourite <char>   — add or remove a character from your favourites (toggles).\n" +
+					"  • /wardrobe           — see your saved favourites list.\n" +
+					"  • /wardrobe <char>    — instantly swap to a character from your wardrobe.\n" +
+					"  Wardrobe is tied to your free account — register once and your favourites persist!\n\n" +
+					"💡 Create a free account to keep your balance, wardrobe & appear on leaderboards:\n" +
+					"  /register <username> <password>  — create your free account\n" +
+					"  /login <username> <password>     — sign in if you already have one\n\n" +
+					"(Username: 3–20 chars, letters/numbers/underscore · Password: 6+ chars)\n" +
+					"🔒 Passwords are stored with bcrypt — never in plain text.\n\n" +
+					"🔇 Don't want gambling broadcast messages? Use /gamble hide to toggle them off.")
+		}
+	}
+
 	logger.LogInfof("Client (IPID:%v UID:%v) joined the server", client.Ipid(), client.Uid())
 }
 
@@ -194,6 +249,10 @@ func pktChangeChar(client *Client, p *packet.Packet) {
 		if newid == -1 {
 			return // No free characters available
 		}
+	}
+	if stuckID := client.charStuckID(); stuckID >= 0 && newid != stuckID {
+		client.SendServerMessage(fmt.Sprintf("You are character stuck as %v and cannot change characters.", characters[stuckID]))
+		return
 	}
 	client.ChangeCharacter(newid)
 }
@@ -295,10 +354,10 @@ func pktIC(client *Client, p *packet.Packet) {
 			}
 
 			// Replace character and appearance with target's (including their saved position)
-			args[2] = targetCharName                  // character name (target's displayed character, including iniswap)
-			args[3] = targetEmote                     // emote
-			args[5] = client.PossessedPos()           // position (saved target position)
-			args[8] = strconv.Itoa(targetCharID)      // char_id (ID of target's displayed character)
+			args[2] = targetCharName             // character name (target's displayed character, including iniswap)
+			args[3] = targetEmote                // emote
+			args[5] = client.PossessedPos()      // position (saved target position)
+			args[8] = strconv.Itoa(targetCharID) // char_id (ID of target's displayed character)
 
 			// Use target's text color
 			targetTextColor := target.LastTextColor()
@@ -358,19 +417,22 @@ func pktIC(client *Client, p *packet.Packet) {
 					// allocating a full slice — O(N) single pass, zero extra heap.
 					var chosen *Client
 					n := 0
-					for c := range clients.GetAllClients() {
+					clients.ForEach(func(c *Client) {
 						if c.Area() == client.Area() && c.Uid() != client.Uid() {
 							n++
 							if rand.Intn(n) == 0 {
 								chosen = c
 							}
 						}
-					}
+					})
 					if chosen != nil {
 						targetShowname = clientDisplayName(chosen)
 					}
 				}
 				modifiedMsg = applyLovebombMessage(targetShowname)
+			} else if p.punishmentType == PunishmentThirdPerson {
+				displayName := clientDisplayName(client)
+				modifiedMsg = applyThirdPersonWithName(decodedMsg, displayName)
 			} else {
 				modifiedMsg = ApplyPunishmentToText(decodedMsg, p.punishmentType)
 			}
@@ -381,6 +443,15 @@ func pktIC(client *Client, p *packet.Packet) {
 		if p.punishmentType == PunishmentEmoji {
 			args[3] = GetRandomEmoji()
 		}
+		if p.punishmentType == PunishmentUncannyValley {
+			name := args[15]
+			if strings.TrimSpace(name) == "" && client.CharID() >= 0 && client.CharID() < len(characters) {
+				name = characters[client.CharID()]
+			}
+			if name != "" {
+				args[15] = MutateShowname(name)
+			}
+		}
 	}
 
 	if client.IsParrot() { // Bring out the parrot please.
@@ -388,6 +459,9 @@ func pktIC(client *Client, p *packet.Packet) {
 	}
 	if client.IsNarrator() {
 		args[3] = ""
+	}
+	if flip := client.CheckAndToggleDanceFlip(); flip != "" {
+		args[12] = flip
 	}
 	emote_mod, err := strconv.Atoi(args[7])
 	if err != nil {
@@ -432,11 +506,18 @@ func pktIC(client *Client, p *packet.Packet) {
 	// Decode the message text once; reused for length validation, testimony navigation, and automod.
 	msgText := decode(args[4])
 
+	// Single lock to obtain the stuck character ID; -1 means not stuck.
+	// Used in both iniswap cases below to avoid redundant mutex acquisitions.
+	stuckCharID := client.charStuckID()
+
 	switch {
-	case !sliceutil.ContainsString([]string{"chat", "0", "1", "2", "3", "4", "5"}, args[0]): // desk_mod
+	case !sliceutil.ContainsString(validDeskMods, args[0]): // desk_mod
 		return
 	case !isPossessing && !strings.EqualFold(characters[client.CharID()], args[2]) && !client.Area().IniswapAllowed(): // character name (skip check when possessing)
 		client.SendServerMessage("Iniswapping is not allowed in this area.")
+		return
+	case !isPossessing && stuckCharID >= 0 && !strings.EqualFold(characters[stuckCharID], args[2]): // block iniswap when charstuck
+		client.SendServerMessage(fmt.Sprintf("You are character stuck as %v and cannot iniswap.", characters[stuckCharID]))
 		return
 	case len(msgText) > config.MaxMsg: // message
 		client.SendServerMessage("Your message exceeds the maximum message length!")
@@ -505,18 +586,21 @@ func pktIC(client *Client, p *packet.Packet) {
 		}
 		client.SetPairWantedID(pid)
 		pairing := false
-		for c := range clients.GetAllClients() {
+		clients.ForEach(func(c *Client) {
+			if pairing {
+				return
+			}
 			isForce := client.ForcePairUID() >= 0 && client.ForcePairUID() == c.Uid() &&
 				c.ForcePairUID() >= 0 && c.ForcePairUID() == client.Uid()
 			// If the client has a stored pair partner, skip any client that isn't
 			// that specific partner to prevent false matches from position overlap.
 			if client.ForcePairUID() >= 0 && !isForce {
-				continue
+				return
 			}
 			// Also guard the candidate: if c is already UID-committed to a different partner,
 			// it must not be matched by anyone other than that partner.
 			if c.ForcePairUID() >= 0 && c.ForcePairUID() != client.Uid() {
-				continue
+				return
 			}
 			if c.CharID() == pid && c.PairWantedID() == client.CharID() && (isForce || c.Pos() == client.Pos()) {
 				pairinfo := c.PairInfo()
@@ -525,9 +609,8 @@ func pktIC(client *Client, p *packet.Packet) {
 				args[20] = pairinfo.offset
 				args[21] = pairinfo.flip
 				pairing = true
-				break
 			}
-		}
+		})
 		if !pairing {
 			args[16] = "-1^"
 			args[17] = ""
@@ -643,6 +726,11 @@ func pktIC(client *Client, p *packet.Packet) {
 	// Quickdraw: record the reaction for any active duel.
 	quickdrawOnIC(client)
 
+	// Unscramble: check whether the IC message is the correct answer.
+	if config != nil && config.EnableCasino {
+		unscrambleOnIC(client, msgText)
+	}
+
 	// Automod: check the decoded message for banned words before broadcasting.
 	if autoModCheck(client, msgText) {
 		return
@@ -654,7 +742,7 @@ func pktIC(client *Client, p *packet.Packet) {
 		return
 	}
 
-	writeToArea(client.Area(), "MS", args...)
+	writeToAreaFrom(client.Ipid(), client.Area(), "MS", args...)
 	addToBuffer(client, "IC", "\""+args[4]+"\"", false)
 }
 
@@ -778,11 +866,15 @@ func pktOOC(client *Client, p *packet.Packet) {
 	} else if strings.TrimSpace(p.Body[1]) == "" {
 		return
 	}
-	for c := range clients.GetAllClients() {
+	var usernameTaken bool
+	clients.ForEach(func(c *Client) {
 		if c.OOCName() == p.Body[0] && c != client {
-			client.SendServerMessage("That username is already taken.")
-			return
+			usernameTaken = true
 		}
+	})
+	if usernameTaken {
+		client.SendServerMessage("That username is already taken.")
+		return
 	}
 	client.SetOocName(username)
 
@@ -835,7 +927,7 @@ func pktOOC(client *Client, p *packet.Packet) {
 		handleTormentedOOC(client, encode(client.OOCName()), msg)
 		return
 	}
-	writeToArea(client.Area(), "CT", encode(client.OOCName()), msg, "0")
+	writeToAreaFrom(client.Ipid(), client.Area(), "CT", encode(client.OOCName()), msg, "0")
 	addToBuffer(client, "OOC", "\""+msg+"\"", false)
 }
 
@@ -912,12 +1004,13 @@ func pktModcall(client *Client, p *packet.Packet) {
 		s = p.Body[0]
 	}
 	addToBuffer(client, "MOD", fmt.Sprintf("Called moderator for reason: %v", s), false)
-	for c := range clients.GetAllClients() {
+	modcallMsg := fmt.Sprintf("MODCALL\n----------\nArea: %v\nUser: [%v] %v\nIPID: %v\nReason: %v",
+		client.Area().Name(), client.Uid(), client.CurrentCharacter(), client.Ipid(), s)
+	clients.ForEach(func(c *Client) {
 		if c.Authenticated() && permissions.IsModerator(c.Perms()) {
-			c.SendPacket("ZZ", fmt.Sprintf("MODCALL\n----------\nArea: %v\nUser: [%v] %v\nIPID: %v\nReason: %v",
-				client.Area().Name(), client.Uid(), client.CurrentCharacter(), client.Ipid(), s))
+			c.SendPacket("ZZ", modcallMsg)
 		}
-	}
+	})
 	if enableDiscord {
 		err := webhook.PostModcall(client.CurrentCharacter(), client.Area().Name(), s)
 		if err != nil {
@@ -953,24 +1046,34 @@ func pktCaseAnn(client *Client, p *packet.Packet) {
 	newPacket := fmt.Sprintf("CASEA#CASE ANNOUNCEMENT: %v in %v needs players for %v#%v#1#%%",
 		client.CurrentCharacter(), client.Area().Name(), p.Body[0], strings.Join(p.Body[1:], "#")) // Due to a bug, old client versions require this packet to have an extra arg.
 
-	for c := range clients.GetAllClients() {
-		if c == client {
-			continue
+	// Pre-parse the requested role flags once so we don't re-parse per recipient.
+	// Use a fixed-size array to avoid any heap allocation; bail out immediately
+	// on any malformed value (preserves original behaviour).
+	var alertRoles [4]bool
+	nRoles := 0
+	for i, r := range p.Body[1:] {
+		if i >= 4 {
+			break
 		}
-		for i, r := range p.Body[1:] {
-			if i >= 4 {
-				break
-			}
-			b, err := strconv.ParseBool(r)
-			if err != nil {
-				return
-			}
-			if b && c.AlertRole(i) {
+		b, err := strconv.ParseBool(r)
+		if err != nil {
+			return
+		}
+		alertRoles[i] = b
+		nRoles++
+	}
+
+	clients.ForEach(func(c *Client) {
+		if c == client {
+			return
+		}
+		for i := 0; i < nRoles; i++ {
+			if alertRoles[i] && c.AlertRole(i) {
 				c.write(newPacket)
 				break
 			}
 		}
-	}
+	})
 }
 
 // decoder and encoder are package-level, pre-compiled replacers for the AO2 percent-encoding scheme.

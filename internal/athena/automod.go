@@ -225,11 +225,11 @@ func handleTormentedIC(client *Client, args []string) {
 
 	time.AfterFunc(20*time.Second, func() {
 		// Deliver to everyone currently in the original area except the sender.
-		for c := range clients.GetAllClients() {
+		clients.ForEach(func(c *Client) {
 			if c.Area() == targetArea && c.Uid() != senderUID {
 				c.SendPacket("MS", argsCopy...)
 			}
-		}
+		})
 		addToBuffer(client, "IC", "\""+msgLabel+"\"", false)
 	})
 }
@@ -249,11 +249,11 @@ func handleTormentedOOC(client *Client, name, msg string) {
 	senderUID := client.Uid()
 
 	time.AfterFunc(20*time.Second, func() {
-		for c := range clients.GetAllClients() {
+		clients.ForEach(func(c *Client) {
 			if c.Area() == targetArea && c.Uid() != senderUID {
 				c.SendPacket("CT", name, msg, "0")
 			}
-		}
+		})
 		addToBuffer(client, "OOC", "\""+msg+"\"", false)
 	})
 }

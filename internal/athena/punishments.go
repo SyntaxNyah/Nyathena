@@ -22,6 +22,7 @@ import (
 	"regexp"
 	"strings"
 	"unicode"
+	"unicode/utf8"
 )
 
 // confusedSplitter splits on any sequence of non-letter, non-digit characters
@@ -29,113 +30,12 @@ var confusedSplitter = regexp.MustCompile(`[^\p{L}\p{N}]+`)
 
 const maxTextLength = 2000
 
-// safeSubstring safely extracts a substring with bounds checking
-func safeSubstring(s string, start, length int) string {
-	runes := []rune(s)
-	if start >= len(runes) {
-		return ""
-	}
-	end := start + length
-	if end > len(runes) {
-		end = len(runes)
-	}
-	return string(runes[start:end])
-}
+// Package-level tables — allocated once at program start, reused on every IC
+// message. Moving these out of the hot-path function bodies eliminates the
+// per-call heap allocation that would otherwise occur on every punished message.
 
-// truncateText ensures text doesn't exceed maximum length
-func truncateText(text string) string {
-	if len(text) > maxTextLength {
-		return safeSubstring(text, 0, maxTextLength)
-	}
-	return text
-}
-
-// applyBackward reverses character order
-func applyBackward(text string) string {
-	runes := []rune(text)
-	for i, j := 0, len(runes)-1; i < j; i, j = i+1, j-1 {
-		runes[i], runes[j] = runes[j], runes[i]
-	}
-	return string(runes)
-}
-
-// applyStutterstep doubles every word
-func applyStutterstep(text string) string {
-	words := strings.Fields(text)
-	var result strings.Builder
-	for i, word := range words {
-		if i > 0 {
-			result.WriteString(" ")
-		}
-		result.WriteString(word)
-		result.WriteString(" ")
-		result.WriteString(word)
-	}
-	return truncateText(result.String())
-}
-
-// applyElongate repeats vowels
-func applyElongate(text string) string {
-	var result strings.Builder
-	vowels := "aeiouAEIOU"
-	for _, r := range text {
-		result.WriteRune(r)
-		if strings.ContainsRune(vowels, r) {
-			result.WriteRune(r)
-			result.WriteRune(r)
-		}
-	}
-	return truncateText(result.String())
-}
-
-// applyUppercase converts to uppercase
-func applyUppercase(text string) string {
-	return strings.ToUpper(text)
-}
-
-// applyLowercase converts to lowercase
-func applyLowercase(text string) string {
-	return strings.ToLower(text)
-}
-
-// applyRobotic replaces with [BEEP] [BOOP]
-func applyRobotic(text string) string {
-	words := strings.Fields(text)
-	if len(words) == 0 {
-		return "[BEEP]"
-	}
-	var result strings.Builder
-	robotWords := []string{"[BEEP]", "[BOOP]", "[WHIRR]", "[BUZZ]"}
-	for i := 0; i < len(words); i++ {
-		if i > 0 {
-			result.WriteString(" ")
-		}
-		result.WriteString(robotWords[i%len(robotWords)])
-	}
-	return truncateText(result.String())
-}
-
-// applyAlternating creates alternating case
-func applyAlternating(text string) string {
-	runes := []rune(text)
-	upper := true
-	for i, r := range runes {
-		if unicode.IsLetter(r) {
-			if upper {
-				runes[i] = unicode.ToUpper(r)
-			} else {
-				runes[i] = unicode.ToLower(r)
-			}
-			upper = !upper
-		}
-	}
-	return string(runes)
-}
-
-// applyFancy converts to Unicode fancy characters (mathematical bold)
-func applyFancy(text string) string {
-	var result strings.Builder
-	fancyMap := map[rune]rune{
+var (
+	fancyTable = map[rune]rune{
 		'a': '𝐚', 'b': '𝐛', 'c': '𝐜', 'd': '𝐝', 'e': '𝐞', 'f': '𝐟', 'g': '𝐠',
 		'h': '𝐡', 'i': '𝐢', 'j': '𝐣', 'k': '𝐤', 'l': '𝐥', 'm': '𝐦', 'n': '𝐧',
 		'o': '𝐨', 'p': '𝐩', 'q': '𝐪', 'r': '𝐫', 's': '𝐬', 't': '𝐭', 'u': '𝐮',
@@ -145,38 +45,10 @@ func applyFancy(text string) string {
 		'O': '𝐎', 'P': '𝐏', 'Q': '𝐐', 'R': '𝐑', 'S': '𝐒', 'T': '𝐓', 'U': '𝐔',
 		'V': '𝐕', 'W': '𝐖', 'X': '𝐗', 'Y': '𝐘', 'Z': '𝐙',
 	}
-	for _, r := range text {
-		if fancy, ok := fancyMap[r]; ok {
-			result.WriteRune(fancy)
-		} else {
-			result.WriteRune(r)
-		}
-	}
-	return truncateText(result.String())
-}
 
-// applyUwu converts to UwU speak
-func applyUwu(text string) string {
-	text = strings.ReplaceAll(text, "r", "w")
-	text = strings.ReplaceAll(text, "R", "W")
-	text = strings.ReplaceAll(text, "l", "w")
-	text = strings.ReplaceAll(text, "L", "W")
-	text = strings.ReplaceAll(text, "no", "nyo")
-	text = strings.ReplaceAll(text, "No", "Nyo")
-	text = strings.ReplaceAll(text, "na", "nya")
-	text = strings.ReplaceAll(text, "Na", "Nya")
-	
-	// Add random UwU expressions
-	if rand.Float32() < 0.3 {
-		suffixes := []string{" uwu", " owo", " >w<", " ^w^"}
-		text += suffixes[rand.Intn(len(suffixes))]
-	}
-	return truncateText(text)
-}
-
-// applyPirate converts to pirate speech
-func applyPirate(text string) string {
-	replacements := map[string]string{
+	uwuSuffixes    = []string{" uwu", " owo", " >w<", " ^w^"}
+	pirateSuffixes = []string{", arr!", ", matey!", ", ye scurvy dog!"}
+	pirateTable    = map[string]string{
 		"hello": "ahoy",
 		"hi":    "ahoy",
 		"yes":   "aye",
@@ -186,23 +58,8 @@ func applyPirate(text string) string {
 		"are":   "be",
 		"is":    "be",
 	}
-	
-	lower := strings.ToLower(text)
-	for old, new := range replacements {
-		lower = strings.ReplaceAll(lower, old, new)
-	}
-	
-	// Add pirate expressions
-	if rand.Float32() < 0.3 {
-		suffixes := []string{", arr!", ", matey!", ", ye scurvy dog!"}
-		lower += suffixes[rand.Intn(len(suffixes))]
-	}
-	return truncateText(lower)
-}
 
-// applyShakespearean converts to Shakespearean English
-func applyShakespearean(text string) string {
-	replacements := map[string]string{
+	shakespeareanTable = map[string]string{
 		"you":       "thou",
 		"your":      "thy",
 		"yours":     "thine",
@@ -282,7 +139,735 @@ func applyShakespearean(text string) string {
 		"speak":     "speakest",
 		"say":       "sayest",
 	}
+	shakespeareanPrefixes = []string{
+		"Hark! ",
+		"Forsooth! ",
+		"Zounds! ",
+		"Prithee, ",
+		"Methinks ",
+		"By my troth! ",
+		"O fie! ",
+		"Marry! ",
+		"'Tis said that ",
+		"Good morrow! ",
+	}
+	shakespeareanSuffixes = []string{
+		", methinks.",
+		", forsooth!",
+		", I prithee.",
+		", good soul.",
+		", 'tis so!",
+		", verily.",
+		", upon mine honour.",
+		", I dare say.",
+	}
 
+	cavemanWords    = []string{"UGH", "GRUNT", "OOG", "RAWR", "HMPH", "GRUG"}
+	robotWords      = []string{"[BEEP]", "[BOOP]", "[WHIRR]", "[BUZZ]"}
+	whistleSounds   = []string{"♪", "♫", "~", "♬"}
+	paranoidPhrases = []string{
+		" (they're watching)",
+		" (don't trust them)",
+		" (they know)",
+		" (THEY'RE LISTENING)",
+		" (it's a conspiracy)",
+	}
+	subtitleLines = []string{
+		" [ominous music playing]",
+		" [confusing noises]",
+		" [awkward silence]",
+		" [dramatic pause]",
+		" [indistinct chatter]",
+	}
+	snakeSuffixes = []string{" *hisss*", " ssss...", " ~hisssss~"}
+	monkeySounds  = []string{"ook", "eek", "ooh ooh", "ahh ahh", "oo oo", "ee ee", "*scratches head*", "*swings from tree*"}
+	dogSounds     = []string{"woof", "arf", "grr", "bark!", "ruff", "yip", "*wags tail*", "bork"}
+	catSounds     = []string{"meow", "purrr~", "mrrrow", "mew", "nya~", "*purrs*", "prrrr", "mrrr"}
+	birdSounds    = []string{"tweet", "chirp", "squawk", "cheep", "coo coo", "*flaps wings*", "peep", "caw"}
+	cowSounds     = []string{"moo", "mooo", "MOOO", "moooo", "*chews cud*", "muu", "MOO MOO"}
+	frogSounds    = []string{"ribbit", "croak", "brrr-ribbit", "riiibbit", "*jumps*", "crrroak", "ribbit-ribbit"}
+	duckSounds    = []string{"quack", "QUACK", "quack!", "quack quack", "*waddles*", "QUACK!", "QUACK QUACK"}
+	horseSounds   = []string{"neigh", "whinny", "nicker", "NEIGH!", "*clip clop*", "hrrrr", "snort"}
+	lionSounds    = []string{"ROAR", "grrr", "rawr", "GRRR", "*snarls*", "rrrroar", "RAWRR"}
+	bunnySounds   = []string{"*thump*", "*thump thump*", "*nose twitch*", "*hops away*", "*binky!*", "*flops*", "*teeth chattering*", "*nudges*"}
+	emojiTable    = []string{"😀", "😎", "🤡", "👻", "🎃", "🦄", "🐱", "🐶", "🎮", "⭐"}
+
+	autospellTable = map[string]string{
+		"the":   "teh",
+		"you":   "u",
+		"your":  "ur",
+		"there": "their",
+		"their": "there",
+		"to":    "too",
+		"too":   "to",
+		"its":   "it's",
+		"it's":  "its",
+	}
+
+	spaghettiEffects = []func(string) string{
+		applyUppercase,
+		applyBackward,
+		applyElongate,
+		applyConfused,
+		applyDrunk,
+	}
+	rngEffects = []func(string) string{
+		applyBackward,
+		applyUppercase,
+		applyLowercase,
+		applyUwu,
+		applyPirate,
+		applyRobotic,
+		applyAlternating,
+	}
+	tormentEffects = []func(string) string{
+		applyUppercase,
+		applyBackward,
+		applyUwu,
+		applyRobotic,
+		applyConfused,
+	}
+	zooEffects = []func(string) string{
+		applyMonkey,
+		applySnake,
+		applyDog,
+		applyCat,
+		applyBird,
+		applyCow,
+		applyFrog,
+		applyDuck,
+		applyHorse,
+		applyLion,
+		applyBunny,
+	}
+
+	// ── ThesaurusOverload ────────────────────────────────────────────────────
+	thesaurusTable = map[string]string{
+		"go":         "peregrinate",
+		"going":      "peregrinating",
+		"walk":       "ambulate",
+		"say":        "proclaim",
+		"says":       "proclaims",
+		"said":       "proclaimed",
+		"talk":       "discourse",
+		"want":       "desire",
+		"wanted":     "desired",
+		"need":       "necessitate",
+		"needs":      "necessitates",
+		"see":        "behold",
+		"saw":        "beheld",
+		"look":       "observe",
+		"get":        "procure",
+		"make":       "fabricate",
+		"think":      "contemplate",
+		"thought":    "contemplated",
+		"know":       "comprehend",
+		"feel":       "discern",
+		"find":       "ascertain",
+		"give":       "bestow",
+		"take":       "appropriate",
+		"have":       "possess",
+		"big":        "gargantuan",
+		"large":      "voluminous",
+		"small":      "diminutive",
+		"good":       "splendid",
+		"great":      "magnanimous",
+		"bad":        "deplorable",
+		"awful":      "egregious",
+		"happy":      "ebullient",
+		"sad":        "melancholic",
+		"angry":      "incensed",
+		"smart":      "perspicacious",
+		"dumb":       "obtuse",
+		"stupid":     "obtuse",
+		"fast":       "expeditious",
+		"slow":       "sluggardly",
+		"friend":     "compatriot",
+		"enemy":      "adversary",
+		"help":       "ameliorate",
+		"stop":       "desist",
+		"start":      "commence",
+		"now":        "forthwith",
+		"later":      "subsequently",
+		"here":       "hereupon",
+		"there":      "thereupon",
+		"yes":        "affirmative",
+		"no":         "negatory",
+		"okay":       "acquiescence granted",
+		"ok":         "affirmative",
+		"please":     "I beseech thee",
+		"thanks":     "gratitude proffered",
+		"sorry":      "I sincerely apologise",
+		"sure":       "unequivocally",
+		"very":       "exceedingly",
+		"really":     "veritably",
+		"just":       "merely",
+		"thing":      "entity",
+		"things":     "entities",
+		"stuff":      "sundry materials",
+		"use":        "employ",
+		"do":         "execute",
+		"did":        "executed",
+		"done":       "concluded",
+		"try":        "endeavour",
+		"wrong":      "erroneous",
+		"right":      "perspicacious",
+		"old":        "antiquated",
+		"new":        "contemporary",
+		"time":       "temporal juncture",
+		"food":       "sustenance",
+		"work":       "endeavour productively",
+		"win":        "triumph",
+		"lose":       "suffer defeat",
+		"answer":     "riposte",
+		"question":   "inquiry",
+		"problem":    "predicament",
+		"idea":       "conjecture",
+		"place":      "locale",
+		"home":       "domicile",
+		"people":     "individuals",
+		"person":     "individual",
+		"tell":       "elucidate",
+		"about":      "pertaining to",
+		"because":    "for the reason that",
+		"also":       "furthermore",
+		"actually":   "in point of fact",
+		"literally":  "in a wholly un-metaphorical capacity",
+		"basically":  "fundamentally",
+		"totally":    "unequivocally",
+		"wait":       "remain stationary momentarily",
+		"show":       "demonstrate",
+		"weird":      "idiosyncratic",
+		"strange":    "anomalous",
+		"normal":     "normative",
+		"fine":       "satisfactory",
+		"hard":       "arduous",
+		"easy":       "facile",
+		"cold":       "frigid",
+		"funny":      "mirthfully provocative",
+		"serious":    "solemn",
+		"true":       "veritable",
+		"false":      "erroneous",
+		"ask":        "inquire",
+		"asked":      "inquired",
+		"choose":     "elect",
+		"believe":    "hypothesise",
+		"remember":   "recollect",
+		"forget":     "fail to recollect",
+		"important":  "of considerable import",
+		"leave":      "vacate",
+		"return":     "recommence one's presence",
+		"check":      "verify",
+		"move":       "relocate",
+		"write":      "inscribe",
+		"read":       "peruse",
+		"send":       "transmit",
+		"call":       "invoke",
+		"decide":     "adjudicate",
+		"understand": "apprehend",
+		"agree":      "concur",
+		"disagree":   "dissent",
+		"mean":       "signify",
+		"like":       "regard with favour",
+		"hate":       "hold in contemptuous disfavour",
+		"love":       "harbour deep affection for",
+		"eat":        "partake of sustenance",
+		"sleep":      "enter a state of somnolence",
+		"play":       "engage in recreational pursuits",
+	}
+	thesaurusSuffixes = []string{
+		" (i.e., as previously stated)",
+		" (per se)",
+		" [citation needed]",
+		" (source: my own perspicacity)",
+		" (ergo, QED)",
+		" (QED)",
+		" (cf. the above)",
+		" (vide infra)",
+		" (this is veritably the case)",
+		" (one might say)",
+	}
+
+	// ── ValleyGirl ───────────────────────────────────────────────────────────
+	valleygirlFillers = []string{
+		"like, ",
+		"literally ",
+		"okay sooo ",
+		"um, ",
+		"I mean, ",
+		"honestly? ",
+		"no but like, ",
+		"okay but ",
+	}
+	valleygirlSuffixes = []string{
+		" I literally can't.",
+		" like, seriously??",
+		" omg.",
+		", like, whatever.",
+		" ugh, literally.",
+		" no cap.",
+		"?? okay??",
+		" I can't even.",
+	}
+
+	// ── Babytalk ─────────────────────────────────────────────────────────────
+	babytalkStageDirections = []string{
+		" *tiny stomp*",
+		" *pout*",
+		" *wiggles*",
+		" *reaches arms up*",
+		" *blows raspberry*",
+		" *tugs sleeve*",
+		" *bottom lip wobbles*",
+		" *sniffles*",
+	}
+
+	// ── ThirdPerson ──────────────────────────────────────────────────────────
+	thirdPersonTemplates = []string{
+		"%s says: \"%s\"",
+		"%s declares: \"%s\"",
+		"%s, with great conviction, states: \"%s\"",
+		"%s announces to the room: \"%s\"",
+		"%s, without hesitation, proclaims: \"%s\"",
+		"According to %s: \"%s\"",
+		"%s would like the room to know: \"%s\"",
+		"Allegedly, %s says: \"%s\"",
+	}
+	thirdPersonMoodTags = []string{
+		" [dramatically]",
+		" [emphatically]",
+		" [passionately]",
+		" [mysteriously]",
+		" [suspiciously]",
+		" [unconvincingly]",
+	}
+
+	// ── UnreliableNarrator ───────────────────────────────────────────────────
+	unreliableHedges = []string{
+		"allegedly",
+		"supposedly",
+		"in theory",
+		"or so I'm told",
+		"I think",
+		"maybe",
+		"perhaps",
+		"apparently",
+		"if memory serves",
+		"according to sources",
+	}
+	unreliableSuffixes = []string{
+		" (…or so I recall.)",
+		" (Source: trust me.)",
+		" (I think.)",
+		" (allegedly.)",
+		" *narrator's note: this is unverified*",
+		" (unconfirmed)",
+		" (or did they?)",
+		" (citation: vibes)",
+		" (don't quote me on this)",
+		" (I was there. Probably.)",
+		" (in a dream, maybe?)",
+		" (my lawyer says I can't confirm this)",
+	}
+
+	// ── UncannyValley ────────────────────────────────────────────────────────
+	uncannyGlitchTags = []string{
+		" [checksum mismatch]",
+		" [signal distortion detected]",
+		" [buffer overflow at 0x0]",
+		" [connection unstable]",
+		" [data corruption detected]",
+		" [reality.exe has stopped responding]",
+		" [unexpected EOF]",
+		" [ERR: IDENTITY_UNDEFINED]",
+		" [rendering artifact]",
+		" [frame desync]",
+		" [memory leak suspected]",
+		" [this message may not be real]",
+	}
+	// uncannyVowelSwaps maps vowels to safe lookalike substitutions for showname glitching.
+	uncannyVowelSwaps = map[rune][]rune{
+		'a': {'α', 'ä', 'â'},
+		'e': {'ε', 'ë', 'é'},
+		'i': {'ι', 'ï', 'í'},
+		'o': {'ο', 'ö', 'ô'},
+		'u': {'υ', 'ü', 'ú'},
+		'A': {'Α', 'Ä', 'Â'},
+		'E': {'Ε', 'Ë', 'É'},
+		'I': {'Ι', 'Ï', 'Í'},
+		'O': {'Ο', 'Ö', 'Ô'},
+		'U': {'Υ', 'Ü', 'Ú'},
+	}
+
+	// tourettesAllVariants bundles the four outburst categories so applyTourettes
+	// can pick one with a single rand.Intn call instead of allocating a new slice.
+	tourettesAllVariants = [][]string{
+		tourettesSwearing,
+		tourettesRandom,
+		tourettesExclamations,
+		tourettesAnimalSounds,
+	}
+
+	// slangWords maps individual words to internet-slang shorthands.
+	// Applied after phrase substitution; keys are already lower-cased.
+	slangWords = map[string]string{
+		// Pronouns / verbs
+		"you":      "u",
+		"your":     "ur",
+		"yourself": "urself",
+		"are":      "r",
+		"be":       "b",
+		"see":      "c",
+		"why":      "y",
+		"for":      "4",
+		"to":       "2",
+		"too":      "2",
+		"two":      "2",
+		// Polite words
+		"please": "pls",
+		"thanks": "thx",
+		"okay":   "k",
+		"ok":     "k",
+		// Common shortenings
+		"because":   "bc",
+		"though":    "tho",
+		"about":     "abt",
+		"something": "smth",
+		"someone":   "sm1",
+		"everyone":  "evry1",
+		"anyone":    "ne1",
+		"anywhere":  "nywhr",
+		"somewhere": "smwhr",
+		"nothing":   "nth",
+		"without":   "w/o",
+		"with":      "w/",
+		// Time
+		"tomorrow": "tmrw",
+		"tonight":  "2nite",
+		"today":    "2day",
+		"later":    "l8r",
+		"before":   "b4",
+		"forever":  "4ever",
+		"together": "2gether",
+		"second":   "sec",
+		// Adjectives / adverbs
+		"really":     "rly",
+		"seriously":  "srsly",
+		"definitely": "def",
+		"probably":   "prob",
+		"already":    "alrdy",
+		"anyway":     "neway",
+		// Fun leet-style
+		"great":  "gr8",
+		"wait":   "w8",
+		"late":   "l8",
+		"mate":   "m8",
+		"hate":   "h8",
+		"good":   "gud",
+		"love":   "luv",
+		"night":  "nite",
+		"people": "ppl",
+		"what":   "wut",
+		"this":   "dis",
+		"that":   "dat",
+		// Relationships
+		"girlfriend": "gf",
+		"boyfriend":  "bf",
+		"brother":    "bro",
+		"sister":     "sis",
+		// Misc
+		"message":     "msg",
+		"picture":     "pic",
+		"pictures":    "pics",
+		"information": "info",
+		"whatever":    "w/e",
+	}
+)
+
+// babytalkReplacer applies all babytalk phonetic substitutions in a single O(n)
+// pass. Longer patterns are listed before shorter ones that share a prefix (e.g.
+// "together" before "tr", "flower" before "fl") so that the first match wins.
+var babytalkReplacer = strings.NewReplacer(
+	// 8 chars
+	"together", "togedder",
+	// 7 chars
+	"brother", "bwudder",
+	// 6 chars
+	"bottle", "baba",
+	"flower", "fwower",
+	"friend", "fwiend",
+	"hungry", "hungy",
+	"little", "widdle",
+	"please", "pwease",
+	"pretty", "pwetty",
+	// 5 chars
+	"light", "wight",
+	"right", "wight",
+	"sorry", "sowwy",
+	"water", "wawa",
+	// 4 chars
+	"crap", "poop",
+	"damn", "dang",
+	"give", "gib",
+	"hell", "heck",
+	"okay", "otay",
+	"very", "vewy",
+	// 3 chars (str before tr so "str" isn't partially consumed by "tr")
+	"str", "stw",
+	// 2 chars
+	"dr", "dw",
+	"fl", "fw",
+	"tr", "tw",
+)
+
+// uncannyFineReplacer handles all capitalisation variants of "im/i'm/i am fine"
+// so that applyUncannyValley doesn't allocate a Replacer on every hot-path call.
+var uncannyFineReplacer = strings.NewReplacer(
+	"I am fine", "I am fine :)",
+	"i am fine", "i am fine :)",
+	"I'm fine", "I'm fine :)",
+	"i'm fine", "i'm fine :)",
+	"Im fine", "Im fine :)",
+	"im fine", "im fine :)",
+)
+
+// slangPhraseReplacer performs all multi-word phrase substitutions in a single
+// left-to-right O(n) pass (Aho-Corasick internally).  Entries are ordered
+// longest-first so that longer phrases always win over their shorter prefixes
+// (e.g. "see you later" matches before "see you").
+var slangPhraseReplacer = strings.NewReplacer(
+	// ── 25+ chars ────────────────────────────────────────────────────────────
+	"rolling on the floor laughing", "rotfl",
+	// ── 21 chars ─────────────────────────────────────────────────────────────
+	"at the end of the day", "ateotd",
+	"in case you missed it", "icymi",
+	"if i recall correctly", "iirc",
+	"too long did not read", "tldr",
+	// ── 20 chars ─────────────────────────────────────────────────────────────
+	"you know what i mean", "ykwim",
+	"don't worry about it", "dwai",
+	"in my humble opinion", "imho",
+	"greatest of all time", "goat",
+	"best friends forever", "bff",
+	"too long didn't read", "tldr",
+	// ── 19 chars ─────────────────────────────────────────────────────────────
+	"fear of missing out", "fomo",
+	"laughing my ass off", "lmao",
+	"as soon as possible", "asap",
+	// ── 18 chars ─────────────────────────────────────────────────────────────
+	"good luck have fun", "glhf",
+	"you only live once", "yolo",
+	// ── 17 chars ─────────────────────────────────────────────────────────────
+	"not safe for work", "nsfw",
+	"talk to you later", "ttyl",
+	"laughing out loud", "lol",
+	// ── 16 chars ─────────────────────────────────────────────────────────────
+	"talk to you soon", "ttys",
+	"not going to lie", "ngl",
+	"as far as i know", "afaik",
+	"long story short", "lss",
+	"laugh my ass off", "lmao",
+	"what do you mean", "wdym",
+	// ── 15 chars ─────────────────────────────────────────────────────────────
+	"shaking my head", "smh",
+	"to be continued", "tbc",
+	// ── 14 chars ─────────────────────────────────────────────────────────────
+	"laugh out loud", "lol",
+	// ── 13 chars ─────────────────────────────────────────────────────────────
+	"see you later", "cya", // must come before "see you"
+	"i do not know", "idk",
+	"i do not care", "idc",
+	"be right back", "brb",
+	"what the heck", "wth",
+	"what the hell", "wth",
+	"what the fuck", "wtf",
+	"at the moment", "atm",
+	"in my opinion", "imo",
+	"shake my head", "smh",
+	"not gonna lie", "ngl",
+	// ── 12 chars ─────────────────────────────────────────────────────────────
+	"just kidding", "jk",
+	"good morning", "gm",
+	"in real life", "irl",
+	"i don't know", "idk",
+	"i don't care", "idc",
+	"to be honest", "tbh",
+	"i know right", "ikr",
+	// ── 11 chars ─────────────────────────────────────────────────────────────
+	"let me know", "lmk",
+	"for the win", "ftw",
+	// ── 10 chars ─────────────────────────────────────────────────────────────
+	"oh my gosh", "omg", // before "oh my god"
+	"never mind", "nvm",
+	"no problem", "np",
+	"to be fair", "tbf",
+	"good night", "gn",
+	"by the way", "btw",
+	"i love you", "ily",
+	// ── 9 chars ──────────────────────────────────────────────────────────────
+	"got to go", "gtg",
+	"on my way", "omw",
+	"hit me up", "hmu",
+	"all right", "aight",
+	"good luck", "gl",
+	"right now", "rn",
+	"oh my god", "omg",
+	// ── 8 chars ──────────────────────────────────────────────────────────────
+	"have fun", "hf",
+	"for real", "fr",
+	// ── 7 chars ──────────────────────────────────────────────────────────────
+	"see you", "cya",
+)
+
+// safeSubstring safely extracts a substring with bounds checking
+func safeSubstring(s string, start, length int) string {
+	runes := []rune(s)
+	if start >= len(runes) {
+		return ""
+	}
+	end := start + length
+	if end > len(runes) {
+		end = len(runes)
+	}
+	return string(runes[start:end])
+}
+
+// truncateText ensures text doesn't exceed maximum length
+func truncateText(text string) string {
+	if len(text) > maxTextLength {
+		return safeSubstring(text, 0, maxTextLength)
+	}
+	return text
+}
+
+// applyBackward reverses character order
+func applyBackward(text string) string {
+	runes := []rune(text)
+	for i, j := 0, len(runes)-1; i < j; i, j = i+1, j-1 {
+		runes[i], runes[j] = runes[j], runes[i]
+	}
+	return string(runes)
+}
+
+// applyStutterstep doubles every word
+func applyStutterstep(text string) string {
+	words := strings.Fields(text)
+	var result strings.Builder
+	for i, word := range words {
+		if i > 0 {
+			result.WriteString(" ")
+		}
+		result.WriteString(word)
+		result.WriteString(" ")
+		result.WriteString(word)
+	}
+	return truncateText(result.String())
+}
+
+// applyElongate repeats vowels
+func applyElongate(text string) string {
+	var result strings.Builder
+	vowels := "aeiouAEIOU"
+	for _, r := range text {
+		result.WriteRune(r)
+		if strings.ContainsRune(vowels, r) {
+			result.WriteRune(r)
+			result.WriteRune(r)
+		}
+	}
+	return truncateText(result.String())
+}
+
+// applyUppercase converts to uppercase
+func applyUppercase(text string) string {
+	return strings.ToUpper(text)
+}
+
+// applyLowercase converts to lowercase
+func applyLowercase(text string) string {
+	return strings.ToLower(text)
+}
+
+// applyRobotic replaces with [BEEP] [BOOP]
+func applyRobotic(text string) string {
+	words := strings.Fields(text)
+	if len(words) == 0 {
+		return "[BEEP]"
+	}
+	var result strings.Builder
+	for i := 0; i < len(words); i++ {
+		if i > 0 {
+			result.WriteString(" ")
+		}
+		result.WriteString(robotWords[i%len(robotWords)])
+	}
+	return truncateText(result.String())
+}
+
+// applyAlternating creates alternating case
+func applyAlternating(text string) string {
+	runes := []rune(text)
+	upper := true
+	for i, r := range runes {
+		if unicode.IsLetter(r) {
+			if upper {
+				runes[i] = unicode.ToUpper(r)
+			} else {
+				runes[i] = unicode.ToLower(r)
+			}
+			upper = !upper
+		}
+	}
+	return string(runes)
+}
+
+// applyFancy converts to Unicode fancy characters (mathematical bold)
+func applyFancy(text string) string {
+	var result strings.Builder
+	for _, r := range text {
+		if fancy, ok := fancyTable[r]; ok {
+			result.WriteRune(fancy)
+		} else {
+			result.WriteRune(r)
+		}
+	}
+	return truncateText(result.String())
+}
+
+// applyUwu converts to UwU speak
+func applyUwu(text string) string {
+	text = strings.ReplaceAll(text, "r", "w")
+	text = strings.ReplaceAll(text, "R", "W")
+	text = strings.ReplaceAll(text, "l", "w")
+	text = strings.ReplaceAll(text, "L", "W")
+	text = strings.ReplaceAll(text, "no", "nyo")
+	text = strings.ReplaceAll(text, "No", "Nyo")
+	text = strings.ReplaceAll(text, "na", "nya")
+	text = strings.ReplaceAll(text, "Na", "Nya")
+
+	// Add random UwU expressions
+	if rand.Float32() < 0.3 {
+		text += uwuSuffixes[rand.Intn(len(uwuSuffixes))]
+	}
+	return truncateText(text)
+}
+
+// applyPirate converts to pirate speech
+func applyPirate(text string) string {
+	lower := strings.ToLower(text)
+	for old, new := range pirateTable {
+		lower = strings.ReplaceAll(lower, old, new)
+	}
+
+	// Add pirate expressions
+	if rand.Float32() < 0.3 {
+		lower += pirateSuffixes[rand.Intn(len(pirateSuffixes))]
+	}
+	return truncateText(lower)
+}
+
+// applyShakespearean converts to Shakespearean English
+func applyShakespearean(text string) string {
 	words := strings.Fields(text)
 	for i, word := range words {
 		// Strip trailing punctuation for lookup, restore it after
@@ -296,9 +881,10 @@ func applyShakespearean(text string) string {
 			}
 		}
 		lower := strings.ToLower(stripped)
-		if replacement, ok := replacements[lower]; ok {
-			// Preserve leading capital if original word was capitalised
-			if len(stripped) > 0 && unicode.IsUpper([]rune(stripped)[0]) {
+		if replacement, ok := shakespeareanTable[lower]; ok {
+			// Preserve leading capital if original word was capitalised.
+			// utf8.DecodeRuneInString avoids allocating a full []rune slice.
+			if firstRune, _ := utf8.DecodeRuneInString(stripped); unicode.IsUpper(firstRune) {
 				r := []rune(replacement)
 				r[0] = unicode.ToUpper(r[0])
 				replacement = string(r)
@@ -309,34 +895,12 @@ func applyShakespearean(text string) string {
 
 	result := strings.Join(words, " ")
 
-	prefixes := []string{
-		"Hark! ",
-		"Forsooth! ",
-		"Zounds! ",
-		"Prithee, ",
-		"Methinks ",
-		"By my troth! ",
-		"O fie! ",
-		"Marry! ",
-		"'Tis said that ",
-		"Good morrow! ",
-	}
 	if rand.Float32() < 0.4 {
-		result = prefixes[rand.Intn(len(prefixes))] + result
+		result = shakespeareanPrefixes[rand.Intn(len(shakespeareanPrefixes))] + result
 	}
 
-	suffixes := []string{
-		", methinks.",
-		", forsooth!",
-		", I prithee.",
-		", good soul.",
-		", 'tis so!",
-		", verily.",
-		", upon mine honour.",
-		", I dare say.",
-	}
 	if rand.Float32() < 0.3 {
-		result = result + suffixes[rand.Intn(len(suffixes))]
+		result = result + shakespeareanSuffixes[rand.Intn(len(shakespeareanSuffixes))]
 	}
 
 	return truncateText(result)
@@ -348,8 +912,7 @@ func applyCaveman(text string) string {
 	if len(words) == 0 {
 		return "UGH"
 	}
-	
-	cavemanWords := []string{"UGH", "GRUNT", "OOG", "RAWR", "HMPH", "GRUG"}
+
 	var result strings.Builder
 	for i := 0; i < (len(words)+1)/2; i++ {
 		if i > 0 {
@@ -395,13 +958,6 @@ func applyConfused(text string) string {
 
 // applyParanoid adds paranoid text
 func applyParanoid(text string) string {
-	paranoidPhrases := []string{
-		" (they're watching)",
-		" (don't trust them)",
-		" (they know)",
-		" (THEY'RE LISTENING)",
-		" (it's a conspiracy)",
-	}
 	phrase := paranoidPhrases[rand.Intn(len(paranoidPhrases))]
 	return truncateText(text + phrase)
 }
@@ -410,18 +966,18 @@ func applyParanoid(text string) string {
 func applyDrunk(text string) string {
 	words := strings.Fields(text)
 	var result strings.Builder
-	
+
 	for i, word := range words {
 		if i > 0 {
 			result.WriteString(" ")
 		}
-		
+
 		// Randomly repeat words
 		if rand.Float32() < 0.3 {
 			result.WriteString(word)
 			result.WriteString(" ")
 		}
-		
+
 		// Slur by repeating letters
 		runes := []rune(word)
 		for j, r := range runes {
@@ -431,7 +987,7 @@ func applyDrunk(text string) string {
 			}
 		}
 	}
-	
+
 	// Add hiccups
 	if rand.Float32() < 0.3 {
 		result.WriteString(" *hic*")
@@ -443,13 +999,13 @@ func applyDrunk(text string) string {
 func applyHiccup(text string) string {
 	words := strings.Fields(text)
 	var result strings.Builder
-	
+
 	for i, word := range words {
 		if i > 0 {
 			result.WriteString(" ")
 		}
 		result.WriteString(word)
-		
+
 		if rand.Float32() < 0.4 {
 			result.WriteString(" *hic*")
 		}
@@ -460,15 +1016,14 @@ func applyHiccup(text string) string {
 // applyWhistle replaces letters with whistles
 func applyWhistle(text string) string {
 	words := strings.Fields(text)
-	whistles := []string{"♪", "♫", "~", "♬"}
-	
+
 	var result strings.Builder
 	for i, word := range words {
 		if i > 0 {
 			result.WriteString(" ")
 		}
 		for range word {
-			result.WriteString(whistles[rand.Intn(len(whistles))])
+			result.WriteString(whistleSounds[rand.Intn(len(whistleSounds))])
 		}
 	}
 	return truncateText(result.String())
@@ -478,12 +1033,12 @@ func applyWhistle(text string) string {
 func applyMumble(text string) string {
 	words := strings.Fields(text)
 	var result strings.Builder
-	
+
 	for i, word := range words {
 		if i > 0 {
 			result.WriteString(" ")
 		}
-		
+
 		runes := []rune(word)
 		for j, r := range runes {
 			if j == 0 || j == len(runes)-1 {
@@ -500,36 +1055,17 @@ func applyMumble(text string) string {
 
 // applySpaghetti combines multiple random effects
 func applySpaghetti(text string) string {
-	effects := []func(string) string{
-		applyUppercase,
-		applyBackward,
-		applyElongate,
-		applyConfused,
-		applyDrunk,
-	}
-	
 	// Apply 2-3 random effects
 	numEffects := 2 + rand.Intn(2)
 	for i := 0; i < numEffects; i++ {
-		effect := effects[rand.Intn(len(effects))]
-		text = effect(text)
+		text = spaghettiEffects[rand.Intn(len(spaghettiEffects))](text)
 	}
 	return text
 }
 
 // applyRng applies random effect from pool
 func applyRng(text string) string {
-	effects := []func(string) string{
-		applyBackward,
-		applyUppercase,
-		applyLowercase,
-		applyUwu,
-		applyPirate,
-		applyRobotic,
-		applyAlternating,
-	}
-	effect := effects[rand.Intn(len(effects))]
-	return effect(text)
+	return rngEffects[rand.Intn(len(rngEffects))](text)
 }
 
 // applyEssay ensures minimum character count
@@ -542,22 +1078,10 @@ func applyEssay(text string) string {
 
 // applyAutospell intentionally misspells words
 func applyAutospell(text string) string {
-	replacements := map[string]string{
-		"the":   "teh",
-		"you":   "u",
-		"your":  "ur",
-		"there": "their",
-		"their": "there",
-		"to":    "too",
-		"too":   "to",
-		"its":   "it's",
-		"it's":  "its",
-	}
-	
 	words := strings.Fields(text)
 	for i, word := range words {
 		lower := strings.ToLower(word)
-		if replacement, ok := replacements[lower]; ok {
+		if replacement, ok := autospellTable[lower]; ok {
 			words[i] = replacement
 		}
 	}
@@ -566,32 +1090,232 @@ func applyAutospell(text string) string {
 
 // applyTorment cycles through different effects based on message count
 func applyTorment(text string, cycleIndex int) string {
-	effects := []func(string) string{
-		applyUppercase,
-		applyBackward,
-		applyUwu,
-		applyRobotic,
-		applyConfused,
-	}
-	effect := effects[cycleIndex%len(effects)]
-	return effect(text)
+	return tormentEffects[cycleIndex%len(tormentEffects)](text)
 }
 
 // applySubtitles adds confusing annotations
 func applySubtitles(text string) string {
-	subtitles := []string{
-		" [ominous music playing]",
-		" [confusing noises]",
-		" [awkward silence]",
-		" [dramatic pause]",
-		" [indistinct chatter]",
-	}
-	return text + subtitles[rand.Intn(len(subtitles))]
+	return text + subtitleLines[rand.Intn(len(subtitleLines))]
 }
 
 // applySpotlight adds an announcement prefix
 func applySpotlight(text string) string {
 	return "📣 EVERYONE LOOK: " + text
+}
+
+// ── ThesaurusOverload ────────────────────────────────────────────────────────
+
+// applyThesaurusOverload replaces common words with absurdly pompous synonyms.
+func applyThesaurusOverload(text string) string {
+	words := strings.Fields(text)
+	for i, word := range words {
+		// Strip trailing punctuation
+		punct := ""
+		stripped := word
+		if len(stripped) > 0 {
+			last := rune(stripped[len(stripped)-1])
+			if strings.ContainsRune(".,!?;:", last) {
+				punct = string(last)
+				stripped = stripped[:len(stripped)-1]
+			}
+		}
+		lower := strings.ToLower(stripped)
+		if replacement, ok := thesaurusTable[lower]; ok {
+			if firstRune, _ := utf8.DecodeRuneInString(stripped); unicode.IsUpper(firstRune) {
+				r := []rune(replacement)
+				r[0] = unicode.ToUpper(r[0])
+				replacement = string(r)
+			}
+			words[i] = replacement + punct
+		}
+	}
+	result := strings.Join(words, " ")
+	if rand.Float32() < 0.4 {
+		result += thesaurusSuffixes[rand.Intn(len(thesaurusSuffixes))]
+	}
+	return truncateText(result)
+}
+
+// ── ValleyGirl ───────────────────────────────────────────────────────────────
+
+// applyValleyGirl injects valley-girl filler words and stretches vowels.
+func applyValleyGirl(text string) string {
+	// Inject a filler at the start ~60% of the time
+	if rand.Float32() < 0.6 {
+		text = valleygirlFillers[rand.Intn(len(valleygirlFillers))] + text
+	}
+	// Stretch some vowels for drama. Compute lower once and keep it in sync
+	// with text so subsequent searches use accurate positions without
+	// redundant ToLower calls.
+	lower := strings.ToLower(text)
+	for _, ch := range []string{"o", "e", "a"} {
+		if rand.Float32() < 0.3 {
+			if idx := strings.Index(lower, ch); idx >= 0 {
+				text = text[:idx+1] + ch + ch + text[idx+1:]
+				lower = lower[:idx+1] + ch + ch + lower[idx+1:]
+			}
+		}
+	}
+	// Replace "no" with "nooo" and "yes" with "yesss"
+	text = strings.ReplaceAll(text, " no ", " nooo ")
+	text = strings.ReplaceAll(text, " yes ", " yesss ")
+	// Append a dramatic suffix ~50% of the time
+	if rand.Float32() < 0.5 {
+		text += valleygirlSuffixes[rand.Intn(len(valleygirlSuffixes))]
+	}
+	return truncateText(text)
+}
+
+// ── Babytalk ─────────────────────────────────────────────────────────────────
+
+// applyBabytalk converts text to toddler-style speech.
+func applyBabytalk(text string) string {
+	// babytalkReplacer performs all phonetic substitutions (including profanity
+	// softening) in a single O(n) pass instead of 22 sequential ReplaceAll calls.
+	lower := babytalkReplacer.Replace(strings.ToLower(text))
+	// Add a stage direction ~40% of the time
+	if rand.Float32() < 0.4 {
+		lower += babytalkStageDirections[rand.Intn(len(babytalkStageDirections))]
+	}
+	return truncateText(lower)
+}
+
+// ── ThirdPerson ──────────────────────────────────────────────────────────────
+
+// applyThirdPersonWithName wraps text in third-person narration using the
+// player's display name. Call applyThirdPerson for the no-showname fallback.
+func applyThirdPersonWithName(text, showname string) string {
+	if strings.TrimSpace(showname) == "" {
+		showname = "Someone"
+	}
+	// Determine mood tag from punctuation / capitalisation.
+	// Count uppercase letters and total runes in a single pass to avoid the
+	// extra O(n) allocation that len([]rune(text)) would cause.
+	moodTag := ""
+	upperCount := 0
+	runeCount := 0
+	for _, r := range text {
+		runeCount++
+		if unicode.IsUpper(r) {
+			upperCount++
+		}
+	}
+	hasExclamation := strings.Contains(text, "!")
+	hasQuestion := strings.Contains(text, "?")
+	upperRatio := 0.0
+	if runeCount > 0 {
+		upperRatio = float64(upperCount) / float64(runeCount)
+	}
+	switch {
+	case upperRatio > 0.6 && hasExclamation:
+		moodTag = " [feral]"
+	case upperRatio > 0.6:
+		moodTag = " [unhinged]"
+	case hasExclamation && hasQuestion:
+		moodTag = " [confused and dramatic]"
+	case hasExclamation:
+		moodTag = " [dramatic]"
+	case hasQuestion:
+		moodTag = " [confused]"
+	case rand.Float32() < 0.25:
+		moodTag = thirdPersonMoodTags[rand.Intn(len(thirdPersonMoodTags))]
+	}
+	template := thirdPersonTemplates[rand.Intn(len(thirdPersonTemplates))]
+	result := fmt.Sprintf(template, showname, text) + moodTag
+	return truncateText(result)
+}
+
+// applyThirdPerson is the no-showname version used by the generic dispatcher.
+func applyThirdPerson(text string) string {
+	return applyThirdPersonWithName(text, "")
+}
+
+// ── UnreliableNarrator ───────────────────────────────────────────────────────
+
+// applyUnreliableNarrator makes the speaker sound like an untrustworthy narrator.
+func applyUnreliableNarrator(text string) string {
+	// Insert a hedge word after the first word ~60% of the time.
+	// Use in-place grow-and-shift to avoid allocating two temporary slices.
+	words := strings.Fields(text)
+	if len(words) >= 2 && rand.Float32() < 0.6 {
+		hedge := unreliableHedges[rand.Intn(len(unreliableHedges))]
+		words = append(words, "")  // grow by one
+		copy(words[2:], words[1:]) // shift [1:] one position right
+		words[1] = hedge
+		text = strings.Join(words, " ")
+	}
+	// Append a suspicious suffix
+	text += unreliableSuffixes[rand.Intn(len(unreliableSuffixes))]
+	return truncateText(text)
+}
+
+// ── UncannyValley ────────────────────────────────────────────────────────────
+
+// applyUncannyValley adds glitchy system-note suffixes to messages.
+// The display-name mutation is handled in netprotocol.go.
+func applyUncannyValley(text string) string {
+	// Easter egg: if they claim to be fine, add an unsettling smiley.
+	// uncannyFineReplacer is package-level so no allocation occurs here.
+	// It returns the original string unchanged if none of the patterns match,
+	// which is cheaper than pre-checking with ToLower + Contains.
+	text = uncannyFineReplacer.Replace(text)
+	// ~60% chance to append a glitch tag
+	if rand.Float32() < 0.6 {
+		text += uncannyGlitchTags[rand.Intn(len(uncannyGlitchTags))]
+	}
+	return truncateText(text)
+}
+
+// MutateShowname applies a mild per-message display-name glitch for
+// PunishmentUncannyValley. It makes safe mutations (no true impersonation).
+func MutateShowname(name string) string {
+	if len(name) == 0 {
+		return name
+	}
+	runes := []rune(name)
+	choice := rand.Intn(4)
+	switch choice {
+	case 0:
+		// Replace one vowel with a lookalike homoglyph
+		var vowelIndices []int
+		for i, r := range runes {
+			if _, ok := uncannyVowelSwaps[r]; ok {
+				vowelIndices = append(vowelIndices, i)
+			}
+		}
+		if len(vowelIndices) > 0 {
+			idx := vowelIndices[rand.Intn(len(vowelIndices))]
+			options := uncannyVowelSwaps[runes[idx]]
+			runes[idx] = options[rand.Intn(len(options))]
+			return string(runes)
+		}
+		// Fallback: add underscore suffix
+		return string(runes) + "_"
+	case 1:
+		// Add a period suffix (distinct from the underscore fallback in case 0)
+		return string(runes) + "."
+	case 2:
+		// Swap two adjacent letters (skip first char to keep capital intact)
+		if len(runes) >= 3 {
+			idx := 1 + rand.Intn(len(runes)-2)
+			runes[idx], runes[idx+1] = runes[idx+1], runes[idx]
+		} else {
+			return string(runes) + "."
+		}
+		return string(runes)
+	default:
+		// Duplicate a random character (only if within length budget).
+		// len(runes) is the rune count — the correct comparison for maxShownameLength.
+		if len(runes) < maxShownameLength-1 {
+			idx := rand.Intn(len(runes))
+			newRunes := make([]rune, len(runes)+1)
+			copy(newRunes, runes[:idx+1])
+			newRunes[idx+1] = runes[idx]
+			copy(newRunes[idx+2:], runes[idx+1:])
+			return string(newRunes)
+		}
+		return string(runes) + "."
+	}
 }
 
 // ApplyPunishmentToText applies a punishment effect to text
@@ -697,6 +1421,20 @@ func ApplyPunishmentToText(text string, pType PunishmentType) string {
 		return applyDegrade(text)
 	case PunishmentTourettes:
 		return applyTourettes(text)
+	case PunishmentSlang:
+		return applySlang(text)
+	case PunishmentThesaurusOverload:
+		return applyThesaurusOverload(text)
+	case PunishmentValleyGirl:
+		return applyValleyGirl(text)
+	case PunishmentBabytalk:
+		return applyBabytalk(text)
+	case PunishmentThirdPerson:
+		return applyThirdPerson(text)
+	case PunishmentUnreliableNarrator:
+		return applyUnreliableNarrator(text)
+	case PunishmentUncannyValley:
+		return applyUncannyValley(text)
 	default:
 		return text
 	}
@@ -721,7 +1459,6 @@ func applyMonkey(text string) string {
 	if len(words) == 0 {
 		return "OOH OOH AHH AHH"
 	}
-	monkeySounds := []string{"ook", "eek", "ooh ooh", "ahh ahh", "oo oo", "ee ee", "*scratches head*", "*swings from tree*"}
 	var result strings.Builder
 	for i := range words {
 		if i > 0 {
@@ -737,8 +1474,7 @@ func applySnake(text string) string {
 	text = strings.ReplaceAll(text, "s", "sss")
 	text = strings.ReplaceAll(text, "S", "SSS")
 	if rand.Float32() < 0.5 {
-		suffixes := []string{" *hisss*", " ssss...", " ~hisssss~"}
-		text += suffixes[rand.Intn(len(suffixes))]
+		text += snakeSuffixes[rand.Intn(len(snakeSuffixes))]
 	}
 	return truncateText(text)
 }
@@ -749,7 +1485,6 @@ func applyDog(text string) string {
 	if len(words) == 0 {
 		return "WOOF!"
 	}
-	dogSounds := []string{"woof", "arf", "grr", "bark!", "ruff", "yip", "*wags tail*", "bork"}
 	var result strings.Builder
 	for i := range words {
 		if i > 0 {
@@ -766,7 +1501,6 @@ func applyCat(text string) string {
 	if len(words) == 0 {
 		return "meow~"
 	}
-	catSounds := []string{"meow", "purrr~", "mrrrow", "mew", "nya~", "*purrs*", "prrrr", "mrrr"}
 	var result strings.Builder
 	for i := range words {
 		if i > 0 {
@@ -783,7 +1517,6 @@ func applyBird(text string) string {
 	if len(words) == 0 {
 		return "tweet!"
 	}
-	birdSounds := []string{"tweet", "chirp", "squawk", "cheep", "coo coo", "*flaps wings*", "peep", "caw"}
 	var result strings.Builder
 	for i := range words {
 		if i > 0 {
@@ -800,7 +1533,6 @@ func applyCow(text string) string {
 	if len(words) == 0 {
 		return "MOO"
 	}
-	cowSounds := []string{"moo", "mooo", "MOOO", "moooo", "*chews cud*", "muu", "MOO MOO"}
 	var result strings.Builder
 	for i := range words {
 		if i > 0 {
@@ -817,7 +1549,6 @@ func applyFrog(text string) string {
 	if len(words) == 0 {
 		return "ribbit!"
 	}
-	frogSounds := []string{"ribbit", "croak", "brrr-ribbit", "riiibbit", "*jumps*", "crrroak", "ribbit-ribbit"}
 	var result strings.Builder
 	for i := range words {
 		if i > 0 {
@@ -834,7 +1565,6 @@ func applyDuck(text string) string {
 	if len(words) == 0 {
 		return "QUACK!"
 	}
-	duckSounds := []string{"quack", "QUACK", "quack!", "quack quack", "*waddles*", "QUACK!", "QUACK QUACK"}
 	var result strings.Builder
 	for i := range words {
 		if i > 0 {
@@ -851,7 +1581,6 @@ func applyHorse(text string) string {
 	if len(words) == 0 {
 		return "NEIGH!"
 	}
-	horseSounds := []string{"neigh", "whinny", "nicker", "NEIGH!", "*clip clop*", "hrrrr", "snort"}
 	var result strings.Builder
 	for i := range words {
 		if i > 0 {
@@ -868,7 +1597,6 @@ func applyLion(text string) string {
 	if len(words) == 0 {
 		return "ROAR!"
 	}
-	lionSounds := []string{"ROAR", "grrr", "rawr", "GRRR", "*snarls*", "rrrroar", "RAWRR"}
 	var result strings.Builder
 	for i := range words {
 		if i > 0 {
@@ -881,21 +1609,7 @@ func applyLion(text string) string {
 
 // applyZoo applies a random animal punishment from the full zoo
 func applyZoo(text string) string {
-	animalEffects := []func(string) string{
-		applyMonkey,
-		applySnake,
-		applyDog,
-		applyCat,
-		applyBird,
-		applyCow,
-		applyFrog,
-		applyDuck,
-		applyHorse,
-		applyLion,
-		applyBunny,
-	}
-	effect := animalEffects[rand.Intn(len(animalEffects))]
-	return effect(text)
+	return zooEffects[rand.Intn(len(zooEffects))](text)
 }
 
 // applyBunny replaces text with bunny sounds
@@ -904,7 +1618,6 @@ func applyBunny(text string) string {
 	if len(words) == 0 {
 		return "*thump thump*"
 	}
-	bunnySounds := []string{"*thump*", "*thump thump*", "*nose twitch*", "*hops away*", "*binky!*", "*flops*", "*teeth chattering*", "*nudges*"}
 	var result strings.Builder
 	for i := range words {
 		if i > 0 {
@@ -917,8 +1630,7 @@ func applyBunny(text string) string {
 
 // GetRandomEmoji returns a random emoji string
 func GetRandomEmoji() string {
-	emojis := []string{"😀", "😎", "🤡", "👻", "🎃", "🦄", "🐱", "🐶", "🎮", "⭐"}
-	return emojis[rand.Intn(len(emojis))]
+	return emojiTable[rand.Intn(len(emojiTable))]
 }
 
 // ── Dere-type punishments ────────────────────────────────────────────────────
@@ -1292,13 +2004,6 @@ func applyTourettes(text string) string {
 		return text
 	}
 
-	allVariants := [][]string{
-		tourettesSwearing,
-		tourettesRandom,
-		tourettesExclamations,
-		tourettesAnimalSounds,
-	}
-
 	var result strings.Builder
 	for i, word := range words {
 		if i > 0 {
@@ -1308,13 +2013,68 @@ func applyTourettes(text string) string {
 
 		// ~35% chance of an outburst after each word
 		if rand.Float32() < 0.35 {
-			category := allVariants[rand.Intn(len(allVariants))]
+			category := tourettesAllVariants[rand.Intn(len(tourettesAllVariants))]
 			outburst := category[rand.Intn(len(category))]
 			result.WriteString(" ")
 			result.WriteString(outburst)
 		}
 	}
 	return truncateText(result.String())
+}
+
+// applySlang converts common words and phrases to internet-slang shorthands.
+//
+// Two-phase design for maximum efficiency:
+//
+//  1. slangPhraseReplacer.Replace performs ALL multi-word phrase substitutions
+//     in a single O(n) left-to-right scan (Aho-Corasick automaton, built once
+//     at package init).
+//
+//  2. A single word-level scan substitutes individual words from slangWords,
+//     stripping and restoring one byte of trailing ASCII punctuation per token.
+//     strings.Builder with a pre-grown buffer keeps allocations to the minimum.
+//
+// IPID persistence: the punishment is stored and restored by the generic
+// cmdPunishment / restorePunishments machinery, so slang survives reconnects.
+func applySlang(text string) string {
+	// Phase 1: lower-case once; replace all phrases in one pass.
+	s := slangPhraseReplacer.Replace(strings.ToLower(text))
+
+	words := strings.Fields(s)
+	if len(words) == 0 {
+		return s
+	}
+
+	// Phase 2: word-level substitution.
+	// Pre-grow to len(s): slang replacements shrink text, so this is a safe
+	// upper bound that avoids any re-allocation inside the builder.
+	var b strings.Builder
+	b.Grow(len(s))
+
+	for i, word := range words {
+		if i > 0 {
+			b.WriteByte(' ')
+		}
+		// Detect and strip a single trailing ASCII punctuation byte so that
+		// "you," → "u," rather than leaving "you," unmatched.
+		punct := byte(0)
+		if n := len(word); n > 0 {
+			c := word[n-1]
+			if c == '.' || c == ',' || c == '!' || c == '?' || c == ';' || c == ':' {
+				punct = c
+				word = word[:n-1]
+			}
+		}
+		if rep, ok := slangWords[word]; ok {
+			b.WriteString(rep)
+		} else {
+			b.WriteString(word)
+		}
+		if punct != 0 {
+			b.WriteByte(punct)
+		}
+	}
+	return truncateText(b.String())
 }
 
 // lovebombTemplates are silly love-bomb message templates.

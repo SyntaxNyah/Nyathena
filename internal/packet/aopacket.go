@@ -31,18 +31,30 @@ type Packet struct {
 
 // NewPacket returns a new Packet with the specified data, which should be a valid AO2 packet.
 func NewPacket(data string) (*Packet, error) {
-	p := &Packet{}
-	s := strings.Split(data, "#")
-	if strings.TrimSpace(s[0]) == "" {
+	// Split off the header at the first '#' without allocating a full slice for
+	// the entire packet up front.  For packets with no body this avoids any
+	// string-split allocation entirely.
+	idx := strings.IndexByte(data, '#')
+	var header, rest string
+	if idx < 0 {
+		header = data
+	} else {
+		header = data[:idx]
+		rest = data[idx+1:]
+	}
+	if strings.TrimSpace(header) == "" {
 		return nil, fmt.Errorf("packet header cannot be empty")
 	}
-	p.Header = s[0]
-	s = s[1:] // Remove header
-	if len(s) > 1 {
-		s = s[:len(s)-1] // Remove empty entry after the final '#'
+
+	var body []string
+	if rest != "" {
+		body = strings.Split(rest, "#")
+		// Remove the empty trailing entry produced by the final '#' delimiter.
+		if len(body) > 1 && body[len(body)-1] == "" {
+			body = body[:len(body)-1]
+		}
 	}
-	p.Body = s
-	return p, nil
+	return &Packet{Header: header, Body: body}, nil
 }
 
 // String returns a string representation of the Packet.

@@ -14,7 +14,6 @@ GNU Affero General Public License for more details.
 You should have received a copy of the GNU Affero General Public License
 along with this program.  If not, see <https://www.gnu.org/licenses/>. */
 
-
 package athena
 
 import (
@@ -22,16 +21,18 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/MangosArentLiterature/Athena/internal/db"
 	"github.com/MangosArentLiterature/Athena/internal/permissions"
 	"github.com/MangosArentLiterature/Athena/internal/sliceutil"
 )
 
 type Command struct {
-	handler  func(client *Client, args []string, usage string)
-	minArgs  int
-	usage    string
-	desc     string
-	reqPerms uint64
+	handler   func(client *Client, args []string, usage string)
+	minArgs   int
+	usage     string
+	desc      string
+	reqPerms  uint64
+	casinoCmd bool // when true, command is hidden/disabled if EnableCasino is false
 }
 
 var Commands map[string]Command
@@ -44,6 +45,13 @@ func initCommands() {
 			usage:    "Usage: /about",
 			desc:     "Prints Athena version information.",
 			reqPerms: permissions.PermissionField["NONE"],
+		},
+		"add": {
+			handler:  cmdAdd,
+			minArgs:  0,
+			usage:    "Usage: /add",
+			desc:     "Inserts the next IC message from the witness into the testimony after the current statement.",
+			reqPerms: permissions.PermissionField["CM"],
 		},
 		"allowcms": {
 			handler:  cmdAllowCMs,
@@ -80,12 +88,33 @@ func initCommands() {
 			desc:     "Sets the area's background.",
 			reqPerms: permissions.PermissionField["CM"],
 		},
+		"bglist": {
+			handler:  cmdBgList,
+			minArgs:  0,
+			usage:    "Usage: /bglist",
+			desc:     "Lists all available backgrounds.",
+			reqPerms: permissions.PermissionField["NONE"],
+		},
 		"charselect": {
 			handler:  cmdCharSelect,
 			minArgs:  0,
 			usage:    "Usage: /charselect [uid1],[uid2]...",
 			desc:     "Return to character select.",
 			reqPerms: permissions.PermissionField["NONE"],
+		},
+		"charstuck": {
+			handler:  cmdCharStuck,
+			minArgs:  1,
+			usage:    "Usage: /charstuck [-d duration] [-r reason] <uid>",
+			desc:     "Locks a player to their current character, preventing character changes.",
+			reqPerms: permissions.PermissionField["MUTE"],
+		},
+		"charcurse": {
+			handler:  cmdCharCurse,
+			minArgs:  2,
+			usage:    "Usage: /charcurse <uid> <charname>",
+			desc:     "Forces a player to a specific character. The player may still change characters freely.",
+			reqPerms: permissions.PermissionField["KICK"],
 		},
 		"cm": {
 			handler:  cmdCM,
@@ -99,6 +128,20 @@ func initCommands() {
 			minArgs:  0,
 			usage:    "Usage: /doc [-c] [doc]\n-c: Clear the doc.",
 			desc:     "Prints or sets the area's document.",
+			reqPerms: permissions.PermissionField["NONE"],
+		},
+		"delete": {
+			handler:  cmdDelete,
+			minArgs:  0,
+			usage:    "Usage: /delete",
+			desc:     "Deletes the current testimony statement.",
+			reqPerms: permissions.PermissionField["CM"],
+		},
+		"dance": {
+			handler:  cmdDance,
+			minArgs:  0,
+			usage:    "Usage: /dance",
+			desc:     "Toggles dance mode. Flips your sprite on each message you send.",
 			reqPerms: permissions.PermissionField["NONE"],
 		},
 		"editban": {
@@ -115,6 +158,13 @@ func initCommands() {
 			desc:     "The AO ERP command. Super fun!",
 			reqPerms: permissions.PermissionField["NONE"],
 		},
+		"examine": {
+			handler:  cmdExamine,
+			minArgs:  0,
+			usage:    "Usage: /examine",
+			desc:     "Starts cross-examination playback.",
+			reqPerms: permissions.PermissionField["NONE"],
+		},
 		"evimode": {
 			handler:  cmdSetEviMod,
 			minArgs:  1,
@@ -128,6 +178,13 @@ func initCommands() {
 			usage:    "Usage: /forcebglist <true|false>",
 			desc:     "Toggles enforcing the server BG list on or off.",
 			reqPerms: permissions.PermissionField["MODIFY_AREA"],
+		},
+		"firewall": {
+			handler:  cmdFirewall,
+			minArgs:  1,
+			usage:    "Usage: /firewall <on|off>",
+			desc:     "Enables or disables IPHub VPN/proxy screening for new connections. Requires iphub_api_key in config.",
+			reqPerms: permissions.PermissionField["BAN"],
 		},
 		"getban": {
 			handler:  cmdGetBan,
@@ -150,12 +207,33 @@ func initCommands() {
 			desc:     "Sends a global message.",
 			reqPerms: permissions.PermissionField["NONE"],
 		},
+		"hide": {
+			handler:  cmdHide,
+			minArgs:  0,
+			usage:    "Usage: /hide",
+			desc:     "Toggles hiding yourself from the player list, /players, /gas, and room player counts.",
+			reqPerms: permissions.PermissionField["KICK"],
+		},
 		"invite": {
 			handler:  cmdInvite,
 			minArgs:  1,
 			usage:    "Usage: /invite <uid1>,<uid2>...",
 			desc:     "Invites user(s) to the current area.",
 			reqPerms: permissions.PermissionField["CM"],
+		},
+		"ignore": {
+			handler:  cmdIgnore,
+			minArgs:  1,
+			usage:    "Usage: /ignore <uid>",
+			desc:     "Permanently ignores a user based on their IPID. Their IC and OOC messages will no longer be shown to you, even after they reconnect.",
+			reqPerms: permissions.PermissionField["NONE"],
+		},
+		"unignore": {
+			handler:  cmdUnignore,
+			minArgs:  1,
+			usage:    "Usage: /unignore <uid>",
+			desc:     "Removes a permanent ignore for a user, allowing their messages to be shown to you again.",
+			reqPerms: permissions.PermissionField["NONE"],
 		},
 		"jail": {
 			handler:  cmdJail,
@@ -367,6 +445,20 @@ func initCommands() {
 			desc:     "Removes a forced showname from a player.",
 			reqPerms: permissions.PermissionField["KICK"],
 		},
+		"nameshuffle": {
+			handler:  cmdNameShuffle,
+			minArgs:  0,
+			usage:    "Usage: /nameshuffle",
+			desc:     "Randomly shuffles the shownames of all players in the current area.",
+			reqPerms: permissions.PermissionField["KICK"],
+		},
+		"unnameshuffle": {
+			handler:  cmdUnnameShuffle,
+			minArgs:  0,
+			usage:    "Usage: /unnameshuffle",
+			desc:     "Restores all players' own shownames in the current area, undoing any name shuffle.",
+			reqPerms: permissions.PermissionField["KICK"],
+		},
 		"unpair": {
 			handler:  cmdUnpair,
 			minArgs:  0,
@@ -524,9 +616,16 @@ func initCommands() {
 		"testimony": {
 			handler:  cmdTestimony,
 			minArgs:  0,
-			usage:    "Usage /testimony <record|stop|play|update|insert|delete>",
-			desc:     "Updates the current area's testimony recorder, or prints current testimony.",
+			usage:    "Usage: /testimony <record|stop|play|update|insert|delete>\nUse /testimony record to start recording. Witnesses must be in /pos wit for their IC messages to be recorded.",
+			desc:     "Manages the area's testimony recorder. Use /testimony record to start recording. Witnesses must be in /pos wit for their IC messages to be captured.",
 			reqPerms: permissions.PermissionField["NONE"],
+		},
+		"testify": {
+			handler:  cmdTestify,
+			minArgs:  0,
+			usage:    "Usage: /testify",
+			desc:     "Starts recording IC messages as testimony.",
+			reqPerms: permissions.PermissionField["CM"],
 		},
 		"unban": {
 			handler:  cmdUnban,
@@ -542,6 +641,13 @@ func initCommands() {
 			desc:     "Removes CM(s) from the current area.",
 			reqPerms: permissions.PermissionField["CM"],
 		},
+		"update": {
+			handler:  cmdUpdate,
+			minArgs:  0,
+			usage:    "Usage: /update",
+			desc:     "Updates the current testimony statement with the next IC message from the witness.",
+			reqPerms: permissions.PermissionField["CM"],
+		},
 		"uninvite": {
 			handler:  cmdUninvite,
 			minArgs:  1,
@@ -555,6 +661,13 @@ func initCommands() {
 			usage:    "Usage: /unjail <uid1>,<uid2>...",
 			desc:     "Releases user(s) from jail.",
 			reqPerms: permissions.PermissionField["BAN"],
+		},
+		"uncharstuck": {
+			handler:  cmdUnCharStuck,
+			minArgs:  1,
+			usage:    "Usage: /uncharstuck <uid1>,<uid2>...",
+			desc:     "Removes the character-stuck restriction from user(s).",
+			reqPerms: permissions.PermissionField["MUTE"],
 		},
 		"unlock": {
 			handler:  cmdUnlock,
@@ -708,10 +821,10 @@ func initCommands() {
 		},
 		"pause": {
 			handler:  cmdPause,
-			minArgs:  1,
-			usage:    "Usage: /pause [-d duration] [-r reason] <uid1>,<uid2>...",
-			desc:     "Forces wait between messages.",
-			reqPerms: permissions.PermissionField["MUTE"],
+			minArgs:  0,
+			usage:    "Usage: /pause",
+			desc:     "Stops testimony recording.",
+			reqPerms: permissions.PermissionField["CM"],
 		},
 		"lag": {
 			handler:  cmdLag,
@@ -730,10 +843,10 @@ func initCommands() {
 		},
 		"roulette": {
 			handler:  cmdRoulette,
-			minArgs:  1,
-			usage:    "Usage: /roulette [-d duration] [-r reason] <uid1>,<uid2>...",
-			desc:     "Random chance message doesn't send.",
-			reqPerms: permissions.PermissionField["MUTE"],
+			minArgs:  0,
+			usage:    "Usage: /roulette join | /roulette [-d duration] [-r reason] <uid1>,<uid2>...",
+			desc:     "Join Russian Roulette game, or apply roulette punishment to user(s) (requires MUTE permission).",
+			reqPerms: permissions.PermissionField["NONE"],
 		},
 		"spotlight": {
 			handler:  cmdSpotlight,
@@ -1034,6 +1147,104 @@ func initCommands() {
 			desc:     "Causes random outbursts to be inserted into IC messages (swearing, random objects, nonsense, animal noises). Moderator only.",
 			reqPerms: permissions.PermissionField["MUTE"],
 		},
+		"slang": {
+			handler:  cmdSlang,
+			minArgs:  1,
+			usage:    "Usage: /slang [-d duration] [-r reason] <uid1>,<uid2>...",
+			desc:     "Converts messages to internet slang abbreviations (e.g. 'i don't know' -> 'idk', 'got to go' -> 'gtg').",
+			reqPerms: permissions.PermissionField["MUTE"],
+		},
+		"unslang": {
+			handler:  cmdUnslang,
+			minArgs:  1,
+			usage:    "Usage: /unslang <uid1>,<uid2>...",
+			desc:     "Removes slang punishment from user(s). Moderator only.",
+			reqPerms: permissions.PermissionField["MUTE"],
+		},
+		"thesaurusoverload": {
+			handler:  cmdThesaurusOverload,
+			minArgs:  1,
+			usage:    "Usage: /thesaurusoverload [-d duration] [-r reason] <uid1>,<uid2>...",
+			desc:     "Forces IC messages to use comically pompous synonyms and smug parentheticals. Moderator only.",
+			reqPerms: permissions.PermissionField["MUTE"],
+		},
+		"unthesaurusoverload": {
+			handler:  cmdUnthesaurusoverload,
+			minArgs:  1,
+			usage:    "Usage: /unthesaurusoverload <uid1>,<uid2>...",
+			desc:     "Removes thesaurusoverload punishment from user(s). Moderator only.",
+			reqPerms: permissions.PermissionField["MUTE"],
+		},
+		"valleygirl": {
+			handler:  cmdValleyGirl,
+			minArgs:  1,
+			usage:    "Usage: /valleygirl [-d duration] [-r reason] <uid1>,<uid2>...",
+			desc:     "Injects valley-girl filler words, vowel stretching, and dramatic tone into IC messages. Moderator only.",
+			reqPerms: permissions.PermissionField["MUTE"],
+		},
+		"unvalleygirl": {
+			handler:  cmdUnvalleygirl,
+			minArgs:  1,
+			usage:    "Usage: /unvalleygirl <uid1>,<uid2>...",
+			desc:     "Removes valleygirl punishment from user(s). Moderator only.",
+			reqPerms: permissions.PermissionField["MUTE"],
+		},
+		"babytalk": {
+			handler:  cmdBabytalk,
+			minArgs:  1,
+			usage:    "Usage: /babytalk [-d duration] [-r reason] <uid1>,<uid2>...",
+			desc:     "Converts IC messages to toddler-style baby talk with phonetic substitutions and stage directions. Moderator only.",
+			reqPerms: permissions.PermissionField["MUTE"],
+		},
+		"unbabytalk": {
+			handler:  cmdUnbabytalk,
+			minArgs:  1,
+			usage:    "Usage: /unbabytalk <uid1>,<uid2>...",
+			desc:     "Removes babytalk punishment from user(s). Moderator only.",
+			reqPerms: permissions.PermissionField["MUTE"],
+		},
+		"thirdperson": {
+			handler:  cmdThirdPerson,
+			minArgs:  1,
+			usage:    "Usage: /thirdperson [-d duration] [-r reason] <uid1>,<uid2>...",
+			desc:     "Forces IC messages into third-person narration using the player's display name, with mood tags. Moderator only.",
+			reqPerms: permissions.PermissionField["MUTE"],
+		},
+		"unthirdperson": {
+			handler:  cmdUnthirdperson,
+			minArgs:  1,
+			usage:    "Usage: /unthirdperson <uid1>,<uid2>...",
+			desc:     "Removes thirdperson punishment from user(s). Moderator only.",
+			reqPerms: permissions.PermissionField["MUTE"],
+		},
+		"unreliablenarrator": {
+			handler:  cmdUnreliableNarrator,
+			minArgs:  1,
+			usage:    "Usage: /unreliablenarrator [-d duration] [-r reason] <uid1>,<uid2>...",
+			desc:     "Makes IC messages sound suspiciously unreliable with hedges, contradictions, and self-doubting commentary. Moderator only.",
+			reqPerms: permissions.PermissionField["MUTE"],
+		},
+		"ununreliablenarrator": {
+			handler:  cmdUnunreliablenarrator,
+			minArgs:  1,
+			usage:    "Usage: /ununreliablenarrator <uid1>,<uid2>...",
+			desc:     "Removes unreliablenarrator punishment from user(s). Moderator only.",
+			reqPerms: permissions.PermissionField["MUTE"],
+		},
+		"uncannyvalley": {
+			handler:  cmdUncannyValley,
+			minArgs:  1,
+			usage:    "Usage: /uncannyvalley [-d duration] [-r reason] <uid1>,<uid2>...",
+			desc:     "Adds glitchy system notes to IC messages and subtly mutates the player's display name each message. Moderator only.",
+			reqPerms: permissions.PermissionField["MUTE"],
+		},
+		"ununcannyvalley": {
+			handler:  cmdUnuncannyvalley,
+			minArgs:  1,
+			usage:    "Usage: /ununcannyvalley <uid1>,<uid2>...",
+			desc:     "Removes uncannyvalley punishment from user(s). Moderator only.",
+			reqPerms: permissions.PermissionField["MUTE"],
+		},
 		"unpunish": {
 			handler:  cmdUnpunish,
 			minArgs:  1,
@@ -1097,20 +1308,331 @@ func initCommands() {
 			desc:     "Challenge another player to an Insult Duel! Pick fragments each round to build insults. The loser gets a random punishment.",
 			reqPerms: permissions.PermissionField["NONE"],
 		},
+		// Casino commands
+		"bj": {
+			handler:   cmdBlackjack,
+			minArgs:   0,
+			usage:     "Usage: /bj join|bet <amount>|deal|hit|stand|double|split|insurance|status|leave",
+			desc:      "Play blackjack. Requires casino to be enabled in the area.",
+			reqPerms:  permissions.PermissionField["NONE"],
+			casinoCmd: true,
+		},
+		"poker": {
+			handler:   cmdPoker,
+			minArgs:   0,
+			usage:     "Usage: /poker join|ready|hand|check|call|bet <n>|raise <n>|fold|allin|status|leave",
+			desc:      "Play Texas Hold'em poker. Requires casino to be enabled in the area.",
+			reqPerms:  permissions.PermissionField["NONE"],
+			casinoCmd: true,
+		},
+		"slots": {
+			handler:   cmdSlots,
+			minArgs:   0,
+			usage:     "Usage: /slots [spin [amount]] | /slots max | /slots jackpot | /slots stats",
+			desc:      "Play slot machines. Requires casino to be enabled in the area.",
+			reqPerms:  permissions.PermissionField["NONE"],
+			casinoCmd: true,
+		},
+		"croulette": {
+			handler:   cmdCasinoRoulette,
+			minArgs:   2,
+			usage:     "Usage: /croulette bet <red|black|even|odd|low|high|number <n>> <amount>",
+			desc:      "Play European roulette. Requires casino to be enabled in the area.",
+			reqPerms:  permissions.PermissionField["NONE"],
+			casinoCmd: true,
+		},
+		"baccarat": {
+			handler:   cmdBaccarat,
+			minArgs:   2,
+			usage:     "Usage: /baccarat <player|banker|tie> <amount>",
+			desc:      "Play baccarat. Requires casino to be enabled in the area.",
+			reqPerms:  permissions.PermissionField["NONE"],
+			casinoCmd: true,
+		},
+		"craps": {
+			handler:   cmdCraps,
+			minArgs:   3,
+			usage:     "Usage: /craps bet <pass|nopass> <amount>",
+			desc:      "Play craps. Requires casino to be enabled in the area.",
+			reqPerms:  permissions.PermissionField["NONE"],
+			casinoCmd: true,
+		},
+		"crash": {
+			handler:   cmdCrash,
+			minArgs:   1,
+			usage:     "Usage: /crash bet <amount> | /crash cashout",
+			desc:      "Play crash. Requires casino to be enabled in the area.",
+			reqPerms:  permissions.PermissionField["NONE"],
+			casinoCmd: true,
+		},
+		"mines": {
+			handler:   cmdMines,
+			minArgs:   1,
+			usage:     "Usage: /mines start <mines> <bet> | /mines pick <n> | /mines cashout | /mines quit",
+			desc:      "Play mines. Requires casino to be enabled in the area.",
+			reqPerms:  permissions.PermissionField["NONE"],
+			casinoCmd: true,
+		},
+		"keno": {
+			handler:   cmdKeno,
+			minArgs:   3,
+			usage:     "Usage: /keno pick <numbers...> <bet>",
+			desc:      "Play keno. Requires casino to be enabled in the area.",
+			reqPerms:  permissions.PermissionField["NONE"],
+			casinoCmd: true,
+		},
+		"wheel": {
+			handler:   cmdWheel,
+			minArgs:   2,
+			usage:     "Usage: /wheel spin <bet>",
+			desc:      "Spin the prize wheel. Requires casino to be enabled in the area.",
+			reqPerms:  permissions.PermissionField["NONE"],
+			casinoCmd: true,
+		},
+		"rob": {
+			handler:   cmdRob,
+			minArgs:   0,
+			usage:     "Usage: /rob [bank|casino|vault|atm|store|mint|armored|museum]",
+			desc:      "Attempt to rob a location for chips. 20% success rate — catastrophic failures drain your chips and may mute you.",
+			reqPerms:  permissions.PermissionField["NONE"],
+			casinoCmd: true,
+		},
+		"gamble": {
+			handler:   cmdGamble,
+			minArgs:   1,
+			usage:     "Usage: /gamble hide",
+			desc:      "Toggle visibility of gambling broadcast messages in the area chat.",
+			reqPerms:  permissions.PermissionField["NONE"],
+			casinoCmd: true,
+		},
+		"chips": {
+			handler:   cmdChipsEnhanced,
+			minArgs:   0,
+			usage:     "Usage: /chips [top [n]] | [area [n]] | [give <uid> <amount>]",
+			desc:      "Check your Nyathena Chip balance, view leaderboards, or give chips to another player.",
+			reqPerms:  permissions.PermissionField["NONE"],
+			casinoCmd: true,
+		},
+		"richest": {
+			handler:   cmdRichest,
+			minArgs:   0,
+			usage:     "Usage: /richest [n]",
+			desc:      "Show the global chip leaderboard (top 10 richest players by default, max 50).",
+			reqPerms:  permissions.PermissionField["NONE"],
+			casinoCmd: true,
+		},
+		"casino": {
+			handler:   cmdCasino,
+			minArgs:   0,
+			usage:     "Usage: /casino [status]",
+			desc:      "View the casino dashboard or status for the current area.",
+			reqPerms:  permissions.PermissionField["NONE"],
+			casinoCmd: true,
+		},
+		"casinoenable": {
+			handler:   cmdCasinoEnable,
+			minArgs:   1,
+			usage:     "Usage: /casinoenable <true|false>",
+			desc:      "Enables or disables the casino for this area.",
+			reqPerms:  permissions.PermissionField["MODIFY_AREA"],
+			casinoCmd: true,
+		},
+		"casinoset": {
+			handler:   cmdCasinoSet,
+			minArgs:   2,
+			usage:     "Usage: /casinoset <minbet|maxbet|maxtables|jackpot> <value>",
+			desc:      "Configures casino settings for this area.",
+			reqPerms:  permissions.PermissionField["MODIFY_AREA"],
+			casinoCmd: true,
+		},
+		"register": {
+			handler:   cmdRegister,
+			minArgs:   2,
+			usage:     "Usage: /register <username> <password>",
+			desc:      "Start creating a free player account (a captcha confirmation is required). Tracks chips, playtime, and leaderboard standings.",
+			reqPerms:  permissions.PermissionField["NONE"],
+			casinoCmd: true,
+		},
+		"captcha": {
+			handler:   cmdCaptcha,
+			minArgs:   1,
+			usage:     "Usage: /captcha <token>",
+			desc:      "Complete a pending /register by entering the captcha token you were given.",
+			reqPerms:  permissions.PermissionField["NONE"],
+			casinoCmd: true,
+		},
+		"account": {
+			handler:   cmdAccount,
+			minArgs:   0,
+			usage:     "Usage: /account",
+			desc:      "View your account profile: username, chip balance, and playtime.",
+			reqPerms:  permissions.PermissionField["NONE"],
+			casinoCmd: true,
+		},
+		"playtime": {
+			handler:  cmdPlaytimeTop,
+			minArgs:  0,
+			usage:    "Usage: /playtime [top] [n]",
+			desc:     "Show the playtime leaderboard. Displays account names for registered players.",
+			reqPerms: permissions.PermissionField["NONE"],
+		},
+		"unscramble": {
+			handler:   cmdUnscramble,
+			minArgs:   0,
+			usage:     "Usage: /unscramble [top [n]]",
+			desc:      "Check your unscramble wins or view the unscramble leaderboard. Answer active puzzles in IC chat to win chips!",
+			reqPerms:  permissions.PermissionField["NONE"],
+			casinoCmd: true,
+		},
+		"jobs": {
+			handler:   cmdJobs,
+			minArgs:   0,
+			usage:     "Usage: /jobs",
+			desc:      "List all available jobs that earn small chip rewards.",
+			reqPerms:  permissions.PermissionField["NONE"],
+			casinoCmd: true,
+		},
+		"jobtop": {
+			handler:   cmdJobTop,
+			minArgs:   0,
+			usage:     "Usage: /jobtop [n]",
+			desc:      "Show the job earnings leaderboard (top chip earners from jobs).",
+			reqPerms:  permissions.PermissionField["NONE"],
+			casinoCmd: true,
+		},
+		"janitor": {
+			handler:   cmdJanitor,
+			minArgs:   0,
+			usage:     "Usage: /janitor",
+			desc:      "Work as a janitor to earn chips (45-minute cooldown).",
+			reqPerms:  permissions.PermissionField["NONE"],
+			casinoCmd: true,
+		},
+		"busker": {
+			handler:   cmdBusker,
+			minArgs:   0,
+			usage:     "Usage: /busker",
+			desc:      "Busk for tips outside the courthouse to earn chips (30-minute cooldown).",
+			reqPerms:  permissions.PermissionField["NONE"],
+			casinoCmd: true,
+		},
+		"paperboy": {
+			handler:   cmdPaperboy,
+			minArgs:   0,
+			usage:     "Usage: /paperboy",
+			desc:      "Deliver newspapers and briefs to earn chips (60-minute cooldown).",
+			reqPerms:  permissions.PermissionField["NONE"],
+			casinoCmd: true,
+		},
+		"bailiffjob": {
+			handler:   cmdBailiffJob,
+			minArgs:   0,
+			usage:     "Usage: /bailiffjob",
+			desc:      "Stand guard duty as a bailiff to earn chips (2-hour cooldown).",
+			reqPerms:  permissions.PermissionField["NONE"],
+			casinoCmd: true,
+		},
+		"clerk": {
+			handler:   cmdClerk,
+			minArgs:   0,
+			usage:     "Usage: /clerk",
+			desc:      "File paperwork as a clerk to earn chips (90-minute cooldown).",
+			reqPerms:  permissions.PermissionField["NONE"],
+			casinoCmd: true,
+		},
+		"shop": {
+			handler:   cmdShop,
+			minArgs:   0,
+			usage:     "Usage: /shop | /shop <category> | /shop buy <item_id> | /shop items | /shop passes | /shop passive",
+			desc:      "Browse the Nyathena Shop: 115+ cosmetic tags, job passes, and passive income upgrades. Categories: gambling attorney anime gamer girly meme prestige.",
+			reqPerms:  permissions.PermissionField["NONE"],
+			casinoCmd: true,
+		},
+		"settag": {
+			handler:   cmdSetTag,
+			minArgs:   1,
+			usage:     "Usage: /settag <tag_id> | /settag none",
+			desc:      "Equip or swap a purchased cosmetic tag. Your active tag appears next to your name in /gas and /players.",
+			reqPerms:  permissions.PermissionField["NONE"],
+			casinoCmd: true,
+		},
+		"favourite": {
+			handler:   cmdFavourite,
+			minArgs:   1,
+			usage:     "Usage: /favourite <char name>",
+			desc:      "Toggle a character in your wardrobe favourites. Add or remove with the same command.",
+			reqPerms:  permissions.PermissionField["NONE"],
+			casinoCmd: true,
+		},
+		"wardrobe": {
+			handler:   cmdWardrobe,
+			minArgs:   0,
+			usage:     "Usage: /wardrobe | /wardrobe <char name>",
+			desc:      "View your saved favourite characters, or swap to one instantly.",
+			reqPerms:  permissions.PermissionField["NONE"],
+			casinoCmd: true,
+		},
 	}
 }
 
 // ParseCommand calls the appropriate function for a given command.
 func ParseCommand(client *Client, command string, args []string) {
+	casinoEnabled := config != nil && config.EnableCasino
+
 	if command == "help" {
 		var s []string
 		for name, cmd := range Commands {
+			// Hide casino/account commands when the feature is disabled.
+			if cmd.casinoCmd && !casinoEnabled {
+				continue
+			}
 			if permissions.HasPermission(client.Perms(), cmd.reqPerms) || (cmd.reqPerms == permissions.PermissionField["CM"] && client.Area().HasCM(client.Uid())) {
 				s = append(s, fmt.Sprintf("- /%v: %v", name, cmd.desc))
 			}
 		}
 		sort.Strings(s)
-		client.SendServerMessage("Recognized commands:\n" + strings.Join(s, "\n") + "\n\nTo view detailed usage on a command, do /<command> -h")
+
+		// Build a context-aware header.
+		var header string
+		if client.Authenticated() {
+			header = fmt.Sprintf("Logged in as: %v\n\n", client.ModName())
+			if casinoEnabled {
+				header += "👗 Your Wardrobe (Favourites):\n" +
+					"  Ever feel overwhelmed by the huge character list? Save your go-to characters!\n" +
+					"  • /favourite <char>   — add or remove a character from your wardrobe (toggles).\n" +
+					"  • /wardrobe           — view all your saved favourites.\n" +
+					"  • /wardrobe <char>    — instantly swap to any character in your wardrobe.\n" +
+					fmt.Sprintf("  You can save up to %d characters. Favourites are tied to your account.\n\n", db.MaxFavourites)
+			}
+		} else if casinoEnabled {
+			header = "💡 Player Accounts (optional):\n" +
+				"  • Already have an account? Use /login <username> <password> — no new account needed.\n" +
+				"  • New here? /register <username> <password> creates a free account that tracks\n" +
+				"    chips, playtime, unscramble wins, and casino standings. No extra permissions granted.\n" +
+				"  • 🔒 Passwords are stored with bcrypt (industry-standard one-way hashing).\n" +
+				"    Your password is never stored in plain text.\n\n" +
+				"👗 Wardrobe (requires free account):\n" +
+				"  Ever been overwhelmed by the huge character list? Your Wardrobe lets you save a\n" +
+				"  personal shortlist of favourite characters and swap to them instantly!\n" +
+				"  • /favourite <char>   — add or remove a character from your saved favourites.\n" +
+				"  • /wardrobe           — view your personal favourites list.\n" +
+				"  • /wardrobe <char>    — swap to any character in your wardrobe in one command.\n" +
+				fmt.Sprintf("  Save up to %d characters — no more scrolling through the entire list!\n\n", db.MaxFavourites) +
+				"🎰 Casino Tips:\n" +
+				"  • /chips                        — check your chip balance.\n" +
+				"  • /chips give <uid> <amount>    — send chips to another player.\n" +
+				"  • /chips top                    — see the global chip leaderboard.\n\n" +
+				"💰 Earn Chips Without Gambling:\n" +
+				"  • /jobs                         — list all available jobs (small rewards, unique cooldowns).\n" +
+				"  • /janitor /busker /paperboy     — work a job to earn chips.\n" +
+				"  • /bailiffjob /clerk             — more jobs available.\n" +
+				"  • /jobtop                        — see the job earnings leaderboard.\n" +
+				"  • Unscramble events post every 30–60 min — answer in IC chat to win 10 chips!\n" +
+				"  • /unscramble                   — see your wins & any active puzzle.\n" +
+				"  • /unscramble top               — see the unscramble leaderboard.\n\n"
+		}
+
+		client.SendServerMessage(header + "Recognized commands:\n" + strings.Join(s, "\n") + "\n\nTo view detailed usage on a command, do /<command> -h")
 		return
 	}
 
@@ -1118,7 +1640,13 @@ func ParseCommand(client *Client, command string, args []string) {
 	if cmd.handler == nil {
 		client.SendServerMessage("Invalid command.")
 		return
-	} else if permissions.HasPermission(client.Perms(), cmd.reqPerms) || (cmd.reqPerms == permissions.PermissionField["CM"] && client.Area().HasCM(client.Uid())) {
+	}
+	// Block casino/account commands when the feature is disabled server-wide.
+	if cmd.casinoCmd && !casinoEnabled {
+		client.SendServerMessage("The casino and player account system is not enabled on this server.")
+		return
+	}
+	if permissions.HasPermission(client.Perms(), cmd.reqPerms) || (cmd.reqPerms == permissions.PermissionField["CM"] && client.Area().HasCM(client.Uid())) {
 		if sliceutil.ContainsString(args, "-h") {
 			client.SendServerMessage(cmd.usage)
 			return

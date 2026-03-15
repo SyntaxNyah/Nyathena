@@ -25,45 +25,51 @@ import (
 
 // commandHelp maps command names to their usage, description, permissions, and example.
 var commandHelp = map[string]struct {
-	usage    string
-	desc     string
-	perms    string
-	example  string
-	related  []string
+	usage   string
+	desc    string
+	perms   string
+	example string
+	related []string
 }{
-	"help":            {"/help [command]", "Display all commands or detailed info for a specific command.", "None", "/help ban", []string{}},
-	"players":         {"/players", "List all currently connected players.", "Moderator", "/players", []string{"info", "find", "status"}},
-	"info":            {"/info <player>", "Get detailed information about a specific player (UID, character, area, IPID).", "Moderator", "/info 5", []string{"find", "players"}},
-	"find":            {"/find <player>", "Find which area a player is currently in.", "Moderator", "/find Phoenix", []string{"info", "players"}},
-	"status":          {"/status", "Get server status, player count, and area statistics.", "Moderator", "/status", []string{"players"}},
-	"mute":            {"/mute <player> [duration] [reason]", "Mute a player from IC and OOC chat.", "Moderator", "/mute 3 30m Spamming", []string{"unmute", "gag"}},
-	"unmute":          {"/unmute <player>", "Remove a mute from a player.", "Moderator", "/unmute 3", []string{"mute"}},
-	"ban":             {"/ban <player> [duration] <reason>", "Ban a player from the server.", "Moderator", "/ban 3 3d Rule violation", []string{"unban", "kick"}},
-	"unban":           {"/unban <id>", "Unban a player by their ban ID.", "Moderator", "/unban 42", []string{"ban", "banlist"}},
-	"kick":            {"/kick <player> [reason]", "Kick a player from the server.", "Moderator", "/kick 3 Disconnecting", []string{"ban", "mute"}},
-	"gag":             {"/gag <player>", "Prevent a player from speaking in IC chat.", "Moderator", "/gag 3", []string{"ungag", "mute"}},
-	"ungag":           {"/ungag <player>", "Remove a gag from a player.", "Moderator", "/ungag 3", []string{"gag"}},
-	"warn":            {"/warn <player> <reason>", "Issue a formal warning to a player.", "Moderator", "/warn 3 Spamming OOC", []string{"warnings"}},
-	"warnings":        {"/warnings <player>", "View all warnings issued to a player.", "Moderator", "/warnings 3", []string{"warn"}},
-	"parrot":          {"/parrot <player> [duration]", "Make a player repeat random parrot messages.", "Moderator", "/parrot 3 10m", []string{"roulette"}},
-	"drunk":           {"/drunk <player> [duration]", "Apply a drunk text effect to a player's messages.", "Moderator", "/drunk 3 1h", []string{"stutterstep"}},
-	"slowpoke":        {"/slowpoke <player> [duration]", "Slow down a player's message rate.", "Moderator", "/slowpoke 3 30m", []string{"roulette"}},
-	"roulette":        {"/roulette <player> [duration]", "Apply a random punishment to a player.", "Moderator", "/roulette 3 15m", []string{"parrot", "drunk"}},
-	"spotlight":       {"/spotlight <player> [duration]", "Force a player's messages to appear with an announcement prefix.", "Moderator", "/spotlight 3 20m", []string{"whisper"}},
-	"whisper":         {"/whisper <player> [duration]", "Force a player into whisper mode.", "Moderator", "/whisper 3 10m", []string{"spotlight"}},
-	"stutterstep":     {"/stutterstep <player> [duration]", "Apply a stutter effect to a player's messages.", "Moderator", "/stutterstep 3 10m", []string{"drunk"}},
-	"backward":        {"/backward <player> [duration]", "Reverse all of a player's messages.", "Moderator", "/backward 3 15m", []string{"drunk"}},
-	"pm":              {"/pm <player> <message>", "Send a private server message to a player.", "Moderator", "/pm 3 Hello!", []string{"announce"}},
-	"announce":        {"/announce <message>", "Send a server-wide announcement to all players.", "Moderator", "/announce Welcome everyone!", []string{"pm", "announce_player"}},
-	"announce_player": {"/announce_player <player> <message>", "Send an announcement to a specific player.", "Moderator", "/announce_player 3 You're special!", []string{"announce", "pm"}},
-	"forcemove":       {"/forcemove <player> <area>", "Force move a player to a specified area.", "Moderator", "/forcemove 3 Courtroom", []string{"cleararea"}},
-	"cleararea":       {"/cleararea <area>", "Force move all players out of an area.", "Moderator", "/cleararea Lobby", []string{"forcemove", "lock"}},
-	"lock":            {"/lock <area>", "Lock an area so only invited players can enter.", "Moderator", "/lock Courtroom", []string{"unlock"}},
-	"unlock":          {"/unlock <area>", "Unlock a previously locked area.", "Moderator", "/unlock Courtroom", []string{"lock"}},
-	"logs":            {"/logs <player>", "View recent activity logs for a player.", "Moderator", "/logs 3", []string{"auditlog"}},
-	"auditlog":        {"/auditlog [filter]", "View the server audit log with an optional filter.", "Moderator", "/auditlog ban", []string{"logs"}},
-	"banlist":         {"/banlist", "View the full list of currently banned players.", "Moderator", "/banlist", []string{"ban", "unban"}},
-	"restart":         {"/restart", "Restart the server process.", "Administrator", "/restart", []string{"status"}},
+	"help":               {"/help [command]", "Display all commands or detailed info for a specific command.", "None", "/help ban", []string{}},
+	"players":            {"/players", "List all currently connected players.", "Moderator", "/players", []string{"info", "find", "status"}},
+	"info":               {"/info <player>", "Get detailed information about a specific player (UID, character, area, IPID).", "Moderator", "/info 5", []string{"find", "players"}},
+	"find":               {"/find <player>", "Find which area a player is currently in.", "Moderator", "/find Phoenix", []string{"info", "players"}},
+	"status":             {"/status", "Get server status, player count, and area statistics.", "Moderator", "/status", []string{"players"}},
+	"mute":               {"/mute <player> [duration] [reason]", "Mute a player from IC and OOC chat.", "Moderator", "/mute 3 30m Spamming", []string{"unmute", "gag"}},
+	"unmute":             {"/unmute <player>", "Remove a mute from a player.", "Moderator", "/unmute 3", []string{"mute"}},
+	"ban":                {"/ban <player> [duration] <reason>", "Ban a player from the server.", "Moderator", "/ban 3 3d Rule violation", []string{"unban", "kick"}},
+	"unban":              {"/unban <id>", "Unban a player by their ban ID.", "Moderator", "/unban 42", []string{"ban", "banlist"}},
+	"kick":               {"/kick <player> [reason]", "Kick a player from the server.", "Moderator", "/kick 3 Disconnecting", []string{"ban", "mute"}},
+	"gag":                {"/gag <player>", "Prevent a player from speaking in IC chat.", "Moderator", "/gag 3", []string{"ungag", "mute"}},
+	"ungag":              {"/ungag <player>", "Remove a gag from a player.", "Moderator", "/ungag 3", []string{"gag"}},
+	"warn":               {"/warn <player> <reason>", "Issue a formal warning to a player.", "Moderator", "/warn 3 Spamming OOC", []string{"warnings"}},
+	"warnings":           {"/warnings <player>", "View all warnings issued to a player.", "Moderator", "/warnings 3", []string{"warn"}},
+	"parrot":             {"/parrot <player> [duration]", "Make a player repeat random parrot messages.", "Moderator", "/parrot 3 10m", []string{"roulette"}},
+	"drunk":              {"/drunk <player> [duration]", "Apply a drunk text effect to a player's messages.", "Moderator", "/drunk 3 1h", []string{"stutterstep"}},
+	"slowpoke":           {"/slowpoke <player> [duration]", "Slow down a player's message rate.", "Moderator", "/slowpoke 3 30m", []string{"roulette"}},
+	"roulette":           {"/roulette <player> [duration]", "Apply a random punishment to a player.", "Moderator", "/roulette 3 15m", []string{"parrot", "drunk"}},
+	"spotlight":          {"/spotlight <player> [duration]", "Force a player's messages to appear with an announcement prefix.", "Moderator", "/spotlight 3 20m", []string{"whisper"}},
+	"whisper":            {"/whisper <player> [duration]", "Force a player into whisper mode.", "Moderator", "/whisper 3 10m", []string{"spotlight"}},
+	"stutterstep":        {"/stutterstep <player> [duration]", "Apply a stutter effect to a player's messages.", "Moderator", "/stutterstep 3 10m", []string{"drunk"}},
+	"backward":           {"/backward <player> [duration]", "Reverse all of a player's messages.", "Moderator", "/backward 3 15m", []string{"drunk"}},
+	"pm":                 {"/pm <player> <message>", "Send a private server message to a player.", "Moderator", "/pm 3 Hello!", []string{"announce"}},
+	"announce":           {"/announce <message>", "Send a server-wide announcement to all players.", "Moderator", "/announce Welcome everyone!", []string{"pm", "announce_player"}},
+	"announce_player":    {"/announce_player <player> <message>", "Send an announcement to a specific player.", "Moderator", "/announce_player 3 You're special!", []string{"announce", "pm"}},
+	"forcemove":          {"/forcemove <player> <area>", "Force move a player to a specified area.", "Moderator", "/forcemove 3 Courtroom", []string{"cleararea"}},
+	"cleararea":          {"/cleararea <area>", "Force move all players out of an area.", "Moderator", "/cleararea Lobby", []string{"forcemove", "lock"}},
+	"lock":               {"/lock <area>", "Lock an area so only invited players can enter.", "Moderator", "/lock Courtroom", []string{"unlock"}},
+	"unlock":             {"/unlock <area>", "Unlock a previously locked area.", "Moderator", "/unlock Courtroom", []string{"lock"}},
+	"logs":               {"/logs <player>", "View recent activity logs for a player.", "Moderator", "/logs 3", []string{"auditlog"}},
+	"auditlog":           {"/auditlog [filter]", "View the server audit log with an optional filter.", "Moderator", "/auditlog ban", []string{"logs"}},
+	"banlist":            {"/banlist", "View the full list of currently banned players.", "Moderator", "/banlist", []string{"ban", "unban"}},
+	"restart":            {"/restart", "Restart the server process.", "Administrator", "/restart", []string{"status"}},
+	"thesaurusoverload":  {"/thesaurusoverload [-d duration] [-r reason] <uid1>,<uid2>...", "Forces IC messages to use comically pompous synonyms and smug parentheticals (e.g. 'go' → 'peregrinate').", "Moderator", "/thesaurusoverload 5 -d 10m -r \"Stop typing like a normal person\"", []string{"valleygirl", "babytalk", "unpunish"}},
+	"valleygirl":         {"/valleygirl [-d duration] [-r reason] <uid1>,<uid2>...", "Injects valley-girl filler words, vowel stretching, and dramatic tone into IC messages (e.g. 'stop' → 'Okay sooo like… literally stoppp??').", "Moderator", "/valleygirl 5 -d 30m -r \"Take a deep breath\"", []string{"thesaurusoverload", "babytalk", "unpunish"}},
+	"babytalk":           {"/babytalk [-d duration] [-r reason] <uid1>,<uid2>...", "Converts IC messages to toddler-style baby talk with phonetic substitutions and stage directions (e.g. 'give it back' → 'gib it bac!! *tiny stomp*').", "Moderator", "/babytalk 5 -d 15m -r \"No more grown-up words\"", []string{"valleygirl", "uwu", "unpunish"}},
+	"thirdperson":        {"/thirdperson [-d duration] [-r reason] <uid1>,<uid2>...", "Forces IC messages into third-person narration using the player's display name, with automatic mood tags (e.g. 'HELLO??' → 'Phoenix demands an explanation [feral][confused]').", "Moderator", "/thirdperson 5 -d 1h -r \"Narration arc\"", []string{"unreliablenarrator", "spotlight", "unpunish"}},
+	"unreliablenarrator": {"/unreliablenarrator [-d duration] [-r reason] <uid1>,<uid2>...", "Makes IC messages sound suspiciously unreliable with hedges, contradictions, and self-doubting commentary (e.g. 'I didn't do it' → 'I allegedly didn't do it (or so I recall.)').", "Moderator", "/unreliablenarrator 5 -d 20m -r \"Stop gaslighting the courtroom\"", []string{"thirdperson", "paranoid", "unpunish"}},
+	"uncannyvalley":      {"/uncannyvalley [-d duration] [-r reason] <uid1>,<uid2>...", "Adds glitchy system notes to IC messages and subtly mutates the player's display name each message (e.g. name: 'Phoenix' → 'Phœnix_', message appended with '[checksum mismatch]').", "Moderator", "/uncannyvalley 5 -d 45m -r \"Become slightly incorrect\"", []string{"unreliablenarrator", "emoji", "unpunish"}},
 }
 
 // handleHelp handles the /help command.

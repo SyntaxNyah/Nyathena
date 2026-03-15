@@ -1,6 +1,6 @@
 # Punishment Commands Documentation
 
-Athena now includes 35 fun, non-harmful punishment commands for moderators to use on players. These commands temporarily modify how player messages appear or behave, adding entertainment value while maintaining server control.
+Athena now includes 41 fun, non-harmful punishment commands for moderators to use on players. These commands temporarily modify how player messages appear or behave, adding entertainment value while maintaining server control.
 
 ## Overview
 
@@ -38,7 +38,7 @@ All punishment commands:
 /unpunish -t uppercase 45        # Remove only uppercase punishment
 ```
 
-## Text Modification Commands (13)
+## Text Modification Commands (14)
 
 ### `/whisper`
 Makes messages only visible to mods and CMs. Players can still send messages, but only staff can see them.
@@ -102,6 +102,14 @@ Converts to Shakespearean English.
 Converts to caveman grunts.
 - Input: "Hello world test"
 - Output: "UGH GRUNT"
+
+### `/slang`
+Converts messages to internet slang abbreviations.
+- Input: "I don't know, got to go"
+- Output: "idk, gtg"
+- Input: "be right back, talk to you later"
+- Output: "brb, ttyl"
+- Remove with: `/unslang <uid1>,<uid2>,...`
 
 ## Visibility/Cosmetic Commands (2)
 
@@ -212,6 +220,114 @@ Intentionally "autocorrects" words incorrectly.
 - "the" → "teh"
 - "you" → "u"
 - "there" → "their"
+
+## Fun Personality Commands (6)
+
+### `/thesaurusoverload`
+Replaces ordinary words with comically pompous synonyms and adds smug parenthetical notes.
+- Input: `"i want to go now"`
+- Output: `"I desire to peregrinate forthwith (ergo, QED)."`
+- Input: `"stop following me"`
+- Output: `"Desist following me (per se)."`
+- Remove with: `/unthesaurusoverload <uid1>,<uid2>...`
+
+**Usage:** `/thesaurusoverload [-d duration] [-r reason] <uid1>,<uid2>...`
+
+**Example:**
+```
+/thesaurusoverload 12 -d 10m -r "Stop typing like a normal person"
+```
+
+---
+
+### `/valleygirl`
+Injects valley-girl filler words, stretches vowels, and adds dramatic tone.
+- Input: `"stop following me"`
+- Output: `"Okay sooo like… literally stop following meee?? I can't even."`
+- Input: `"no"`
+- Output: `"like, nooo?? I literally can't."`
+- Remove with: `/unvalleygirl <uid1>,<uid2>...`
+
+**Usage:** `/valleygirl [-d duration] [-r reason] <uid1>,<uid2>...`
+
+**Example:**
+```
+/valleygirl 5 -d 30m -r "Take a deep breath"
+```
+
+---
+
+### `/babytalk`
+Converts messages to toddler-style speech with phonetic substitutions and stage directions (distinct from `/uwu`).
+- Input: `"give me my evidence back right now"`
+- Output: `"gib me my ev-idence bac wight now!! *tiny stomp*"`
+- Input: `"please be careful"`
+- Output: `"pwease be caweful *bottom lip wobbles*"`
+- Remove with: `/unbabytalk <uid1>,<uid2>...`
+
+**Usage:** `/babytalk [-d duration] [-r reason] <uid1>,<uid2>...`
+
+**Example:**
+```
+/babytalk 19 -d 15m -r "No more grown-up words for you"
+```
+
+---
+
+### `/thirdperson`
+Forces messages into third-person narration using the player's display name. Adds mood tags based on punctuation and capitalisation.
+- Input: `"hello everyone"` (player: Phoenix)
+- Output: `"Phoenix announces to the room: \"hello everyone\""`
+- Input: `"WHAT??"` (player: Phoenix)
+- Output: `"Phoenix demands: \"WHAT??\" [feral][confused]"`
+- Remove with: `/unthirdperson <uid1>,<uid2>...`
+
+**Usage:** `/thirdperson [-d duration] [-r reason] <uid1>,<uid2>...`
+
+**Example:**
+```
+/thirdperson 3 -d 1h -r "Narration arc"
+```
+
+---
+
+### `/unreliablenarrator`
+Makes the speaker sound like an untrustworthy narrator by adding hedges, contradictions, and suspicious commentary.
+- Input: `"i didn't do it"`
+- Output: `"I allegedly didn't do it (…or so I recall.)"`
+- Input: `"i saw them vent"`
+- Output: `"I supposedly saw them vent (citation: vibes)"`
+- Remove with: `/ununreliablenarrator <uid1>,<uid2>...`
+
+**Usage:** `/unreliablenarrator [-d duration] [-r reason] <uid1>,<uid2>...`
+
+**Example:**
+```
+/unreliablenarrator 8 -d 20m -r "Stop gaslighting the courtroom"
+```
+
+---
+
+### `/uncannyvalley`
+Makes the player's identity feel slightly wrong by:
+- Subtly mutating their displayed name each message (safe character swaps, vowel homoglyphs, transpositions — no true impersonation)
+- Appending glitchy system notes to messages
+
+Name mutations cycle through: vowel homoglyphs (`a→α`, `e→ε`, `o→ο`), trailing underscores, character transpositions, and duplications.
+
+**Easter egg:** If they say "I'm fine", it gets an unsettling `:)` appended.
+
+- Display name over time: `Phoenix` → `Phœnix` → `Pheonix` → `Phoenix_` → `Phoønix`
+- Input: `"im fine"` → Output: `"im fine :) [checksum mismatch]"`
+- Input: `"hello"` → Output: `"hello [signal distortion detected]"`
+- Remove with: `/ununcannyvalley <uid1>,<uid2>...`
+
+**Usage:** `/uncannyvalley [-d duration] [-r reason] <uid1>,<uid2>...`
+
+**Example:**
+```
+/uncannyvalley 14 -d 45m -r "Become slightly incorrect"
+```
 
 ## Safety Features
 - **Maximum duration:** 24 hours

@@ -191,11 +191,24 @@ connection_rate_limit = 10
 # Default: 10 seconds
 connection_rate_limit_window = 10
 
+# Whether to automatically ban IPs that are repeatedly rejected by the connection rate limit.
+# When an IP has its connection rejected more than conn_flood_autoban_threshold times
+# (within the same connection-rate window), it is banned for default_ban_duration.
+# This stops endless reconnection floods from wasting server resources.
+# Set to false to disable. Default: true
+conn_flood_autoban = true
+
+# Number of connection rejections (due to the connection rate limit) before an IP is
+# automatically banned. For example, with the default value of 6, an IP that has its
+# connection rejected 6 or more times will be auto-banned.
+# Only takes effect when conn_flood_autoban = true.
+# Default: 6
+conn_flood_autoban_threshold = 6
+
 # Whether to automatically ban IPs that exceed the raw packet rate limit.
 # Raw packet flooding (sending hundreds of packets per second) is a clear bot/DDoS
 # indicator. When enabled, such IPs are banned for default_ban_duration.
-# Connection rate limit violations (connect_rate_limit) only block the connection
-# temporarily and never result in a ban.
+# For connection-level flood banning see conn_flood_autoban above.
 # Default: true
 packet_flood_autoban = true
 
@@ -325,6 +338,46 @@ random_song_cooldown = 5
 # Raise this value to catch longer-lived bots; lower it to be more conservative.
 # Default: 120 seconds (2 minutes).
 botban_playtime_threshold = 120
+
+# IPHub API key for VPN/proxy detection.
+# When set, moderators can use /firewall on|off to enable or disable IP screening.
+# While the firewall is active, every new IP (not previously known to the server) is
+# checked against the IPHub API (https://iphub.info). If the IP is classified as a
+# VPN or non-residential proxy (block=1), the connection is immediately rejected.
+# IPs that are already known to the server (from previous connections) are never
+# sent to the API, and each unique IP is only checked once per server session to
+# respect the free-tier limit of 1 000 requests/day.
+# Leave blank to disable IPHub integration entirely (the /firewall command will
+# still exist but will report that no API key is configured).
+iphub_api_key = ""
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Casino & Player Account System
+# ─────────────────────────────────────────────────────────────────────────────
+# Set to true to enable the Nyathena casino mini-games (blackjack, poker, slots,
+# roulette, baccarat, craps, crash, mines, keno, prize wheel) and the player
+# account system (/register, /account, /chips leaderboard).
+#
+# When set to false:
+#   • All casino game commands are disabled server-wide and respond with a
+#     "not enabled on this server" message.
+#   • /register, /account, /chips, /casino, /casinoenable, and /casinoset are
+#     also hidden from /help and blocked.
+#   • Existing moderator/admin accounts in the database are unaffected —
+#     /login and /logout continue to work normally.
+#   • All existing chip balances and player account data in the database are
+#     preserved and will be fully accessible if you re-enable this setting later.
+#
+# Default: false
+enable_casino = false
+
+# Require players to complete a random captcha when registering a new account.
+# When true, /register issues a one-time token that the player must echo back
+# with /captcha <token> before the account is created. This prevents automated
+# bulk registration from a single session.
+# Set to false to allow immediate registration without any captcha step.
+# Default: true
+register_captcha = true
 
 [Logging]
 # Sets the number of actions (IC chat messages, OOC chat messages, judge actions, etc.) each area should store.

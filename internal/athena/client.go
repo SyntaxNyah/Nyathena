@@ -20,6 +20,7 @@ import (
 	"bufio"
 	"bytes"
 	"fmt"
+	"io"
 	"math"
 	"net"
 	"strconv"
@@ -35,6 +36,13 @@ import (
 	"github.com/MangosArentLiterature/Athena/internal/sliceutil"
 	"github.com/MangosArentLiterature/Athena/internal/webhook"
 )
+
+// packetBufPool is a pool of reusable byte buffers used by SendPacket to build
+// outgoing AO2 packets without allocating a new buffer on every call.
+// Each buffer is reset before use and returned to the pool after the write.
+var packetBufPool = sync.Pool{
+	New: func() any { return new(bytes.Buffer) },
+}
 
 type MuteState int
 
@@ -125,6 +133,15 @@ const (
 	PunishmentDegrade
 	// Chaos/Outburst Punishments
 	PunishmentTourettes
+	// Internet Slang Punishment
+	PunishmentSlang
+	// New Fun Punishment Commands
+	PunishmentThesaurusOverload
+	PunishmentValleyGirl
+	PunishmentBabytalk
+	PunishmentThirdPerson
+	PunishmentUnreliableNarrator
+	PunishmentUncannyValley
 )
 
 type PunishmentState struct {
@@ -147,29 +164,29 @@ type ClientPairInfo struct {
 }
 
 type Client struct {
-	pair          ClientPairInfo
-	mu            sync.Mutex
-	conn          net.Conn
-	joining       bool
-	hdid          string
-	uid           int
-	area          *area.Area
-	char          int
-	ipid          string
-	oocName       string
-	lastmsg       string
-	lastTextColor string
-	perms         uint64
-	authenticated bool
-	mod_name      string
-	pos           string
-	case_prefs    [5]bool
-	muted         MuteState
-	muteuntil     time.Time
-	showname      string
-	narrator      bool
-	jailedUntil   time.Time
-	lastRpsTime   time.Time
+	pair               ClientPairInfo
+	mu                 sync.Mutex
+	conn               net.Conn
+	joining            bool
+	hdid               string
+	uid                int
+	area               *area.Area
+	char               int
+	ipid               string
+	oocName            string
+	lastmsg            string
+	lastTextColor      string
+	perms              uint64
+	authenticated      bool
+	mod_name           string
+	pos                string
+	case_prefs         [5]bool
+	muted              MuteState
+	muteuntil          time.Time
+	showname           string
+	narrator           bool
+	jailedUntil        time.Time
+	lastRpsTime        time.Time
 	punishments        []PunishmentState
 	msgTimestamps      []time.Time // Tracks message timestamps for rate limiting
 	oocMsgTimestamps   []time.Time // Tracks OOC message timestamps for OOC rate limiting
@@ -179,25 +196,37 @@ type Client struct {
 	lastRandomCharTime time.Time   // Tracks last /randomchar time for cooldown
 	lastRandomBgTime   time.Time   // Tracks last /randombg time for cooldown
 	lastRandomSongTime time.Time   // Tracks last /randomsong time for cooldown
-	forcePairUID    int         // UID of the client this client is force-paired with (-1 if none)
-	possessing      int         // UID of the client being possessed (-1 if not possessing anyone)
-	possessedPos    string      // Position of the possessed target (saved at time of possession)
-	forcedShowname  string      // Showname forced by a moderator ("" if none)
-	connectedAt     time.Time   // Time the client joined the server (uid assigned); zero if not yet joined
-	jailAreaID      int         // Area index where this client is jailed; -1 = no specific jail area
+	forcePairUID       int         // UID of the client this client is force-paired with (-1 if none)
+	possessing         int         // UID of the client being possessed (-1 if not possessing anyone)
+	possessedPos       string      // Position of the possessed target (saved at time of possession)
+	forcedShowname     string      // Showname forced by a moderator ("" if none)
+	connectedAt        time.Time   // Time the client joined the server (uid assigned); zero if not yet joined
+	jailAreaID         int         // Area index where this client is jailed; -1 = no specific jail area
+	hidden             bool        // Whether the client is hidden from the player list and area counts
+	charStuckUntil     time.Time   // Time when the character-stuck restriction expires; zero = not stuck
+	charStuckCharID    int         // Character ID the client is locked to; -1 = not stuck
+	dancing            bool        // Whether the client has dance mode active (flips sprite every message)
+	danceFlipped       bool        // Current flip state for dance mode; toggles each IC message
+	gambleHide         bool        // Whether the client has opted out of seeing gambling broadcast messages
+	pendingRegUser     string      // Username from a pending /register that is awaiting captcha confirmation
+	pendingRegPass     []byte      // bcrypt hash from a pending /register that is awaiting captcha confirmation
+	pendingRegCaptcha  string      // Expected captcha token for the pending registration
+	sessionChipsAwarded int64     // Chips already awarded mid-session (hourly ticker); subtracted at disconnect to avoid double-counting
+	ignoredIPIDs        sync.Map  // Set of IPIDs permanently ignored by this client. Key: IPID string, Value: struct{}. Lock-free reads.
 }
 
 // NewClient returns a new client.
 func NewClient(conn net.Conn, ipid string) *Client {
 	return &Client{
-		conn:       conn,
-		uid:        -1,
-		char:       -1,
-		pair:       ClientPairInfo{wanted_id: -1},
-		ipid:       ipid,
-		forcePairUID: -1,
-		possessing: -1,
-		jailAreaID: -1,
+		conn:            conn,
+		uid:             -1,
+		char:            -1,
+		pair:            ClientPairInfo{wanted_id: -1},
+		ipid:            ipid,
+		forcePairUID:    -1,
+		possessing:      -1,
+		jailAreaID:      -1,
+		charStuckCharID: -1,
 	}
 }
 
@@ -214,13 +243,16 @@ func (client *Client) HandleClient() {
 		go startTormentDisconnect(client)
 	}
 
-	var mc int
-	for c := range clients.GetAllClients() {
-		if c.Ipid() == client.Ipid() {
-			mc++
+	// Load this client's persisted ignore list.
+	if ignoredIPs, err := db.LoadIgnoredIPIDs(client.Ipid()); err != nil {
+		logger.LogErrorf("Failed to load ignore list for %v: %v", client.Ipid(), err)
+	} else {
+		for _, ipid := range ignoredIPs {
+			client.ignoredIPIDs.Store(ipid, struct{}{})
 		}
 	}
-	if mc >= config.MCLimit && config.MCLimit != 0 {
+
+	if config.MCLimit != 0 && clients.CountByIPID(client.Ipid()) >= config.MCLimit {
 		client.SendPacket("BD", "You have reached the server's multiclient limit.")
 		client.conn.Close()
 		return
@@ -291,9 +323,11 @@ func (client *Client) HandleClient() {
 }
 
 // write sends the given message to the client's network socket.
+// Write errors are intentionally ignored: any underlying connection failure
+// will surface on the next read in HandleClient, which closes the connection.
 func (client *Client) write(message string) {
 	client.mu.Lock()
-	fmt.Fprint(client.conn, message)
+	io.WriteString(client.conn, message) //nolint:errcheck
 	if logger.DebugNetwork {
 		logger.LogDebugf("To %v: %v", client.ipid, message)
 	}
@@ -304,8 +338,37 @@ func (client *Client) write(message string) {
 }
 
 // SendPacket sends the client a packet with the given header and contents.
+// A bytes.Buffer from packetBufPool is used to assemble the packet in a
+// single allocation-free pass; the buffer is returned to the pool afterwards.
+// Write errors are intentionally ignored: any underlying connection failure
+// will surface on the next read in HandleClient, which closes the connection.
 func (client *Client) SendPacket(header string, contents ...string) {
-	client.write(header + "#" + strings.Join(contents, "#") + "#%")
+	b := packetBufPool.Get().(*bytes.Buffer)
+	b.Reset()
+	b.WriteString(header)
+	for _, c := range contents {
+		b.WriteByte('#')
+		b.WriteString(c)
+	}
+	b.WriteString("#%")
+
+	client.mu.Lock()
+	if logger.DebugNetwork || logger.EnableNetworkLogging {
+		// Logging paths need a string copy; keep them off the common fast path.
+		msg := b.String()
+		client.conn.Write(b.Bytes()) //nolint:errcheck
+		if logger.DebugNetwork {
+			logger.LogDebugf("To %v: %v", client.ipid, msg)
+		}
+		if logger.EnableNetworkLogging {
+			logger.WriteNetworkLog(client.ipid, client.hdid, "SEND", msg)
+		}
+	} else {
+		b.WriteTo(client.conn) //nolint:errcheck
+	}
+	client.mu.Unlock()
+
+	packetBufPool.Put(b)
 }
 
 // clientClenup cleans up a disconnected client.
@@ -313,14 +376,28 @@ func (client *Client) clientCleanup() {
 	if client.Uid() != -1 {
 		logger.LogInfof("Client (IPID:%v UID:%v) left the server", client.ipid, client.Uid())
 
-		// Accumulate session playtime in the database.
+		// Accumulate session playtime and award 1 chip per newly-completed hour.
+		// AddPlaytimeReturning is a single atomic SQL operation, so concurrent
+		// disconnects for the same IPID (multiclient) cannot race on the boundary.
 		if connAt := client.ConnectedAt(); !connAt.IsZero() {
 			sessionSecs := int64(time.Since(connAt).Seconds())
 			if sessionSecs > 0 {
 				ipid := client.Ipid()
+				alreadyAwarded := client.SessionChipsAwarded()
 				go func() {
-					if err := db.AddPlaytime(ipid, sessionSecs); err != nil {
+					newPt, err := db.AddPlaytimeReturning(ipid, sessionSecs)
+					if err != nil {
 						logger.LogErrorf("Failed to add playtime for %v: %v", ipid, err)
+						return
+					}
+					oldPt := newPt - sessionSecs
+					chipsEarned := (newPt/secondsPerHour) - (oldPt/secondsPerHour) - alreadyAwarded
+					if chipsEarned > 0 && config.EnableCasino {
+						if err := db.EnsureChipBalance(ipid); err == nil {
+							if _, err := db.AddChips(ipid, chipsEarned); err != nil {
+								logger.LogErrorf("Failed to award playtime chips for %v: %v", ipid, err)
+							}
+						}
 					}
 				}()
 			}
@@ -333,12 +410,13 @@ func (client *Client) clientCleanup() {
 		}
 
 		// Clear possession links if anyone was possessing this client
-		for c := range clients.GetAllClients() {
-			if c.Possessing() == client.Uid() {
+		uid := client.Uid()
+		clients.ForEach(func(c *Client) {
+			if c.Possessing() == uid {
 				c.SetPossessing(-1)
 				c.SetPossessedPos("")
 			}
-		}
+		})
 
 		if client.Area().PlayerCount() <= 1 {
 			client.Area().Reset()
@@ -360,16 +438,20 @@ func (client *Client) clientCleanup() {
 			updatePlayers <- players.GetPlayerCount()
 		}
 		client.Area().RemoveChar(client.CharID())
+		if !client.Hidden() {
+			client.Area().RemoveVisiblePlayer()
+		}
 		writeToAll("PR", strconv.Itoa(client.Uid()), "1")
 		sendPlayerArup()
 	}
+	handleCasinoDisconnect(client)
 	client.conn.Close()
 	clients.RemoveClient(client)
 }
 
 // SendServerMessage sends a server OOC message to the client.
 func (client *Client) SendServerMessage(message string) {
-	client.SendPacket("CT", encode(config.Name), encode(message), "1")
+	client.SendPacket("CT", encodedServerName, encode(message), "1")
 }
 
 // KickForRateLimit kicks the client for exceeding the message (IC/OOC/music) rate limit.
@@ -545,6 +627,24 @@ func (client *Client) SetModName(name string) {
 	client.mu.Unlock()
 }
 
+// PendingReg returns the client's pending registration data.
+// username and captcha are empty strings, hashedPass is nil when no registration is pending.
+func (client *Client) PendingReg() (username, captcha string, hashedPass []byte) {
+	client.mu.Lock()
+	defer client.mu.Unlock()
+	return client.pendingRegUser, client.pendingRegCaptcha, client.pendingRegPass
+}
+
+// SetPendingReg stores a pending registration awaiting captcha confirmation.
+// Pass empty strings and nil to clear any pending registration.
+func (client *Client) SetPendingReg(username, captcha string, hashedPass []byte) {
+	client.mu.Lock()
+	client.pendingRegUser = username
+	client.pendingRegCaptcha = captcha
+	client.pendingRegPass = hashedPass
+	client.mu.Unlock()
+}
+
 // Pos returns the client's current position.
 func (client *Client) Pos() string {
 	client.mu.Lock()
@@ -631,6 +731,15 @@ func (client *Client) RemoveAuth() {
 	client.SendPacket("AUTH", "-1")
 }
 
+// RemoveAccountAuth logs a client out of a player account (no moderator badge change needed).
+func (client *Client) RemoveAccountAuth() {
+	client.mu.Lock()
+	username := client.mod_name
+	client.authenticated, client.perms, client.mod_name = false, 0, ""
+	client.mu.Unlock()
+	client.SendServerMessage(fmt.Sprintf("Logged out of account '%v'.", username))
+}
+
 // restorePunishments loads any persistent punishments for this client from the database
 // and applies them. Called once after the client successfully joins the server.
 func (client *Client) restorePunishments() {
@@ -655,6 +764,8 @@ func (client *Client) restorePunishments() {
 		case db.PunishKindJail:
 			client.SetJailedUntil(expiresAt)
 			client.SetJailAreaID(p.Value)
+		case db.PunishKindCharStuck:
+			client.SetCharStuck(p.Value, expiresAt)
 		case db.PunishKindText:
 			pType := PunishmentType(p.Subtype)
 			var remaining time.Duration
@@ -715,6 +826,9 @@ func (client *Client) CheckBanned(by db.BanLookup) bool {
 func (client *Client) JoinArea(area *area.Area) {
 	client.SetArea(area)
 	area.AddChar(client.CharID())
+	if !client.Hidden() {
+		area.AddVisiblePlayer()
+	}
 	def, pro := area.HP()
 	client.SendPacket("LE", areas[0].Evidence()...)
 	client.SendPacket("CharsCheck", area.Taken()...)
@@ -736,17 +850,22 @@ func (client *Client) ChangeArea(a *area.Area) bool {
 		!permissions.HasPermission(client.Perms(), permissions.PermissionField["BYPASS_LOCK"]) {
 		return false
 	}
-	addToBuffer(client, "AREA", "Left area.", false)
-	if client.Area().PlayerCount() <= 1 {
-		client.Area().Reset()
-		sendLockArup()
-		sendStatusArup()
-		sendCMArup()
-	} else if client.Area().HasCM(client.Uid()) {
-		client.Area().RemoveCM(client.Uid())
-		sendCMArup()
+	if client.Area() != nil {
+		addToBuffer(client, "AREA", "Left area.", false)
+		if client.Area().PlayerCount() <= 1 {
+			client.Area().Reset()
+			sendLockArup()
+			sendStatusArup()
+			sendCMArup()
+		} else if client.Area().HasCM(client.Uid()) {
+			client.Area().RemoveCM(client.Uid())
+			sendCMArup()
+		}
+		client.Area().RemoveChar(client.CharID())
+		if !client.Hidden() {
+			client.Area().RemoveVisiblePlayer()
+		}
 	}
-	client.Area().RemoveChar(client.CharID())
 	if a.IsTaken(client.CharID()) {
 		client.SetCharID(-1)
 	}
@@ -867,12 +986,45 @@ func (client *Client) IsNarrator() bool {
 func (client *Client) ToggleNarrator() {
 	client.mu.Lock()
 	client.narrator = !client.narrator
-	client.mu.Unlock()	
+	client.mu.Unlock()
 	if client.narrator {
 		client.SendServerMessage("You are now in narrator mode.")
 	} else {
 		client.SendServerMessage("You are no longer in narrator mode.")
 	}
+}
+
+// ToggleDance toggles dance mode on or off and notifies the client.
+func (client *Client) ToggleDance() {
+	client.mu.Lock()
+	client.dancing = !client.dancing
+	if !client.dancing {
+		client.danceFlipped = false
+	}
+	client.mu.Unlock()
+	if client.dancing {
+		client.SendServerMessage("Dance mode enabled. Your sprite will flip and unflip with every message.")
+	} else {
+		client.SendServerMessage("Dance mode disabled.")
+	}
+}
+
+// CheckAndToggleDanceFlip atomically checks if dance mode is active and, if so,
+// toggles the flip state in one lock acquisition. Returns the new flip value
+// ("0" or "1") when dancing, or "" when dance mode is off.
+func (client *Client) CheckAndToggleDanceFlip() string {
+	client.mu.Lock()
+	if !client.dancing {
+		client.mu.Unlock()
+		return ""
+	}
+	client.danceFlipped = !client.danceFlipped
+	flipped := client.danceFlipped
+	client.mu.Unlock()
+	if flipped {
+		return "1"
+	}
+	return "0"
 }
 
 // canAlterEvidence is a helper function that returns if a client can alter evidence in their current area.
@@ -1021,6 +1173,74 @@ func (client *Client) SetJailAreaID(id int) {
 	client.mu.Unlock()
 }
 
+// IsCharStuck returns true if the client is currently under a character-stuck restriction.
+// Both fields are read under a single mutex lock to avoid double-locking.
+func (client *Client) IsCharStuck() bool {
+	client.mu.Lock()
+	id := client.charStuckCharID
+	t := client.charStuckUntil
+	client.mu.Unlock()
+	return id >= 0 && !t.IsZero() && time.Now().UTC().Before(t)
+}
+
+// charStuckID returns the locked character ID if the client is currently stuck, or -1 if not.
+// Both fields are read under a single lock; this is the preferred hot-path check that avoids
+// the need to call IsCharStuck and CharStuckCharID separately.
+func (client *Client) charStuckID() int {
+	client.mu.Lock()
+	id := client.charStuckCharID
+	t := client.charStuckUntil
+	client.mu.Unlock()
+	if id >= 0 && !t.IsZero() && time.Now().UTC().Before(t) {
+		return id
+	}
+	return -1
+}
+
+// SetCharStuck atomically sets both the locked character ID and the expiry time in one lock.
+func (client *Client) SetCharStuck(id int, until time.Time) {
+	client.mu.Lock()
+	client.charStuckCharID = id
+	client.charStuckUntil = until
+	client.mu.Unlock()
+}
+
+// ClearCharStuck atomically clears both char-stuck fields in one lock.
+func (client *Client) ClearCharStuck() {
+	client.mu.Lock()
+	client.charStuckCharID = -1
+	client.charStuckUntil = time.Time{}
+	client.mu.Unlock()
+}
+
+// Hidden returns whether the client is hidden from the player list and area counts.
+func (client *Client) Hidden() bool {
+	client.mu.Lock()
+	defer client.mu.Unlock()
+	return client.hidden
+}
+
+// SetHidden sets whether the client is hidden from the player list and area counts.
+func (client *Client) SetHidden(h bool) {
+	client.mu.Lock()
+	client.hidden = h
+	client.mu.Unlock()
+}
+
+// GambleHide returns whether the client has opted out of gambling broadcast messages.
+func (client *Client) GambleHide() bool {
+	client.mu.Lock()
+	defer client.mu.Unlock()
+	return client.gambleHide
+}
+
+// SetGambleHide sets whether the client wants to suppress gambling broadcast messages.
+func (client *Client) SetGambleHide(h bool) {
+	client.mu.Lock()
+	client.gambleHide = h
+	client.mu.Unlock()
+}
+
 // forceChangeArea moves the client to the given area unconditionally, bypassing
 // the jailed-player area-lock and area invitation checks that ChangeArea enforces.
 // Used to place a jailed player into their designated cell (both at jail time and on reconnect).
@@ -1036,6 +1256,9 @@ func (client *Client) forceChangeArea(a *area.Area) {
 		sendCMArup()
 	}
 	client.Area().RemoveChar(client.CharID())
+	if !client.Hidden() {
+		client.Area().RemoveVisiblePlayer()
+	}
 	if a.IsTaken(client.CharID()) {
 		client.SetCharID(-1)
 	}
@@ -1158,7 +1381,7 @@ func (m MuteState) String() string {
 func (client *Client) AddPunishment(pType PunishmentType, duration time.Duration, reason string) {
 	client.mu.Lock()
 	defer client.mu.Unlock()
-	
+
 	// Remove existing punishment of the same type (prevent duplicate same-type punishments)
 	// Different punishment types can coexist and stack their effects
 	for i := len(client.punishments) - 1; i >= 0; i-- {
@@ -1167,12 +1390,12 @@ func (client *Client) AddPunishment(pType PunishmentType, duration time.Duration
 			break
 		}
 	}
-	
+
 	expiresAt := time.Time{}
 	if duration > 0 {
 		expiresAt = time.Now().UTC().Add(duration)
 	}
-	
+
 	client.punishments = append(client.punishments, PunishmentState{
 		punishmentType: pType,
 		expiresAt:      expiresAt,
@@ -1189,7 +1412,7 @@ func (client *Client) AddPunishment(pType PunishmentType, duration time.Duration
 func (client *Client) RemovePunishment(pType PunishmentType) {
 	client.mu.Lock()
 	defer client.mu.Unlock()
-	
+
 	for i := len(client.punishments) - 1; i >= 0; i-- {
 		if client.punishments[i].punishmentType == pType {
 			client.punishments = append(client.punishments[:i], client.punishments[i+1:]...)
@@ -1236,7 +1459,7 @@ func (client *Client) RemoveAllPunishments() {
 func (client *Client) HasPunishment(pType PunishmentType) bool {
 	client.mu.Lock()
 	defer client.mu.Unlock()
-	
+
 	for _, p := range client.punishments {
 		if p.punishmentType == pType {
 			return true
@@ -1251,7 +1474,7 @@ func (client *Client) HasPunishment(pType PunishmentType) bool {
 func (client *Client) GetPunishment(pType PunishmentType) *PunishmentState {
 	client.mu.Lock()
 	defer client.mu.Unlock()
-	
+
 	for i := range client.punishments {
 		if client.punishments[i].punishmentType == pType {
 			return &client.punishments[i]
@@ -1264,7 +1487,7 @@ func (client *Client) GetPunishment(pType PunishmentType) *PunishmentState {
 func (client *Client) UpdatePunishmentState(pType PunishmentType, updateFunc func(*PunishmentState)) {
 	client.mu.Lock()
 	defer client.mu.Unlock()
-	
+
 	for i := range client.punishments {
 		if client.punishments[i].punishmentType == pType {
 			updateFunc(&client.punishments[i])
@@ -1303,17 +1526,17 @@ func (client *Client) CheckExpiredPunishments() bool {
 func (client *Client) GetActivePunishments() []PunishmentState {
 	client.mu.Lock()
 	defer client.mu.Unlock()
-	
+
 	// Clean up expired punishments first
 	now := time.Now().UTC()
 	active := make([]PunishmentState, 0, len(client.punishments))
-	
+
 	for _, p := range client.punishments {
 		if p.expiresAt.IsZero() || now.Before(p.expiresAt) {
 			active = append(active, p)
 		}
 	}
-	
+
 	return active
 }
 
@@ -1442,6 +1665,20 @@ func (p PunishmentType) String() string {
 		return "degrade"
 	case PunishmentTourettes:
 		return "tourettes"
+	case PunishmentSlang:
+		return "slang"
+	case PunishmentThesaurusOverload:
+		return "thesaurusoverload"
+	case PunishmentValleyGirl:
+		return "valleygirl"
+	case PunishmentBabytalk:
+		return "babytalk"
+	case PunishmentThirdPerson:
+		return "thirdperson"
+	case PunishmentUnreliableNarrator:
+		return "unreliablenarrator"
+	case PunishmentUncannyValley:
+		return "uncannyvalley"
 	default:
 		return "none"
 	}
@@ -1464,7 +1701,7 @@ func (client *Client) CheckRateLimit() bool {
 
 	// Remove timestamps outside the current window (sliding window)
 	cutoff := now.Add(-window)
-	
+
 	// Find the first timestamp that is still within the window
 	validIdx := -1
 	for i, ts := range client.msgTimestamps {
@@ -1473,7 +1710,7 @@ func (client *Client) CheckRateLimit() bool {
 			break
 		}
 	}
-	
+
 	// Clean up old timestamps
 	if validIdx == -1 {
 		// All timestamps are expired, release the underlying array for GC
@@ -1603,4 +1840,39 @@ func (client *Client) SetConnectedAt(t time.Time) {
 	client.mu.Lock()
 	client.connectedAt = t
 	client.mu.Unlock()
+}
+
+// SessionChipsAwarded returns the number of chips already awarded to this client
+// by the hourly mid-session ticker during the current connection.
+func (client *Client) SessionChipsAwarded() int64 {
+	client.mu.Lock()
+	defer client.mu.Unlock()
+	return client.sessionChipsAwarded
+}
+
+// AddSessionChipsAwarded increments the mid-session chip award counter and
+// returns the updated total.
+func (client *Client) AddSessionChipsAwarded(n int64) int64 {
+	client.mu.Lock()
+	defer client.mu.Unlock()
+	client.sessionChipsAwarded += n
+	return client.sessionChipsAwarded
+}
+
+// IgnoresIPID returns true if this client has permanently ignored the given IPID.
+// Uses sync.Map.Load which is essentially lock-free for keys that have been stored
+// at least once, keeping the hot per-message path free of mutex contention.
+func (client *Client) IgnoresIPID(ipid string) bool {
+	_, ok := client.ignoredIPIDs.Load(ipid)
+	return ok
+}
+
+// AddIgnoredIPID adds an IPID to this client's in-memory permanent ignore set.
+func (client *Client) AddIgnoredIPID(ipid string) {
+	client.ignoredIPIDs.Store(ipid, struct{}{})
+}
+
+// RemoveIgnoredIPID removes an IPID from this client's in-memory permanent ignore set.
+func (client *Client) RemoveIgnoredIPID(ipid string) {
+	client.ignoredIPIDs.Delete(ipid)
 }

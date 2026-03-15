@@ -67,7 +67,17 @@ func getIpidList(ipids []string) []*Client {
 
 // getCharacterID returns the character ID for a given character name.
 // Returns -1 if the character name is not found.
+// Uses the O(1) charactersByName map when available (production); falls back
+// to a linear scan otherwise (tests that set characters directly).
+// charactersByName is written once before any connections are accepted, so
+// concurrent reads require no additional synchronisation.
 func getCharacterID(charName string) int {
+	if charactersByName != nil {
+		if id, ok := charactersByName[strings.ToLower(charName)]; ok {
+			return id
+		}
+		return -1
+	}
 	for i, name := range characters {
 		if strings.EqualFold(name, charName) {
 			return i

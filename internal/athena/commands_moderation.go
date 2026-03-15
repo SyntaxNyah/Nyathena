@@ -21,10 +21,12 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"math/rand"
 	"strconv"
 	"strings"
 	"time"
 
+	"github.com/MangosArentLiterature/Athena/internal/area"
 	"github.com/MangosArentLiterature/Athena/internal/db"
 	"github.com/MangosArentLiterature/Athena/internal/logger"
 	"github.com/MangosArentLiterature/Athena/internal/permissions"
@@ -86,6 +88,7 @@ func cmdBan(client *Client, args []string, usage string) {
 			c.SendPacket("KB", fmt.Sprintf("%v\nUntil: %v\nID: %v", reason, untilS, id))
 			c.conn.Close()
 			forgetIP(c.Ipid())
+			deleteAccountForIPID(c.Ipid())
 			count++
 			if err := webhook.PostBan(c.CurrentCharacter(), c.Showname(), c.OOCName(), c.Ipid(), c.Uid(), id, *duration, reason, client.ModName()); err != nil {
 				logger.LogErrorf("while posting ban webhook: %v", err)
@@ -101,6 +104,7 @@ func cmdBan(client *Client, args []string, usage string) {
 					continue
 				}
 				forgetIP(ipid)
+				deleteAccountForIPID(ipid)
 				if err := webhook.PostBan("N/A", "N/A", "N/A", ipid, -1, id, *duration, reason, client.ModName()); err != nil {
 					logger.LogErrorf("while posting ban webhook: %v", err)
 				}
@@ -121,6 +125,7 @@ func cmdBan(client *Client, args []string, usage string) {
 					continue
 				}
 				forgetIP(ipid)
+				deleteAccountForIPID(ipid)
 				for _, c := range onlineClients {
 					if id, ok := banIDByHdid[c.Hdid()]; ok {
 						c.SendPacket("KB", fmt.Sprintf("%v\nUntil: %v\nID: %v", reason, untilS, id))
@@ -147,6 +152,27 @@ func cmdBan(client *Client, args []string, usage string) {
 	}
 	sendPlayerArup()
 	addToBuffer(client, "CMD", fmt.Sprintf("Banned %v from server for %v: %v.", report, *duration, reason), true)
+}
+
+// deleteAccountForIPID removes the player account linked to the given IPID (if any).
+// Any currently-connected session using that account is also logged out.
+// Called automatically whenever a ban is issued so banned players cannot log back in.
+func deleteAccountForIPID(ipid string) {
+	username, err := db.GetUsernameByIPID(ipid)
+	if err != nil || username == "" {
+		return // no linked account — nothing to do
+	}
+	if err := db.RemoveUser(username); err != nil {
+		logger.LogErrorf("deleteAccountForIPID: failed to remove account %q (IPID %v): %v", username, ipid, err)
+		return
+	}
+	// Log out any connected session that was using the now-deleted account.
+	clients.ForEach(func(c *Client) {
+		if c.Authenticated() && c.ModName() == username {
+			c.RemoveAuth()
+		}
+	})
+	logger.LogInfof("deleteAccountForIPID: removed account %q linked to banned IPID %v", username, ipid)
 }
 
 // Handles /bg
@@ -281,6 +307,26 @@ func cmdGlobal(client *Client, args []string, _ string) {
 	writeToAll("CT", fmt.Sprintf("[GLOBAL] %v", client.OOCName()), strings.Join(args, " "), "1")
 }
 
+// Handles /hide
+
+func cmdHide(client *Client, _ []string, _ string) {
+	if client.Hidden() {
+		client.Area().AddVisiblePlayer()
+		client.SetHidden(false)
+		broadcastPlayerJoin(client)
+		sendPlayerArup()
+		client.SendServerMessage("You are now visible.")
+		addToBuffer(client, "CMD", "Disabled hide mode.", false)
+	} else {
+		client.Area().RemoveVisiblePlayer()
+		client.SetHidden(true)
+		writeToAll("PR", strconv.Itoa(client.Uid()), "1")
+		sendPlayerArup()
+		client.SendServerMessage("You are now hidden from the player list and room counts.")
+		addToBuffer(client, "CMD", "Enabled hide mode.", false)
+	}
+}
+
 // Handles /invite
 
 func cmdKick(client *Client, args []string, usage string) {
@@ -338,11 +384,15 @@ func cmdLogin(client *Client, args []string, _ string) {
 		client.SetAuthenticated(true)
 		client.SetPerms(perms)
 		client.SetModName(args[0])
+		// Link the current IPID to this account so leaderboards can show names.
+		db.LinkIPIDToUser(args[0], client.Ipid()) //nolint:errcheck
 		if permissions.IsModerator(perms) {
 			client.SendServerMessage("Logged in as moderator.")
+		} else {
+			client.SendServerMessage("Logged in to your account.")
 		}
 		client.SendPacket("AUTH", "1")
-		client.SendServerMessage(fmt.Sprintf("Welcome, %v.", args[0]))
+		client.SendServerMessage(fmt.Sprintf("Welcome back, %v.", args[0]))
 		addToBuffer(client, "AUTH", fmt.Sprintf("Logged in as %v.", args[0]), true)
 		return
 	}
@@ -355,9 +405,14 @@ func cmdLogin(client *Client, args []string, _ string) {
 func cmdLogout(client *Client, _ []string, _ string) {
 	if !client.Authenticated() {
 		client.SendServerMessage("You are not logged in.")
+		return
 	}
 	addToBuffer(client, "AUTH", fmt.Sprintf("Logged out as %v.", client.ModName()), true)
-	client.RemoveAuth()
+	if permissions.IsModerator(client.Perms()) {
+		client.RemoveAuth()
+	} else {
+		client.RemoveAccountAuth()
+	}
 }
 
 // Handles /mkusr
@@ -407,11 +462,11 @@ func cmdMod(client *Client, args []string, usage string) {
 
 func cmdModChat(client *Client, args []string, _ string) {
 	msg := strings.Join(args, " ")
-	for c := range clients.GetAllClients() {
+	clients.ForEach(func(c *Client) {
 		if permissions.HasPermission(c.Perms(), permissions.PermissionField["MOD_CHAT"]) {
 			c.SendPacket("CT", fmt.Sprintf("[MODCHAT] %v", client.OOCName()), msg, "1")
 		}
-	}
+	})
 }
 
 // Handles /motd
@@ -537,39 +592,76 @@ func cmdPlayers(client *Client, args []string, _ string) {
 	flags.SetOutput(io.Discard)
 	all := flags.Bool("a", false, "")
 	flags.Parse(args)
-	out := "\nPlayers\n----------\n"
-	entry := func(c *Client, auth bool) string {
-		s := fmt.Sprintf("[%v] %v\n", c.Uid(), c.CurrentCharacter())
-		if auth {
-			if permissions.IsModerator(c.Perms()) {
-				s += fmt.Sprintf("Mod: %v\n", c.ModName())
-			}
-			s += fmt.Sprintf("IPID: %v\n", c.Ipid())
-		}
-		if c.OOCName() != "" {
-			s += fmt.Sprintf("OOC: %v\n", c.OOCName())
-		}
-		return s
+
+	isAdmin   := permissions.HasPermission(client.Perms(), permissions.PermissionField["ADMIN"])
+	hasBanInfo := permissions.HasPermission(client.Perms(), permissions.PermissionField["BAN_INFO"])
+	targetArea := client.Area()
+
+	// Group clients by area in a single snapshot pass.
+	type areaClients struct {
+		list []*Client
 	}
+	grouped := make(map[*area.Area]*areaClients, len(areas))
+	allFlag := *all
+	clients.ForEach(func(c *Client) {
+		a := c.Area()
+		if !allFlag && a != targetArea {
+			return
+		}
+		if !isAdmin && c.Hidden() {
+			return
+		}
+		ac := grouped[a]
+		if ac == nil {
+			ac = &areaClients{}
+			grouped[a] = ac
+		}
+		ac.list = append(ac.list, c)
+	})
+
+	// writeEntry appends a single client's info to the builder.
+	writeEntry := func(b *strings.Builder, c *Client) {
+		if c.Hidden() {
+			b.WriteString("[HIDDEN] ")
+		}
+		prefix := formatTagDisplay(db.GetActiveTag(c.Ipid()))
+		if prefix != "" {
+			prefix += " "
+		}
+		fmt.Fprintf(b, "%s[%v] %v\n", prefix, c.Uid(), c.CurrentCharacter())
+		if hasBanInfo {
+			if permissions.IsModerator(c.Perms()) {
+				fmt.Fprintf(b, "Mod: %v\n", c.ModName())
+			}
+			fmt.Fprintf(b, "IPID: %v\n", c.Ipid())
+		}
+		if ooc := c.OOCName(); ooc != "" {
+			fmt.Fprintf(b, "OOC: %v\n", ooc)
+		}
+	}
+
+	// printArea appends one area's section to the builder.
+	printArea := func(b *strings.Builder, a *area.Area) {
+		count := a.VisiblePlayerCount()
+		fmt.Fprintf(b, "%v:\n%v players online.\n", a.Name(), count)
+		if ac := grouped[a]; ac != nil {
+			for _, c := range ac.list {
+				writeEntry(b, c)
+			}
+		}
+	}
+
+	var out strings.Builder
+	out.WriteString("\nPlayers\n----------\n")
 	if *all {
 		for _, a := range areas {
-			out += fmt.Sprintf("%v:\n%v players online.\n", a.Name(), a.PlayerCount())
-			for c := range clients.GetAllClients() {
-				if c.Area() == a {
-					out += entry(c, permissions.HasPermission(client.Perms(), permissions.PermissionField["BAN_INFO"]))
-				}
-			}
-			out += "----------\n"
+			printArea(&out, a)
+			out.WriteString("----------\n")
 		}
 	} else {
-		out += fmt.Sprintf("%v:\n%v players online.\n", client.Area().Name(), client.Area().PlayerCount())
-		for c := range clients.GetAllClients() {
-			if c.Area() == client.Area() {
-				out += entry(c, permissions.HasPermission(client.Perms(), permissions.PermissionField["BAN_INFO"]))
-			}
-		}
+		printArea(&out, targetArea)
 	}
-	client.SendServerMessage(out)
+	client.SendServerMessage(out.String())
 }
 
 // Handles /pm
@@ -622,11 +714,12 @@ func cmdRemoveUser(client *Client, args []string, _ string) {
 	}
 	client.SendServerMessage("Removed user.")
 
-	for c := range clients.GetAllClients() {
-		if c.Authenticated() && c.ModName() == args[0] {
+	removedUser := args[0]
+	clients.ForEach(func(c *Client) {
+		if c.Authenticated() && c.ModName() == removedUser {
 			c.RemoveAuth()
 		}
-	}
+	})
 	addToBuffer(client, "CMD", fmt.Sprintf("Removed user %v.", args[0]), true)
 }
 
@@ -652,11 +745,13 @@ func cmdChangeRole(client *Client, args []string, _ string) {
 	}
 	client.SendServerMessage("Role updated.")
 
-	for c := range clients.GetAllClients() {
-		if c.Authenticated() && c.ModName() == args[0] {
-			c.SetPerms(role.GetPermissions())
+	targetUser := args[0]
+	newPerms := role.GetPermissions()
+	clients.ForEach(func(c *Client) {
+		if c.Authenticated() && c.ModName() == targetUser {
+			c.SetPerms(newPerms)
 		}
-	}
+	})
 	addToBuffer(client, "CMD", fmt.Sprintf("Updated role of %v to %v.", args[0], args[1]), true)
 }
 
@@ -892,6 +987,88 @@ func cmdUnforceName(client *Client, args []string, _ string) {
 	addToBuffer(client, "CMD", fmt.Sprintf("removed forced showname from UID %v", uid), true)
 }
 
+// cmdNameShuffle randomly reassigns all shownames within the current area.
+// Each player receives another player's effective showname so that every name
+// is displaced but none is lost.
+func cmdNameShuffle(client *Client, _ []string, _ string) {
+	targetArea := client.Area()
+
+	// Fast path: skip the full client-list scan when the area clearly lacks
+	// enough participants. PlayerCount() is an O(1) cached counter that only
+	// counts clients that have fully joined an area (UID != -1), so it is a
+	// reliable lower bound. A second check below handles any edge-case races.
+	if targetArea.PlayerCount() < 2 {
+		client.SendServerMessage("There are not enough players in this area to shuffle names (need at least 2).")
+		return
+	}
+
+	// Collect joined clients and their shownames in a single pass.
+	// Pre-allocate with the cached player count to avoid repeated re-allocs.
+	n := targetArea.PlayerCount()
+	targets := make([]*Client, 0, n)
+	names := make([]string, 0, n)
+	clients.ForEach(func(c *Client) {
+		if c.Uid() != -1 && c.Area() == targetArea {
+			targets = append(targets, c)
+			names = append(names, c.EffectiveShowname())
+		}
+	})
+
+	if len(targets) < 2 {
+		client.SendServerMessage("There are not enough players in this area to shuffle names (need at least 2).")
+		return
+	}
+
+	// Sattolo algorithm: single O(n) in-place pass that guarantees every
+	// element moves to a new index (a cyclic derangement). The bound is i
+	// (not i+1 as in Fisher-Yates) to exclude self-swaps and ensure the
+	// result is always a derangement; no copy or retry loop is needed.
+	for i := len(names) - 1; i > 0; i-- {
+		j := rand.Intn(i) // [0, i-1] inclusive
+		names[i], names[j] = names[j], names[i]
+	}
+
+	// Apply shuffled shownames and broadcast PU updates.
+	for i, c := range targets {
+		c.SetForcedShowname(names[i])
+		writeToAll("PU", strconv.Itoa(c.Uid()), "2", decode(names[i]))
+		c.SendServerMessage("A moderator has shuffled the shownames in this area.")
+	}
+
+	client.SendServerMessage(fmt.Sprintf("Shuffled shownames of %d players in the area.", len(targets)))
+	addToBuffer(client, "CMD", fmt.Sprintf("shuffled shownames of %d players in area %v", len(targets), targetArea.Name()), true)
+}
+
+// cmdUnnameShuffle removes all forced shownames in the current area, restoring
+// each player's own showname and broadcasting a PU update to all clients.
+func cmdUnnameShuffle(client *Client, _ []string, _ string) {
+	targetArea := client.Area()
+
+	// Pre-allocate with the cached player count to avoid repeated re-allocs.
+	// PlayerCount() is O(1); the slice may end up shorter if not all players
+	// have a forced showname, but this avoids any mid-loop heap growth.
+	resetTargets := make([]*Client, 0, targetArea.PlayerCount())
+	clients.ForEach(func(c *Client) {
+		if c.Uid() != -1 && c.Area() == targetArea && c.ForcedShowname() != "" {
+			resetTargets = append(resetTargets, c)
+		}
+	})
+
+	if len(resetTargets) == 0 {
+		client.SendServerMessage("No players in this area have a forced showname.")
+		return
+	}
+
+	for _, c := range resetTargets {
+		c.SetForcedShowname("")
+		writeToAll("PU", strconv.Itoa(c.Uid()), "2", decode(c.Showname()))
+		c.SendServerMessage("A moderator has restored shownames in this area.")
+	}
+
+	client.SendServerMessage(fmt.Sprintf("Restored shownames of %d players in the area.", len(resetTargets)))
+	addToBuffer(client, "CMD", fmt.Sprintf("restored shownames of %d players in area %v", len(resetTargets), targetArea.Name()), true)
+}
+
 // cmdUntorment removes an IPID from the automod torment list.
 func cmdUntorment(client *Client, args []string, usage string) {
 	ipid := strings.TrimSpace(args[0])
@@ -926,6 +1103,40 @@ func cmdLockdown(client *Client, _ []string, _ string) {
 	}
 }
 
+// cmdFirewall toggles the IPHub VPN/proxy firewall gate.
+// Usage: /firewall on | /firewall off
+// While the firewall is active, every new connection whose IP has not been seen
+// before is checked against the IPHub API.  IPs classified as VPNs or proxies
+// (block=1) are rejected immediately.  Already-known IPs and previously-checked
+// IPs (cached within this session) are never sent to the API, keeping usage well
+// within the free-tier daily limit of 1 000 requests.
+// Requires an iphub_api_key to be set in config.toml.
+func cmdFirewall(client *Client, args []string, usage string) {
+	if len(args) < 1 {
+		client.SendServerMessage("Not enough arguments:\n" + usage)
+		return
+	}
+
+	switch args[0] {
+	case "on":
+		if config.IPHubAPIKey == "" {
+			client.SendServerMessage("Cannot enable firewall: no iphub_api_key is configured in config.toml.")
+			return
+		}
+		firewallActive.Store(true)
+		writeToAll("CT", "OOC", "🔥 VPN firewall is now ACTIVE. New connections will be screened against IPHub.", "1")
+		client.SendServerMessage("Firewall enabled. New IPs will be checked via IPHub.")
+		addToBuffer(client, "CMD", "Enabled IPHub firewall.", true)
+	case "off":
+		firewallActive.Store(false)
+		writeToAll("CT", "OOC", "🔓 VPN firewall has been DISABLED. New connections are no longer screened.", "1")
+		client.SendServerMessage("Firewall disabled.")
+		addToBuffer(client, "CMD", "Disabled IPHub firewall.", true)
+	default:
+		client.SendServerMessage("Invalid argument. " + usage)
+	}
+}
+
 // cmdBotBan bans all currently-connected spectators whose total playtime
 // (accumulated from previous sessions plus the current session) is less than
 // the configured botban_playtime_threshold (default 120 seconds).
@@ -936,10 +1147,10 @@ func cmdBotBan(client *Client, _ []string, _ string) {
 	var count int
 	bannedIPIDs := make(map[string]struct{})
 
-	for c := range clients.GetAllClients() {
+	clients.ForEach(func(c *Client) {
 		if c.CharID() != -1 {
 			// Not a spectator – skip.
-			continue
+			return
 		}
 
 		// Accumulate DB playtime + current session time.
@@ -954,20 +1165,20 @@ func cmdBotBan(client *Client, _ []string, _ string) {
 		totalPlaytime := dbPlaytime + sessionSecs
 
 		if totalPlaytime >= threshold {
-			continue
+			return
 		}
 
 		id, err := db.AddBan(c.Ipid(), c.Hdid(), banTime, -1, "Botban: spectator with insufficient playtime.", client.ModName())
 		if err != nil {
 			logger.LogErrorf("botban: failed to ban IPID %v: %v", c.Ipid(), err)
-			continue
+			return
 		}
 		c.SendPacket("KB", fmt.Sprintf("Botban: spectator with insufficient playtime.\nUntil: ∞\nID: %v", id))
 		c.conn.Close()
 		forgetIP(c.Ipid())
 		count++
 		bannedIPIDs[c.Ipid()] = struct{}{}
-	}
+	})
 
 	// Build the report string from unique IPIDs.
 	var reportParts []string
@@ -1025,4 +1236,198 @@ func cmdPurgeDB(client *Client, _ []string, _ string) {
 	resetKnownIPTracker()
 	client.SendServerMessage(fmt.Sprintf("Purged %v known IP record(s) from the database.", n))
 	addToBuffer(client, "CMD", fmt.Sprintf("Purged %v known IP record(s) from the database.", n), true)
+}
+
+// Handles /charstuck
+
+func cmdCharStuck(client *Client, args []string, usage string) {
+	flags := flag.NewFlagSet("", 0)
+	flags.SetOutput(io.Discard)
+	duration := flags.String("d", "perma", "")
+	reason := flags.String("r", "", "")
+	flags.Parse(args)
+
+	if len(flags.Args()) == 0 {
+		client.SendServerMessage("Not enough arguments:\n" + usage)
+		return
+	}
+
+	uid, err := strconv.Atoi(flags.Arg(0))
+	if err != nil {
+		client.SendServerMessage("Invalid UID.")
+		return
+	}
+
+	target, err := getClientByUid(uid)
+	if err != nil {
+		client.SendServerMessage("Client not found.")
+		return
+	}
+
+	if target.CharID() == -1 {
+		client.SendServerMessage("Target is not on a character. They must be on a character to be stuck.")
+		return
+	}
+
+	isPerma := strings.ToLower(*duration) == "perma"
+	var stuckUntil time.Time
+	if isPerma {
+		stuckUntil = time.Date(2099, 12, 31, 23, 59, 59, 0, time.UTC)
+	} else {
+		parsedDur, err := str2duration.ParseDuration(*duration)
+		if err != nil {
+			client.SendServerMessage("Failed to apply char-stuck: Cannot parse duration.")
+			return
+		}
+		stuckUntil = time.Now().UTC().Add(parsedDur)
+	}
+
+	charID := target.CharID()
+	charName := characters[charID]
+
+	target.SetCharStuck(charID, stuckUntil)
+
+	if err := db.UpsertCharStuck(target.Ipid(), charID, stuckUntil.Unix(), *reason); err != nil {
+		logger.LogErrorf("Failed to persist char-stuck for %v: %v", target.Ipid(), err)
+	}
+
+	msg := fmt.Sprintf("You have been stuck on %v and cannot change characters.", charName)
+	if !isPerma {
+		msg = fmt.Sprintf("You have been stuck on %v for %v and cannot change characters.", charName, *duration)
+	}
+	if *reason != "" {
+		msg += " Reason: " + *reason
+	}
+	target.SendServerMessage(msg)
+
+	client.SendServerMessage(fmt.Sprintf("Stuck [%v] %v on character %v.", uid, target.OOCName(), charName))
+
+	logMsg := fmt.Sprintf("Stuck [%v] %v on character %v", uid, target.OOCName(), charName)
+	if *reason != "" {
+		logMsg += " for reason: " + *reason
+	}
+	addToBuffer(client, "CMD", logMsg, false)
+}
+
+// Handles /uncharstuck
+
+func cmdUnCharStuck(client *Client, args []string, _ string) {
+	toUnstuck := getUidList(strings.Split(args[0], ","))
+	var count int
+	var sb strings.Builder
+	for _, c := range toUnstuck {
+		if !c.IsCharStuck() {
+			continue
+		}
+		c.ClearCharStuck()
+		if err := db.DeleteCharStuck(c.Ipid()); err != nil {
+			logger.LogErrorf("Failed to remove char-stuck for %v: %v", c.Ipid(), err)
+		}
+		c.SendServerMessage("Your character-stuck restriction has been lifted.")
+		count++
+		if sb.Len() > 0 {
+			sb.WriteString(", ")
+		}
+		sb.WriteString(strconv.Itoa(c.Uid()))
+	}
+	client.SendServerMessage(fmt.Sprintf("Lifted char-stuck from %v clients.", count))
+	addToBuffer(client, "CMD", fmt.Sprintf("Lifted char-stuck from %v.", sb.String()), false)
+}
+
+// Handles /charcurse
+
+func cmdCharCurse(client *Client, args []string, usage string) {
+	uid, err := strconv.Atoi(args[0])
+	if err != nil {
+		client.SendServerMessage("Invalid UID.")
+		return
+	}
+
+	target, err := getClientByUid(uid)
+	if err != nil {
+		client.SendServerMessage(fmt.Sprintf("Client with UID %d does not exist.", uid))
+		return
+	}
+
+	charName := strings.Join(args[1:], " ")
+	charID := getCharacterID(charName)
+	if charID == -1 {
+		client.SendServerMessage(fmt.Sprintf("Character \"%s\" not found.", charName))
+		return
+	}
+
+	if target.Area().IsTaken(charID) && target.CharID() != charID {
+		client.SendServerMessage(fmt.Sprintf("Character \"%s\" is already taken in that area.", charName))
+		return
+	}
+
+	target.ChangeCharacter(charID)
+	target.SendServerMessage(fmt.Sprintf("A moderator has forced you to play as %s. You may change characters freely.", charName))
+	client.SendServerMessage(fmt.Sprintf("Forced UID %d to character %s.", uid, charName))
+	addToBuffer(client, "CMD", fmt.Sprintf("Char-cursed UID %d to character %s.", uid, charName), false)
+}
+
+// cmdIgnore permanently ignores a user based on their IPID so their IC and OOC
+// messages are no longer shown to the caller. The ignore persists across
+// reconnections. The target is warned without revealing the caller's IPID.
+func cmdIgnore(client *Client, args []string, usage string) {
+uid, err := strconv.Atoi(args[0])
+if err != nil {
+client.SendServerMessage("Invalid UID.")
+return
+}
+target, err := getClientByUid(uid)
+if err != nil {
+client.SendServerMessage("Client not found.")
+return
+}
+if target == client {
+client.SendServerMessage("You cannot ignore yourself.")
+return
+}
+
+targetIPID := target.Ipid()
+if client.IgnoresIPID(targetIPID) {
+client.SendServerMessage("You are already permanently ignoring that user.")
+return
+}
+
+client.AddIgnoredIPID(targetIPID)
+if err := db.AddIgnoredIP(client.Ipid(), targetIPID); err != nil {
+logger.LogErrorf("Failed to persist ignore for %v -> %v: %v", client.Ipid(), targetIPID, err)
+}
+
+// Warn the target without revealing the ignorer's IPID.
+target.SendServerMessage("⚠️ Warning: You have been permanently ignored by another user. This will persist across your reconnections.")
+
+client.SendServerMessage(fmt.Sprintf("You are now permanently ignoring user [%d]. This will persist across their reconnections.", uid))
+addToBuffer(client, "CMD", fmt.Sprintf("permanently ignored UID %d (IPID: %v)", uid, targetIPID), false)
+}
+
+// cmdUnignore removes a permanent IPID-based ignore for the given UID.
+func cmdUnignore(client *Client, args []string, usage string) {
+uid, err := strconv.Atoi(args[0])
+if err != nil {
+client.SendServerMessage("Invalid UID.")
+return
+}
+target, err := getClientByUid(uid)
+if err != nil {
+client.SendServerMessage("Client not found.")
+return
+}
+
+targetIPID := target.Ipid()
+if !client.IgnoresIPID(targetIPID) {
+client.SendServerMessage("You are not ignoring that user.")
+return
+}
+
+client.RemoveIgnoredIPID(targetIPID)
+if err := db.RemoveIgnoredIP(client.Ipid(), targetIPID); err != nil {
+logger.LogErrorf("Failed to remove persistent ignore for %v -> %v: %v", client.Ipid(), targetIPID, err)
+}
+
+client.SendServerMessage(fmt.Sprintf("Unignored user [%d].", uid))
+addToBuffer(client, "CMD", fmt.Sprintf("unignored UID %d (IPID: %v)", uid, targetIPID), false)
 }

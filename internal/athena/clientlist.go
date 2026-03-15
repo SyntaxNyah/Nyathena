@@ -37,6 +37,23 @@ func (cl *ClientList) RemoveClient(c *Client) {
 	cl.mu.Unlock()
 }
 
+// ForEach calls fn for every client in the list.
+// It builds a slice snapshot under the read lock and releases the lock before
+// invoking fn, so callers may safely call any client method (including writes)
+// without holding cl.mu.  Using a slice instead of a map reduces allocation
+// overhead on the hot broadcast path.
+func (cl *ClientList) ForEach(fn func(*Client)) {
+	cl.mu.RLock()
+	snap := make([]*Client, 0, len(cl.list))
+	for c := range cl.list {
+		snap = append(snap, c)
+	}
+	cl.mu.RUnlock()
+	for _, c := range snap {
+		fn(c)
+	}
+}
+
 // GetAllClients returns a snapshot of all clients in the list.
 // A snapshot is returned so callers can iterate safely without holding a lock.
 func (cl *ClientList) GetAllClients() map[*Client]struct{} {
@@ -59,4 +76,32 @@ func (cl *ClientList) GetClientByUID(uid int) *Client {
 		}
 	}
 	return nil
+}
+
+// CountByIPID returns the number of connected clients with the given IPID.
+func (cl *ClientList) CountByIPID(ipid string) int {
+	cl.mu.RLock()
+	n := 0
+	for c := range cl.list {
+		if c.Ipid() == ipid {
+			n++
+		}
+	}
+	cl.mu.RUnlock()
+	return n
+}
+
+// GetByIPID returns a slice of all clients whose IPID matches ipid.
+// The slice is freshly allocated on each call; the read lock is held only
+// for the iteration itself so callers may safely invoke client methods after.
+func (cl *ClientList) GetByIPID(ipid string) []*Client {
+	cl.mu.RLock()
+	var result []*Client
+	for c := range cl.list {
+		if c.Ipid() == ipid {
+			result = append(result, c)
+		}
+	}
+	cl.mu.RUnlock()
+	return result
 }
