@@ -1382,6 +1382,14 @@ func initCommands() {
 			reqPerms:  permissions.PermissionField["NONE"],
 			casinoCmd: true,
 		},
+		"rob": {
+			handler:   cmdRob,
+			minArgs:   0,
+			usage:     "Usage: /rob [bank|casino|vault|atm|store|mint|armored|museum]",
+			desc:      "Attempt to rob a location for chips. 20% success rate — catastrophic failures drain your chips and may mute you.",
+			reqPerms:  permissions.PermissionField["NONE"],
+			casinoCmd: true,
+		},
 		"gamble": {
 			handler:   cmdGamble,
 			minArgs:   1,
