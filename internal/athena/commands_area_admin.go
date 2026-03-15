@@ -233,13 +233,13 @@ func cmdForceRandomChar(client *Client, args []string, _ string) {
 	// No UID provided — target all players in the current area.
 	var count int
 	var reportBuilder strings.Builder
-	for c := range clients.GetAllClients() {
+	clients.ForEach(func(c *Client) {
 		if c.Area() != client.Area() {
-			continue
+			return
 		}
 		newid := getRandomFreeChar(c)
 		if newid == -1 {
-			continue
+			return
 		}
 		c.ChangeCharacter(newid)
 		if c != client {
@@ -250,7 +250,7 @@ func cmdForceRandomChar(client *Client, args []string, _ string) {
 		}
 		reportBuilder.WriteString(fmt.Sprintf("%v", c.Uid()))
 		count++
-	}
+	})
 	if count > 0 {
 		client.SendServerMessage(fmt.Sprintf("Forced %v player(s) in the area to a random character.", count))
 		addToBuffer(client, "CMD", fmt.Sprintf("Force random char on %v user(s) (%v) in area.", count, reportBuilder.String()), false)
@@ -476,11 +476,12 @@ func cmdLock(client *Client, args []string, _ string) {
 		sendAreaServerMessage(client.Area(), fmt.Sprintf("%v locked the area.", client.OOCName()))
 		addToBuffer(client, "CMD", "Locked the area.", false)
 	}
-	for c := range clients.GetAllClients() {
-		if c.Area() == client.Area() {
-			c.Area().AddInvited(c.Uid())
+	targetArea := client.Area()
+	clients.ForEach(func(c *Client) {
+		if c.Area() == targetArea {
+			targetArea.AddInvited(c.Uid())
 		}
-	}
+	})
 	sendLockArup()
 }
 
@@ -606,32 +607,30 @@ func cmdSummon(client *Client, args []string, usage string) {
 		return
 	}
 	wantedArea := areas[areaID]
-	
-	// Get all connected clients
-	allClients := clients.GetAllClients()
-	
+	wantedAreaName := wantedArea.Name()
+
 	var count int
 	var reportBuilder strings.Builder
-	
+
 	// Move each client to the target area
-	for c := range allClients {
+	clients.ForEach(func(c *Client) {
 		if !c.ChangeArea(wantedArea) {
-			continue
+			return
 		}
-		
+
 		// Send appropriate message based on whether this is the admin
 		if c == client {
-			c.SendServerMessage(fmt.Sprintf("Summoned all users to %v.", wantedArea.Name()))
+			c.SendServerMessage(fmt.Sprintf("Summoned all users to %v.", wantedAreaName))
 		} else {
-			c.SendServerMessage(fmt.Sprintf("You were summoned to %v.", wantedArea.Name()))
+			c.SendServerMessage(fmt.Sprintf("You were summoned to %v.", wantedAreaName))
 		}
-		
+
 		if reportBuilder.Len() > 0 {
 			reportBuilder.WriteString(", ")
 		}
 		reportBuilder.WriteString(fmt.Sprintf("%v", c.Uid()))
 		count++
-	}
+	})
 	
 	report := reportBuilder.String()
 	if count > 0 {

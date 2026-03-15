@@ -171,11 +171,13 @@ func cmdUnpair(client *Client, _ []string, _ string) {
 	}
 
 	// Notify any client that was paired with us.
-	for c := range clients.GetAllClients() {
-		if c != client && c.PairWantedID() == client.CharID() {
-			c.SendServerMessage(fmt.Sprintf("%v has cancelled the pair.", client.OOCName()))
+	cancellerName := client.OOCName()
+	cancellerCharID := client.CharID()
+	clients.ForEach(func(c *Client) {
+		if c != client && c.PairWantedID() == cancellerCharID {
+			c.SendServerMessage(fmt.Sprintf("%v has cancelled the pair.", cancellerName))
 		}
-	}
+	})
 
 	client.SetPairWantedID(-1)
 	client.SendServerMessage("Pair cancelled.")
@@ -212,12 +214,15 @@ func cmdForceUnpair(client *Client, args []string, _ string) {
 	}
 
 	// Notify any non-UID-tracked client that was paired with the target.
-	for c := range clients.GetAllClients() {
-		if c != target && c.PairWantedID() == target.CharID() {
+	targetOOCName := target.OOCName()
+	targetCharID := target.CharID()
+	moderatorName := client.OOCName()
+	clients.ForEach(func(c *Client) {
+		if c != target && c.PairWantedID() == targetCharID {
 			c.SetPairWantedID(-1)
-			c.SendServerMessage(fmt.Sprintf("Your pair with %v was cancelled by %v.", target.OOCName(), client.OOCName()))
+			c.SendServerMessage(fmt.Sprintf("Your pair with %v was cancelled by %v.", targetOOCName, moderatorName))
 		}
-	}
+	})
 
 	target.SetPairWantedID(-1)
 	target.SendServerMessage(fmt.Sprintf("You have been force-unpaired by %v.", client.OOCName()))

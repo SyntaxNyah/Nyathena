@@ -20,6 +20,7 @@ import (
 	"bufio"
 	"bytes"
 	"fmt"
+	"io"
 	"math"
 	"net"
 	"strconv"
@@ -35,6 +36,13 @@ import (
 	"github.com/MangosArentLiterature/Athena/internal/sliceutil"
 	"github.com/MangosArentLiterature/Athena/internal/webhook"
 )
+
+// packetBufPool is a pool of reusable byte buffers used by SendPacket to build
+// outgoing AO2 packets without allocating a new buffer on every call.
+// Each buffer is reset before use and returned to the pool after the write.
+var packetBufPool = sync.Pool{
+	New: func() any { return new(bytes.Buffer) },
+}
 
 type MuteState int
 
@@ -244,13 +252,7 @@ func (client *Client) HandleClient() {
 		}
 	}
 
-	var mc int
-	for c := range clients.GetAllClients() {
-		if c.Ipid() == client.Ipid() {
-			mc++
-		}
-	}
-	if mc >= config.MCLimit && config.MCLimit != 0 {
+	if config.MCLimit != 0 && clients.CountByIPID(client.Ipid()) >= config.MCLimit {
 		client.SendPacket("BD", "You have reached the server's multiclient limit.")
 		client.conn.Close()
 		return
@@ -321,9 +323,11 @@ func (client *Client) HandleClient() {
 }
 
 // write sends the given message to the client's network socket.
+// Write errors are intentionally ignored: any underlying connection failure
+// will surface on the next read in HandleClient, which closes the connection.
 func (client *Client) write(message string) {
 	client.mu.Lock()
-	fmt.Fprint(client.conn, message)
+	io.WriteString(client.conn, message) //nolint:errcheck
 	if logger.DebugNetwork {
 		logger.LogDebugf("To %v: %v", client.ipid, message)
 	}
@@ -334,8 +338,37 @@ func (client *Client) write(message string) {
 }
 
 // SendPacket sends the client a packet with the given header and contents.
+// A bytes.Buffer from packetBufPool is used to assemble the packet in a
+// single allocation-free pass; the buffer is returned to the pool afterwards.
+// Write errors are intentionally ignored: any underlying connection failure
+// will surface on the next read in HandleClient, which closes the connection.
 func (client *Client) SendPacket(header string, contents ...string) {
-	client.write(header + "#" + strings.Join(contents, "#") + "#%")
+	b := packetBufPool.Get().(*bytes.Buffer)
+	b.Reset()
+	b.WriteString(header)
+	for _, c := range contents {
+		b.WriteByte('#')
+		b.WriteString(c)
+	}
+	b.WriteString("#%")
+
+	client.mu.Lock()
+	if logger.DebugNetwork || logger.EnableNetworkLogging {
+		// Logging paths need a string copy; keep them off the common fast path.
+		msg := b.String()
+		client.conn.Write(b.Bytes()) //nolint:errcheck
+		if logger.DebugNetwork {
+			logger.LogDebugf("To %v: %v", client.ipid, msg)
+		}
+		if logger.EnableNetworkLogging {
+			logger.WriteNetworkLog(client.ipid, client.hdid, "SEND", msg)
+		}
+	} else {
+		b.WriteTo(client.conn) //nolint:errcheck
+	}
+	client.mu.Unlock()
+
+	packetBufPool.Put(b)
 }
 
 // clientClenup cleans up a disconnected client.
@@ -377,12 +410,13 @@ func (client *Client) clientCleanup() {
 		}
 
 		// Clear possession links if anyone was possessing this client
-		for c := range clients.GetAllClients() {
-			if c.Possessing() == client.Uid() {
+		uid := client.Uid()
+		clients.ForEach(func(c *Client) {
+			if c.Possessing() == uid {
 				c.SetPossessing(-1)
 				c.SetPossessedPos("")
 			}
-		}
+		})
 
 		if client.Area().PlayerCount() <= 1 {
 			client.Area().Reset()

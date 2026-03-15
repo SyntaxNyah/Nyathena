@@ -167,11 +167,11 @@ func deleteAccountForIPID(ipid string) {
 		return
 	}
 	// Log out any connected session that was using the now-deleted account.
-	for c := range clients.GetAllClients() {
+	clients.ForEach(func(c *Client) {
 		if c.Authenticated() && c.ModName() == username {
 			c.RemoveAuth()
 		}
-	}
+	})
 	logger.LogInfof("deleteAccountForIPID: removed account %q linked to banned IPID %v", username, ipid)
 }
 
@@ -462,11 +462,11 @@ func cmdMod(client *Client, args []string, usage string) {
 
 func cmdModChat(client *Client, args []string, _ string) {
 	msg := strings.Join(args, " ")
-	for c := range clients.GetAllClients() {
+	clients.ForEach(func(c *Client) {
 		if permissions.HasPermission(c.Perms(), permissions.PermissionField["MOD_CHAT"]) {
 			c.SendPacket("CT", fmt.Sprintf("[MODCHAT] %v", client.OOCName()), msg, "1")
 		}
-	}
+	})
 }
 
 // Handles /motd
@@ -602,13 +602,14 @@ func cmdPlayers(client *Client, args []string, _ string) {
 		list []*Client
 	}
 	grouped := make(map[*area.Area]*areaClients, len(areas))
-	for c := range clients.GetAllClients() {
+	allFlag := *all
+	clients.ForEach(func(c *Client) {
 		a := c.Area()
-		if !*all && a != targetArea {
-			continue
+		if !allFlag && a != targetArea {
+			return
 		}
 		if !isAdmin && c.Hidden() {
-			continue
+			return
 		}
 		ac := grouped[a]
 		if ac == nil {
@@ -616,7 +617,7 @@ func cmdPlayers(client *Client, args []string, _ string) {
 			grouped[a] = ac
 		}
 		ac.list = append(ac.list, c)
-	}
+	})
 
 	// writeEntry appends a single client's info to the builder.
 	writeEntry := func(b *strings.Builder, c *Client) {
@@ -713,11 +714,12 @@ func cmdRemoveUser(client *Client, args []string, _ string) {
 	}
 	client.SendServerMessage("Removed user.")
 
-	for c := range clients.GetAllClients() {
-		if c.Authenticated() && c.ModName() == args[0] {
+	removedUser := args[0]
+	clients.ForEach(func(c *Client) {
+		if c.Authenticated() && c.ModName() == removedUser {
 			c.RemoveAuth()
 		}
-	}
+	})
 	addToBuffer(client, "CMD", fmt.Sprintf("Removed user %v.", args[0]), true)
 }
 
@@ -743,11 +745,13 @@ func cmdChangeRole(client *Client, args []string, _ string) {
 	}
 	client.SendServerMessage("Role updated.")
 
-	for c := range clients.GetAllClients() {
-		if c.Authenticated() && c.ModName() == args[0] {
-			c.SetPerms(role.GetPermissions())
+	targetUser := args[0]
+	newPerms := role.GetPermissions()
+	clients.ForEach(func(c *Client) {
+		if c.Authenticated() && c.ModName() == targetUser {
+			c.SetPerms(newPerms)
 		}
-	}
+	})
 	addToBuffer(client, "CMD", fmt.Sprintf("Updated role of %v to %v.", args[0], args[1]), true)
 }
 
@@ -1003,12 +1007,12 @@ func cmdNameShuffle(client *Client, _ []string, _ string) {
 	n := targetArea.PlayerCount()
 	targets := make([]*Client, 0, n)
 	names := make([]string, 0, n)
-	for c := range clients.GetAllClients() {
+	clients.ForEach(func(c *Client) {
 		if c.Uid() != -1 && c.Area() == targetArea {
 			targets = append(targets, c)
 			names = append(names, c.EffectiveShowname())
 		}
-	}
+	})
 
 	if len(targets) < 2 {
 		client.SendServerMessage("There are not enough players in this area to shuffle names (need at least 2).")
@@ -1044,11 +1048,11 @@ func cmdUnnameShuffle(client *Client, _ []string, _ string) {
 	// PlayerCount() is O(1); the slice may end up shorter if not all players
 	// have a forced showname, but this avoids any mid-loop heap growth.
 	resetTargets := make([]*Client, 0, targetArea.PlayerCount())
-	for c := range clients.GetAllClients() {
+	clients.ForEach(func(c *Client) {
 		if c.Uid() != -1 && c.Area() == targetArea && c.ForcedShowname() != "" {
 			resetTargets = append(resetTargets, c)
 		}
-	}
+	})
 
 	if len(resetTargets) == 0 {
 		client.SendServerMessage("No players in this area have a forced showname.")
@@ -1143,10 +1147,10 @@ func cmdBotBan(client *Client, _ []string, _ string) {
 	var count int
 	bannedIPIDs := make(map[string]struct{})
 
-	for c := range clients.GetAllClients() {
+	clients.ForEach(func(c *Client) {
 		if c.CharID() != -1 {
 			// Not a spectator – skip.
-			continue
+			return
 		}
 
 		// Accumulate DB playtime + current session time.
@@ -1161,20 +1165,20 @@ func cmdBotBan(client *Client, _ []string, _ string) {
 		totalPlaytime := dbPlaytime + sessionSecs
 
 		if totalPlaytime >= threshold {
-			continue
+			return
 		}
 
 		id, err := db.AddBan(c.Ipid(), c.Hdid(), banTime, -1, "Botban: spectator with insufficient playtime.", client.ModName())
 		if err != nil {
 			logger.LogErrorf("botban: failed to ban IPID %v: %v", c.Ipid(), err)
-			continue
+			return
 		}
 		c.SendPacket("KB", fmt.Sprintf("Botban: spectator with insufficient playtime.\nUntil: ∞\nID: %v", id))
 		c.conn.Close()
 		forgetIP(c.Ipid())
 		count++
 		bannedIPIDs[c.Ipid()] = struct{}{}
-	}
+	})
 
 	// Build the report string from unique IPIDs.
 	var reportParts []string

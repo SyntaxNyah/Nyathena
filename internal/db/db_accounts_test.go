@@ -341,6 +341,105 @@ func TestExistingModAccountsCompatible(t *testing.T) {
 	}
 }
 
+// TestLinkIPIDToUserMergesChips verifies that when a player re-logs from a new
+// IP address, the chip balance accumulated under their old IPID is carried over
+// to the new IPID so that players do not lose their earned chips.
+func TestLinkIPIDToUserMergesChips(t *testing.T) {
+	teardown := setupTestDB(t)
+	defer teardown()
+
+	// Register from old IPID and simulate accumulated chips.
+	if err := RegisterPlayer("chipcarry", []byte("pass1234"), "chips_old"); err != nil {
+		t.Fatalf("RegisterPlayer failed: %v", err)
+	}
+	if err := EnsureChipBalance("chips_old"); err != nil {
+		t.Fatalf("EnsureChipBalance (old) failed: %v", err)
+	}
+	// Win 500 extra chips so the old balance is clearly above the default.
+	if _, err := AddChips("chips_old", 500); err != nil {
+		t.Fatalf("AddChips failed: %v", err)
+	}
+	// Old IPID should now have defaultChipBalance + 500.
+	wantOld := int64(defaultChipBalance) + 500
+
+	// Simulate a new connection: EnsureChipBalance seeds a fresh row for the new IPID.
+	if err := EnsureChipBalance("chips_new"); err != nil {
+		t.Fatalf("EnsureChipBalance (new) failed: %v", err)
+	}
+
+	// Re-login from a different IP triggers the IPID migration.
+	if err := LinkIPIDToUser("chipcarry", "chips_new"); err != nil {
+		t.Fatalf("LinkIPIDToUser failed: %v", err)
+	}
+
+	// New IPID must have at least the old balance (not the default 500).
+	newBal, err := GetChipBalance("chips_new")
+	if err != nil {
+		t.Fatalf("GetChipBalance (new) failed: %v", err)
+	}
+	if newBal != wantOld {
+		t.Errorf("expected new IPID chip balance=%d after migration, got %d", wantOld, newBal)
+	}
+
+	// Old IPID balance must be zeroed out so chips are not duplicated.
+	oldBal, err := GetChipBalance("chips_old")
+	if err != nil {
+		t.Fatalf("GetChipBalance (old) failed: %v", err)
+	}
+	if oldBal != 0 {
+		t.Errorf("expected old IPID chip balance=0 after migration, got %d", oldBal)
+	}
+}
+
+// TestLinkIPIDToUserChipsKeepsHigher verifies that when both IPIDs already have
+// chips, the new IPID retains the higher of the two balances (no inflation).
+func TestLinkIPIDToUserChipsKeepsHigher(t *testing.T) {
+	teardown := setupTestDB(t)
+	defer teardown()
+
+	if err := RegisterPlayer("highchip", []byte("pass1234"), "hc_old"); err != nil {
+		t.Fatalf("RegisterPlayer failed: %v", err)
+	}
+	if err := EnsureChipBalance("hc_old"); err != nil {
+		t.Fatalf("EnsureChipBalance (old) failed: %v", err)
+	}
+	// Old IPID earns chips: defaultChipBalance + 1000.
+	if _, err := AddChips("hc_old", 1000); err != nil {
+		t.Fatalf("AddChips (old) failed: %v", err)
+	}
+
+	if err := EnsureChipBalance("hc_new"); err != nil {
+		t.Fatalf("EnsureChipBalance (new) failed: %v", err)
+	}
+	// New IPID earns chips too before login: defaultChipBalance + 200.
+	if _, err := AddChips("hc_new", 200); err != nil {
+		t.Fatalf("AddChips (new) failed: %v", err)
+	}
+
+	if err := LinkIPIDToUser("highchip", "hc_new"); err != nil {
+		t.Fatalf("LinkIPIDToUser failed: %v", err)
+	}
+
+	// New IPID should have the old (higher) balance.
+	want := int64(defaultChipBalance) + 1000
+	newBal, err := GetChipBalance("hc_new")
+	if err != nil {
+		t.Fatalf("GetChipBalance (new) failed: %v", err)
+	}
+	if newBal != want {
+		t.Errorf("expected new balance=%d (the higher value), got %d", want, newBal)
+	}
+
+	// Old IPID balance zeroed.
+	oldBal, err := GetChipBalance("hc_old")
+	if err != nil {
+		t.Fatalf("GetChipBalance (old) failed: %v", err)
+	}
+	if oldBal != 0 {
+		t.Errorf("expected old IPID chip balance=0 after migration, got %d", oldBal)
+	}
+}
+
 // TestOneAccountPerIPID verifies the one-account-per-IPID gate: once an IPID is
 // linked to an account, GetUsernameByIPID returns a non-empty string, which the
 // /register command uses to block a second registration attempt.

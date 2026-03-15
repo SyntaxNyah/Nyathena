@@ -70,9 +70,9 @@ func findClientByArg(arg string) *Client {
 // GetPlayers returns information about all connected players.
 func (a *ServerAdapter) GetPlayers() []bot.PlayerInfo {
 	var result []bot.PlayerInfo
-	for c := range clients.GetAllClients() {
+	clients.ForEach(func(c *Client) {
 		if c.Uid() == -1 {
-			continue
+			return
 		}
 		areaName := ""
 		if c.Area() != nil {
@@ -85,7 +85,7 @@ func (a *ServerAdapter) GetPlayers() []bot.PlayerInfo {
 			Area:      areaName,
 			IPID:      c.Ipid(),
 		})
-	}
+	})
 	return result
 }
 
@@ -389,12 +389,12 @@ func (a *ServerAdapter) SendPrivateMessage(uid int, message string) error {
 
 // SendAnnouncement sends a message to all connected players.
 func (a *ServerAdapter) SendAnnouncement(message string) error {
-	for c := range clients.GetAllClients() {
-		if c.Uid() == -1 {
-			continue
+	msg := "[Announcement] " + message
+	clients.ForEach(func(c *Client) {
+		if c.Uid() != -1 {
+			c.SendServerMessage(msg)
 		}
-		c.SendServerMessage("[Announcement] " + message)
-	}
+	})
 	return nil
 }
 
@@ -445,12 +445,12 @@ func (a *ServerAdapter) ClearArea(areaName string) error {
 	if target == lobby {
 		return fmt.Errorf("cannot clear the default area")
 	}
-	for c := range clients.GetAllClients() {
+	clients.ForEach(func(c *Client) {
 		if c.Uid() != -1 && c.Area() == target {
 			c.ChangeArea(lobby)
 			c.SendServerMessage(fmt.Sprintf("You were moved out of %s by a moderator.", areaName))
 		}
-	}
+	})
 	return nil
 }
 
@@ -460,11 +460,11 @@ func (a *ServerAdapter) LockArea(areaName string) error {
 		if strings.EqualFold(ar.Name(), areaName) {
 			ar.SetLock(area.LockLocked)
 			// Invite all current players.
-			for c := range clients.GetAllClients() {
+			clients.ForEach(func(c *Client) {
 				if c.Uid() != -1 && c.Area() == ar {
 					ar.AddInvited(c.Uid())
 				}
-			}
+			})
 			sendAreaServerMessage(ar, fmt.Sprintf("%s was locked by a Discord moderator.", ar.Name()))
 			sendLockArup()
 			return nil

@@ -286,13 +286,13 @@ func cmdPlaytimeTop(client *Client, args []string, usage string) {
 	// all active sessions for the same IPID, matching clientCleanup behaviour.
 	// Pre-size with player count to avoid rehashing.
 	liveSecs := make(map[string]int64, players.GetPlayerCount())
-	for c := range clients.GetAllClients() {
+	clients.ForEach(func(c *Client) {
 		if connAt := c.ConnectedAt(); !connAt.IsZero() {
 			if secs := int64(time.Since(connAt).Seconds()); secs > 0 {
 				liveSecs[c.Ipid()] += secs
 			}
 		}
-	}
+	})
 	// Merge live session seconds into the DB entries and re-sort.
 	if len(liveSecs) > 0 {
 		for i := range entries {
