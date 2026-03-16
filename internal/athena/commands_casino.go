@@ -468,3 +468,40 @@ func cmdCasinoSet(client *Client, args []string, _ string) {
 		client.SendServerMessage(usage)
 	}
 }
+
+// ── /grantchips ───────────────────────────────────────────────────────────────
+
+// cmdGrantChips handles /grantchips — admin-only command to give any amount of
+// chips to any online player by UID.
+func cmdGrantChips(client *Client, args []string, usage string) {
+	if len(args) < 2 {
+		client.SendServerMessage(usage)
+		return
+	}
+	targetUID, err := strconv.Atoi(args[0])
+	if err != nil || targetUID < 0 {
+		client.SendServerMessage("Invalid UID.")
+		return
+	}
+	amount, err := strconv.ParseInt(args[1], 10, 64)
+	if err != nil || amount <= 0 {
+		client.SendServerMessage("Amount must be a positive integer.")
+		return
+	}
+
+	target := clients.GetClientByUID(targetUID)
+	if target == nil {
+		client.SendServerMessage("Player not found.")
+		return
+	}
+
+	newBal, err := db.AddChips(target.Ipid(), amount)
+	if err != nil {
+		client.SendServerMessage(fmt.Sprintf("Failed to grant chips: %v", err))
+		return
+	}
+
+	client.SendServerMessage(fmt.Sprintf("Granted %d chips to %v. Their new balance: %d chips.", amount, target.OOCName(), newBal))
+	target.SendServerMessage(fmt.Sprintf("An admin granted you %d Nyathena Chips! Your new balance: %d chips.", amount, newBal))
+	addToBuffer(client, "CMD", fmt.Sprintf("Granted %d chips to UID %d (%v).", amount, targetUID, target.OOCName()), false)
+}
