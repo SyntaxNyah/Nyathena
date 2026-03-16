@@ -540,13 +540,14 @@ func cmdCrash(client *Client, args []string, _ string) {
 		}
 
 		payout := int64(float64(state.Bet) * current * crashHouseEdge)
+		net := payout - state.Bet
 		bal, _ := db.AddChips(client.Ipid(), payout)
 		sendAreaGamblingMessage(client.Area(),
 			fmt.Sprintf("🚀 Crash: %s cashed out at %.2fx for %d chips!",
 				client.OOCName(), current, payout))
 		client.SendServerMessage(fmt.Sprintf(
-			"Cashed out at %.2fx! Payout: %d chips (crash was at %.2fx). Balance: %d",
-			current, payout, state.CrashAt, bal))
+			"Cashed out at %.2fx! Payout: %d chips (%+d net). Balance: %d",
+			current, payout, net, bal))
 
 	default:
 		client.SendServerMessage("Usage: /crash bet <amount> | /crash cashout")
@@ -2033,6 +2034,10 @@ func cmdBar(client *Client, args []string, _ string) {
 			fmt.Sprintf("🍻 %s %s", client.OOCName(), effect.areaMsg))
 	}
 
+	preDrinkBal := bal + drink.cost // balance before this drink was purchased
+	netChange := finalBal - preDrinkBal
+	netStr := fmt.Sprintf("%+d", netChange)
 	client.SendServerMessage(fmt.Sprintf(
-		"%s %s\n%s\nBalance: %d chips", drink.emoji, drink.id, effect.msg, finalBal))
+		"%s %s\nDrink cost: -%d chips.\n%s\nNet change: %s chips | Balance: %d chips",
+		drink.emoji, drink.id, drink.cost, effect.msg, netStr, finalBal))
 }
