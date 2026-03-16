@@ -32,7 +32,7 @@ import (
 
 const (
 	chipsGiveCooldown        = 10 * time.Minute // per-player cooldown between transfers
-	chipsGiveMax             = 500              // maximum chips transferable per transaction
+	chipsGiveMax             = 200000           // maximum chips transferable per transaction
 	chipsGiveMinPlaytime     = 24 * time.Hour   // minimum total playtime to use /chips give
 )
 
