@@ -2009,7 +2009,7 @@ func cmdBar(client *Client, args []string, _ string) {
 		finalBal, _ = db.AddChips(client.Ipid(), effect.chipDelta)
 	} else if effect.chipDelta < 0 {
 		spent := -effect.chipDelta
-		// High rollers (pre-drink balance >100k) have a 50% chance of losing 5–35% of
+		// High rollers (pre-drink balance > barHighRollerThreshold) have a 50% chance of losing 5–35% of
 		// their total balance instead of the normal drink penalty, to prevent farming.
 		preDrinkBal := bal + drink.cost
 		if preDrinkBal > barHighRollerThreshold && rand.Intn(100) < barHighRollerTaxChance {
