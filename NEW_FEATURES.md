@@ -825,3 +825,83 @@ A new mod-only command `/charcurse` that forces a player to immediately switch t
 ### Security
 - CodeQL scan: No vulnerabilities detected
 - No persistent state is stored; effect is a simple one-time character change
+
+---
+
+## Mafia Social Deduction Minigame
+
+### Overview
+
+A fully-featured social deduction minigame playable inside any server area.
+Players are secretly assigned roles — **Town**, **Mafia**, or **Neutral** — and
+must use logic, deduction, and sometimes deception to fulfill their win condition.
+
+The game alternates between **Day phases** (open discussion + lynch voting) and
+**Night phases** (private role actions). It supports 4–20+ players with
+automatically balanced role pools.
+
+### Commands (summary)
+
+| Command | Description |
+|---------|-------------|
+| `/mafia create` | Open a new lobby |
+| `/mafia join` | Join the lobby |
+| `/mafia start` | Start the game (host/CM/mod) |
+| `/mafia vote <name>` | Vote to lynch during Day |
+| `/mafia skip` | Clear your vote |
+| `/mafia tally` | Show current vote standings |
+| `/mafia act <target>` | Submit night action |
+| `/mafia shoot <name>` | Sheriff: spend one-time shot |
+| `/mafia will <text>` | Set your last will |
+| `/mafia whisper <name> <msg>` | Private in-game message |
+| `/mafia graveyard` | View eliminated players + cause of death |
+| `/mafia roles` | List all roles |
+| `/mafia help` | Full usage |
+
+For a complete rule reference, role descriptions, strategy tips, and admin
+documentation see **[MAFIA_COMMANDS.md](MAFIA_COMMANDS.md)**.
+
+### Roles
+
+#### Town (Good)
+- **Villager** — No ability; votes to eliminate threats
+- **Detective** — Investigates one player's alignment each night
+- **Doctor** — Protects one player from being killed each night
+- **Sheriff** — One-time day shot; backfires on innocents
+- **Bodyguard** — Intercepts a kill; attacker and Bodyguard both die
+- **Vigilante** *(new)* — Executes one player at night; dies of guilt if target is Town
+- **Mayor** *(new)* — Reveals publicly once; votes count double thereafter
+- **Escort** *(new)* — Roleblocks one player each night, cancelling their action
+
+#### Mafia (Evil)
+- **Mafia** — Nightly consensus kill; know all teammates
+- **Shapeshifter** — Mafia member; appears Town to Detective
+- **Godfather** *(new)* — Appears Town to Detective; immune to Sheriff shot (Sheriff dies instead)
+
+#### Neutral
+- **Jester** — Wins by getting lynched
+- **Witch** — Redirects one player's night action
+- **Lawyer** — Wins if their secret client survives
+- **Arsonist** — Douses targets over time; ignites all at once
+- **Serial Killer** — Solo nightly act; one-time Mafia immunity
+- **Survivor** *(new)* — No ability; wins by surviving to game end
+
+### New Features Added
+
+| Feature | Description |
+|---------|-------------|
+| **Graveyard** | Chronological death log with role, cause, day, and last will |
+| **Last Will** | Players set a personal message revealed when they die |
+| **Vote Tally** | Real-time `/mafia tally` shows weighted vote standings |
+| **Whisper** | Private in-game messages; area sees sender+target but not content |
+| **Mayor double-vote** | After revealing, Mayor's lynch votes count ×2 |
+| **Escort roleblock** | Cancels any target's night action for that night |
+| **Vigilante guilt** | Targeting a Town player causes the Vigilante to die next morning |
+| **Godfather immunity** | Bounces Sheriff shots; appears Good to Detective |
+| **Survivor win** | Announced separately alongside the main faction winner |
+
+### Security
+
+- CodeQL scan: No vulnerabilities detected
+- All inter-player communication (whisper) is routed through the server; clients
+  never see another player's private messages unless they are the intended recipient

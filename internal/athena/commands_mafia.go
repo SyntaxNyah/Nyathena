@@ -56,11 +56,16 @@ Subcommands:
   players / status       — Show player list and game status.
   start                  — Start the game and assign roles. (host/CM/mod)
   vote <name>            — Vote to lynch a player during Day.
-  skip                   — Cast a no-lynch vote.
-  act <target>           — Submit your night action.
+  skip                   — Clear your vote (no-lynch).
+  tally                  — Show the current vote standings.
+  act <target>           — Submit your night action (or Mayor reveal during Day).
     Arsonist:  act douse <target>  /  act ignite
     Witch:     act <player> <newtarget>
+    Mayor:     act reveal  (Day only — announces you; doubles your vote)
   shoot <name>           — Sheriff: spend your one-time shot on a player.
+  will <text>            — Set your last will (revealed publicly when you die).
+  whisper <name> <msg>   — Send a private in-game message to another alive player.
+  graveyard / dead       — Show the list of eliminated players and cause of death.
   day                    — Force advance to Day phase. (CM/mod)
   night                  — Force advance to Night phase. (CM/mod)
   resolve                — Force-resolve current phase. (CM/mod)
@@ -115,10 +120,18 @@ func cmdMafia(client *Client, args []string, _ string) {
 		mafiaSubVote(client, rest)
 	case "skip":
 		mafiaSubSkip(client)
+	case "tally":
+		mafiaSubTally(client)
 	case "act":
 		mafiaSubAct(client, rest)
 	case "shoot":
 		mafiaSubShoot(client, rest)
+	case "will":
+		mafiaSubWill(client, rest)
+	case "whisper":
+		mafiaSubWhisper(client, rest)
+	case "graveyard", "dead":
+		mafiaSubGraveyard(client)
 	case "day":
 		mafiaSubDay(client)
 	case "night":
@@ -214,7 +227,10 @@ func mafiaSubLeave(client *Client) {
 	}
 
 	// Mid-game: mark dead
-	p.Alive = false
+	if wasAlive {
+		p.Alive = false
+		g.addToGraveyard(p, "Resigned")
+	}
 	winner, won := g.checkWin()
 	g.mu.Unlock()
 
@@ -341,18 +357,30 @@ func mafiaSubVote(client *Client, args []string) {
 	}
 	voter.VoteTarget = target.Name()
 
-	// Tally for announcement
+	// Tally (Mayor counts double when revealed)
 	tally := make(map[string]int)
 	for _, p := range g.Players {
 		if p.Alive && p.VoteTarget != "" {
-			tally[strings.ToLower(p.VoteTarget)]++
+			weight := 1
+			if p.Role == RoleMayor && p.MayorRevealed {
+				weight = 2
+			}
+			tally[strings.ToLower(p.VoteTarget)] += weight
 		}
 	}
 	aliveCount := g.aliveCount()
 	majority := aliveCount/2 + 1
+	voteWeight := 1
+	if voter.Role == RoleMayor && voter.MayorRevealed {
+		voteWeight = 2
+	}
 	g.mu.Unlock()
 
-	sendAreaServerMessage(a, fmt.Sprintf("🗳️  %v votes to lynch %v. (%d/%d needed)", voter.Name(), target.Name(), tally[strings.ToLower(target.Name())], majority))
+	voteLabel := ""
+	if voteWeight == 2 {
+		voteLabel = " (×2 Mayor vote)"
+	}
+	sendAreaServerMessage(a, fmt.Sprintf("🗳️  %v votes to lynch %v%v. (%d/%d needed)", voter.Name(), target.Name(), voteLabel, tally[strings.ToLower(target.Name())], majority))
 
 	// Auto-resolve if majority reached
 	if tally[strings.ToLower(target.Name())] >= majority {
@@ -386,11 +414,52 @@ func mafiaSubSkip(client *Client) {
 	client.SendServerMessage("You have cleared your vote (no-lynch).")
 }
 
-// ── act ────────────────────────────────────────────────────────────────────
+// ── tally ──────────────────────────────────────────────────────────────────
 
-func mafiaSubAct(client *Client, args []string) {
+func mafiaSubTally(client *Client) {
+	a := client.Area()
+	g := getMafiaGame(a)
+	if g == nil {
+		client.SendServerMessage("No active Mafia game in this area.")
+		return
+	}
+	g.mu.Lock()
+	if g.Phase != MafiaPhaseDayDiscussion {
+		g.mu.Unlock()
+		client.SendServerMessage("Vote tally is only available during the Day phase.")
+		return
+	}
+	tally := make(map[string]int)
+	for _, p := range g.Players {
+		if p.Alive && p.VoteTarget != "" {
+			weight := 1
+			if p.Role == RoleMayor && p.MayorRevealed {
+				weight = 2
+			}
+			tally[strings.ToLower(p.VoteTarget)] += weight
+		}
+	}
+	aliveCount := g.aliveCount()
+	majority := aliveCount/2 + 1
+	g.mu.Unlock()
+
+	if len(tally) == 0 {
+		client.SendServerMessage("🗳️  No votes have been cast yet.")
+		return
+	}
+	var sb strings.Builder
+	sb.WriteString(fmt.Sprintf("🗳️  Vote Tally (need %d for majority):\n", majority))
+	for name, votes := range tally {
+		sb.WriteString(fmt.Sprintf("  %v — %d vote(s)\n", name, votes))
+	}
+	client.SendServerMessage(sb.String())
+}
+
+// ── will ───────────────────────────────────────────────────────────────────
+
+func mafiaSubWill(client *Client, args []string) {
 	if len(args) == 0 {
-		client.SendServerMessage("Usage: /mafia act <target>\n  Arsonist: /mafia act douse <target>  OR  /mafia act ignite\n  Witch: /mafia act <player> <newtarget>")
+		client.SendServerMessage("Usage: /mafia will <your last will text>")
 		return
 	}
 	a := client.Area()
@@ -400,15 +469,140 @@ func mafiaSubAct(client *Client, args []string) {
 		return
 	}
 	g.mu.Lock()
-	if g.Phase != MafiaPhaseNight {
+	p := g.findPlayerByClient(client)
+	if p == nil {
 		g.mu.Unlock()
-		client.SendServerMessage("Night actions can only be submitted during the Night phase.")
+		client.SendServerMessage("You are not in the current Mafia game.")
 		return
 	}
+	p.LastWill = strings.Join(args, " ")
+	g.mu.Unlock()
+	client.SendServerMessage("📜 Last will set. It will be revealed when you die.")
+}
+
+// ── whisper ────────────────────────────────────────────────────────────────
+
+func mafiaSubWhisper(client *Client, args []string) {
+	if len(args) < 2 {
+		client.SendServerMessage("Usage: /mafia whisper <player name> <message>")
+		return
+	}
+	a := client.Area()
+	g := getMafiaGame(a)
+	if g == nil {
+		client.SendServerMessage("No active Mafia game in this area.")
+		return
+	}
+	g.mu.Lock()
+	if g.Phase == MafiaPhaseEnded || g.Phase == MafiaPhaseLobby {
+		g.mu.Unlock()
+		client.SendServerMessage("Whispers are only available during an active game.")
+		return
+	}
+	sender := g.findPlayerByClient(client)
+	if sender == nil || !sender.Alive {
+		g.mu.Unlock()
+		client.SendServerMessage("You are not an alive player in this game.")
+		return
+	}
+	// Try longest-prefix matching for the target name
+	var target *MafiaPlayer
+	var msgStart int
+	for split := len(args) - 1; split >= 1; split-- {
+		candidate := strings.Join(args[:split], " ")
+		if tp := g.findPlayer(candidate); tp != nil && tp.Alive && tp != sender {
+			target = tp
+			msgStart = split
+			break
+		}
+	}
+	if target == nil {
+		g.mu.Unlock()
+		client.SendServerMessage("Could not find an alive player with that name. Usage: /mafia whisper <player> <message>")
+		return
+	}
+	message := strings.Join(args[msgStart:], " ")
+	area := g.Area
+	g.mu.Unlock()
+
+	// Target receives the actual message
+	g.privateMsg(target, fmt.Sprintf("💬 [Whisper from %v]: %v", sender.Name(), message))
+	// Area sees a notice (no content)
+	sendAreaServerMessage(area, fmt.Sprintf("💬 [Whisper] %v → %v (message hidden)", sender.Name(), target.Name()))
+}
+
+// ── graveyard ──────────────────────────────────────────────────────────────
+
+func mafiaSubGraveyard(client *Client) {
+	a := client.Area()
+	g := getMafiaGame(a)
+	if g == nil {
+		client.SendServerMessage("No active Mafia game in this area.")
+		return
+	}
+	g.mu.Lock()
+	if len(g.Graveyard) == 0 {
+		g.mu.Unlock()
+		client.SendServerMessage("⚰️  The graveyard is empty.")
+		return
+	}
+	var sb strings.Builder
+	sb.WriteString("⚰️  Graveyard:\n")
+	for _, e := range g.Graveyard {
+		info := roleInfoMap[e.Role]
+		sb.WriteString(fmt.Sprintf("  Day %d — %v (%v, %v team) — %v\n", e.Day, e.Name, info.Name, info.Team, e.Cause))
+		if e.LastWill != "" {
+			sb.WriteString(fmt.Sprintf("    📜 Will: %v\n", e.LastWill))
+		}
+	}
+	g.mu.Unlock()
+	client.SendServerMessage(sb.String())
+}
+
+// ── act ────────────────────────────────────────────────────────────────────
+
+func mafiaSubAct(client *Client, args []string) {
+	if len(args) == 0 {
+		client.SendServerMessage("Usage: /mafia act <target>\n  Arsonist: /mafia act douse <target>  OR  /mafia act ignite\n  Witch: /mafia act <player> <newtarget>\n  Mayor: /mafia act reveal  (Day only)")
+		return
+	}
+	a := client.Area()
+	g := getMafiaGame(a)
+	if g == nil {
+		client.SendServerMessage("No active Mafia game in this area.")
+		return
+	}
+	g.mu.Lock()
+
 	p := g.findPlayerByClient(client)
 	if p == nil || !p.Alive {
 		g.mu.Unlock()
 		client.SendServerMessage("You are not an alive player in this game.")
+		return
+	}
+
+	// Mayor reveal is a Day action
+	if strings.ToLower(args[0]) == "reveal" && p.Role == RoleMayor {
+		if g.Phase != MafiaPhaseDayDiscussion {
+			g.mu.Unlock()
+			client.SendServerMessage("You can only reveal as Mayor during the Day phase.")
+			return
+		}
+		if p.MayorRevealed {
+			g.mu.Unlock()
+			client.SendServerMessage("You have already revealed yourself as Mayor.")
+			return
+		}
+		p.MayorRevealed = true
+		area := g.Area
+		g.mu.Unlock()
+		sendAreaServerMessage(area, fmt.Sprintf("📣 %v reveals themselves as the MAYOR! Their votes now count double!", p.Name()))
+		return
+	}
+
+	if g.Phase != MafiaPhaseNight {
+		g.mu.Unlock()
+		client.SendServerMessage("Night actions can only be submitted during the Night phase.")
 		return
 	}
 
@@ -513,6 +707,35 @@ func mafiaSubAct(client *Client, args []string) {
 		g.mu.Unlock()
 		client.SendServerMessage(fmt.Sprintf("Target set to %v.", t.Name()))
 
+	case RoleVigilante:
+		if p.VigilanteUsed {
+			g.mu.Unlock()
+			client.SendServerMessage("You have already used your Vigilante shot.")
+			return
+		}
+		targetName := strings.Join(args, " ")
+		t := g.findPlayer(targetName)
+		if t == nil || !t.Alive {
+			g.mu.Unlock()
+			client.SendServerMessage(fmt.Sprintf("No alive player named %q found.", targetName))
+			return
+		}
+		p.NightAction = t.Name()
+		g.mu.Unlock()
+		client.SendServerMessage(fmt.Sprintf("⚠️  You will execute %v tonight. If they are Town-aligned, you die of guilt tomorrow morning!", t.Name()))
+
+	case RoleEscort:
+		targetName := strings.Join(args, " ")
+		t := g.findPlayer(targetName)
+		if t == nil || !t.Alive {
+			g.mu.Unlock()
+			client.SendServerMessage(fmt.Sprintf("No alive player named %q found.", targetName))
+			return
+		}
+		p.NightAction = t.Name()
+		g.mu.Unlock()
+		client.SendServerMessage(fmt.Sprintf("You will keep %v busy tonight — their action will be blocked.", t.Name()))
+
 	case RoleWitch:
 		if len(args) < 2 {
 			g.mu.Unlock()
@@ -599,15 +822,38 @@ func mafiaSubShoot(client *Client, args []string) {
 
 	targetRole := target.Role
 	info := roleInfoMap[targetRole]
-	if info.Team == "Mafia" {
+	if info.Team == "Mafia" && targetRole != RoleGodfather {
 		target.Alive = false
+		targetWill := target.LastWill
+		g.addToGraveyard(target, "Shot (Sheriff)")
 		g.mu.Unlock()
-		g.broadcastToGame(fmt.Sprintf("🔫 The Sheriff shoots %v — and hits a Mafia member! %v is eliminated!", target.Name(), target.Name()))
-	} else {
-		// Backfire: Sheriff dies
+		msg := fmt.Sprintf("🔫 The Sheriff shoots %v — and hits a Mafia member! %v is eliminated!", target.Name(), target.Name())
+		if targetWill != "" {
+			msg += "\n📜 Last Will of " + target.Name() + ": " + targetWill
+		}
+		g.broadcastToGame(msg)
+	} else if targetRole == RoleGodfather {
+		// Godfather is immune — bullet bounces, Sheriff dies
 		shooter.Alive = false
+		shooterWill := shooter.LastWill
+		g.addToGraveyard(shooter, "Shot bounced (Godfather immunity)")
 		g.mu.Unlock()
-		g.broadcastToGame(fmt.Sprintf("🔫 The Sheriff shoots %v — an innocent! The gun backfires, killing the Sheriff (%v)!", target.Name(), shooter.Name()))
+		msg := fmt.Sprintf("🔫 The Sheriff shoots %v — but the bullet bounces off the Godfather! %v (Sheriff) falls dead!", target.Name(), shooter.Name())
+		if shooterWill != "" {
+			msg += "\n📜 Last Will of " + shooter.Name() + ": " + shooterWill
+		}
+		g.broadcastToGame(msg)
+	} else {
+		// Innocent target — backfire
+		shooter.Alive = false
+		shooterWill := shooter.LastWill
+		g.addToGraveyard(shooter, "Backfire (Sheriff)")
+		g.mu.Unlock()
+		msg := fmt.Sprintf("🔫 The Sheriff shoots %v — an innocent! The gun backfires, killing the Sheriff (%v)!", target.Name(), shooter.Name())
+		if shooterWill != "" {
+			msg += "\n📜 Last Will of " + shooter.Name() + ": " + shooterWill
+		}
+		g.broadcastToGame(msg)
 	}
 
 	g.mu.Lock()
@@ -765,7 +1011,10 @@ func mafiaSubKick(client *Client, args []string) {
 		return
 	}
 
-	p.Alive = false
+	if wasAlive {
+		p.Alive = false
+		g.addToGraveyard(p, "Kicked")
+	}
 	winner, won := g.checkWin()
 	g.mu.Unlock()
 
@@ -850,10 +1099,12 @@ func mafiaSubRoles(client *Client) {
 	var sb strings.Builder
 	sb.WriteString("🎭 Mafia Roles:\n\n")
 	order := []RoleID{
-		RoleVillager, RoleDetective, RoleDoctor, RoleSheriff, RoleBodyguard,
-		RoleMafia, RoleShapeshifter,
-		RoleJester, RoleWitch, RoleLawyer,
-		RoleArsonist, RoleSerialKiller,
+		// Town
+		RoleVillager, RoleDetective, RoleDoctor, RoleSheriff, RoleBodyguard, RoleVigilante, RoleEscort, RoleMayor,
+		// Mafia
+		RoleMafia, RoleShapeshifter, RoleGodfather,
+		// Neutral
+		RoleJester, RoleWitch, RoleLawyer, RoleArsonist, RoleSerialKiller, RoleSurvivor,
 	}
 	for _, id := range order {
 		info := roleInfoMap[id]
