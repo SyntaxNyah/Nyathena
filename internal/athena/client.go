@@ -445,6 +445,7 @@ func (client *Client) clientCleanup() {
 		sendPlayerArup()
 	}
 	handleCasinoDisconnect(client)
+	handleMafiaDisconnect(client)
 	client.conn.Close()
 	clients.RemoveClient(client)
 }

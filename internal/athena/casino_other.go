@@ -1950,6 +1950,100 @@ func printBarMenu(client *Client) {
 			barMenuBody)
 }
 
+// ============================================================
+// /lotto — instant scratch-card lottery
+// ============================================================
+//
+// Usage: /lotto buy <ticket_cost>
+//
+// The player pays <ticket_cost> chips.  Three symbols are revealed;
+// matching symbols multiply the ticket cost according to the payout table.
+// There is also a small chance of hitting the "JACKPOT" (~1 in 500).
+
+var lottoSymbols = []string{"🍒", "🍋", "🍊", "🍇", "⭐", "💎", "🎰"}
+
+var lottoPayout = map[string]int64{
+	"🍒": 2,  // common: 2× ticket cost
+	"🍋": 3,
+	"🍊": 4,
+	"🍇": 5,
+	"⭐": 8,
+	"💎": 15,
+	"🎰": 30, // rare triple: 30× ticket cost
+}
+
+const lottoJackpotChance = 500   // 1 in 500 for jackpot
+const lottoJackpotMultiplier = 100 // 100× ticket cost
+
+func cmdLotto(client *Client, args []string, _ string) {
+	if len(args) < 2 || strings.ToLower(args[0]) != "buy" {
+		client.SendServerMessage("Usage: /lotto buy <ticket_cost>  —  buy an instant scratch-card lottery ticket.")
+		return
+	}
+	amount, err := strconv.ParseInt(args[1], 10, 64)
+	if err != nil || amount <= 0 {
+		client.SendServerMessage("Ticket cost must be a positive integer.")
+		return
+	}
+	if ok, reason := validateBet(client, amount); !ok {
+		client.SendServerMessage(reason)
+		return
+	}
+	bal, ok := spendBet(client, amount)
+	if !ok {
+		return
+	}
+
+	// Check jackpot first
+	if rand.Intn(lottoJackpotChance) == 0 {
+		prize := amount * lottoJackpotMultiplier
+		newBal, _ := db.AddChips(client.Ipid(), prize)
+		sendAreaGamblingMessage(client.Area(), fmt.Sprintf(
+			"🎰🎰🎰 JACKPOT! %v scratched a lottery ticket and won %d chips! 🎰🎰🎰",
+			client.OOCName(), prize))
+		client.SendServerMessage(fmt.Sprintf(
+			"🎰 [ 🎰 | 🎰 | 🎰 ]  JACKPOT! You won %d chips! Balance: %d", prize, newBal))
+		return
+	}
+
+	// Roll three symbols
+	s1 := lottoSymbols[rand.Intn(len(lottoSymbols))]
+	s2 := lottoSymbols[rand.Intn(len(lottoSymbols))]
+	s3 := lottoSymbols[rand.Intn(len(lottoSymbols))]
+
+	var prize int64
+	var resultMsg string
+	if s1 == s2 && s2 == s3 {
+		mult := lottoPayout[s1]
+		prize = amount * mult
+		resultMsg = fmt.Sprintf("Triple %v! You win %d chips! (×%d)", s1, prize, mult)
+	} else if s1 == s2 || s2 == s3 || s1 == s3 {
+		// Partial match: 1.5× ticket cost (rounded down via integer division; minimum payout is 1 chip).
+		prize = amount + amount/2
+		resultMsg = fmt.Sprintf("Partial match! You win %d chips back!", prize)
+	} else {
+		prize = 0
+		resultMsg = "No match. Better luck next time!"
+	}
+
+	var newBal int64
+	if prize > 0 {
+		newBal, _ = db.AddChips(client.Ipid(), prize)
+		net := prize - amount
+		client.SendServerMessage(fmt.Sprintf(
+			"🎟️  [ %v | %v | %v ]  %v  (net: %+d chips | balance: %d)",
+			s1, s2, s3, resultMsg, net, newBal))
+		if prize > amount {
+			sendAreaGamblingMessage(client.Area(), fmt.Sprintf(
+				"🎟️  %v scratched a lotto ticket and won %d chips!", client.OOCName(), prize))
+		}
+	} else {
+		client.SendServerMessage(fmt.Sprintf(
+			"🎟️  [ %v | %v | %v ]  %v  (net: -%d chips | balance: %d)",
+			s1, s2, s3, resultMsg, amount, bal))
+	}
+}
+
 func cmdBar(client *Client, args []string, _ string) {
 	if len(args) == 0 || strings.ToLower(args[0]) == "menu" {
 		printBarMenu(client)
