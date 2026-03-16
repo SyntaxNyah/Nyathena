@@ -27,7 +27,7 @@ Player account passwords are stored using **bcrypt** (industry-standard one-way 
 | `/chips` | Show your current chip balance. |
 | `/chips top [n]` | Show the global chip leaderboard (top 10 by default, max 50). |
 | `/chips area [n]` | Show the chip leaderboard for players currently in your area. |
-| `/chips give <uid> <amount>` | Transfer chips to another player (max 500 per transfer, 10-minute cooldown). |
+| `/chips give <uid> <amount>` | Transfer chips to another player (max 200,000 per transfer, 10-minute cooldown). |
 | `/richest [n]` | Shortcut for `/chips top` — show the richest players by chip balance (top 10 by default, max 50). |
 
 ### Examples
@@ -58,7 +58,7 @@ Player account passwords are stored using **bcrypt** (industry-standard one-way 
 ```
 
 ### Anti-abuse constraints for `/chips give`
-- Maximum 500 chips per transfer.
+- Maximum 200,000 chips per transfer.
 - 10-minute cooldown between transfers.
 - You cannot give chips to yourself.
 - **Requires 24 hours of total playtime.** New accounts must reach 24 hours of playtime before they can transfer chips to others.
@@ -596,7 +596,7 @@ Casino: enabled (bet: 10–500), jackpot pool: 1200
 |---------|-------|
 | Slots spins | Max 5 spins per 10 seconds |
 | Chips give cooldown | 10 minutes between transfers |
-| Chips give max | 500 chips per transfer |
+| Chips give max | 200,000 chips per transfer |
 | Chips give playtime gate | 24 hours total playtime required |
 | BJ/Poker turn timer | 60 seconds — auto-stand/fold |
 | Crash cooldown | 45 seconds between bets |
