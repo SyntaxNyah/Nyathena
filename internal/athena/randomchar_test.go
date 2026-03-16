@@ -149,7 +149,7 @@ func TestForceRandomCharTargetsUID(t *testing.T) {
 
 	origClients := clients
 	t.Cleanup(func() { clients = origClients })
-	clients = ClientList{list: make(map[*Client]struct{})}
+	clients = &ClientList{list: make(map[*Client]struct{})}
 
 	a := area.NewArea(area.AreaData{}, len(characters), 0, area.EviAny)
 
@@ -205,7 +205,7 @@ func TestForceRandomCharOnlyAffectsCurrentArea(t *testing.T) {
 	// Snapshot and restore the global clients list.
 	origClients := clients
 	t.Cleanup(func() { clients = origClients })
-	clients = ClientList{list: make(map[*Client]struct{})}
+	clients = &ClientList{list: make(map[*Client]struct{})}
 
 	adminArea := area.NewArea(area.AreaData{}, len(characters), 0, area.EviAny)
 	otherArea := area.NewArea(area.AreaData{}, len(characters), 0, area.EviAny)

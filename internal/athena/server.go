@@ -67,10 +67,10 @@ var (
 	bgListStr                              string // pre-built background list for /bglist; zero alloc per call
 	areaIndexMap                           map[*area.Area]int // pre-computed index lookup for O(1) getAreaIndex
 	roles                                  []permissions.Role
-	uids                                   uidmanager.UidManager
+	uids                                   *uidmanager.UidManager
 	players                                playercount.PlayerCount
 	enableDiscord                          bool
-	clients                                ClientList = ClientList{list: make(map[*Client]struct{})}
+	clients                                *ClientList = &ClientList{list: make(map[*Client]struct{})}
 	updatePlayers                                     = make(chan int)      // Updates the advertiser's player count.
 	advertDone                                        = make(chan struct{}) // Signals the advertiser to stop.
 	FatalError                                        = make(chan error)    // Signals that the server should stop after a fatal error.
@@ -184,10 +184,10 @@ type Server struct {
 	bgListStr              string
 	areaIndexMap           map[*area.Area]int
 	roles                  []permissions.Role
-	uids                   uidmanager.UidManager
+	uids                   *uidmanager.UidManager
 	players                playercount.PlayerCount
 	enableDiscord          bool
-	clients                ClientList
+	clients                *ClientList
 	updatePlayers          chan int
 	advertDone             chan struct{}
 	tournamentActive       bool
@@ -267,7 +267,8 @@ func NewServer(conf *settings.Config) (*Server, error) {
 
 	s := &Server{
 		config:                 conf,
-		clients:                ClientList{list: make(map[*Client]struct{})},
+		clients:                &ClientList{list: make(map[*Client]struct{})},
+		uids:                   &uidmanager.UidManager{},
 		updatePlayers:          updatePlayers,
 		advertDone:             advertDone,
 		tournamentParticipants: make(map[int]*TournamentParticipant),

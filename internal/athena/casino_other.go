@@ -937,6 +937,13 @@ type barDrinkEffect struct {
 	areaMsg   string // public message broadcast to the area (empty = no broadcast)
 }
 
+const (
+	barHighRollerThreshold = int64(100000) // chip balance above which the high-roller tax can apply
+	barHighRollerTaxChance = 50            // percent chance the tax fires on a loss (50 = 50%)
+	barHighRollerMinPct    = 5             // minimum percent of total balance lost when tax fires
+	barHighRollerMaxPct    = 35            // maximum percent of total balance lost when tax fires
+)
+
 // barDrink describes a single drink available at the bar.
 type barDrink struct {
 	id    string
@@ -2002,6 +2009,14 @@ func cmdBar(client *Client, args []string, _ string) {
 		finalBal, _ = db.AddChips(client.Ipid(), effect.chipDelta)
 	} else if effect.chipDelta < 0 {
 		spent := -effect.chipDelta
+		// High rollers (pre-drink balance > barHighRollerThreshold) have a 50% chance of losing 5–35% of
+		// their total balance instead of the normal drink penalty, to prevent farming.
+		preDrinkBal := bal + drink.cost
+		if preDrinkBal > barHighRollerThreshold && rand.Intn(100) < barHighRollerTaxChance {
+			pct := int64(barHighRollerMinPct + rand.Intn(barHighRollerMaxPct-barHighRollerMinPct+1))
+			spent = preDrinkBal * pct / 100
+			effect.msg += fmt.Sprintf(" 💸 High roller reckoning: you lose %d%% of your pre-drink balance — %d chips gone!", pct, spent)
+		}
 		newBal, spendErr := db.SpendChips(client.Ipid(), spent)
 		if spendErr != nil {
 			// Not enough chips for the penalty — drain to zero instead.
