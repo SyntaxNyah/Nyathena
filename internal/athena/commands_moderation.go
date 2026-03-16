@@ -401,6 +401,10 @@ func cmdLogin(client *Client, args []string, _ string) {
 		client.SetModName(args[0])
 		// Link the current IPID to this account so leaderboards can show names.
 		db.LinkIPIDToUser(args[0], client.Ipid()) //nolint:errcheck
+		// Restore the account's gamble-hide preference for this session.
+		if hide, err := db.GetGambleHide(args[0]); err == nil {
+			client.SetGambleHide(hide)
+		}
 		if permissions.IsModerator(perms) {
 			client.SendServerMessage("Logged in as moderator.")
 		} else {

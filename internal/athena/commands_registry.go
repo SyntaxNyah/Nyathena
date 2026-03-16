@@ -554,8 +554,8 @@ func initCommands() {
 			handler:  cmdRandomSong,
 			minArgs:  0,
 			usage:    "Usage: /randomsong",
-			desc:     "Plays a random song from the server music list. Cooldown is configurable via random_song_cooldown.",
-			reqPerms: permissions.PermissionField["CM"],
+			desc:     "Plays a random song from the server music list. Usable by everyone with a 10-second cooldown per user.",
+			reqPerms: permissions.PermissionField["NONE"],
 		},
 		"rps": {
 			handler:  cmdRps,

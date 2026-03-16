@@ -308,7 +308,7 @@ Toggle whether you see gambling broadcast messages in the area chat.
 
 - Run once to **hide** all gambling result announcements (wheel spins, slot wins, roulette results, etc.) from your chat.
 - Run again to **show** them again.
-- This setting lasts until you disconnect.
+- This setting is saved to your account and automatically restored when you log in.
 
 ---
 

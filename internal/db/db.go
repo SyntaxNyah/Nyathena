@@ -58,7 +58,7 @@ const MaxChipBalance = 10_000_000
 
 // Database version.
 // This should be incremented whenever changes are made to the DB that require existing databases to upgrade.
-const ver = 13
+const ver = 14
 
 // MaxFavourites is the maximum number of favourite characters a player can save.
 const MaxFavourites = 100
@@ -132,7 +132,7 @@ func Open() error {
 	if err != nil {
 		return err
 	}
-	_, err = db.Exec("CREATE TABLE IF NOT EXISTS USERS(USERNAME TEXT PRIMARY KEY, PASSWORD TEXT, PERMISSIONS TEXT, IPID TEXT NOT NULL DEFAULT '')")
+	_, err = db.Exec("CREATE TABLE IF NOT EXISTS USERS(USERNAME TEXT PRIMARY KEY, PASSWORD TEXT, PERMISSIONS TEXT, IPID TEXT NOT NULL DEFAULT '', GAMBLE_HIDE INTEGER NOT NULL DEFAULT 0)")
 	if err != nil {
 		return err
 	}
@@ -406,6 +406,20 @@ func upgradeDB(v int) error {
 		}
 		_, err = db.Exec("PRAGMA user_version = 13")
 		if err != nil {
+			return err
+		}
+		fallthrough
+	case 13:
+		// Add GAMBLE_HIDE column to USERS so per-account gamble-hide preference persists across sessions.
+		// Brand-new databases get the column from the CREATE TABLE statement in Open().
+		var usersExists int
+		db.QueryRow("SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='USERS'").Scan(&usersExists) //nolint:errcheck
+		if usersExists > 0 {
+			if _, err := db.Exec("ALTER TABLE USERS ADD COLUMN GAMBLE_HIDE INTEGER NOT NULL DEFAULT 0"); err != nil {
+				return err
+			}
+		}
+		if _, err := db.Exec("PRAGMA user_version = 14"); err != nil {
 			return err
 		}
 	}
@@ -1630,4 +1644,34 @@ func IsFavourite(username, charName string) (bool, error) {
 		username, charName,
 	).Scan(&count)
 	return count > 0, err
+}
+
+// GetGambleHide returns whether the user has opted out of gambling broadcast messages.
+// Returns false if the user does not exist or the database is unavailable.
+func GetGambleHide(username string) (bool, error) {
+	if db == nil {
+		return false, nil
+	}
+	var hide int
+	err := db.QueryRow("SELECT COALESCE(GAMBLE_HIDE, 0) FROM USERS WHERE USERNAME = ?", username).Scan(&hide)
+	if err == sql.ErrNoRows {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	return hide != 0, nil
+}
+
+// SetGambleHide persists the gamble-hide preference for the given user account.
+func SetGambleHide(username string, hide bool) error {
+	if db == nil {
+		return nil
+	}
+	val := 0
+	if hide {
+		val = 1
+	}
+	_, err := db.Exec("UPDATE USERS SET GAMBLE_HIDE = ? WHERE USERNAME = ?", val, username)
+	return err
 }
