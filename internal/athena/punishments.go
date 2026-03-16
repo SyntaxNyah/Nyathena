@@ -1453,20 +1453,27 @@ func ApplyPunishmentToTextWithState(text string, pType PunishmentType, state *Pu
 	}
 }
 
-// applyMonkey replaces text with monkey noises
-func applyMonkey(text string) string {
+// applyAnimalSounds replaces each word in text with a random entry from sounds.
+// If text is empty, defaultSound is returned instead.
+// sounds must be a non-empty slice.
+func applyAnimalSounds(text, defaultSound string, sounds []string) string {
 	words := strings.Fields(text)
 	if len(words) == 0 {
-		return "OOH OOH AHH AHH"
+		return defaultSound
 	}
 	var result strings.Builder
 	for i := range words {
 		if i > 0 {
 			result.WriteString(" ")
 		}
-		result.WriteString(monkeySounds[rand.Intn(len(monkeySounds))])
+		result.WriteString(sounds[rand.Intn(len(sounds))])
 	}
 	return truncateText(result.String())
+}
+
+// applyMonkey replaces text with monkey noises
+func applyMonkey(text string) string {
+	return applyAnimalSounds(text, "OOH OOH AHH AHH", monkeySounds)
 }
 
 // applySnake replaces s sounds with extended hissing
@@ -1481,130 +1488,42 @@ func applySnake(text string) string {
 
 // applyDog replaces text with dog sounds
 func applyDog(text string) string {
-	words := strings.Fields(text)
-	if len(words) == 0 {
-		return "WOOF!"
-	}
-	var result strings.Builder
-	for i := range words {
-		if i > 0 {
-			result.WriteString(" ")
-		}
-		result.WriteString(dogSounds[rand.Intn(len(dogSounds))])
-	}
-	return truncateText(result.String())
+	return applyAnimalSounds(text, "WOOF!", dogSounds)
 }
 
 // applyCat replaces text with cat sounds
 func applyCat(text string) string {
-	words := strings.Fields(text)
-	if len(words) == 0 {
-		return "meow~"
-	}
-	var result strings.Builder
-	for i := range words {
-		if i > 0 {
-			result.WriteString(" ")
-		}
-		result.WriteString(catSounds[rand.Intn(len(catSounds))])
-	}
-	return truncateText(result.String())
+	return applyAnimalSounds(text, "meow~", catSounds)
 }
 
 // applyBird replaces text with bird sounds
 func applyBird(text string) string {
-	words := strings.Fields(text)
-	if len(words) == 0 {
-		return "tweet!"
-	}
-	var result strings.Builder
-	for i := range words {
-		if i > 0 {
-			result.WriteString(" ")
-		}
-		result.WriteString(birdSounds[rand.Intn(len(birdSounds))])
-	}
-	return truncateText(result.String())
+	return applyAnimalSounds(text, "tweet!", birdSounds)
 }
 
 // applyCow replaces text with cow sounds
 func applyCow(text string) string {
-	words := strings.Fields(text)
-	if len(words) == 0 {
-		return "MOO"
-	}
-	var result strings.Builder
-	for i := range words {
-		if i > 0 {
-			result.WriteString(" ")
-		}
-		result.WriteString(cowSounds[rand.Intn(len(cowSounds))])
-	}
-	return truncateText(result.String())
+	return applyAnimalSounds(text, "MOO", cowSounds)
 }
 
 // applyFrog replaces text with frog sounds
 func applyFrog(text string) string {
-	words := strings.Fields(text)
-	if len(words) == 0 {
-		return "ribbit!"
-	}
-	var result strings.Builder
-	for i := range words {
-		if i > 0 {
-			result.WriteString(" ")
-		}
-		result.WriteString(frogSounds[rand.Intn(len(frogSounds))])
-	}
-	return truncateText(result.String())
+	return applyAnimalSounds(text, "ribbit!", frogSounds)
 }
 
 // applyDuck replaces text with duck sounds
 func applyDuck(text string) string {
-	words := strings.Fields(text)
-	if len(words) == 0 {
-		return "QUACK!"
-	}
-	var result strings.Builder
-	for i := range words {
-		if i > 0 {
-			result.WriteString(" ")
-		}
-		result.WriteString(duckSounds[rand.Intn(len(duckSounds))])
-	}
-	return truncateText(result.String())
+	return applyAnimalSounds(text, "QUACK!", duckSounds)
 }
 
 // applyHorse replaces text with horse sounds
 func applyHorse(text string) string {
-	words := strings.Fields(text)
-	if len(words) == 0 {
-		return "NEIGH!"
-	}
-	var result strings.Builder
-	for i := range words {
-		if i > 0 {
-			result.WriteString(" ")
-		}
-		result.WriteString(horseSounds[rand.Intn(len(horseSounds))])
-	}
-	return truncateText(result.String())
+	return applyAnimalSounds(text, "NEIGH!", horseSounds)
 }
 
 // applyLion replaces text with lion sounds
 func applyLion(text string) string {
-	words := strings.Fields(text)
-	if len(words) == 0 {
-		return "ROAR!"
-	}
-	var result strings.Builder
-	for i := range words {
-		if i > 0 {
-			result.WriteString(" ")
-		}
-		result.WriteString(lionSounds[rand.Intn(len(lionSounds))])
-	}
-	return truncateText(result.String())
+	return applyAnimalSounds(text, "ROAR!", lionSounds)
 }
 
 // applyZoo applies a random animal punishment from the full zoo
@@ -1614,18 +1533,7 @@ func applyZoo(text string) string {
 
 // applyBunny replaces text with bunny sounds
 func applyBunny(text string) string {
-	words := strings.Fields(text)
-	if len(words) == 0 {
-		return "*thump thump*"
-	}
-	var result strings.Builder
-	for i := range words {
-		if i > 0 {
-			result.WriteString(" ")
-		}
-		result.WriteString(bunnySounds[rand.Intn(len(bunnySounds))])
-	}
-	return truncateText(result.String())
+	return applyAnimalSounds(text, "*thump thump*", bunnySounds)
 }
 
 // GetRandomEmoji returns a random emoji string
@@ -1832,14 +1740,20 @@ var (
 	}
 )
 
+// applyPrefixSuffix wraps text with a random prefix from pfx and a random suffix from sfx.
+// Both pfx and sfx must be non-empty slices.
+func applyPrefixSuffix(text string, pfx, sfx []string) string {
+	return pfx[rand.Intn(len(pfx))] + text + sfx[rand.Intn(len(sfx))]
+}
+
 // applyTsundere wraps text in classic tsundere denial and blush reactions.
 func applyTsundere(text string) string {
-	return tsunderePfx[rand.Intn(len(tsunderePfx))] + text + tsundereSfx[rand.Intn(len(tsundereSfx))]
+	return applyPrefixSuffix(text, tsunderePfx, tsundereSfx)
 }
 
 // applyYandere wraps text in obsessive, unhinged yandere flavour.
 func applyYandere(text string) string {
-	return yanderePfx[rand.Intn(len(yanderePfx))] + text + yandereSfx[rand.Intn(len(yandereSfx))]
+	return applyPrefixSuffix(text, yanderePfx, yandereSfx)
 }
 
 // applyKuudere flattens text into deadpan, emotionless kuudere delivery.
@@ -1854,7 +1768,7 @@ func applyKuudere(text string) string {
 		}
 		return unicode.ToLower(r)
 	}, text)
-	return kuuderePfx[rand.Intn(len(kuuderePfx))] + text + kuudereSfx[rand.Intn(len(kuudereSfx))]
+	return applyPrefixSuffix(text, kuuderePfx, kuudereSfx)
 }
 
 // applyDandere makes text extremely shy: phrase stutters every few words,
@@ -1886,22 +1800,22 @@ func applyDandere(text string) string {
 
 // applyDeredere wraps text in over-the-top lovey-dovey sweetness.
 func applyDeredere(text string) string {
-	return deredere_pfx[rand.Intn(len(deredere_pfx))] + text + deredere_sfx[rand.Intn(len(deredere_sfx))]
+	return applyPrefixSuffix(text, deredere_pfx, deredere_sfx)
 }
 
 // applyHimedere makes the speaker act like imperious royalty.
 func applyHimedere(text string) string {
-	return himederePfx[rand.Intn(len(himederePfx))] + text + himedereSfx[rand.Intn(len(himedereSfx))]
+	return applyPrefixSuffix(text, himederePfx, himedereSfx)
 }
 
 // applyKamidere makes the speaker act like a self-proclaimed god.
 func applyKamidere(text string) string {
-	return kamiderePfx[rand.Intn(len(kamiderePfx))] + text + kamidereSfx[rand.Intn(len(kamidereSfx))]
+	return applyPrefixSuffix(text, kamiderePfx, kamidereSfx)
 }
 
 // applyUndere makes the speaker agree with absolutely everything.
 func applyUndere(text string) string {
-	return underePfx[rand.Intn(len(underePfx))] + text + undereSfx[rand.Intn(len(undereSfx))]
+	return applyPrefixSuffix(text, underePfx, undereSfx)
 }
 
 // applyBakadere inserts clumsy accident interjections into the message.
@@ -1928,7 +1842,7 @@ func applyBakadere(text string) string {
 
 // applyMayadere gives text an eerie, enigmatic, mysterious quality.
 func applyMayadere(text string) string {
-	return mayaderePfx[rand.Intn(len(mayaderePfx))] + text + mayadereSfx[rand.Intn(len(mayadereSfx))]
+	return applyPrefixSuffix(text, mayaderePfx, mayadereSfx)
 }
 
 var emoticons = []string{
