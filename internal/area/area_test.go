@@ -163,8 +163,8 @@ func TestInvited(t *testing.T) {
 	if !a.AddInvited(1) {
 		t.Errorf("adding new user to area invited: got %t, want %t", false, true)
 	}
-	if a.invited[0] != 1 {
-		t.Errorf("unexpected value for invited[0], got %d, want %d", a.invited[0], 1)
+	if !a.HasInvited(1) {
+		t.Errorf("checking HasInvited for joined user: got %t, want %t", false, true)
 	}
 
 	// Adding invite with same UID should fail

@@ -20,8 +20,6 @@ import (
 	"strings"
 	"sync"
 	"time"
-
-	"github.com/MangosArentLiterature/Athena/internal/sliceutil"
 )
 
 type EvidenceMode int
@@ -88,12 +86,12 @@ type Area struct {
 	prohp             int
 	evidence          []string
 	buffer            []string
-	cms               []int
+	cms               map[int]struct{}
 	last_msg          int
 	evi_mode          EvidenceMode
 	status            Status
 	lock              Lock
-	invited           []int
+	invited           map[int]struct{}
 	doc               string
 	tr                TestimonyRecorder
 	activePoll        *Poll
@@ -103,7 +101,7 @@ type Area struct {
 	activeCoinflip    *CoinflipChallenge
 	lastCoinflipTime  time.Time
 	spectateMode      bool
-	spectateInvited   []int
+	spectateInvited   map[int]struct{}
 	casinoEnabled     bool
 	casinoMinBet      int
 	casinoMaxBet      int
@@ -170,6 +168,9 @@ func NewArea(data AreaData, charlen int, bufsize int, evi_mode EvidenceMode) *Ar
 		buffer:          make([]string, bufsize),
 		last_msg:        -1,
 		evi_mode:        evi_mode,
+		cms:             make(map[int]struct{}),
+		invited:         make(map[int]struct{}),
+		spectateInvited: make(map[int]struct{}),
 		casinoEnabled:   data.Casino_enabled,
 		casinoMinBet:    data.Casino_min_bet,
 		casinoMaxBet:    data.Casino_max_bet,
@@ -366,21 +367,25 @@ func (a *Area) Buffer() []string {
 	return returnList
 }
 
-// CMs returns the list uids of CMs in the area.
+// CMs returns a slice of UID values for all CMs in the area.
 func (a *Area) CMs() []int {
 	a.mu.Lock()
 	defer a.mu.Unlock()
-	return a.cms
+	result := make([]int, 0, len(a.cms))
+	for uid := range a.cms {
+		result = append(result, uid)
+	}
+	return result
 }
 
 // AddCM adds a new CM to the area.
 func (a *Area) AddCM(uid int) bool {
 	a.mu.Lock()
 	defer a.mu.Unlock()
-	if sliceutil.ContainsInt(a.cms, uid) {
+	if _, exists := a.cms[uid]; exists {
 		return false
 	}
-	a.cms = append(a.cms, uid)
+	a.cms[uid] = struct{}{}
 	return true
 }
 
@@ -388,20 +393,19 @@ func (a *Area) AddCM(uid int) bool {
 func (a *Area) RemoveCM(uid int) bool {
 	a.mu.Lock()
 	defer a.mu.Unlock()
-	for i, id := range a.cms {
-		if id == uid {
-			a.cms = append(a.cms[:i], a.cms[i+1:]...)
-			return true
-		}
+	if _, exists := a.cms[uid]; !exists {
+		return false
 	}
-	return false
+	delete(a.cms, uid)
+	return true
 }
 
 // HasCM returns whether the given uid is a CM in the area.
 func (a *Area) HasCM(uid int) bool {
 	a.mu.Lock()
 	defer a.mu.Unlock()
-	return sliceutil.ContainsInt(a.cms, uid)
+	_, exists := a.cms[uid]
+	return exists
 }
 
 // EvidenceMode returns the area's evidence mode.
@@ -531,10 +535,10 @@ func (a *Area) SetLock(lock Lock) {
 func (a *Area) AddInvited(uid int) bool {
 	a.mu.Lock()
 	defer a.mu.Unlock()
-	if sliceutil.ContainsInt(a.invited, uid) {
+	if _, exists := a.invited[uid]; exists {
 		return false
 	}
-	a.invited = append(a.invited, uid)
+	a.invited[uid] = struct{}{}
 	return true
 }
 
@@ -542,37 +546,47 @@ func (a *Area) AddInvited(uid int) bool {
 func (a *Area) RemoveInvited(uid int) bool {
 	a.mu.Lock()
 	defer a.mu.Unlock()
-	for i, id := range a.invited {
-		if id == uid {
-			a.invited = append(a.invited[:i], a.invited[i+1:]...)
-			return true
-		}
+	if _, exists := a.invited[uid]; !exists {
+		return false
 	}
-	return false
+	delete(a.invited, uid)
+	return true
 }
 
 // ClearInvited clears the area's invite list.
 func (a *Area) ClearInvited() {
 	a.mu.Lock()
-	a.invited = []int{}
+	a.invited = make(map[int]struct{})
 	a.mu.Unlock()
 }
 
-// Invited returns the area's invite list.
+// Invited returns the area's invite list as a slice of UIDs.
 func (a *Area) Invited() []int {
 	a.mu.Lock()
 	defer a.mu.Unlock()
-	return a.invited
+	result := make([]int, 0, len(a.invited))
+	for uid := range a.invited {
+		result = append(result, uid)
+	}
+	return result
+}
+
+// HasInvited returns whether the given UID is on the area's invite list.
+func (a *Area) HasInvited(uid int) bool {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	_, exists := a.invited[uid]
+	return exists
 }
 
 // Reset returns all area settings to their default values.
 func (a *Area) Reset() {
 	a.mu.Lock()
 	a.evidence = []string{}
-	a.invited = []int{}
+	a.invited = make(map[int]struct{})
 	a.status = StatusIdle
 	a.lock = LockFree
-	a.cms = []int{}
+	a.cms = make(map[int]struct{})
 	a.last_msg = -1
 	a.defhp = 10
 	a.prohp = 10
@@ -596,7 +610,7 @@ func (a *Area) Reset() {
 	a.pollVotes = nil
 	a.playerVotes = nil
 	a.spectateMode = false
-	a.spectateInvited = []int{}
+	a.spectateInvited = make(map[int]struct{})
 	a.mu.Unlock()
 }
 
@@ -612,7 +626,7 @@ func (a *Area) SetSpectateMode(b bool) {
 	a.mu.Lock()
 	a.spectateMode = b
 	if !b {
-		a.spectateInvited = []int{}
+		a.spectateInvited = make(map[int]struct{})
 	}
 	a.mu.Unlock()
 }
@@ -621,10 +635,10 @@ func (a *Area) SetSpectateMode(b bool) {
 func (a *Area) AddSpectateInvited(uid int) bool {
 	a.mu.Lock()
 	defer a.mu.Unlock()
-	if sliceutil.ContainsInt(a.spectateInvited, uid) {
+	if _, exists := a.spectateInvited[uid]; exists {
 		return false
 	}
-	a.spectateInvited = append(a.spectateInvited, uid)
+	a.spectateInvited[uid] = struct{}{}
 	return true
 }
 
@@ -632,20 +646,19 @@ func (a *Area) AddSpectateInvited(uid int) bool {
 func (a *Area) RemoveSpectateInvited(uid int) bool {
 	a.mu.Lock()
 	defer a.mu.Unlock()
-	for i, id := range a.spectateInvited {
-		if id == uid {
-			a.spectateInvited = append(a.spectateInvited[:i], a.spectateInvited[i+1:]...)
-			return true
-		}
+	if _, exists := a.spectateInvited[uid]; !exists {
+		return false
 	}
-	return false
+	delete(a.spectateInvited, uid)
+	return true
 }
 
 // HasSpectateInvited returns whether the given UID is in the spectate IC invite list.
 func (a *Area) HasSpectateInvited(uid int) bool {
 	a.mu.Lock()
 	defer a.mu.Unlock()
-	return sliceutil.ContainsInt(a.spectateInvited, uid)
+	_, exists := a.spectateInvited[uid]
+	return exists
 }
 
 // ForceBGList returns whether the server BG list is enforced in the area.
