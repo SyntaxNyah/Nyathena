@@ -1195,7 +1195,9 @@ func AddChips(ipid string, amount int64) (int64, error) {
 }
 
 // SpendChips deducts the given amount from an IPID's chip balance, returning the new balance.
-// Returns an error if the balance would go below zero.
+// Returns an error if the balance would go below zero. On insufficient-funds errors the first
+// return value is the player's current (unmodified) balance, so callers can display it without
+// an extra round-trip.
 func SpendChips(ipid string, amount int64) (int64, error) {
 	if db == nil {
 		return 0, nil
@@ -1208,7 +1210,10 @@ func SpendChips(ipid string, amount int64) (int64, error) {
 		"UPDATE CHIPS SET BALANCE = BALANCE - ? WHERE IPID = ? AND BALANCE >= ? RETURNING BALANCE",
 		amount, ipid, amount).Scan(&newBalance)
 	if err == sql.ErrNoRows {
-		return 0, fmt.Errorf("insufficient chips")
+		// Fetch the actual balance so callers can show it without an extra query.
+		var cur int64
+		_ = db.QueryRow("SELECT BALANCE FROM CHIPS WHERE IPID = ?", ipid).Scan(&cur)
+		return cur, fmt.Errorf("insufficient chips")
 	}
 	if err != nil {
 		return 0, err

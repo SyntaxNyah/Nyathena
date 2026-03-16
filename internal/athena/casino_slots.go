@@ -104,14 +104,12 @@ func slotsDoSpin(client *Client, bet int64) {
 		return
 	}
 
-	ok, reason := validateBet(client, bet)
-	if !ok {
+	if ok, reason := validateBet(client, bet); !ok {
 		client.SendServerMessage(reason)
 		return
 	}
-	balAfterBet, err := db.SpendChips(client.Ipid(), bet)
-	if err != nil {
-		client.SendServerMessage("Failed to place bet: " + err.Error())
+	balAfterBet, ok := spendBet(client, bet)
+	if !ok {
 		return
 	}
 

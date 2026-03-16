@@ -470,8 +470,7 @@ func bjBet(client *Client, args []string) {
 		client.SendServerMessage("Invalid bet amount.")
 		return
 	}
-	ok, reason := validateBet(client, amount)
-	if !ok {
+	if ok, reason := validateBet(client, amount); !ok {
 		client.SendServerMessage(reason)
 		return
 	}
@@ -689,14 +688,11 @@ func bjDouble(client *Client) {
 		return
 	}
 
-	ok, reason := validateBet(client, h.Bet)
-	if !ok {
+	if ok, reason := validateBet(client, h.Bet); !ok {
 		client.SendServerMessage("Cannot double: " + reason)
 		return
 	}
-	_, err := db.SpendChips(client.Ipid(), h.Bet)
-	if err != nil {
-		client.SendServerMessage("Failed to double down: " + err.Error())
+	if _, ok := spendBet(client, h.Bet); !ok {
 		return
 	}
 
@@ -762,14 +758,11 @@ func bjSplit(client *Client) {
 		return
 	}
 
-	ok, reason := validateBet(client, h.Bet)
-	if !ok {
+	if ok, reason := validateBet(client, h.Bet); !ok {
 		client.SendServerMessage("Cannot split: " + reason)
 		return
 	}
-	_, err := db.SpendChips(client.Ipid(), h.Bet)
-	if err != nil {
-		client.SendServerMessage("Failed to split: " + err.Error())
+	if _, ok := spendBet(client, h.Bet); !ok {
 		return
 	}
 
@@ -826,14 +819,11 @@ func bjInsurance(client *Client) {
 	if insAmt == 0 {
 		insAmt = 1
 	}
-	ok, reason := validateBet(client, insAmt)
-	if !ok {
+	if ok, reason := validateBet(client, insAmt); !ok {
 		client.SendServerMessage("Cannot place insurance: " + reason)
 		return
 	}
-	_, err := db.SpendChips(client.Ipid(), insAmt)
-	if err != nil {
-		client.SendServerMessage("Failed to place insurance: " + err.Error())
+	if _, ok := spendBet(client, insAmt); !ok {
 		return
 	}
 	p.InsuranceBet = insAmt

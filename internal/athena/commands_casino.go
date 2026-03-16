@@ -364,7 +364,7 @@ func chipsGive(client *Client, args []string) {
 
 	senderBal, err := db.SpendChips(ipid, amount)
 	if err != nil {
-		client.SendServerMessage(fmt.Sprintf("Transfer failed: %v", err))
+		client.SendServerMessage(fmt.Sprintf("Insufficient chips. Your balance: %d", senderBal))
 		return
 	}
 	if _, err = db.AddChips(target.Ipid(), amount); err != nil {

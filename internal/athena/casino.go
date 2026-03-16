@@ -53,7 +53,9 @@ func getCasinoState(a *area.Area) *AreaCasinoState {
 // astronomically large regardless of the player's balance.
 const globalDefaultMaxBet = 10_000_000
 
-// validateBet checks the bet against area min/max limits and the player's chip balance.
+// validateBet checks the bet amount against area min/max limits only.
+// Balance adequacy is enforced atomically by SpendChips; a separate pre-check
+// would be a redundant DB round-trip on every successful bet.
 // Returns (valid bool, reason string).
 func validateBet(client *Client, amount int64) (bool, string) {
 	if amount <= 0 {
@@ -72,11 +74,19 @@ func validateBet(client *Client, amount int64) (bool, string) {
 	if amount > effectiveMax {
 		return false, fmt.Sprintf("Maximum bet is %d chips.", effectiveMax)
 	}
-	balance, err := db.GetChipBalance(client.Ipid())
-	if err != nil || balance < amount {
-		return false, fmt.Sprintf("Insufficient chips. Your balance: %d", balance)
-	}
 	return true, ""
+}
+
+// spendBet deducts amount chips for client and returns (newBalance, true) on success.
+// On failure it sends an "Insufficient chips" message (with the current balance) to the
+// client and returns (currentBalance, false). Call validateBet first to enforce limits.
+func spendBet(client *Client, amount int64) (int64, bool) {
+	bal, err := db.SpendChips(client.Ipid(), amount)
+	if err != nil {
+		client.SendServerMessage(fmt.Sprintf("Insufficient chips. Your balance: %d", bal))
+		return bal, false
+	}
+	return bal, true
 }
 
 // handleCasinoDisconnect cleans up casino state when a client disconnects.
