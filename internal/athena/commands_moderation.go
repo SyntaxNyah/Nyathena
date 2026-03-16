@@ -75,15 +75,20 @@ func cmdBan(client *Client, args []string, usage string) {
 	}
 
 	var count int
-	var report string
+	var reportBuilder strings.Builder
+	seenIPIDs := make(map[string]struct{})
 	if len(*uids) > 0 {
 		for _, c := range getUidList(*uids) {
 			id, err := db.AddBan(c.Ipid(), c.Hdid(), banTime, until, reason, client.ModName())
 			if err != nil {
 				continue
 			}
-			if !strings.Contains(report, c.Ipid()) {
-				report += c.Ipid() + ", "
+			if _, seen := seenIPIDs[c.Ipid()]; !seen {
+				seenIPIDs[c.Ipid()] = struct{}{}
+				if reportBuilder.Len() > 0 {
+					reportBuilder.WriteString(", ")
+				}
+				reportBuilder.WriteString(c.Ipid())
 			}
 			c.SendPacket("KB", fmt.Sprintf("%v\nUntil: %v\nID: %v", reason, untilS, id))
 			c.conn.Close()
@@ -138,13 +143,17 @@ func cmdBan(client *Client, args []string, usage string) {
 					c.conn.Close()
 				}
 			}
-			if !strings.Contains(report, ipid) {
-				report += ipid + ", "
+			if _, seen := seenIPIDs[ipid]; !seen {
+				seenIPIDs[ipid] = struct{}{}
+				if reportBuilder.Len() > 0 {
+					reportBuilder.WriteString(", ")
+				}
+				reportBuilder.WriteString(ipid)
 			}
 			count++
 		}
 	}
-	report = strings.TrimSuffix(report, ", ")
+	report := reportBuilder.String()
 	if len(*ipids) > 0 {
 		client.SendServerMessage(fmt.Sprintf("Banned %v IPID(s).", count))
 	} else {
@@ -205,7 +214,7 @@ func cmdEditBan(client *Client, args []string, usage string) {
 		}
 	}
 
-	var report string
+	var reportBuilder strings.Builder
 	for _, s := range toUpdate {
 		id, err := strconv.Atoi(s)
 		if err != nil {
@@ -223,9 +232,12 @@ func cmdEditBan(client *Client, args []string, usage string) {
 				continue
 			}
 		}
-		report += fmt.Sprintf("%v, ", s)
+		if reportBuilder.Len() > 0 {
+			reportBuilder.WriteString(", ")
+		}
+		reportBuilder.WriteString(s)
 	}
-	report = strings.TrimSuffix(report, ", ")
+	report := reportBuilder.String()
 	client.SendServerMessage(fmt.Sprintf("Updated bans: %v", report))
 	if useDur {
 		addToBuffer(client, "CMD", fmt.Sprintf("Edited bans: %v to duration: %v.", report, duration), true)
@@ -243,16 +255,16 @@ func cmdGetBan(client *Client, args []string, _ string) {
 	banid := flags.Int("b", -1, "")
 	ipid := flags.String("i", "", "")
 	flags.Parse(args)
-	s := "Bans:\n----------"
-	entry := func(b db.BanInfo) string {
+	var sb strings.Builder
+	sb.WriteString("Bans:\n----------")
+	entry := func(b db.BanInfo) {
 		var d string
 		if b.Duration == -1 {
 			d = "∞"
 		} else {
 			d = time.Unix(b.Duration, 0).UTC().Format("02 Jan 2006 15:04 MST")
 		}
-
-		return fmt.Sprintf("\nID: %v\nIPID: %v\nHDID: %v\nBanned on: %v\nUntil: %v\nReason: %v\nModerator: %v\n----------",
+		fmt.Fprintf(&sb, "\nID: %v\nIPID: %v\nHDID: %v\nBanned on: %v\nUntil: %v\nReason: %v\nModerator: %v\n----------",
 			b.Id, b.Ipid, b.Hdid, time.Unix(b.Time, 0).UTC().Format("02 Jan 2006 15:04 MST"), d, b.Reason, b.Moderator)
 	}
 	if *banid > 0 {
@@ -261,7 +273,7 @@ func cmdGetBan(client *Client, args []string, _ string) {
 			client.SendServerMessage("No ban with that ID exists.")
 			return
 		}
-		s += entry(b[0])
+		entry(b[0])
 	} else if *ipid != "" {
 		bans, err := db.GetBan(db.IPID, *ipid)
 		if err != nil || len(bans) == 0 {
@@ -269,7 +281,7 @@ func cmdGetBan(client *Client, args []string, _ string) {
 			return
 		}
 		for _, b := range bans {
-			s += entry(b)
+			entry(b)
 		}
 	} else {
 		bans, err := db.GetRecentBans()
@@ -279,10 +291,10 @@ func cmdGetBan(client *Client, args []string, _ string) {
 			return
 		}
 		for _, b := range bans {
-			s += entry(b)
+			entry(b)
 		}
 	}
-	client.SendServerMessage(s)
+	client.SendServerMessage(sb.String())
 }
 
 // Handles /global
@@ -354,10 +366,13 @@ func cmdKick(client *Client, args []string, usage string) {
 	}
 
 	var count int
-	var report string
+	var reportBuilder strings.Builder
 	reason := strings.Join(flags.Args(), " ")
 	for _, c := range toKick {
-		report += c.Ipid() + ", "
+		if reportBuilder.Len() > 0 {
+			reportBuilder.WriteString(", ")
+		}
+		reportBuilder.WriteString(c.Ipid())
 		c.SendPacket("KK", reason)
 		c.conn.Close()
 		count++
@@ -365,7 +380,7 @@ func cmdKick(client *Client, args []string, usage string) {
 			logger.LogErrorf("while posting kick webhook: %v", err)
 		}
 	}
-	report = strings.TrimSuffix(report, ", ")
+	report := reportBuilder.String()
 	client.SendServerMessage(fmt.Sprintf("Kicked %v clients.", count))
 	sendPlayerArup()
 	addToBuffer(client, "CMD", fmt.Sprintf("Kicked %v from server for reason: %v.", report, reason), true)
@@ -510,7 +525,7 @@ func cmdMute(client *Client, args []string, usage string) {
 	}
 	toMute := getUidList(strings.Split(flags.Arg(0), ","))
 	var count int
-	var report string
+	var reportBuilder strings.Builder
 	for _, c := range toMute {
 		if c.Muted() == m {
 			continue
@@ -530,9 +545,12 @@ func cmdMute(client *Client, args []string, usage string) {
 		}
 		c.SendServerMessage(msg)
 		count++
-		report += fmt.Sprintf("%v, ", c.Uid())
+		if reportBuilder.Len() > 0 {
+			reportBuilder.WriteString(", ")
+		}
+		fmt.Fprintf(&reportBuilder, "%v", c.Uid())
 	}
-	report = strings.TrimSuffix(report, ", ")
+	report := reportBuilder.String()
 	client.SendServerMessage(fmt.Sprintf("Muted %v clients.", count))
 	addToBuffer(client, "CMD", fmt.Sprintf("Muted %v.", report), false)
 }
@@ -558,7 +576,7 @@ func cmdParrot(client *Client, args []string, usage string) {
 	}
 	toParrot := getUidList(strings.Split(flags.Arg(0), ","))
 	var count int
-	var report string
+	var reportBuilder strings.Builder
 	for _, c := range toParrot {
 		if c.Muted() != Unmuted {
 			continue
@@ -578,9 +596,12 @@ func cmdParrot(client *Client, args []string, usage string) {
 		}
 		c.SendServerMessage(msg)
 		count++
-		report += fmt.Sprintf("%v, ", c.Uid())
+		if reportBuilder.Len() > 0 {
+			reportBuilder.WriteString(", ")
+		}
+		fmt.Fprintf(&reportBuilder, "%v", c.Uid())
 	}
-	report = strings.TrimSuffix(report, ", ")
+	report := reportBuilder.String()
 	client.SendServerMessage(fmt.Sprintf("Parroted %v clients.", count))
 	addToBuffer(client, "CMD", fmt.Sprintf("Parroted %v.", report), false)
 }
@@ -759,7 +780,7 @@ func cmdChangeRole(client *Client, args []string, _ string) {
 
 func cmdUnban(client *Client, args []string, _ string) {
 	toUnban := strings.Split(args[0], ",")
-	var report string
+	var reportBuilder strings.Builder
 	for _, s := range toUnban {
 		id, err := strconv.Atoi(s)
 		if err != nil {
@@ -771,7 +792,10 @@ func cmdUnban(client *Client, args []string, _ string) {
 		if err != nil {
 			continue
 		}
-		report += fmt.Sprintf("%v, ", s)
+		if reportBuilder.Len() > 0 {
+			reportBuilder.WriteString(", ")
+		}
+		reportBuilder.WriteString(s)
 		if dbErr == nil && len(bans) > 0 {
 			b := bans[0]
 			var durStr string
@@ -785,7 +809,7 @@ func cmdUnban(client *Client, args []string, _ string) {
 			}
 		}
 	}
-	report = strings.TrimSuffix(report, ", ")
+	report := reportBuilder.String()
 	client.SendServerMessage(fmt.Sprintf("Nullified bans: %v", report))
 	addToBuffer(client, "CMD", fmt.Sprintf("Nullified bans: %v", report), true)
 }
@@ -795,7 +819,7 @@ func cmdUnban(client *Client, args []string, _ string) {
 func cmdUnmute(client *Client, args []string, _ string) {
 	toUnmute := getUidList(strings.Split(args[0], ","))
 	var count int
-	var report string
+	var reportBuilder strings.Builder
 	for _, c := range toUnmute {
 		if c.Muted() == Unmuted {
 			continue
@@ -806,9 +830,12 @@ func cmdUnmute(client *Client, args []string, _ string) {
 		}
 		c.SendServerMessage("You have been unmuted.")
 		count++
-		report += fmt.Sprintf("%v, ", c.Uid())
+		if reportBuilder.Len() > 0 {
+			reportBuilder.WriteString(", ")
+		}
+		fmt.Fprintf(&reportBuilder, "%v", c.Uid())
 	}
-	report = strings.TrimSuffix(report, ", ")
+	report := reportBuilder.String()
 	client.SendServerMessage(fmt.Sprintf("Unmuted %v clients.", count))
 	addToBuffer(client, "CMD", fmt.Sprintf("Unmuted %v.", report), false)
 }
@@ -918,7 +945,7 @@ func cmdJail(client *Client, args []string, usage string) {
 func cmdUnjail(client *Client, args []string, _ string) {
 	toUnjail := getUidList(strings.Split(args[0], ","))
 	var count int
-	var report string
+	var reportBuilder strings.Builder
 	for _, c := range toUnjail {
 		if !c.IsJailed() {
 			continue
@@ -930,9 +957,12 @@ func cmdUnjail(client *Client, args []string, _ string) {
 		}
 		c.SendServerMessage("You have been released from jail.")
 		count++
-		report += fmt.Sprintf("%v, ", c.Uid())
+		if reportBuilder.Len() > 0 {
+			reportBuilder.WriteString(", ")
+		}
+		fmt.Fprintf(&reportBuilder, "%v", c.Uid())
 	}
-	report = strings.TrimSuffix(report, ", ")
+	report := reportBuilder.String()
 	client.SendServerMessage(fmt.Sprintf("Released %v clients from jail.", count))
 	addToBuffer(client, "CMD", fmt.Sprintf("Released %v from jail.", report), false)
 }

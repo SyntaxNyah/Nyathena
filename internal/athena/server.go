@@ -39,7 +39,6 @@ import (
 	"github.com/MangosArentLiterature/Athena/internal/permissions"
 	"github.com/MangosArentLiterature/Athena/internal/playercount"
 	"github.com/MangosArentLiterature/Athena/internal/settings"
-	"github.com/MangosArentLiterature/Athena/internal/sliceutil"
 	"github.com/MangosArentLiterature/Athena/internal/uidmanager"
 	"github.com/MangosArentLiterature/Athena/internal/webhook"
 	"github.com/ecnepsnai/discord"
@@ -70,7 +69,7 @@ var (
 	uids                                   *uidmanager.UidManager
 	players                                playercount.PlayerCount
 	enableDiscord                          bool
-	clients                                *ClientList = &ClientList{list: make(map[*Client]struct{})}
+	clients                                *ClientList = &ClientList{list: make(map[*Client]struct{}), uidIndex: make(map[int]*Client), ipidCounts: make(map[string]int)}
 	updatePlayers                                     = make(chan int)      // Updates the advertiser's player count.
 	advertDone                                        = make(chan struct{}) // Signals the advertiser to stop.
 	FatalError                                        = make(chan error)    // Signals that the server should stop after a fatal error.
@@ -267,7 +266,7 @@ func NewServer(conf *settings.Config) (*Server, error) {
 
 	s := &Server{
 		config:                 conf,
-		clients:                &ClientList{list: make(map[*Client]struct{})},
+		clients:                &ClientList{list: make(map[*Client]struct{}), uidIndex: make(map[int]*Client), ipidCounts: make(map[string]int)},
 		uids:                   &uidmanager.UidManager{},
 		updatePlayers:          updatePlayers,
 		advertDone:             advertDone,
@@ -315,6 +314,12 @@ func NewServer(conf *settings.Config) (*Server, error) {
 	}
 	s.bgListStr = bgBuilder.String()
 
+	// Build O(1) background lookup set for area validation.
+	bgSet := make(map[string]struct{}, len(s.backgrounds))
+	for _, bg := range s.backgrounds {
+		bgSet[bg] = struct{}{}
+	}
+
 	s.parrot, err = settings.LoadFile("/parrot.txt")
 	if err != nil {
 		return nil, err
@@ -361,7 +366,7 @@ func NewServer(conf *settings.Config) (*Server, error) {
 			logger.LogWarningf("Area %v has an invalid or undefined evidence mode, defaulting to 'cms'.", a.Name)
 			evi_mode = area.EviCMs
 		}
-		if a.Bg == "" || !sliceutil.ContainsString(s.backgrounds, a.Bg) {
+		if _, validBg := bgSet[a.Bg]; a.Bg == "" || !validBg {
 			logger.LogWarningf("Area %v has an invalid or undefined background, defaulting to 'default'.", a.Name)
 			a.Bg = "default"
 		}

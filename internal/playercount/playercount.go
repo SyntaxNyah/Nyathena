@@ -16,30 +16,23 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>. */
 
 package playercount
 
-import "sync"
+import "sync/atomic"
 
 type PlayerCount struct {
-	players int
-	mu      sync.Mutex
+	players int64
 }
 
 // GetPlayerCount returns the current player count.
 func (pc *PlayerCount) GetPlayerCount() int {
-	pc.mu.Lock()
-	defer pc.mu.Unlock()
-	return pc.players
+	return int(atomic.LoadInt64(&pc.players))
 }
 
 // AddPlayer increments the player count by one.
 func (pc *PlayerCount) AddPlayer() {
-	pc.mu.Lock()
-	pc.players++
-	pc.mu.Unlock()
+	atomic.AddInt64(&pc.players, 1)
 }
 
 // RemovePlayer decrements the player count by one.
 func (pc *PlayerCount) RemovePlayer() {
-	pc.mu.Lock()
-	pc.players--
-	pc.mu.Unlock()
+	atomic.AddInt64(&pc.players, -1)
 }

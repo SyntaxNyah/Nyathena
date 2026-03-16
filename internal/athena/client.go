@@ -33,7 +33,6 @@ import (
 	"github.com/MangosArentLiterature/Athena/internal/logger"
 	"github.com/MangosArentLiterature/Athena/internal/packet"
 	"github.com/MangosArentLiterature/Athena/internal/permissions"
-	"github.com/MangosArentLiterature/Athena/internal/sliceutil"
 	"github.com/MangosArentLiterature/Athena/internal/webhook"
 )
 
@@ -847,7 +846,7 @@ func (client *Client) ChangeArea(a *area.Area) bool {
 		return false
 	}
 	if a.Lock() == area.LockLocked &&
-		!sliceutil.ContainsInt(a.Invited(), client.Uid()) &&
+		!a.HasInvited(client.Uid()) &&
 		!permissions.HasPermission(client.Perms(), permissions.PermissionField["BYPASS_LOCK"]) {
 		return false
 	}
@@ -895,7 +894,7 @@ func (client *Client) CanSpeakIC() bool {
 	switch {
 	case client.CharID() == -1:
 		return false
-	case client.Area().Lock() == area.LockSpectatable && !sliceutil.ContainsInt(client.area.Invited(), client.Uid()) &&
+	case client.Area().Lock() == area.LockSpectatable && !client.area.HasInvited(client.Uid()) &&
 		!permissions.HasPermission(client.Perms(), permissions.PermissionField["BYPASS_LOCK"]):
 		return false
 	case client.Area().SpectateMode() && !client.Area().HasCM(client.Uid()) && !client.Area().HasSpectateInvited(client.Uid()) &&
@@ -932,7 +931,7 @@ func (client *Client) CanChangeMusic() bool {
 		return false
 	case client.Area().LockMusic() && !client.HasCMPermission():
 		return false
-	case client.Area().Lock() == area.LockSpectatable && !sliceutil.ContainsInt(client.area.Invited(), client.Uid()) &&
+	case client.Area().Lock() == area.LockSpectatable && !client.area.HasInvited(client.Uid()) &&
 		!permissions.HasPermission(client.Perms(), permissions.PermissionField["BYPASS_LOCK"]):
 		return false
 	case client.Muted() == MusicMuted || client.Muted() == ICMuted || client.Muted() == ICOOCMuted:
@@ -946,7 +945,7 @@ func (client *Client) CanJud() bool {
 	switch {
 	case client.CharID() == -1:
 		return false
-	case client.Area().Lock() == area.LockSpectatable && !sliceutil.ContainsInt(client.area.Invited(), client.Uid()) &&
+	case client.Area().Lock() == area.LockSpectatable && !client.area.HasInvited(client.Uid()) &&
 		!permissions.HasPermission(client.Perms(), permissions.PermissionField["BYPASS_LOCK"]):
 		return false
 	case client.Muted() == JudMuted || client.Muted() == ICMuted || client.Muted() == ICOOCMuted:

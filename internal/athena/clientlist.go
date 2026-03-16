@@ -19,14 +19,18 @@ package athena
 import "sync"
 
 type ClientList struct {
-	list map[*Client]struct{}
-	mu   sync.RWMutex
+	list       map[*Client]struct{}
+	uidIndex   map[int]*Client
+	ipidCounts map[string]int
+	mu         sync.RWMutex
 }
 
 // AddClient adds a client to the list.
 func (cl *ClientList) AddClient(c *Client) {
 	cl.mu.Lock()
 	cl.list[c] = struct{}{}
+	cl.uidIndex[c.Uid()] = c
+	cl.ipidCounts[c.Ipid()]++
 	cl.mu.Unlock()
 }
 
@@ -34,6 +38,12 @@ func (cl *ClientList) AddClient(c *Client) {
 func (cl *ClientList) RemoveClient(c *Client) {
 	cl.mu.Lock()
 	delete(cl.list, c)
+	delete(cl.uidIndex, c.Uid())
+	if n := cl.ipidCounts[c.Ipid()]; n <= 1 {
+		delete(cl.ipidCounts, c.Ipid())
+	} else {
+		cl.ipidCounts[c.Ipid()] = n - 1
+	}
 	cl.mu.Unlock()
 }
 
@@ -67,26 +77,19 @@ func (cl *ClientList) GetAllClients() map[*Client]struct{} {
 }
 
 // GetClientByUID returns a client by their UID, or nil if not found.
+// O(1) lookup via the UID index map.
 func (cl *ClientList) GetClientByUID(uid int) *Client {
 	cl.mu.RLock()
-	defer cl.mu.RUnlock()
-	for client := range cl.list {
-		if client.Uid() == uid {
-			return client
-		}
-	}
-	return nil
+	c := cl.uidIndex[uid]
+	cl.mu.RUnlock()
+	return c
 }
 
 // CountByIPID returns the number of connected clients with the given IPID.
+// O(1) lookup via the IPID count map.
 func (cl *ClientList) CountByIPID(ipid string) int {
 	cl.mu.RLock()
-	n := 0
-	for c := range cl.list {
-		if c.Ipid() == ipid {
-			n++
-		}
-	}
+	n := cl.ipidCounts[ipid]
 	cl.mu.RUnlock()
 	return n
 }
@@ -96,7 +99,7 @@ func (cl *ClientList) CountByIPID(ipid string) int {
 // for the iteration itself so callers may safely invoke client methods after.
 func (cl *ClientList) GetByIPID(ipid string) []*Client {
 	cl.mu.RLock()
-	var result []*Client
+	result := make([]*Client, 0, cl.ipidCounts[ipid])
 	for c := range cl.list {
 		if c.Ipid() == ipid {
 			result = append(result, c)
