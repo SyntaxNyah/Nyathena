@@ -168,7 +168,7 @@ func DefaultConfig() *Config {
 			AutoModEnabled:             false,
 			AutoModWordlist:            "banned_words.txt",
 			AutoModAction:              "ban",
-			RandomSongCooldown:         5,
+			RandomSongCooldown:         10,
 			BotBanPlaytimeThreshold:    120,
 			EnableCasino:               false,
 			RegisterCaptcha:            true,
