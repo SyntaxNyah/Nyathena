@@ -206,7 +206,6 @@ type MafiaPlayer struct {
 	Client       *Client
 	Role         RoleID
 	Alive        bool
-	Doused       bool   // for Arsonist tracking
 	NightAction  string // submitted night action primary target
 	NightAction2 string // secondary target (Witch only)
 	VoteTarget   string // OOCName of vote target during day
@@ -246,11 +245,8 @@ type MafiaGame struct {
 	// Lawyer's assigned client name
 	LawyerClientName string
 
-	// Arsonist: track doused player names
-	DousedNames map[string]bool
-
-	// Bodyguard: bodyguard name → protected player name
-	BodyguardProtects map[string]string
+	// Arsonist: track doused players (pointer-keyed for O(1) lookup without string hashing)
+	DousedNames map[*MafiaPlayer]bool
 
 	// Sheriff: whether the shot has been used
 	SheriffUsed bool
@@ -283,10 +279,9 @@ func getMafiaGame(a *area.Area) *MafiaGame {
 // newMafiaGame creates a fresh MafiaGame for the area and stores it.
 func newMafiaGame(a *area.Area) *MafiaGame {
 	g := &MafiaGame{
-		Area:              a,
-		Phase:             MafiaPhaseLobby,
-		DousedNames:       make(map[string]bool),
-		BodyguardProtects: make(map[string]string),
+		Area:        a,
+		Phase:       MafiaPhaseLobby,
+		DousedNames: make(map[*MafiaPlayer]bool),
 	}
 	mafiaStates.Store(a, g)
 	return g
@@ -311,9 +306,9 @@ func (g *MafiaGame) addToGraveyard(p *MafiaPlayer, cause string) {
 // deathAnnounce builds the public death line (includes last will if set).
 func deathAnnounce(name, lastWill string) string {
 	if lastWill != "" {
-		return fmt.Sprintf("💀 %v was found dead!\n📜 Last Will of %v: %v", name, name, lastWill)
+		return "💀 " + name + " was found dead!\n📜 Last Will of " + name + ": " + lastWill
 	}
-	return fmt.Sprintf("💀 %v was found dead!", name)
+	return "💀 " + name + " was found dead!"
 }
 
 // ============================================================
@@ -339,32 +334,10 @@ func (g *MafiaGame) findPlayerByClient(c *Client) *MafiaPlayer {
 	return nil
 }
 
-func (g *MafiaGame) alivePlayers() []*MafiaPlayer {
-	var alive []*MafiaPlayer
+func (g *MafiaGame) aliveCount() int {
+	n := 0
 	for _, p := range g.Players {
 		if p.Alive {
-			alive = append(alive, p)
-		}
-	}
-	return alive
-}
-
-func (g *MafiaGame) aliveCount() int { return len(g.alivePlayers()) }
-
-func (g *MafiaGame) aliveCountByTeam(team string) int {
-	n := 0
-	for _, p := range g.Players {
-		if p.Alive && roleInfoMap[p.Role].Team == team {
-			n++
-		}
-	}
-	return n
-}
-
-func (g *MafiaGame) aliveCountByRole(r RoleID) int {
-	n := 0
-	for _, p := range g.Players {
-		if p.Alive && p.Role == r {
 			n++
 		}
 	}
@@ -452,7 +425,6 @@ func (g *MafiaGame) assignRoles() {
 	for i, p := range g.Players {
 		p.Role = pool[i]
 		p.Alive = true
-		p.Doused = false
 		p.NightAction = ""
 		p.VoteTarget = ""
 	}
@@ -497,78 +469,64 @@ func (g *MafiaGame) assignRoles() {
 // Win condition detection (call with g.mu held)
 // ============================================================
 
-// checkWin evaluates win conditions.
+// checkWin evaluates win conditions in a single pass over all players.
 // Returns ("", false) if the game continues, or (description, true) when a faction wins.
 func (g *MafiaGame) checkWin() (string, bool) {
-	alive := g.alivePlayers()
-	if len(alive) == 0 {
-		return "Nobody — everyone is dead!", true
-	}
+	var mafiaAlive, skAlive, arsonistAlive, townAlive, total int
+	var mafiaNames []string
+	var skName, arsonistName string
 
-	// Count by team/role
-	mafiaAlive := g.aliveCountByTeam("Mafia")
-	skAlive := g.aliveCountByRole(RoleSerialKiller)
-	arsonistAlive := g.aliveCountByRole(RoleArsonist)
-
-	// Count evil threats: Mafia (includes Shapeshifter via Team="Mafia"), Serial Killer, Arsonist.
-	threats := mafiaAlive + skAlive + arsonistAlive
-
-	// Count town-aligned
-	townAlive := 0
-	for _, p := range alive {
-		if roleInfoMap[p.Role].Alignment == "Good" {
+	for _, p := range g.Players {
+		if !p.Alive {
+			continue
+		}
+		total++
+		info := roleInfoMap[p.Role]
+		if info.Team == "Mafia" {
+			mafiaAlive++
+			mafiaNames = append(mafiaNames, p.Name())
+		}
+		switch p.Role {
+		case RoleSerialKiller:
+			skAlive++
+			skName = p.Name()
+		case RoleArsonist:
+			arsonistAlive++
+			arsonistName = p.Name()
+		}
+		if info.Alignment == "Good" {
 			townAlive++
 		}
 	}
 
-	// Town win: all threats gone
+	if total == 0 {
+		return "Nobody — everyone is dead!", true
+	}
+
+	threats := mafiaAlive + skAlive + arsonistAlive
+
+	// Town win: all threats eliminated.
 	if threats == 0 {
 		return "Town wins! All threats have been eliminated.", true
 	}
 
-	// Mafia win: equal or outnumber town
+	// Mafia win: equal or outnumber town-aligned players.
 	if mafiaAlive > 0 && mafiaAlive >= townAlive {
-		names := make([]string, 0)
-		for _, p := range alive {
-			if roleInfoMap[p.Role].Team == "Mafia" {
-				names = append(names, p.Name())
-			}
-		}
-		return fmt.Sprintf("Mafia wins! (%v)", strings.Join(names, ", ")), true
+		return "Mafia wins! (" + strings.Join(mafiaNames, ", ") + ")", true
 	}
 
-	// Serial Killer solo win: only SK (+ neutral bystanders) alive
-	if skAlive > 0 {
-		nonNeutral := 0
-		for _, p := range alive {
-			if p.Role != RoleSerialKiller && roleInfoMap[p.Role].Alignment != "Neutral" {
-				nonNeutral++
-			}
-		}
-		if nonNeutral == 0 {
-			for _, p := range alive {
-				if p.Role == RoleSerialKiller {
-					return fmt.Sprintf("Serial Killer (%v) wins — last one standing!", p.Name()), true
-				}
-			}
-		}
+	// SK and Arsonist both have Alignment="Neutral"; when townAlive==0 && mafiaAlive==0
+	// every remaining player is Neutral — the solo chaos killer wins.
+	noTownOrMafia := townAlive == 0 && mafiaAlive == 0
+
+	// Serial Killer solo win.
+	if skAlive > 0 && noTownOrMafia {
+		return "Serial Killer (" + skName + ") wins — last one standing!", true
 	}
 
-	// Arsonist solo win: only Arsonist (+ neutral bystanders) alive
-	if arsonistAlive > 0 {
-		nonNeutral := 0
-		for _, p := range alive {
-			if p.Role != RoleArsonist && roleInfoMap[p.Role].Alignment != "Neutral" {
-				nonNeutral++
-			}
-		}
-		if nonNeutral == 0 {
-			for _, p := range alive {
-				if p.Role == RoleArsonist {
-					return fmt.Sprintf("Arsonist (%v) wins — reduced everything to ashes!", p.Name()), true
-				}
-			}
-		}
+	// Arsonist solo win.
+	if arsonistAlive > 0 && noTownOrMafia {
+		return "Arsonist (" + arsonistName + ") wins — reduced everything to ashes!", true
 	}
 
 	return "", false
@@ -593,7 +551,6 @@ func (g *MafiaGame) startDay(dayNum int) {
 		p.VoteTarget = ""
 	}
 	g.MafiaKillTarget = ""
-	g.BodyguardProtects = make(map[string]string)
 	phaseSecs := g.PhaseSecs
 
 	// Guilty Vigilante dies of grief this morning
@@ -642,48 +599,56 @@ func (g *MafiaGame) startNight() {
 		return
 	}
 	g.Phase = MafiaPhaseNight
+	phaseSecs := g.PhaseSecs
+
+	// Single pass: clear night actions and collect role-specific prompts.
+	type rolePrompt struct {
+		p   *MafiaPlayer
+		msg string
+	}
+	prompts := make([]rolePrompt, 0, len(g.Players))
 	for _, p := range g.Players {
 		p.NightAction = ""
 		p.NightAction2 = ""
+		if !p.Alive {
+			continue
+		}
+		var msg string
+		switch p.Role {
+		case RoleMafia, RoleShapeshifter:
+			msg = "Night: /mafia act <target> — choose the Mafia kill target. Coordinate with your team!"
+		case RoleDetective:
+			msg = "Night: /mafia act <target> — investigate a player's alignment."
+		case RoleDoctor:
+			msg = "Night: /mafia act <target> — protect a player from being killed tonight."
+		case RoleBodyguard:
+			msg = "Night: /mafia act <target> — guard someone. If attacked, you and the attacker both die!"
+		case RoleVigilante:
+			if !p.VigilanteUsed {
+				msg = "Night: /mafia act <target> — execute a player. ⚠️ If they are Town-aligned, YOU die of guilt tomorrow morning!"
+			} else {
+				msg = "You have already used your Vigilante shot."
+			}
+		case RoleEscort:
+			msg = "Night: /mafia act <target> — roleblock someone, cancelling their night action."
+		case RoleArsonist:
+			msg = "Night: /mafia act douse <target> to pour gasoline, OR /mafia act ignite to burn all doused targets."
+		case RoleWitch:
+			msg = "Night: /mafia act <player> <newtarget> — redirect that player's action to a new target."
+		case RoleSerialKiller:
+			msg = "Night: /mafia act <target> — silently eliminate a player."
+		}
+		if msg != "" {
+			prompts = append(prompts, rolePrompt{p, msg})
+		}
 	}
-	phaseSecs := g.PhaseSecs
 	g.mu.Unlock()
 
 	g.broadcastToGame("🌙 Night falls… Submit your actions privately using /mafia act <target>.")
 	g.broadcastToGame("Arsonist: /mafia act douse <target> OR /mafia act ignite | Witch: /mafia act <player> <newtarget>")
-
-	// Role-specific private prompts
-	g.mu.Lock()
-	for _, p := range g.Players {
-		if !p.Alive {
-			continue
-		}
-		switch p.Role {
-		case RoleMafia, RoleShapeshifter:
-			g.privateMsg(p, "Night: /mafia act <target> — choose the Mafia kill target. Coordinate with your team!")
-		case RoleDetective:
-			g.privateMsg(p, "Night: /mafia act <target> — investigate a player's alignment.")
-		case RoleDoctor:
-			g.privateMsg(p, "Night: /mafia act <target> — protect a player from being killed tonight.")
-		case RoleBodyguard:
-			g.privateMsg(p, "Night: /mafia act <target> — guard someone. If attacked, you and the attacker both die!")
-		case RoleVigilante:
-			if !p.VigilanteUsed {
-				g.privateMsg(p, "Night: /mafia act <target> — execute a player. ⚠️ If they are Town-aligned, YOU die of guilt tomorrow morning!")
-			} else {
-				g.privateMsg(p, "You have already used your Vigilante shot.")
-			}
-		case RoleEscort:
-			g.privateMsg(p, "Night: /mafia act <target> — roleblock someone, cancelling their night action.")
-		case RoleArsonist:
-			g.privateMsg(p, "Night: /mafia act douse <target> to pour gasoline, OR /mafia act ignite to burn all doused targets.")
-		case RoleWitch:
-			g.privateMsg(p, "Night: /mafia act <player> <newtarget> — redirect that player's action to a new target.")
-		case RoleSerialKiller:
-			g.privateMsg(p, "Night: /mafia act <target> — silently eliminate a player.")
-		}
+	for _, pr := range prompts {
+		g.privateMsg(pr.p, pr.msg)
 	}
-	g.mu.Unlock()
 
 	if phaseSecs > 0 {
 		g.schedulePhaseEnd(time.Duration(phaseSecs)*time.Second, func() {
@@ -723,6 +688,12 @@ func (g *MafiaGame) resolveDay() {
 		return
 	}
 
+	// Build lowercase name → player map for O(1) lynchTarget lookup.
+	nameMap := make(map[string]*MafiaPlayer, len(g.Players))
+	for _, p := range g.Players {
+		nameMap[strings.ToLower(p.Name())] = p
+	}
+
 	// Tally votes accounting for Mayor double-vote
 	tally := make(map[string]int)
 	for _, p := range g.Players {
@@ -746,14 +717,11 @@ func (g *MafiaGame) resolveDay() {
 		}
 	}
 
-	// Find the actual player for the winning vote key
+	// O(1) lookup instead of linear scan.
 	var lynchTarget *MafiaPlayer
 	if lynchKey != "" && maxVotes >= majority {
-		for _, p := range g.Players {
-			if p.Alive && strings.ToLower(p.Name()) == lynchKey {
-				lynchTarget = p
-				break
-			}
+		if candidate := nameMap[lynchKey]; candidate != nil && candidate.Alive {
+			lynchTarget = candidate
 		}
 	}
 	g.mu.Unlock()
@@ -810,71 +778,64 @@ func (g *MafiaGame) resolveNight() {
 	players := make([]*MafiaPlayer, len(g.Players))
 	copy(players, g.Players)
 
-	// --- Witch redirect map: original target name (lower) → new target name (lower) ---
+	// Build lowercase name → player map once for O(1) lookups throughout.
+	nameMap := make(map[string]*MafiaPlayer, len(players))
+	for _, p := range players {
+		nameMap[strings.ToLower(p.Name())] = p
+	}
+
+	// --- Witch redirect map: original target (lower) → new target (lower) ---
 	redirect := make(map[string]string)
 	for _, p := range players {
-		if !p.Alive || p.Role != RoleWitch {
+		if !p.Alive || p.Role != RoleWitch || p.NightAction == "" || p.NightAction2 == "" {
 			continue
 		}
-		if p.NightAction != "" && p.NightAction2 != "" {
-			redirect[strings.ToLower(p.NightAction)] = strings.ToLower(p.NightAction2)
-		}
+		redirect[strings.ToLower(p.NightAction)] = strings.ToLower(p.NightAction2)
 	}
 
-	applyRedirect := func(name string) string {
-		lower := strings.ToLower(name)
+	// resolveTarget applies witch redirect and returns the alive target, or nil.
+	// O(1) per call via nameMap.
+	resolveTarget := func(rawName string) *MafiaPlayer {
+		lower := strings.ToLower(rawName)
 		if newT, ok := redirect[lower]; ok {
-			return newT
-		}
-		return lower
-	}
-
-	findAlive := func(name string) *MafiaPlayer {
-		lower := strings.ToLower(name)
-		for _, p := range players {
-			if p.Alive && strings.ToLower(p.Name()) == lower {
+			if p := nameMap[newT]; p != nil && p.Alive {
 				return p
 			}
+		}
+		if p := nameMap[lower]; p != nil && p.Alive {
+			return p
 		}
 		return nil
 	}
 
-	// --- Escort roleblocks (applied before defensive/offensive actions) ---
-	roleblocked := make(map[string]bool) // lower player name → roleblocked
+	// --- Escort roleblocks (pointer-keyed: no per-check string allocation) ---
+	roleblocked := make(map[*MafiaPlayer]bool)
 	for _, p := range players {
 		if !p.Alive || p.Role != RoleEscort || p.NightAction == "" {
 			continue
 		}
-		finalName := applyRedirect(p.NightAction)
-		t := findAlive(finalName)
-		if t == nil {
-			t = findAlive(p.NightAction)
-		}
-		if t != nil {
-			roleblocked[strings.ToLower(t.Name())] = true
+		if t := resolveTarget(p.NightAction); t != nil {
+			roleblocked[t] = true
 			g.privateMsg(p, fmt.Sprintf("You kept %v busy all night — their action was blocked!", t.Name()))
 		}
 	}
 
-	// --- Collect protective actions (skip if roleblocked) ---
-	// doctorProtects: lowercase player name → true
-	doctorProtects := make(map[string]bool)
-	// bgProtects: lowercase protected name → bodyguard player
-	bgProtects := make(map[string]*MafiaPlayer)
+	// --- Collect protective actions (pointer-keyed for O(1) membership checks) ---
+	doctorProtects := make(map[*MafiaPlayer]bool)
+	bgProtects := make(map[*MafiaPlayer]*MafiaPlayer) // protected → bodyguard
 
 	for _, p := range players {
-		if !p.Alive || roleblocked[strings.ToLower(p.Name())] {
+		if !p.Alive || roleblocked[p] || p.NightAction == "" {
 			continue
 		}
-		target := strings.ToLower(p.NightAction)
 		switch p.Role {
 		case RoleDoctor:
-			if target != "" {
-				doctorProtects[target] = true
+			if t := resolveTarget(p.NightAction); t != nil {
+				doctorProtects[t] = true
 			}
 		case RoleBodyguard:
-			if target != "" {
-				bgProtects[target] = p
+			if t := resolveTarget(p.NightAction); t != nil {
+				bgProtects[t] = p
 			}
 		}
 	}
@@ -902,29 +863,23 @@ func (g *MafiaGame) resolveNight() {
 		}
 	}
 	if mafiaTarget != "" {
-		finalName := applyRedirect(mafiaTarget)
-		t := findAlive(finalName)
-		if t == nil {
-			t = findAlive(mafiaTarget)
-		}
-		if t != nil {
-			tLower := strings.ToLower(t.Name())
-			if doctorProtects[tLower] {
+		if t := resolveTarget(mafiaTarget); t != nil {
+			if doctorProtects[t] {
 				msgs = append(msgs, "🏥 Someone was healed last night and survived!")
-			} else if bg, ok := bgProtects[tLower]; ok && bg.Alive {
+			} else if bg, ok := bgProtects[t]; ok && bg.Alive {
 				// Bodyguard intercepts; both bodyguard and an attacker die
 				bg.Alive = false
 				g.addToGraveyard(bg, "Killed protecting (Bodyguard)")
-				msgs = append(msgs, deathAnnounce(bg.Name(), bg.LastWill))
-				msgs[len(msgs)-1] = "🛡️  " + bg.Name() + " died protecting someone last night!\n" + msgs[len(msgs)-1]
+				msgs = append(msgs, "🛡️  "+bg.Name()+" died protecting someone last night!\n"+deathAnnounce(bg.Name(), bg.LastWill))
 				for _, mp := range players {
 					if mp.Alive && roleInfoMap[mp.Role].Team == "Mafia" {
 						mp.Alive = false
 						g.addToGraveyard(mp, "Killed by Bodyguard")
-						msgs = append(msgs, fmt.Sprintf("⚔️  %v was killed by the Bodyguard!", mp.Name()))
+						entry := "⚔️  " + mp.Name() + " was killed by the Bodyguard!"
 						if mp.LastWill != "" {
-							msgs[len(msgs)-1] += "\n📜 Last Will of " + mp.Name() + ": " + mp.LastWill
+							entry += "\n📜 Last Will of " + mp.Name() + ": " + mp.LastWill
 						}
+						msgs = append(msgs, entry)
 						break
 					}
 				}
@@ -939,18 +894,12 @@ func (g *MafiaGame) resolveNight() {
 		if !p.Alive || p.Role != RoleSerialKiller || p.NightAction == "" {
 			continue
 		}
-		if roleblocked[strings.ToLower(p.Name())] {
+		if roleblocked[p] {
 			g.privateMsg(p, "You were kept busy last night — your action was blocked!")
 			continue
 		}
-		finalName := applyRedirect(p.NightAction)
-		t := findAlive(finalName)
-		if t == nil {
-			t = findAlive(p.NightAction)
-		}
-		if t != nil {
-			tLower := strings.ToLower(t.Name())
-			if doctorProtects[tLower] {
+		if t := resolveTarget(p.NightAction); t != nil {
+			if doctorProtects[t] {
 				msgs = append(msgs, "🏥 Someone survived an attack last night!")
 			} else {
 				kills = append(kills, pendingKill{t, "Serial Killer", p})
@@ -963,35 +912,29 @@ func (g *MafiaGame) resolveNight() {
 		if !p.Alive || p.Role != RoleArsonist || p.NightAction == "" {
 			continue
 		}
-		if roleblocked[strings.ToLower(p.Name())] {
+		if roleblocked[p] {
 			g.privateMsg(p, "You were kept busy last night — your action was blocked!")
 			continue
 		}
-		action := p.NightAction
-		actionLower := strings.ToLower(action)
+		actionLower := strings.ToLower(p.NightAction)
 		if actionLower == "ignite" {
 			var ignited []string
 			for _, dp := range players {
-				if dp.Alive && g.DousedNames[strings.ToLower(dp.Name())] {
+				if dp.Alive && g.DousedNames[dp] {
 					kills = append(kills, pendingKill{dp, "Arsonist", p})
 					ignited = append(ignited, dp.Name())
 				}
 			}
 			if len(ignited) > 0 {
-				msgs = append(msgs, fmt.Sprintf("🔥 The Arsonist ignites! %v go up in flames!", strings.Join(ignited, ", ")))
-				g.DousedNames = make(map[string]bool)
+				msgs = append(msgs, "🔥 The Arsonist ignites! "+strings.Join(ignited, ", ")+" go up in flames!")
+				g.DousedNames = make(map[*MafiaPlayer]bool)
 			} else {
 				msgs = append(msgs, "🔥 The Arsonist tried to ignite but nobody was doused!")
 			}
 		} else if strings.HasPrefix(actionLower, "douse ") {
-			targetName := action[6:]
-			finalName := applyRedirect(targetName)
-			t := findAlive(finalName)
-			if t == nil {
-				t = findAlive(targetName)
-			}
-			if t != nil {
-				g.DousedNames[strings.ToLower(t.Name())] = true
+			targetName := p.NightAction[6:]
+			if t := resolveTarget(targetName); t != nil {
+				g.DousedNames[t] = true
 				g.privateMsg(p, fmt.Sprintf("You doused %v. Use /mafia act ignite when ready!", t.Name()))
 			}
 		}
@@ -1002,18 +945,12 @@ func (g *MafiaGame) resolveNight() {
 		if !p.Alive || p.Role != RoleVigilante || p.NightAction == "" || p.VigilanteUsed {
 			continue
 		}
-		if roleblocked[strings.ToLower(p.Name())] {
+		if roleblocked[p] {
 			g.privateMsg(p, "You were kept busy last night — your action was blocked!")
 			continue
 		}
-		finalName := applyRedirect(p.NightAction)
-		t := findAlive(finalName)
-		if t == nil {
-			t = findAlive(p.NightAction)
-		}
-		if t != nil {
-			tLower := strings.ToLower(t.Name())
-			if doctorProtects[tLower] {
+		if t := resolveTarget(p.NightAction); t != nil {
+			if doctorProtects[t] {
 				msgs = append(msgs, "🏥 Someone survived a Vigilante attack thanks to a Doctor!")
 			} else {
 				kills = append(kills, pendingKill{t, "Vigilante", p})
@@ -1021,14 +958,10 @@ func (g *MafiaGame) resolveNight() {
 		}
 	}
 
-	// --- Apply kills (deduplicated, SK immunity, guilt tracking) ---
-	alreadyKilled := make(map[string]bool)
+	// --- Apply kills (pointer-keyed dedup; no string allocations) ---
+	alreadyKilled := make(map[*MafiaPlayer]bool)
 	for _, k := range kills {
-		if !k.target.Alive {
-			continue
-		}
-		kLower := strings.ToLower(k.target.Name())
-		if alreadyKilled[kLower] {
+		if !k.target.Alive || alreadyKilled[k.target] {
 			continue
 		}
 		// Serial Killer is immune to the first Mafia kill attempt
@@ -1038,7 +971,7 @@ func (g *MafiaGame) resolveNight() {
 			continue
 		}
 		k.target.Alive = false
-		alreadyKilled[kLower] = true
+		alreadyKilled[k.target] = true
 		g.addToGraveyard(k.target, "Killed at night ("+k.by+")")
 		msgs = append(msgs, deathAnnounce(k.target.Name(), k.target.LastWill))
 
@@ -1056,29 +989,22 @@ func (g *MafiaGame) resolveNight() {
 		if !p.Alive || p.Role != RoleDetective || p.NightAction == "" {
 			continue
 		}
-		if roleblocked[strings.ToLower(p.Name())] {
+		if roleblocked[p] {
 			g.privateMsg(p, "You were kept busy last night — your investigation was blocked!")
 			continue
 		}
-		finalName := applyRedirect(p.NightAction)
-		t := findAlive(finalName)
-		if t == nil {
-			// May have been killed this night; search all
-			tName := strings.ToLower(finalName)
-			for _, pp := range players {
-				if strings.ToLower(pp.Name()) == tName {
-					t = pp
-					break
-				}
-			}
+		// Apply redirect for the Detective's target, then look up (may be dead this night).
+		lowerAction := strings.ToLower(p.NightAction)
+		if newT, ok := redirect[lowerAction]; ok {
+			lowerAction = newT
 		}
-		if t != nil {
+		if t := nameMap[lowerAction]; t != nil {
 			alignment := roleInfoMap[t.Role].Alignment
 			// Shapeshifter and Godfather both appear Town to Detective
 			if t.Role == RoleShapeshifter || t.Role == RoleGodfather {
 				alignment = "Good"
 			}
-			g.privateMsg(p, fmt.Sprintf("🔍 Investigation: %v is %v-aligned.", t.Name(), alignment))
+			g.privateMsg(p, "🔍 Investigation: "+t.Name()+" is "+alignment+"-aligned.")
 		}
 	}
 
@@ -1118,8 +1044,9 @@ func (g *MafiaGame) endGame(reason string) {
 	}
 
 	var sb strings.Builder
+	sb.Grow(128 + len(reason) + len(g.Players)*80)
 	sb.WriteString("\n🎭 ── GAME OVER ──\n")
-	sb.WriteString(fmt.Sprintf("Result: %v\n\n", reason))
+	fmt.Fprintf(&sb, "Result: %v\n\n", reason)
 
 	// Announce Survivor wins (any Survivor still alive wins alongside the main winner)
 	var survivors []string
@@ -1129,7 +1056,7 @@ func (g *MafiaGame) endGame(reason string) {
 		}
 	}
 	if len(survivors) > 0 {
-		sb.WriteString(fmt.Sprintf("🛡️  Survivor(s) also win: %v\n\n", strings.Join(survivors, ", ")))
+		fmt.Fprintf(&sb, "🛡️  Survivor(s) also win: %v\n\n", strings.Join(survivors, ", "))
 	}
 
 	sb.WriteString("Role reveal:\n")
@@ -1139,11 +1066,11 @@ func (g *MafiaGame) endGame(reason string) {
 		if p.Alive {
 			status = "✅ alive"
 		}
-		sb.WriteString(fmt.Sprintf("  %v — %v (%v) [%v]", p.Name(), info.Name, info.Team, status))
+		fmt.Fprintf(&sb, "  %v — %v (%v) [%v]", p.Name(), info.Name, info.Team, status)
 		if p.LastWill != "" {
-			sb.WriteString(fmt.Sprintf(" | Will: %v", p.LastWill))
+			fmt.Fprintf(&sb, " | Will: %v", p.LastWill)
 		}
-		sb.WriteString("\n")
+		sb.WriteByte('\n')
 	}
 	a := g.Area
 	msg := sb.String()

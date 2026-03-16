@@ -257,14 +257,17 @@ func mafiaSubStatus(client *Client) {
 	defer g.mu.Unlock()
 
 	var sb strings.Builder
-	sb.WriteString(fmt.Sprintf("\n🎭 Mafia Status — %v\n", a.Name()))
-	sb.WriteString(fmt.Sprintf("Phase: %v  |  Day: %d  |  Timer: ", g.Phase.String(), g.Day))
+	sb.Grow(64 + len(g.Players)*48)
+	fmt.Fprintf(&sb, "\n🎭 Mafia Status — %v\n", a.Name())
+	sb.WriteString("Phase: ")
+	sb.WriteString(g.Phase.String())
+	fmt.Fprintf(&sb, "  |  Day: %d  |  Timer: ", g.Day)
 	if g.PhaseSecs > 0 {
-		sb.WriteString(fmt.Sprintf("%ds\n", g.PhaseSecs))
+		fmt.Fprintf(&sb, "%ds\n", g.PhaseSecs)
 	} else {
 		sb.WriteString("manual\n")
 	}
-	sb.WriteString(fmt.Sprintf("Players (%d):\n", len(g.Players)))
+	fmt.Fprintf(&sb, "Players (%d):\n", len(g.Players))
 	for _, p := range g.Players {
 		status := "✅"
 		if !p.Alive && g.Phase != MafiaPhaseLobby {
@@ -275,7 +278,7 @@ func mafiaSubStatus(client *Client) {
 		if p.Client == client || g.Phase == MafiaPhaseEnded {
 			roleName = " [" + roleInfoMap[p.Role].Name + "]"
 		}
-		sb.WriteString(fmt.Sprintf("  %v %v%v\n", status, p.Name(), roleName))
+		fmt.Fprintf(&sb, "  %v %v%v\n", status, p.Name(), roleName)
 	}
 	client.SendServerMessage(sb.String())
 }
@@ -374,16 +377,17 @@ func mafiaSubVote(client *Client, args []string) {
 	if voter.Role == RoleMayor && voter.MayorRevealed {
 		voteWeight = 2
 	}
+	targetLower := strings.ToLower(target.Name())
 	g.mu.Unlock()
 
 	voteLabel := ""
 	if voteWeight == 2 {
 		voteLabel = " (×2 Mayor vote)"
 	}
-	sendAreaServerMessage(a, fmt.Sprintf("🗳️  %v votes to lynch %v%v. (%d/%d needed)", voter.Name(), target.Name(), voteLabel, tally[strings.ToLower(target.Name())], majority))
+	sendAreaServerMessage(a, fmt.Sprintf("🗳️  %v votes to lynch %v%v. (%d/%d needed)", voter.Name(), target.Name(), voteLabel, tally[targetLower], majority))
 
 	// Auto-resolve if majority reached
-	if tally[strings.ToLower(target.Name())] >= majority {
+	if tally[targetLower] >= majority {
 		g.resolveDay()
 	}
 }
@@ -448,9 +452,10 @@ func mafiaSubTally(client *Client) {
 		return
 	}
 	var sb strings.Builder
-	sb.WriteString(fmt.Sprintf("🗳️  Vote Tally (need %d for majority):\n", majority))
+	sb.Grow(48 + len(tally)*32)
+	fmt.Fprintf(&sb, "🗳️  Vote Tally (need %d for majority):\n", majority)
 	for name, votes := range tally {
-		sb.WriteString(fmt.Sprintf("  %v — %d vote(s)\n", name, votes))
+		fmt.Fprintf(&sb, "  %v — %d vote(s)\n", name, votes)
 	}
 	client.SendServerMessage(sb.String())
 }
@@ -547,12 +552,13 @@ func mafiaSubGraveyard(client *Client) {
 		return
 	}
 	var sb strings.Builder
+	sb.Grow(32 + len(g.Graveyard)*80)
 	sb.WriteString("⚰️  Graveyard:\n")
 	for _, e := range g.Graveyard {
 		info := roleInfoMap[e.Role]
-		sb.WriteString(fmt.Sprintf("  Day %d — %v (%v, %v team) — %v\n", e.Day, e.Name, info.Name, info.Team, e.Cause))
+		fmt.Fprintf(&sb, "  Day %d — %v (%v, %v team) — %v\n", e.Day, e.Name, info.Name, info.Team, e.Cause)
 		if e.LastWill != "" {
-			sb.WriteString(fmt.Sprintf("    📜 Will: %v\n", e.LastWill))
+			fmt.Fprintf(&sb, "    📜 Will: %v\n", e.LastWill)
 		}
 	}
 	g.mu.Unlock()
