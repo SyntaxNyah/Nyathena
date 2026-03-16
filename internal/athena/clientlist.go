@@ -26,11 +26,22 @@ type ClientList struct {
 }
 
 // AddClient adds a client to the list.
+// The UID index is not populated here because clients have uid == -1 at
+// connection time; call RegisterUID once the real UID has been assigned.
 func (cl *ClientList) AddClient(c *Client) {
 	cl.mu.Lock()
 	cl.list[c] = struct{}{}
-	cl.uidIndex[c.Uid()] = c
 	cl.ipidCounts[c.Ipid()]++
+	cl.mu.Unlock()
+}
+
+// RegisterUID inserts c into the UID index.
+// Call this after the client's UID has been set via SetUid.
+func (cl *ClientList) RegisterUID(c *Client) {
+	cl.mu.Lock()
+	if uid := c.Uid(); uid != -1 {
+		cl.uidIndex[uid] = c
+	}
 	cl.mu.Unlock()
 }
 
@@ -38,7 +49,9 @@ func (cl *ClientList) AddClient(c *Client) {
 func (cl *ClientList) RemoveClient(c *Client) {
 	cl.mu.Lock()
 	delete(cl.list, c)
-	delete(cl.uidIndex, c.Uid())
+	if uid := c.Uid(); uid != -1 {
+		delete(cl.uidIndex, uid)
+	}
 	if n := cl.ipidCounts[c.Ipid()]; n <= 1 {
 		delete(cl.ipidCounts, c.Ipid())
 	} else {

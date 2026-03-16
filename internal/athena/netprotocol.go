@@ -173,6 +173,7 @@ func pktReqDone(client *Client, _ *packet.Packet) {
 		return
 	}
 	client.SetUid(uids.GetUid())
+	clients.RegisterUID(client)
 	client.SetConnectedAt(time.Now())
 	players.AddPlayer()
 	if config.Advertise {
