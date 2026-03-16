@@ -164,7 +164,9 @@ func TestForceRandomCharTargetsUID(t *testing.T) {
 	a.AddChar(2)
 
 	clients.AddClient(target)
+	clients.RegisterUID(target)
 	clients.AddClient(bystander)
+	clients.RegisterUID(bystander)
 
 	// Verify that getClientByUid finds the correct client.
 	found, err := getClientByUid(20)
@@ -221,7 +223,9 @@ func TestForceRandomCharOnlyAffectsCurrentArea(t *testing.T) {
 	otherArea.AddChar(1)
 
 	clients.AddClient(inArea)
+	clients.RegisterUID(inArea)
 	clients.AddClient(outArea)
+	clients.RegisterUID(outArea)
 
 	// Verify that getRandomFreeChar returns -1 for the client in the other area
 	// (character 1 is taken there), and returns a free character for inArea.
