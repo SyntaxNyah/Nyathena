@@ -212,7 +212,7 @@ func initCommands() {
 			minArgs:  0,
 			usage:    "Usage: /hide",
 			desc:     "Toggles hiding yourself from the player list, /players, /gas, and room player counts.",
-			reqPerms: permissions.PermissionField["KICK"],
+			reqPerms: permissions.PermissionField["ADMIN"],
 		},
 		"invite": {
 			handler:  cmdInvite,
