@@ -96,14 +96,12 @@ func cmdCasinoRoulette(client *Client, args []string, _ string) {
 		client.SendServerMessage("Invalid bet amount.")
 		return
 	}
-	ok, reason := validateBet(client, amount)
-	if !ok {
+	if ok, reason := validateBet(client, amount); !ok {
 		client.SendServerMessage(reason)
 		return
 	}
-	balAfterBet, err := db.SpendChips(client.Ipid(), amount)
-	if err != nil {
-		client.SendServerMessage("Failed to place bet: " + err.Error())
+	balAfterBet, ok := spendBet(client, amount)
+	if !ok {
 		return
 	}
 
@@ -185,6 +183,14 @@ func baccaratHandValue(hand []Card) int {
 	return total % 10
 }
 
+// baccaratDrawCard returns a random Card without allocating a full deck.
+// Baccarat draws at most 6 cards; the statistical difference of drawing
+// independently (vs sampling without replacement from a 312-card shoe) is
+// negligible for gameplay purposes.
+func baccaratDrawCard() Card {
+	return Card{Value: rand.Intn(13) + 1, Suit: CardSuit(rand.Intn(4))}
+}
+
 func cmdBaccarat(client *Client, args []string, _ string) {
 	if len(args) < 2 {
 		client.SendServerMessage("Usage: /baccarat <player|banker|tie> <amount>")
@@ -202,23 +208,19 @@ func cmdBaccarat(client *Client, args []string, _ string) {
 		client.SendServerMessage("Invalid bet amount.")
 		return
 	}
-	ok, reason := validateBet(client, amount)
-	if !ok {
+	if ok, reason := validateBet(client, amount); !ok {
 		client.SendServerMessage(reason)
 		return
 	}
-	balAfterBet, err := db.SpendChips(client.Ipid(), amount)
-	if err != nil {
-		client.SendServerMessage("Failed to place bet: " + err.Error())
+	balAfterBet, ok := spendBet(client, amount)
+	if !ok {
 		return
 	}
 
-	deck := newDeck(6)
-
 	// Initial deal: player and banker each get 2 cards.
-	pHand := []Card{deck[0], deck[2]}
-	bHand := []Card{deck[1], deck[3]}
-	deck = deck[4:]
+	// Draw cards directly instead of building a full 6-deck shoe (312 cards + shuffle).
+	pHand := []Card{baccaratDrawCard(), baccaratDrawCard()}
+	bHand := []Card{baccaratDrawCard(), baccaratDrawCard()}
 
 	pVal := baccaratHandValue(pHand)
 	bVal := baccaratHandValue(bHand)
@@ -230,8 +232,7 @@ func cmdBaccarat(client *Client, args []string, _ string) {
 		// Player draws if total 0-5.
 		var pThird *Card
 		if pVal <= 5 {
-			c := deck[0]
-			deck = deck[1:]
+			c := baccaratDrawCard()
 			pHand = append(pHand, c)
 			pThird = &c
 			pVal = baccaratHandValue(pHand)
@@ -257,7 +258,7 @@ func cmdBaccarat(client *Client, args []string, _ string) {
 			}
 		}
 		if bankerDraws {
-			c := deck[0]
+			c := baccaratDrawCard()
 			bHand = append(bHand, c)
 			bVal = baccaratHandValue(bHand)
 		}
@@ -332,22 +333,16 @@ func cmdCraps(client *Client, args []string, _ string) {
 		client.SendServerMessage("Invalid bet amount.")
 		return
 	}
-	ok, reason := validateBet(client, amount)
-	if !ok {
+	if ok, reason := validateBet(client, amount); !ok {
 		client.SendServerMessage(reason)
 		return
 	}
-	balAfterBet, err := db.SpendChips(client.Ipid(), amount)
-	if err != nil {
-		client.SendServerMessage("Failed to place bet: " + err.Error())
+	balAfterBet, ok := spendBet(client, amount)
+	if !ok {
 		return
 	}
 
-	rollDice := func() (int, int) {
-		return rand.Intn(6) + 1, rand.Intn(6) + 1
-	}
-
-	d1, d2 := rollDice()
+	d1, d2 := rand.Intn(6)+1, rand.Intn(6)+1
 	comeOut := d1 + d2
 	rolls := []string{fmt.Sprintf("%d+%d=%d", d1, d2, comeOut)}
 
@@ -363,7 +358,7 @@ func cmdCraps(client *Client, args []string, _ string) {
 		sendAreaGamblingMessage(client.Area(),
 			fmt.Sprintf("🎲 Craps: %s rolls %d+%d=%d — point is %d!", client.OOCName(), d1, d2, comeOut, point))
 		for {
-			d1, d2 = rollDice()
+			d1, d2 = rand.Intn(6)+1, rand.Intn(6)+1
 			sum := d1 + d2
 			rolls = append(rolls, fmt.Sprintf("%d+%d=%d", d1, d2, sum))
 			if sum == point {
@@ -468,13 +463,11 @@ func cmdCrash(client *Client, args []string, _ string) {
 			client.SendServerMessage("Invalid bet amount.")
 			return
 		}
-		ok, reason := validateBet(client, amount)
-		if !ok {
+		if ok, reason := validateBet(client, amount); !ok {
 			client.SendServerMessage(reason)
 			return
 		}
-		if _, err = db.SpendChips(client.Ipid(), amount); err != nil {
-			client.SendServerMessage("Failed to place bet: " + err.Error())
+		if _, ok := spendBet(client, amount); !ok {
 			return
 		}
 
@@ -540,13 +533,14 @@ func cmdCrash(client *Client, args []string, _ string) {
 		}
 
 		payout := int64(float64(state.Bet) * current * crashHouseEdge)
+		net := payout - state.Bet
 		bal, _ := db.AddChips(client.Ipid(), payout)
 		sendAreaGamblingMessage(client.Area(),
 			fmt.Sprintf("🚀 Crash: %s cashed out at %.2fx for %d chips!",
 				client.OOCName(), current, payout))
 		client.SendServerMessage(fmt.Sprintf(
-			"Cashed out at %.2fx! Payout: %d chips (crash was at %.2fx). Balance: %d",
-			current, payout, state.CrashAt, bal))
+			"Cashed out at %.2fx! Payout: %d chips (%+d net). Balance: %d",
+			current, payout, net, bal))
 
 	default:
 		client.SendServerMessage("Usage: /crash bet <amount> | /crash cashout")
@@ -620,13 +614,11 @@ func cmdMines(client *Client, args []string, _ string) {
 			client.SendServerMessage("Invalid bet amount.")
 			return
 		}
-		ok, reason := validateBet(client, bet)
-		if !ok {
+		if ok, reason := validateBet(client, bet); !ok {
 			client.SendServerMessage(reason)
 			return
 		}
-		if _, err = db.SpendChips(client.Ipid(), bet); err != nil {
-			client.SendServerMessage("Failed to place bet: " + err.Error())
+		if _, ok := spendBet(client, bet); !ok {
 			return
 		}
 
@@ -736,9 +728,10 @@ func cmdMines(client *Client, args []string, _ string) {
 // /keno — Keno
 // ============================================================
 
-// kenoPayouts maps [picks][matches] → multiplier (0 = no payout).
-// Based on a standard keno pay table scaled by number of picks.
-var kenoPayouts = map[int]map[int]int{
+// kenoPayouts[picks][matches] → multiplier (0 = no payout).
+// A package-level [11][11]int array is BSS-allocated (no heap) and O(1) lookup
+// via two array-index operations, avoiding map hashing overhead entirely.
+var kenoPayouts = [11][11]int{
 	1:  {1: 2},
 	2:  {2: 5},
 	3:  {2: 1, 3: 15},
@@ -791,18 +784,14 @@ func cmdKeno(client *Client, args []string, _ string) {
 		picked = append(picked, n)
 	}
 
-	ok, reason := validateBet(client, bet)
-	if !ok {
+	if ok, reason := validateBet(client, bet); !ok {
 		client.SendServerMessage(reason)
 		return
 	}
-	balAfterBet, err := db.SpendChips(client.Ipid(), bet)
-	if err != nil {
-		client.SendServerMessage("Failed to place bet: " + err.Error())
+	balAfterBet, ok := spendBet(client, bet)
+	if !ok {
 		return
 	}
-
-	// Draw 20 unique numbers from 1-80.
 	pool := rand.Perm(80)
 	drawn := make([]int, 20)
 	for i := 0; i < 20; i++ {
@@ -822,11 +811,7 @@ func cmdKeno(client *Client, args []string, _ string) {
 		}
 	}
 
-	payTable := kenoPayouts[len(picked)]
-	mult := 0
-	if payTable != nil {
-		mult = payTable[matches]
-	}
+	mult := kenoPayouts[len(picked)][matches]
 
 	var bal int64
 	var result string
@@ -839,18 +824,22 @@ func cmdKeno(client *Client, args []string, _ string) {
 		result = fmt.Sprintf("LOSE. -%d chips", bet)
 	}
 
-	drawnStrs := make([]string, len(drawn))
-	for i, n := range drawn {
-		drawnStrs[i] = strconv.Itoa(n)
+	// Build the output message with a strings.Builder to avoid allocating two
+	// intermediate []string slices and their per-element strconv.Itoa strings.
+	var kenoMsg strings.Builder
+	kenoMsg.Grow(200)
+	kenoMsg.WriteString("🎱 Keno | Picked:")
+	for _, n := range picked {
+		kenoMsg.WriteByte(' ')
+		kenoMsg.WriteString(strconv.Itoa(n))
 	}
-	pickedStrs := make([]string, len(picked))
-	for i, n := range picked {
-		pickedStrs[i] = strconv.Itoa(n)
+	kenoMsg.WriteString("\nDrawn:")
+	for _, n := range drawn {
+		kenoMsg.WriteByte(' ')
+		kenoMsg.WriteString(strconv.Itoa(n))
 	}
-
-	client.SendServerMessage(fmt.Sprintf(
-		"🎱 Keno | Picked: %s\nDrawn: %s\nMatches: %d/%d | %s | Balance: %d",
-		strings.Join(pickedStrs, " "), strings.Join(drawnStrs, " "), matches, len(picked), result, bal))
+	fmt.Fprintf(&kenoMsg, "\nMatches: %d/%d | %s | Balance: %d", matches, len(picked), result, bal)
+	client.SendServerMessage(kenoMsg.String())
 	sendAreaGamblingMessage(client.Area(),
 		fmt.Sprintf("🎱 Keno: %s matched %d/%d numbers — %s",
 			client.OOCName(), matches, len(picked), result))
@@ -889,14 +878,12 @@ func cmdWheel(client *Client, args []string, _ string) {
 		client.SendServerMessage("Invalid bet amount.")
 		return
 	}
-	ok, reason := validateBet(client, bet)
-	if !ok {
+	if ok, reason := validateBet(client, bet); !ok {
 		client.SendServerMessage(reason)
 		return
 	}
-	balAfterBet, err := db.SpendChips(client.Ipid(), bet)
-	if err != nil {
-		client.SendServerMessage("Failed to place bet: " + err.Error())
+	balAfterBet, ok := spendBet(client, bet)
+	if !ok {
 		return
 	}
 
@@ -2033,6 +2020,10 @@ func cmdBar(client *Client, args []string, _ string) {
 			fmt.Sprintf("🍻 %s %s", client.OOCName(), effect.areaMsg))
 	}
 
+	preDrinkBal := bal + drink.cost // balance before this drink was purchased
+	netChange := finalBal - preDrinkBal
+	netStr := fmt.Sprintf("%+d", netChange)
 	client.SendServerMessage(fmt.Sprintf(
-		"%s %s\n%s\nBalance: %d chips", drink.emoji, drink.id, effect.msg, finalBal))
+		"%s %s\nDrink cost: -%d chips.\n%s\nNet change: %s chips | Balance: %d chips",
+		drink.emoji, drink.id, drink.cost, effect.msg, netStr, finalBal))
 }

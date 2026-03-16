@@ -573,6 +573,21 @@ Configure casino settings for the current area.
 
 ---
 
+### `/grantchips <uid> <amount>` *(Admin only)*
+Grant any number of chips to an online player by their UID. There are no transfer limits or cooldowns — this command is for admin use only.
+
+```
+/grantchips 3 500
+> Granted 500 chips to Phoenix. Their new balance: 850 chips.
+```
+
+The target player also receives a notification:
+```
+> An admin granted you 500 Nyathena Chips! Your new balance: 850 chips.
+```
+
+---
+
 ## `/areainfo` Integration
 
 `/areainfo` now includes a **Casino** line showing:

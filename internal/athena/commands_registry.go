@@ -1446,6 +1446,14 @@ func initCommands() {
 			reqPerms:  permissions.PermissionField["MODIFY_AREA"],
 			casinoCmd: true,
 		},
+		"grantchips": {
+			handler:   cmdGrantChips,
+			minArgs:   2,
+			usage:     "Usage: /grantchips <uid> <amount>",
+			desc:      "Admin: Grant any amount of chips to an online player by UID.",
+			reqPerms:  permissions.PermissionField["ADMIN"],
+			casinoCmd: true,
+		},
 		"register": {
 			handler:   cmdRegister,
 			minArgs:   2,

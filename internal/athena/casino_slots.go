@@ -104,14 +104,12 @@ func slotsDoSpin(client *Client, bet int64) {
 		return
 	}
 
-	ok, reason := validateBet(client, bet)
-	if !ok {
+	if ok, reason := validateBet(client, bet); !ok {
 		client.SendServerMessage(reason)
 		return
 	}
-	balAfterBet, err := db.SpendChips(client.Ipid(), bet)
-	if err != nil {
-		client.SendServerMessage("Failed to place bet: " + err.Error())
+	balAfterBet, ok := spendBet(client, bet)
+	if !ok {
 		return
 	}
 
@@ -139,18 +137,18 @@ func slotsDoSpin(client *Client, bet int64) {
 
 		client.Area().ResetCasinoJackpotPool()
 		bal, _ = db.AddChips(client.Ipid(), payout)
-		msg = fmt.Sprintf("[ %s | %s | %s ] %s\nJACKPOT! You won the pool of %d chips! Balance: %d",
-			s1, s2, s3, desc, payout, bal)
+		msg = fmt.Sprintf("[ %s | %s | %s ] %s\nJACKPOT! You won the jackpot pool of %d chips! +%d chips net. Balance: %d",
+			s1, s2, s3, desc, pool, pool, bal)
 		sendAreaGamblingMessage(client.Area(),
-			fmt.Sprintf("🎰 JACKPOT! %s hit the jackpot for %d chips!", client.OOCName(), payout))
+			fmt.Sprintf("🎰 JACKPOT! %s hit the jackpot for %d chips!", client.OOCName(), pool))
 	} else if mult > 0 {
 		payout := int64(float64(bet) * mult)
 		cs.slotsStats.TotalPayout += payout
 		cs.mu.Unlock()
 
 		bal, _ = db.AddChips(client.Ipid(), payout)
-		msg = fmt.Sprintf("[ %s | %s | %s ] %s\nPayout: %d chips. Balance: %d",
-			s1, s2, s3, desc, payout, bal)
+		msg = fmt.Sprintf("[ %s | %s | %s ] %s\n+%d chips. Balance: %d",
+			s1, s2, s3, desc, payout-bet, bal)
 	} else {
 		// Loss: 5% of bet contributes to jackpot pool.
 		if jackpotEnabled {
