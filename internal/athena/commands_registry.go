@@ -1581,6 +1581,30 @@ func initCommands() {
 			reqPerms:  permissions.PermissionField["NONE"],
 			casinoCmd: true,
 		},
+		// ── Mafia / Werewolf social deduction minigame ──────────────────────
+		"mafia": {
+			handler:  cmdMafia,
+			minArgs:  0,
+			usage:    mafiaUsage,
+			desc:     "Social deduction minigame (Mafia/Werewolf). Type /mafia help for subcommands.",
+			reqPerms: permissions.PermissionField["NONE"],
+		},
+		"werewolf": {
+			handler:  cmdMafia,
+			minArgs:  0,
+			usage:    mafiaUsage,
+			desc:     "Alias for /mafia — social deduction minigame.",
+			reqPerms: permissions.PermissionField["NONE"],
+		},
+		// ── Lotto scratch card ───────────────────────────────────────────────
+		"lotto": {
+			handler:   cmdLotto,
+			minArgs:   2,
+			usage:     "Usage: /lotto buy <ticket_cost>",
+			desc:      "Buy an instant scratch-card lottery ticket. Three matching symbols = big win!",
+			reqPerms:  permissions.PermissionField["NONE"],
+			casinoCmd: true,
+		},
 	}
 }
 
