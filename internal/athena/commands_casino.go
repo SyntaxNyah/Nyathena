@@ -417,6 +417,10 @@ func cmdGamble(client *Client, args []string, _ string) {
 		client.SetGambleHide(true)
 		client.SendServerMessage("🔇 Gambling broadcast messages are now hidden. Use /gamble hide again to show them.")
 	}
+	// Persist the preference to the account so it is restored on next login.
+	if client.Authenticated() {
+		db.SetGambleHide(client.ModName(), client.GambleHide()) //nolint:errcheck
+	}
 }
 
 // ── /casinoset ────────────────────────────────────────────────────────────────
