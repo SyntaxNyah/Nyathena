@@ -1057,7 +1057,7 @@ func mafiaSubReveal(client *Client) {
 		if !p.Alive {
 			status = "💀 dead"
 		}
-		sb.WriteString(fmt.Sprintf("  %v — %v (%v) [%v]\n", p.Name(), info.Name, info.Team, status))
+		fmt.Fprintf(&sb, "  %v — %v (%v) [%v]\n", p.Name(), info.Name, info.Team, status)
 	}
 	a2 := g.Area
 	msg := sb.String()
@@ -1114,10 +1114,10 @@ func mafiaSubRoles(client *Client) {
 	}
 	for _, id := range order {
 		info := roleInfoMap[id]
-		sb.WriteString(fmt.Sprintf("── %v (%v / %v) ──\n", info.Name, info.Team, info.Alignment))
-		sb.WriteString(fmt.Sprintf("  %v\n", info.Desc))
-		sb.WriteString(fmt.Sprintf("  Win: %v\n", info.WinCond))
-		sb.WriteString(fmt.Sprintf("  Ability: %v\n\n", info.Ability))
+		fmt.Fprintf(&sb, "── %v (%v / %v) ──\n", info.Name, info.Team, info.Alignment)
+		fmt.Fprintf(&sb, "  %v\n", info.Desc)
+		fmt.Fprintf(&sb, "  Win: %v\n", info.WinCond)
+		fmt.Fprintf(&sb, "  Ability: %v\n\n", info.Ability)
 	}
 	client.SendServerMessage(sb.String())
 }
