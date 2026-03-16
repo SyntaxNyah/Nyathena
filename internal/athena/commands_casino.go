@@ -406,8 +406,8 @@ func cmdCasinoEnable(client *Client, args []string, _ string) {
 // cmdGamble handles the /gamble command.
 // Subcommand: hide — toggles whether the client receives gambling broadcast messages.
 func cmdGamble(client *Client, args []string, _ string) {
-	if len(args) == 0 || strings.ToLower(args[0]) != "hide" {
-		client.SendServerMessage("Usage: /gamble hide  — toggle gambling broadcast messages on/off.")
+	if strings.ToLower(args[0]) != "hide" {
+		client.SendServerMessage("Usage: /gamble hide — toggle gambling broadcast messages on/off.")
 		return
 	}
 	if client.GambleHide() {
