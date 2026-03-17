@@ -76,6 +76,15 @@ Subcommands:
   roles                  — List all roles with descriptions.
   help                   — Show this help.`
 
+const mafiaLobbyRules = `🎭 How to play Mafia:
+Players are secretly assigned roles from three teams — Town, Mafia, or Neutral.
+GOAL: Town must eliminate all Mafia/threats. Mafia must equal/outnumber Town.
+PHASES:
+  Day — Discuss and vote to lynch a suspect with /mafia vote <name>. Use /mafia skip to abstain. A player is lynched when they reach a simple majority of votes.
+  Night — Special roles use /mafia act <target> to submit their action privately.
+ROLES (examples): Villager (no ability), Detective (investigate alignment), Doctor (protect someone), Mafia (team kill each night), Jester (get lynched to win), and more.
+Type /mafia roles to see all roles, or /mafia help for the full command list.`
+
 // isMafiaCM returns true if the client is a CM in the area, mod, or the
 // game host (first player to create the game).
 func isMafiaCM(client *Client, g *MafiaGame) bool {
@@ -165,6 +174,7 @@ func mafiaSubCreate(client *Client) {
 	g.Players = append(g.Players, &MafiaPlayer{Client: client, Alive: false})
 	g.mu.Unlock()
 	sendAreaServerMessage(a, fmt.Sprintf("🎭 %v created a Mafia lobby! Type /mafia join to join.", client.OOCName()))
+	sendAreaServerMessage(a, mafiaLobbyRules)
 	client.SendServerMessage("You are the host. Use /mafia start when ready (min 3 players).")
 }
 
