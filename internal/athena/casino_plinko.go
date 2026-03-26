@@ -31,16 +31,23 @@ import (
 // With N rows there are N+1 possible final slots (0..N).
 const plinkoRows = 8
 
+// plinkoMaxBet is the per-drop bet ceiling for Plinko specifically.
+const plinkoMaxBet = 10_000
+
 // plinkoMultipliers maps risk level → per-slot payout multipliers.
-// Slot distribution is binomial(8, 0.5); centre slot (4) is most likely.
-// Multipliers are tuned so higher risk = bigger swing, lower house edge at centre.
+// Slot distribution is binomial(8, 0.5); centre slot (4) is the MOST LIKELY.
+// Highest multipliers are placed on the edge slots (hardest to hit), matching
+// standard plinko design — this ensures wins occur at varied multipliers rather
+// than a single centre value.
+//
+// House edge (approx): low ~5.4%, med ~4.5%, high ~26.9%
 var plinkoMultipliers = map[string][]float64{
-	// Low  : spread 0.3×–2.5×  (gentle bell curve)
-	"low": {0.3, 0.5, 1.0, 1.5, 2.5, 1.5, 1.0, 0.5, 0.3},
-	// Med  : spread 0.1×–5.0×  (moderate risk)
-	"med": {0.1, 0.3, 0.5, 1.0, 5.0, 1.0, 0.5, 0.3, 0.1},
-	// High : spread 0×–12×    (feast or famine)
-	"high": {0.0, 0.1, 0.2, 0.5, 12.0, 0.5, 0.2, 0.1, 0.0},
+	// Low  : edges 2.0×, gentle bell, centre 0.5× loss  (~5.4% house edge)
+	"low": {2.0, 1.5, 1.2, 1.0, 0.5, 1.0, 1.2, 1.5, 2.0},
+	// Med  : edges 5.0×, centre wipes bet               (~4.5% house edge)
+	"med": {5.0, 2.5, 1.5, 0.8, 0.3, 0.8, 1.5, 2.5, 5.0},
+	// High : edges 20×, centre zero — feast or famine   (~26.9% house edge)
+	"high": {20.0, 5.0, 1.0, 0.1, 0.0, 0.1, 1.0, 5.0, 20.0},
 }
 
 // plinkoRateLimit tracks recent drop timestamps per player (uid → *[]time.Time).
@@ -150,9 +157,10 @@ func cmdPlinko(client *Client, args []string, _ string) {
 		client.SendServerMessage(
 			"Drop a chip down the peg board and win based on where it lands!\n" +
 				"Usage: /plinko drop <risk> <bet>\n" +
-				"  risk: low  (0.3×–2.5×, gentle bell curve)\n" +
-				"        med  (0.1×–5.0×, moderate risk)\n" +
-				"        high (0×–12×, feast or famine)\n" +
+				"  risk: low  (0.5×–2.0×, gentle swings, edges pay best)\n" +
+				"        med  (0.3×–5.0×, moderate risk, edges pay best)\n" +
+				"        high (0×–20×, feast or famine, edges pay best)\n" +
+				fmt.Sprintf("Max bet per drop: %d chips\n", plinkoMaxBet) +
 				"Example: /plinko drop med 500",
 		)
 		return
@@ -173,6 +181,10 @@ func cmdPlinko(client *Client, args []string, _ string) {
 		bet, err := strconv.ParseInt(args[2], 10, 64)
 		if err != nil || bet <= 0 {
 			client.SendServerMessage("Invalid bet amount.")
+			return
+		}
+		if bet > plinkoMaxBet {
+			client.SendServerMessage(fmt.Sprintf("Plinko bets are capped at %d chips per drop.", plinkoMaxBet))
 			return
 		}
 
