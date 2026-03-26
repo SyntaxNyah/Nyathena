@@ -61,6 +61,7 @@ func init() {
 	sb.WriteString("  /mines start <mines> <bet> | /mines pick <n> | /mines cashout | /mines quit\n")
 	sb.WriteString("  /keno pick <numbers...> <bet>\n")
 	sb.WriteString("  /wheel spin <bet>\n")
+	sb.WriteString("  /plinko drop <low|med|high> <bet>\n")
 	sb.WriteString(fmt.Sprintf("\n🍻 THE BAR — /bar menu | /bar buy <drink>\n  %d drinks, ALL with risk & huge variance!\n", len(barMenu)))
 	sb.WriteString("  beer wine whiskey tequila vodka rum gin mojito mead sake champagne margarita\n")
 	sb.WriteString("  moonshine absinthe fireball jagerbomb longisland cosmo pina mystery poison\n")

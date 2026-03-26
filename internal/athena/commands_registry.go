@@ -1396,6 +1396,14 @@ func initCommands() {
 			reqPerms:  permissions.PermissionField["NONE"],
 			casinoCmd: true,
 		},
+		"plinko": {
+			handler:   cmdPlinko,
+			minArgs:   0,
+			usage:     "Usage: /plinko drop <low|med|high> <bet>",
+			desc:      "Drop a chip down the Plinko peg board. Risk level controls payout spread (low: 0.3x-2.5x, med: 0.1x-5x, high: 0x-12x). Requires casino to be enabled in the area.",
+			reqPerms:  permissions.PermissionField["NONE"],
+			casinoCmd: true,
+		},
 		"bar": {
 			handler:   cmdBar,
 			minArgs:   0,
