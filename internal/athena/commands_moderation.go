@@ -1158,12 +1158,20 @@ func cmdFirewall(client *Client, args []string, usage string) {
 			return
 		}
 		firewallActive.Store(true)
-		writeToAll("CT", "OOC", "🔥 VPN firewall is now ACTIVE. New connections will be screened against IPHub.", "1")
+		clients.ForEach(func(c *Client) {
+			if c.Uid() != -1 && permissions.HasPermission(c.Perms(), permissions.PermissionField["BAN"]) {
+				c.SendPacket("CT", "OOC", "🔥 VPN firewall is now ACTIVE. New connections will be screened against IPHub.", "1")
+			}
+		})
 		client.SendServerMessage("Firewall enabled. New IPs will be checked via IPHub.")
 		addToBuffer(client, "CMD", "Enabled IPHub firewall.", true)
 	case "off":
 		firewallActive.Store(false)
-		writeToAll("CT", "OOC", "🔓 VPN firewall has been DISABLED. New connections are no longer screened.", "1")
+		clients.ForEach(func(c *Client) {
+			if c.Uid() != -1 && permissions.HasPermission(c.Perms(), permissions.PermissionField["BAN"]) {
+				c.SendPacket("CT", "OOC", "🔓 VPN firewall has been DISABLED. New connections are no longer screened.", "1")
+			}
+		})
 		client.SendServerMessage("Firewall disabled.")
 		addToBuffer(client, "CMD", "Disabled IPHub firewall.", true)
 	default:
