@@ -1,0 +1,300 @@
+# Nyathena
+
+## Project Overview
+
+Nyathena is a fork of [Athena](https://github.com/MangosArentLiterature/Athena), a lightweight AO2 (Attorney Online 2) server written in Go. It extends upstream Athena with a large set of original features:
+
+- A full **Discord bot** integration (slash commands, embeds, moderation bridge)
+- A **casino system** with 10 distinct games and persistent virtual currency ("Nyathena Chips")
+- A **Mafia social-deduction minigame** playable inside any server area
+- **41 punishment commands** for moderators, with stacking, tournaments, and a coinflip challenge system
+- Persistent pairing, per-area logging, configurable rate limiting, AutoMod, IPHub VPN firewall, and more
+
+Module path (retained from upstream): `github.com/MangosArentLiterature/Athena`
+
+## Tech Stack
+
+| Dependency | Version | Purpose |
+|-----------|---------|---------|
+| `github.com/bwmarrin/discordgo` | v0.28.1 | Discord bot (Gateway, slash commands, embeds) |
+| `github.com/ecnepsnai/discord` | v1.2.1 | Discord webhook support |
+| `github.com/BurntSushi/toml` | v1.2.0 | TOML config parsing |
+| `modernc.org/sqlite` | v1.18.0 | SQLite database (no cgo required) |
+| `golang.org/x/crypto` | — | bcrypt password hashing |
+| `nhooyr.io/websocket` | v1.8.7 | WebAO WebSocket support |
+| `github.com/gorilla/websocket` | v1.4.2 | Additional WebSocket (indirect) |
+| `github.com/xhit/go-str2duration/v2` | v2.0.0 | Duration string parsing for punishment timers |
+
+**Go version requirement:** 1.19
+
+## Architecture
+
+### Entry Point
+
+`athena.go` — parses CLI flags, loads config, then starts goroutines for:
+- `athena.ListenTCP()` — AO2 TCP connections
+- `athena.StartDiscordBot()` — Discord bot
+- `athena.ListenWS()` / `athena.ListenWSS()` — WebAO plain/secure WebSocket
+- `athena.ListenInput()` — CLI stdin (unless `-nocli`)
+
+Shutdown via OS signal (`SIGINT`/`SIGTERM`) or a `FatalError` channel. Server restart supported via `syscall.Exec`.
+
+### Internal Packages
+
+| Package | Role |
+|---------|------|
+| `athena` | Core server logic, all command handlers, casino, mafia, punishments, pairing, jobs, shop, unscramble, hot potato, quick draw, giveaway, roulette, coinflip, AutoMod, IPHub |
+| `db` | SQLite wrapper; chip balances, accounts, bans |
+| `discord/bot` | Discord bot: slash commands, mod bridge, embeds, area/player listings |
+| `logger` | Multi-level structured logger (stdout + log file) |
+| `ms` | Master server advertisement |
+| `packet` | AO2 protocol packet parsing |
+| `permissions` | Role-based permission bitfield system |
+| `playercount` | Concurrent player counting |
+| `settings` | TOML config loading |
+| `sliceutil`, `uidheap`, `uidmanager`, `webhook` | Utilities |
+
+### Database
+
+SQLite at `config/athena.db`. Stores:
+- Moderator accounts (bcrypt-hashed passwords)
+- Ban records
+- Nyathena Chip balances (per IPID)
+- Player account registrations
+- Shop inventory / purchased items / active tags
+- Job cooldowns and playtime tracking
+- Unscramble win records
+
+## Build & Run
+
+```bash
+make build        # go build -v -o bin/athena athena.go
+make test         # go test -v ./...
+make all          # build + test
+make release      # goreleaser (requires goreleaser installed)
+```
+
+```bash
+./bin/athena                          # config dir: ./config
+./bin/athena -c /path/to/config       # custom config directory
+./bin/athena -nocli                   # disable stdin CLI
+./bin/athena -netdebug                # log raw network traffic
+```
+
+**First run:** after build, copy `config_sample/` to `config/`, edit config files, then launch and run `mkusr` in the CLI to create the first moderator account.
+
+## Configuration
+
+Copy `config_sample/` to `config/` before first run.
+
+### config/config.toml — [Server]
+
+| Key | Default | Description |
+|-----|---------|-------------|
+| `addr` | `""` | Listen address (blank = all interfaces) |
+| `port` | `27016` | TCP port |
+| `name` | `"Unnamed Server"` | Server name |
+| `description` | — | Server description |
+| `motd` | — | Message of the day |
+| `max_players` | `100` | Maximum connections |
+| `max_message_length` | `256` | Maximum IC/OOC message byte length |
+| `default_ban_duration` | `"3d"` | Default ban length |
+| `multiclient_limit` | `16` | Max connections per IP |
+| `asset_url` | `""` | URL for WebAO assets |
+| `webhook_url` | `""` | Discord webhook URL for modcall notifications |
+| `webhook_ping_role_id` | `""` | Discord role ID to ping on modcall |
+| `punishment_webhook_url` | `""` | Discord webhook for ban/kick embeds |
+| `enable_webao` | `false` | Enable plain WebSocket (WebAO) |
+| `webao_port` | `27017` | WebSocket port |
+| `enable_webao_secure` | `false` | Enable WSS (secure WebSocket) |
+| `webao_secure_port` | `443` | WSS port |
+| `tls_cert_path` / `tls_key_path` | `""` | TLS cert/key (leave blank for reverse proxy) |
+| `webao_allowed_origin` | `"web.aceattorneyonline.com"` | Allowed WebSocket Origin (glob supported, `*` = any) |
+| `message_rate_limit` | `20` | Max IC/OOC/music packets per window (0 = off) |
+| `message_rate_limit_window` | `10` | Window in seconds |
+| `ooc_rate_limit` / `ooc_rate_limit_window` | `4` / `1` | OOC-specific rate limit |
+| `connection_rate_limit` / `connection_rate_limit_window` | `10` / `10` | Per-IP connection rate |
+| `conn_flood_autoban` | `true` | Auto-ban IPs that flood connections |
+| `conn_flood_autoban_threshold` | `6` | Rejections before auto-ban |
+| `raw_packet_rate_limit` / `raw_packet_rate_limit_window` | `20` / `2` | Raw AO2 packet rate |
+| `new_ipid_ooc_cooldown` | `10` | Seconds new IPIDs wait before OOC |
+| `new_ipid_modcall_cooldown` | `60` | Seconds new IPIDs wait before modcall |
+| `modcall_cooldown` | `0` | Seconds between modcalls per user |
+| `automod_enabled` | `false` | Enable AutoMod banned-word enforcement |
+| `automod_wordlist` | `"banned_words.txt"` | Path to banned-words file |
+| `automod_action` | `"ban"` | AutoMod action: `ban`, `kick`, `mute`, or `torment` |
+| `iphub_api_key` | `""` | IPHub API key for VPN/proxy detection |
+| `enable_casino` | `false` | Enable casino and player account system |
+| `register_captcha` | `true` | Require captcha on `/register` |
+
+### config/config.toml — [Discord]
+
+| Key | Description |
+|-----|-------------|
+| `bot_token` | Discord bot token (blank = bot disabled) |
+| `guild_id` | Discord server ID for slash command registration |
+| `mod_role_id` | Discord role ID allowed to run moderation slash commands |
+
+### Other Config Files
+
+| File | Purpose |
+|------|---------|
+| `areas.toml` | Area definitions |
+| `roles.toml` | Moderator role permissions |
+| `characters.txt` | Allowed characters |
+| `music.txt` | Music list |
+| `backgrounds.txt` | Background list |
+| `banned_words.txt` | AutoMod word list |
+| `parrot.txt` | Parrot command word list |
+
+### Discord Bot Setup
+
+1. Create a bot at https://discord.com/developers/applications
+2. Enable the **Message Content** intent
+3. Copy the bot token into `[Discord]` → `bot_token`
+4. Set `guild_id` to your Discord server ID
+5. Optionally set `mod_role_id` to restrict moderation slash commands
+6. Invite the bot with `applications.commands` and `bot` scopes
+
+## Features Beyond Base Athena
+
+### Punishment System (41 Commands)
+
+All punishment commands require `MUTE` permission, support `-d <duration>` (max 24 h) and `-r <reason>`, accept comma-separated UIDs, and auto-expire. Multiple types stack on a single player.
+
+**Remove:** `/unpunish <uid>` (all) or `/unpunish -t <type> <uid>` (specific)
+
+#### Text Modification (14)
+`/whisper`, `/backward`, `/stutterstep`, `/elongate`, `/uppercase`, `/lowercase`, `/robotic`, `/alternating`, `/fancy`, `/uwu`, `/pirate`, `/shakespearean`, `/caveman`, `/slang`
+
+#### Visibility / Cosmetic (2)
+`/emoji`, `/invisible`
+
+#### Timing Effects (4)
+`/slowpoke`, `/fastspammer`, `/pause`, `/lag`
+
+#### Social Chaos (4)
+`/subtitles`, `/tourettes`, `/roulette`, `/spotlight`
+
+#### Text Processing (7)
+`/censor`, `/confused`, `/paranoid`, `/drunk`, `/hiccup`, `/whistle`, `/mumble`
+
+#### Complex Effects (4)
+`/spaghetti`, `/torment`, `/rng`, `/essay`
+
+#### Advanced (2)
+`/haiku`, `/autospell`
+
+#### Fun Personality (6)
+`/thesaurusoverload`, `/valleygirl`, `/babytalk`, `/thirdperson`, `/unreliablenarrator`, `/uncannyvalley`
+
+#### Punishment Stacking
+```
+/stack <type1> <type2> [...] [-d duration] [-r reason] <uid1>,<uid2>,...
+```
+
+#### Punishment Tournament Mode
+Voluntary competitive mode where participants receive 2–3 random punishments; most IC messages sent wins.
+```
+/tournament start|status|stop   # requires MUTE
+/join-tournament                # any user
+```
+
+#### Coinflip Challenge
+Area-scoped 30-second PvP challenge. Players must choose opposite sides.
+```
+/coinflip <heads|tails>
+```
+
+### Persistent Pairing
+UID-based mutual pairing surviving area/character changes. Dissolves on disconnect.
+```
+/pair <uid>
+/unpair
+```
+
+### Character Curse
+One-time forced character swap (requires KICK). Target may freely change afterwards.
+```
+/charcurse <uid> <charname>
+```
+
+### Mafia Social Deduction Minigame
+Fully featured in-server Mafia (4–20+ players) with automatic role pools, day/night phases, lynch voting, night actions, last wills, graveyard, whisper, and phase timers.
+
+**Roles — Town:** Villager, Detective, Doctor, Sheriff, Bodyguard, Vigilante, Mayor, Escort
+**Roles — Mafia:** Mafia, Shapeshifter, Godfather
+**Roles — Neutral:** Jester, Witch, Lawyer, Arsonist, Serial Killer, Survivor
+
+Key commands: `/mafia create|join|start|vote|act|tally|graveyard|whisper|will`
+
+See `MAFIA_COMMANDS.md` for the full reference.
+
+### Casino System
+
+Enabled with `enable_casino = true`. Requires player accounts (`/register`).
+
+**Virtual Currency — Nyathena Chips:** New connections start with 500 chips; max 10,000,000. Stored in SQLite.
+
+**Games:**
+
+| Command | Game |
+|---------|------|
+| `/bj` | Blackjack (6-deck, split, double, insurance; up to 6 players) |
+| `/poker` | Texas Hold'em (up to 9 players, 500-chip buy-in) |
+| `/slots` | Slots with area jackpot pool |
+| `/croulette` | European Roulette (single-zero) |
+| `/baccarat` | Baccarat (player / banker / tie) |
+| `/craps` | Craps lite (pass / don't-pass) |
+| `/crash` | Crash multiplier game |
+| `/mines` | Minesweeper-style grid (1–24 mines, 5×5) |
+| `/keno` | Keno (pick 1–10 numbers from 1–80) |
+| `/wheel` | Prize wheel (~92.5% RTP) |
+| `/bar` | Bar with 33 drinks of wildly varying variance |
+
+**Economy:** `/chips`, `/chips top`, `/chips area`, `/chips give`, `/richest`
+
+**Earning Without Gambling:**
+- Jobs with cooldowns: `/busker`, `/janitor`, `/paperboy`, `/clerk`, `/bailiffjob`
+- Unscramble events every 30 min–3 h (first correct IC answer wins 10 chips)
+
+**Shop (`/shop`):** 30 cosmetic tags (1,000–10,000,000 chips), job cooldown reduction passes, job reward bonus passes.
+
+**Staff:** `/casinoenable`, `/casinoset`, `/grantchips`
+
+See `CASINO_COMMANDS.md` for the full reference.
+
+### Per-Area Logging
+
+Daily-rotating log files per area under `logs/<AreaName>/<AreaName-YYYY-MM-DD.txt>`.
+Format: `[HH:MM:SS] | ACTION | CHARACTER | IPID | HDID | SHOWNAME | OOC_NAME | MESSAGE`
+Actions: IC, OOC, AREA, MUSIC, CMD, AUTH, MOD, JUD, EVI.
+Enabled with `enable_area_logging = true` in `[Logging]`.
+
+### AutoMod
+Word-list-based automatic enforcement. Actions: permanent ban (silent), kick, mute, or torment (random disconnects every 30–60 s).
+
+### IPHub VPN Firewall
+When `iphub_api_key` is set, moderators can run `/firewall on|off`. New IPs are checked against IPHub; VPN/proxy IPs are rejected. Known IPs are never re-checked (respects 1,000 requests/day free tier).
+
+### Other Features
+- Hot Potato area minigame
+- Quick Draw area minigame
+- Chip Giveaway system
+- Area Roulette
+- Wardrobe/character management commands
+- `/randomchar`, `/possess`
+- In-place server restart via `syscall.Exec`
+- Testimony recorder (inherited from upstream Athena)
+
+## Testing
+
+```bash
+go test -v ./...
+```
+
+Tests cover: punishment stacking, coinflip logic, rate limiting (with race detector), persistent pairing, per-area logging benchmarks, giveaway, hot potato, quick draw, and roulette. All tests pass with `-race`.
+
+## License
+
+GNU Affero General Public License v3.0 (inherited from upstream Athena).
