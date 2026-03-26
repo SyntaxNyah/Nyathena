@@ -141,6 +141,8 @@ const (
 	PunishmentThirdPerson
 	PunishmentUnreliableNarrator
 	PunishmentUncannyValley
+	// 51 Messages Punishment
+	Punishment51
 )
 
 type PunishmentState struct {
@@ -1705,6 +1707,8 @@ func (p PunishmentType) String() string {
 		return "unreliablenarrator"
 	case PunishmentUncannyValley:
 		return "uncannyvalley"
+	case Punishment51:
+		return "51"
 	default:
 		return "none"
 	}

@@ -509,6 +509,8 @@ func parsePunishmentType(s string) PunishmentType {
 		return PunishmentUnreliableNarrator
 	case "uncannyvalley":
 		return PunishmentUncannyValley
+	case "51":
+		return Punishment51
 	default:
 		return PunishmentNone
 	}
@@ -1014,6 +1016,36 @@ func cmdUnuncannyvalley(client *Client, args []string, usage string) {
 	report = strings.TrimSuffix(report, ", ")
 	client.SendServerMessage(fmt.Sprintf("Removed uncannyvalley punishment from %v clients.", count))
 	addToBuffer(client, "CMD", fmt.Sprintf("Removed uncannyvalley from %v.", report), false)
+}
+
+func cmd51(client *Client, args []string, usage string) {
+	cmdPunishment(client, args, usage, Punishment51)
+}
+
+// cmdUn51 removes the 51 punishment from user(s).
+func cmdUn51(client *Client, args []string, usage string) {
+	if len(args) == 0 {
+		client.SendServerMessage("Not enough arguments:\n" + usage)
+		return
+	}
+	toUnpunish := getUidList(strings.Split(args[0], ","))
+	var count int
+	var report string
+	for _, c := range toUnpunish {
+		if !c.HasPunishment(Punishment51) {
+			continue
+		}
+		c.RemovePunishment(Punishment51)
+		if err := db.DeleteTextPunishment(c.Ipid(), int(Punishment51)); err != nil {
+			logger.LogErrorf("Failed to remove 51 punishment for %v: %v", c.Ipid(), err)
+		}
+		c.SendServerMessage("51 punishment has been removed.")
+		count++
+		report += fmt.Sprintf("%v, ", c.Uid())
+	}
+	report = strings.TrimSuffix(report, ", ")
+	client.SendServerMessage(fmt.Sprintf("Removed 51 punishment from %v clients.", count))
+	addToBuffer(client, "CMD", fmt.Sprintf("Removed 51 from %v.", report), false)
 }
 
 // cmdTournament manages punishment tournament mode

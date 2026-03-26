@@ -1266,6 +1266,40 @@ func applyUncannyValley(text string) string {
 	return truncateText(text)
 }
 
+// ── 51 ───────────────────────────────────────────────────────────────────────
+
+var messages51 = []string{
+	"I was in a bad mood, to say the least, as it was obvious that they lied to me and had seen someone else.",
+	"I was ranting about her dishonesty, about how badly I was treated in the end, and demanding the truth.",
+	"In the end, they blocked me and never spoke to me again.",
+	"For context in that DM, I wrote 51 messages, as I'm not the kind of person who likes to write one long message like this.",
+	"Two days after she blocked me, I realized I was rather rude with my statements and had gone too far.",
+	"I really wanted to apologize, but there was no way for me to do so, so I just coped basically.",
+	"Later on, I found a new server named Paradise of Despots, so I decided to join it out of curiosity.",
+	"I found old friends from CoA there, and Twilight Sky was there too.",
+	"I decided not to bring anything regarding us two and just said hello on that server to all the people I knew there, but I was immediately banned with the reason \"On the shitlist.\"",
+	"When I asked the owner of the server, AKA Psyra, he basically said that Sky doesn't want to see me there for good.",
+	"For me, it was devastating news; I just couldn't argue that at all, I was mentally exhausted and broken.",
+	"Since that time, I decided to take a break from AO until December, as one of my friends suggested.",
+	"That's what I've been doing since September, aka when I was banned.",
+	"However, some friend of PoD notified me that Sky was spreading some information regarding our last interaction for the sake of mockery.",
+	"That's when I was informed that I apparently wrote 51 messages, and I was both sad that I allowed myself to write so much and sad that Twilight decided to spread this in order to make fun of me behind my back.",
+	"But even then, I decided to do nothing, as I was more focused on my life, and I was thinking that this would not do much harm to me.",
+	"But I was wrong.",
+	"To put it simply, Sky just decided to make fun of me based on the quantity of messages, even when I was mostly right about her snake behavior.",
+	"In the end, it's just drama that should have stayed only between me and her.",
+	"But I guess her tongue is too long.",
+	"I am more annoyed about the fact that people that I used to call \"friends\" decided to take her side and join the childish behavior, not even giving a damn about my side of the story.",
+	"I am even more annoyed that I appeared on the server only one time and never interacted with PoD at any point.",
+	"And yet they are still targeting me for whatever reason.",
+	"I'd like to not escalate this drama any further, as it's a pointless argument.",
+}
+
+// apply51 replaces the message with a random line from the 51-messages story.
+func apply51(_ string) string {
+	return messages51[rand.Intn(len(messages51))]
+}
+
 // MutateShowname applies a mild per-message display-name glitch for
 // PunishmentUncannyValley. It makes safe mutations (no true impersonation).
 func MutateShowname(name string) string {
@@ -1435,6 +1469,8 @@ func ApplyPunishmentToText(text string, pType PunishmentType) string {
 		return applyUnreliableNarrator(text)
 	case PunishmentUncannyValley:
 		return applyUncannyValley(text)
+	case Punishment51:
+		return apply51(text)
 	default:
 		return text
 	}

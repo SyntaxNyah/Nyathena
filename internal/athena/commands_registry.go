@@ -1245,6 +1245,20 @@ func initCommands() {
 			desc:     "Removes uncannyvalley punishment from user(s). Moderator only.",
 			reqPerms: permissions.PermissionField["MUTE"],
 		},
+		"51": {
+			handler:  cmd51,
+			minArgs:  1,
+			usage:    "Usage: /51 [-d duration] [-r reason] <uid1>,<uid2>...",
+			desc:     "Replaces each IC message with a random line from the 51-messages story. Moderator only.",
+			reqPerms: permissions.PermissionField["MUTE"],
+		},
+		"un51": {
+			handler:  cmdUn51,
+			minArgs:  1,
+			usage:    "Usage: /un51 <uid1>,<uid2>...",
+			desc:     "Removes 51 punishment from user(s). Moderator only.",
+			reqPerms: permissions.PermissionField["MUTE"],
+		},
 		"unpunish": {
 			handler:  cmdUnpunish,
 			minArgs:  1,
