@@ -38,8 +38,8 @@ import (
 // Documentation for AO2's network protocol can be found here:
 // https://github.com/AttorneyOnline/docs/blob/master/docs/development/network.md
 
-// commandRegex matches valid command names (e.g., /join, /join-tournament), case-insensitively.
-var commandRegex = regexp.MustCompile(`(?i)^/[a-z]+(-[a-z]+)*`)
+// commandRegex matches valid command names (e.g., /join, /join-tournament, /51), case-insensitively.
+var commandRegex = regexp.MustCompile(`(?i)^/[a-z0-9]+(-[a-z0-9]+)*`)
 
 // tstNavRegex matches testimony navigation controls (<, >, >N) in IC messages.
 // Compiled once at package init to avoid repeated allocation during testimony playback.
