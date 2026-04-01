@@ -21,7 +21,6 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/MangosArentLiterature/Athena/internal/db"
 	"github.com/MangosArentLiterature/Athena/internal/permissions"
 	"github.com/MangosArentLiterature/Athena/internal/sliceutil"
 )
@@ -32,7 +31,8 @@ type Command struct {
 	usage     string
 	desc      string
 	reqPerms  uint64
-	casinoCmd bool // when true, command is hidden/disabled if EnableCasino is false
+	casinoCmd bool   // when true, command is hidden/disabled if EnableCasino is false
+	category  string // help category (e.g. "general", "casino", "punishment")
 }
 
 var Commands map[string]Command
@@ -45,6 +45,7 @@ func initCommands() {
 			usage:    "Usage: /about",
 			desc:     "Prints Athena version information.",
 			reqPerms: permissions.PermissionField["NONE"],
+			category: "general",
 		},
 		"add": {
 			handler:  cmdAdd,
@@ -52,6 +53,7 @@ func initCommands() {
 			usage:    "Usage: /add",
 			desc:     "Inserts the next IC message from the witness into the testimony after the current statement.",
 			reqPerms: permissions.PermissionField["CM"],
+			category: "testimony",
 		},
 		"allowcms": {
 			handler:  cmdAllowCMs,
@@ -59,6 +61,7 @@ func initCommands() {
 			usage:    "Usage: /allowcms <true|false>",
 			desc:     "Toggles allowing CMs on or off.",
 			reqPerms: permissions.PermissionField["MODIFY_AREA"],
+			category: "area",
 		},
 		"allowiniswap": {
 			handler:  cmdAllowIniswap,
@@ -66,6 +69,7 @@ func initCommands() {
 			usage:    "Usage: /allowiniswap <true|false>",
 			desc:     "Toggles iniswapping on or off.",
 			reqPerms: permissions.PermissionField["MODIFY_AREA"],
+			category: "area",
 		},
 		"areainfo": {
 			handler:  cmdAreaInfo,
@@ -73,6 +77,7 @@ func initCommands() {
 			usage:    "Usage: /areainfo",
 			desc:     "Prints area settings.",
 			reqPerms: permissions.PermissionField["NONE"],
+			category: "general",
 		},
 		"ban": {
 			handler:  cmdBan,
@@ -80,6 +85,7 @@ func initCommands() {
 			usage:    "Usage: /ban -u <uid1>,<uid2>... | -i <ipid1>,<ipid2>... [-d duration] <reason>\n-i supports offline IPIDs.",
 			desc:     "Bans user(s) from the server. Use -i to ban by IPID (supports offline users).",
 			reqPerms: permissions.PermissionField["BAN"],
+			category: "moderation",
 		},
 		"bg": {
 			handler:  cmdBg,
@@ -87,6 +93,7 @@ func initCommands() {
 			usage:    "Usage: /bg <background>",
 			desc:     "Sets the area's background.",
 			reqPerms: permissions.PermissionField["CM"],
+			category: "area",
 		},
 		"bglist": {
 			handler:  cmdBgList,
@@ -94,6 +101,7 @@ func initCommands() {
 			usage:    "Usage: /bglist",
 			desc:     "Lists all available backgrounds.",
 			reqPerms: permissions.PermissionField["NONE"],
+			category: "general",
 		},
 		"charselect": {
 			handler:  cmdCharSelect,
@@ -101,6 +109,7 @@ func initCommands() {
 			usage:    "Usage: /charselect [uid1],[uid2]...",
 			desc:     "Return to character select.",
 			reqPerms: permissions.PermissionField["NONE"],
+			category: "general",
 		},
 		"charstuck": {
 			handler:  cmdCharStuck,
@@ -108,6 +117,7 @@ func initCommands() {
 			usage:    "Usage: /charstuck [-d duration] [-r reason] <uid>",
 			desc:     "Locks a player to their current character, preventing character changes.",
 			reqPerms: permissions.PermissionField["MUTE"],
+			category: "moderation",
 		},
 		"charcurse": {
 			handler:  cmdCharCurse,
@@ -115,6 +125,7 @@ func initCommands() {
 			usage:    "Usage: /charcurse <uid> <charname>",
 			desc:     "Forces a player to a specific character. The player may still change characters freely.",
 			reqPerms: permissions.PermissionField["KICK"],
+			category: "moderation",
 		},
 		"cm": {
 			handler:  cmdCM,
@@ -122,6 +133,7 @@ func initCommands() {
 			usage:    "Usage: /cm [uid1],[uid2]...",
 			desc:     "Promote to area CM.",
 			reqPerms: permissions.PermissionField["NONE"],
+			category: "area",
 		},
 		"doc": {
 			handler:  cmdDoc,
@@ -129,6 +141,7 @@ func initCommands() {
 			usage:    "Usage: /doc [-c] [doc]\n-c: Clear the doc.",
 			desc:     "Prints or sets the area's document.",
 			reqPerms: permissions.PermissionField["NONE"],
+			category: "area",
 		},
 		"delete": {
 			handler:  cmdDelete,
@@ -136,6 +149,7 @@ func initCommands() {
 			usage:    "Usage: /delete",
 			desc:     "Deletes the current testimony statement.",
 			reqPerms: permissions.PermissionField["CM"],
+			category: "testimony",
 		},
 		"dance": {
 			handler:  cmdDance,
@@ -143,6 +157,7 @@ func initCommands() {
 			usage:    "Usage: /dance",
 			desc:     "Toggles dance mode. Flips your sprite on each message you send.",
 			reqPerms: permissions.PermissionField["NONE"],
+			category: "general",
 		},
 		"editban": {
 			handler:  cmdEditBan,
@@ -150,6 +165,7 @@ func initCommands() {
 			usage:    "Usage: /editban [-d duration] [-r reason] <id1>,<id2>...",
 			desc:     "Changes the reason of ban(s).",
 			reqPerms: permissions.PermissionField["BAN"],
+			category: "moderation",
 		},
 		"erp": {
 			handler:  cmdErp,
@@ -157,6 +173,7 @@ func initCommands() {
 			usage:    "Usage: /erp",
 			desc:     "The AO ERP command. Super fun!",
 			reqPerms: permissions.PermissionField["NONE"],
+			category: "general",
 		},
 		"examine": {
 			handler:  cmdExamine,
@@ -164,6 +181,7 @@ func initCommands() {
 			usage:    "Usage: /examine",
 			desc:     "Starts cross-examination playback.",
 			reqPerms: permissions.PermissionField["NONE"],
+			category: "testimony",
 		},
 		"evimode": {
 			handler:  cmdSetEviMod,
@@ -171,6 +189,7 @@ func initCommands() {
 			usage:    "Usage: /evimode <mode>",
 			desc:     "Sets the area's evidence mode.",
 			reqPerms: permissions.PermissionField["CM"],
+			category: "area",
 		},
 		"forcebglist": {
 			handler:  cmdForceBGList,
@@ -178,6 +197,7 @@ func initCommands() {
 			usage:    "Usage: /forcebglist <true|false>",
 			desc:     "Toggles enforcing the server BG list on or off.",
 			reqPerms: permissions.PermissionField["MODIFY_AREA"],
+			category: "area",
 		},
 		"firewall": {
 			handler:  cmdFirewall,
@@ -185,6 +205,7 @@ func initCommands() {
 			usage:    "Usage: /firewall <on|off>",
 			desc:     "Enables or disables IPHub VPN/proxy screening for new connections. Requires iphub_api_key in config.",
 			reqPerms: permissions.PermissionField["BAN"],
+			category: "moderation",
 		},
 		"getban": {
 			handler:  cmdGetBan,
@@ -192,6 +213,7 @@ func initCommands() {
 			usage:    "Usage: /getban [-b banid | -i ipid]",
 			desc:     "Prints ban(s) matching the search parameters, or prints the 5 most recent bans.",
 			reqPerms: permissions.PermissionField["BAN_INFO"],
+			category: "moderation",
 		},
 		"gas": {
 			handler:  func(client *Client, _ []string, _ string) { cmdPlayers(client, []string{"-a"}, "") },
@@ -199,6 +221,7 @@ func initCommands() {
 			usage:    "Usage: /gas",
 			desc:     "Shows players in all areas.",
 			reqPerms: permissions.PermissionField["NONE"],
+			category: "general",
 		},
 		"global": {
 			handler:  cmdGlobal,
@@ -206,6 +229,7 @@ func initCommands() {
 			usage:    "Usage: /global <message>",
 			desc:     "Sends a global message.",
 			reqPerms: permissions.PermissionField["NONE"],
+			category: "general",
 		},
 		"hide": {
 			handler:  cmdHide,
@@ -213,6 +237,7 @@ func initCommands() {
 			usage:    "Usage: /hide",
 			desc:     "Toggles hiding yourself from the player list, /players, /gas, and room player counts.",
 			reqPerms: permissions.PermissionField["ADMIN"],
+			category: "admin",
 		},
 		"invite": {
 			handler:  cmdInvite,
@@ -220,6 +245,7 @@ func initCommands() {
 			usage:    "Usage: /invite <uid1>,<uid2>...",
 			desc:     "Invites user(s) to the current area.",
 			reqPerms: permissions.PermissionField["CM"],
+			category: "area",
 		},
 		"ignore": {
 			handler:  cmdIgnore,
@@ -227,6 +253,7 @@ func initCommands() {
 			usage:    "Usage: /ignore <uid>",
 			desc:     "Permanently ignores a user based on their IPID. Their IC and OOC messages will no longer be shown to you, even after they reconnect.",
 			reqPerms: permissions.PermissionField["NONE"],
+			category: "general",
 		},
 		"unignore": {
 			handler:  cmdUnignore,
@@ -234,6 +261,7 @@ func initCommands() {
 			usage:    "Usage: /unignore <uid>",
 			desc:     "Removes a permanent ignore for a user, allowing their messages to be shown to you again.",
 			reqPerms: permissions.PermissionField["NONE"],
+			category: "general",
 		},
 		"jail": {
 			handler:  cmdJail,
@@ -241,6 +269,7 @@ func initCommands() {
 			usage:    "Usage: /jail <uid> [area_id] [-d duration] [-r reason]",
 			desc:     "Jails a player in the given area (or their current area). They cannot leave and are returned there on reconnect.",
 			reqPerms: permissions.PermissionField["BAN"],
+			category: "moderation",
 		},
 		"kick": {
 			handler:  cmdKick,
@@ -248,6 +277,7 @@ func initCommands() {
 			usage:    "Usage: /kick -u <uid1>,<uid2>... | -i <ipid1>,<ipid2>... <reason>",
 			desc:     "Kicks user(s) from the server.",
 			reqPerms: permissions.PermissionField["KICK"],
+			category: "moderation",
 		},
 		"kickarea": {
 			handler:  cmdAreaKick,
@@ -255,6 +285,7 @@ func initCommands() {
 			usage:    "Usage: /kickarea <uid1>,<uid2>...",
 			desc:     "Kicks user(s) from the current area.",
 			reqPerms: permissions.PermissionField["CM"],
+			category: "area",
 		},
 		"kickother": {
 			handler:  cmdKickOther,
@@ -262,6 +293,7 @@ func initCommands() {
 			usage:    "Usage: /kickother",
 			desc:     "Kicks all other connections sharing your IP (ghost clients).",
 			reqPerms: permissions.PermissionField["NONE"],
+			category: "general",
 		},
 		"lock": {
 			handler:  cmdLock,
@@ -269,6 +301,7 @@ func initCommands() {
 			usage:    "Usage: /lock [-s]\n-s: Sets the area to be spectatable.",
 			desc:     "Locks the current area or sets it to spectatable.",
 			reqPerms: permissions.PermissionField["CM"],
+			category: "area",
 		},
 		"lockdown": {
 			handler:  cmdLockdown,
@@ -276,6 +309,7 @@ func initCommands() {
 			usage:    "Usage: /lockdown",
 			desc:     "Toggles server lockdown. While active, only previously-known IPIDs can connect.",
 			reqPerms: permissions.PermissionField["BAN"],
+			category: "moderation",
 		},
 		"botban": {
 			handler:  cmdBotBan,
@@ -283,6 +317,7 @@ func initCommands() {
 			usage:    "Usage: /botban",
 			desc:     "Bans all spectators with less than 2 minutes of total playtime.",
 			reqPerms: permissions.PermissionField["BAN"],
+			category: "moderation",
 		},
 		"setglobalnewiplimit": {
 			handler:  cmdSetGlobalNewIPLimit,
@@ -290,6 +325,7 @@ func initCommands() {
 			usage:    "Usage: /setglobalnewiplimit <limit>\nSets the global new-IP rate limit. Use 0 to disable.",
 			desc:     "Sets the global new-IP rate limit at runtime.",
 			reqPerms: permissions.PermissionField["ADMIN"],
+			category: "admin",
 		},
 		"setglobalipwindow": {
 			handler:  cmdSetGlobalIPWindow,
@@ -297,6 +333,7 @@ func initCommands() {
 			usage:    "Usage: /setglobalipwindow <seconds>\nSets the global new-IP rate limit time window in seconds.",
 			desc:     "Sets the global new-IP rate limit window at runtime.",
 			reqPerms: permissions.PermissionField["ADMIN"],
+			category: "admin",
 		},
 		"purgedb": {
 			handler:  cmdPurgeDB,
@@ -304,6 +341,7 @@ func initCommands() {
 			usage:    "Usage: /purgedb",
 			desc:     "Purges all entries from the known-IP database. Use with caution.",
 			reqPerms: permissions.PermissionField["ADMIN"],
+			category: "admin",
 		},
 		"lockbg": {
 			handler:  cmdLockBG,
@@ -311,6 +349,7 @@ func initCommands() {
 			usage:    "Usage: /lockbg <true|false>",
 			desc:     "Toggles locking the BG on or off.",
 			reqPerms: permissions.PermissionField["MODIFY_AREA"],
+			category: "area",
 		},
 		"lockmusic": {
 			handler:  cmdLockMusic,
@@ -318,6 +357,7 @@ func initCommands() {
 			usage:    "Usage: /lockmusic <true|false>",
 			desc:     "Toggles CM only music on or off.",
 			reqPerms: permissions.PermissionField["CM"],
+			category: "area",
 		},
 		"log": {
 			handler:  cmdLog,
@@ -325,6 +365,7 @@ func initCommands() {
 			usage:    "Usage: /log <area>",
 			desc:     "Prints an area's log buffer.",
 			reqPerms: permissions.PermissionField["LOG"],
+			category: "moderation",
 		},
 		"login": {
 			handler:  cmdLogin,
@@ -332,6 +373,7 @@ func initCommands() {
 			usage:    "Usage: /login <username> <password>",
 			desc:     "Logs in as moderator.",
 			reqPerms: permissions.PermissionField["NONE"],
+			category: "account",
 		},
 		"logout": {
 			handler:  cmdLogout,
@@ -339,6 +381,7 @@ func initCommands() {
 			usage:    "Usage: /logout",
 			desc:     "Logs out as moderator.",
 			reqPerms: permissions.PermissionField["NONE"],
+			category: "account",
 		},
 		"mkusr": {
 			handler:  cmdMakeUser,
@@ -346,6 +389,7 @@ func initCommands() {
 			usage:    "Usage: /mkusr <username> <password> <role>",
 			desc:     "Creates a new moderator user.",
 			reqPerms: permissions.PermissionField["ADMIN"],
+			category: "admin",
 		},
 		"mod": {
 			handler:  cmdMod,
@@ -353,6 +397,7 @@ func initCommands() {
 			usage:    "Usage: /mod [-g] <message>\n-g: Send the message globally.",
 			desc:     "Sends a message speaking officially as a moderator.",
 			reqPerms: permissions.PermissionField["MOD_SPEAK"],
+			category: "moderation",
 		},
 		"modchat": {
 			handler:  cmdModChat,
@@ -360,6 +405,7 @@ func initCommands() {
 			usage:    "Usage: /modchat <message>",
 			desc:     "Sends a message to other moderators.",
 			reqPerms: permissions.PermissionField["MOD_CHAT"],
+			category: "moderation",
 		},
 		"motd": {
 			handler:  cmdMotd,
@@ -367,6 +413,7 @@ func initCommands() {
 			usage:    "Usage /motd",
 			desc:     "Sends the server's message of the day.",
 			reqPerms: permissions.PermissionField["NONE"],
+			category: "general",
 		},
 		"move": {
 			handler:  cmdMove,
@@ -374,6 +421,7 @@ func initCommands() {
 			usage:    "Usage: /move [-u <uid1,<uid2>...] <area>",
 			desc:     "Moves to an area.",
 			reqPerms: permissions.PermissionField["NONE"],
+			category: "general",
 		},
 		"mute": {
 			handler:  cmdMute,
@@ -381,6 +429,7 @@ func initCommands() {
 			usage:    "Usage: /mute [-ic][-ooc][-m][-j][-d duration][-r reason] <uid1>,<uid2>...\n-ic: Mute IC.\n-ooc: Mute OOC.\n-m: Mute music.\n-j: Mute judge.",
 			desc:     "Mutes users(s) from IC, OOC, changing music, and/or judge controls.",
 			reqPerms: permissions.PermissionField["MUTE"],
+			category: "moderation",
 		},
 		"narrator": {
 			handler:  cmdNarrator,
@@ -388,6 +437,7 @@ func initCommands() {
 			usage:    "Usage: /narrator",
 			desc:     "Toggles narrator mode on or off.",
 			reqPerms: permissions.PermissionField["NONE"],
+			category: "general",
 		},
 		"nointpres": {
 			handler:  cmdNoIntPres,
@@ -395,6 +445,7 @@ func initCommands() {
 			usage:    "Usage: /nointpres <true|false>",
 			desc:     "Toggles non-interrupting preanims in the current area on or off.",
 			reqPerms: permissions.PermissionField["MODIFY_AREA"],
+			category: "area",
 		},
 		"parrot": {
 			handler:  cmdParrot,
@@ -402,6 +453,7 @@ func initCommands() {
 			usage:    "Usage: /parrot [-d duration][-r reason] <uid1>,<uid2>...",
 			desc:     "Parrots user(s).",
 			reqPerms: permissions.PermissionField["MUTE"],
+			category: "moderation",
 		},
 		"play": {
 			handler:  cmdPlay,
@@ -409,6 +461,7 @@ func initCommands() {
 			usage:    "Usage: /play <song>",
 			desc:     "Plays a song.",
 			reqPerms: permissions.PermissionField["CM"],
+			category: "area",
 		},
 		"players": {
 			handler:  cmdPlayers,
@@ -416,6 +469,7 @@ func initCommands() {
 			usage:    "Usage: /players [-a]\n-a: Target all areas.",
 			desc:     "Shows players in the current or all areas.",
 			reqPerms: permissions.PermissionField["NONE"],
+			category: "general",
 		},
 		"pair": {
 			handler:  cmdPair,
@@ -423,6 +477,7 @@ func initCommands() {
 			usage:    "Usage: /pair <uid>",
 			desc:     "Sends or accepts a pair request with the specified player.",
 			reqPerms: permissions.PermissionField["NONE"],
+			category: "general",
 		},
 		"forcepair": {
 			handler:  cmdForcePair,
@@ -430,6 +485,7 @@ func initCommands() {
 			usage:    "Usage: /forcepair <uid1> <uid2>",
 			desc:     "Forces two players to pair without requiring mutual consent.",
 			reqPerms: permissions.PermissionField["KICK"],
+			category: "moderation",
 		},
 		"forcename": {
 			handler:  cmdForceName,
@@ -437,6 +493,7 @@ func initCommands() {
 			usage:    "Usage: /forcename <uid> <name>",
 			desc:     "Forces a player to use a specific showname in IC messages.",
 			reqPerms: permissions.PermissionField["KICK"],
+			category: "moderation",
 		},
 		"unforcename": {
 			handler:  cmdUnforceName,
@@ -444,6 +501,7 @@ func initCommands() {
 			usage:    "Usage: /unforcename <uid>",
 			desc:     "Removes a forced showname from a player.",
 			reqPerms: permissions.PermissionField["KICK"],
+			category: "moderation",
 		},
 		"nameshuffle": {
 			handler:  cmdNameShuffle,
@@ -451,6 +509,7 @@ func initCommands() {
 			usage:    "Usage: /nameshuffle",
 			desc:     "Randomly shuffles the shownames of all players in the current area.",
 			reqPerms: permissions.PermissionField["KICK"],
+			category: "moderation",
 		},
 		"unnameshuffle": {
 			handler:  cmdUnnameShuffle,
@@ -458,6 +517,7 @@ func initCommands() {
 			usage:    "Usage: /unnameshuffle",
 			desc:     "Restores all players' own shownames in the current area, undoing any name shuffle.",
 			reqPerms: permissions.PermissionField["KICK"],
+			category: "moderation",
 		},
 		"unpair": {
 			handler:  cmdUnpair,
@@ -465,6 +525,7 @@ func initCommands() {
 			usage:    "Usage: /unpair",
 			desc:     "Cancels your current pair request or active pairing.",
 			reqPerms: permissions.PermissionField["NONE"],
+			category: "general",
 		},
 		"forcerandomchar": {
 			handler:  cmdForceRandomChar,
@@ -472,6 +533,7 @@ func initCommands() {
 			usage:    "Usage: /forcerandomchar [uid]",
 			desc:     "Forces all players in the current area (or a specific player by UID) to select a random free character.",
 			reqPerms: permissions.PermissionField["ADMIN"],
+			category: "moderation",
 		},
 		"forceunpair": {
 			handler:  cmdForceUnpair,
@@ -479,6 +541,7 @@ func initCommands() {
 			usage:    "Usage: /forceunpair <uid>",
 			desc:     "Forces a player to unpair from their current pair.",
 			reqPerms: permissions.PermissionField["KICK"],
+			category: "moderation",
 		},
 		"pm": {
 			handler:  cmdPM,
@@ -486,6 +549,7 @@ func initCommands() {
 			usage:    "Usage: /pm <uid1>,<uid2>... <message>",
 			desc:     "Sends a private message.",
 			reqPerms: permissions.PermissionField["NONE"],
+			category: "general",
 		},
 		"pos": {
 			handler:  cmdPos,
@@ -493,6 +557,7 @@ func initCommands() {
 			usage:    "Usage: /pos [position]",
 			desc:     "Shows your current position or changes it to the given position.",
 			reqPerms: permissions.PermissionField["NONE"],
+			category: "general",
 		},
 		"possess": {
 			handler:  cmdPossess,
@@ -500,6 +565,7 @@ func initCommands() {
 			usage:    "Usage: /possess <uid> <message>",
 			desc:     "Makes target say a message once, copying their appearance.",
 			reqPerms: permissions.PermissionField["ADMIN"],
+			category: "moderation",
 		},
 		"fullpossess": {
 			handler:  cmdFullPossess,
@@ -507,6 +573,7 @@ func initCommands() {
 			usage:    "Usage: /fullpossess <uid>",
 			desc:     "Makes all YOUR IC messages appear as the target until /unpossess.",
 			reqPerms: permissions.PermissionField["ADMIN"],
+			category: "moderation",
 		},
 		"unpossess": {
 			handler:  cmdUnpossess,
@@ -514,6 +581,7 @@ func initCommands() {
 			usage:    "Usage: /unpossess",
 			desc:     "Stops full possession of a player.",
 			reqPerms: permissions.PermissionField["ADMIN"],
+			category: "moderation",
 		},
 		"poll": {
 			handler:  cmdPoll,
@@ -521,6 +589,7 @@ func initCommands() {
 			usage:    "Usage: /poll [question]|[option1]|[option2]|[option3...]",
 			desc:     "Creates a poll in the current area.",
 			reqPerms: permissions.PermissionField["CM"],
+			category: "area",
 		},
 		"rmusr": {
 			handler:  cmdRemoveUser,
@@ -528,6 +597,7 @@ func initCommands() {
 			usage:    "Usage: /rmusr <username>",
 			desc:     "Removes a moderator user.",
 			reqPerms: permissions.PermissionField["ADMIN"],
+			category: "admin",
 		},
 		"roll": {
 			handler:  cmdRoll,
@@ -535,6 +605,7 @@ func initCommands() {
 			usage:    "Usage: /roll [-p] <dice>d<sides>\n-p: Sets the roll to be private.",
 			desc:     "Rolls dice.",
 			reqPerms: permissions.PermissionField["NONE"],
+			category: "general",
 		},
 		"randomchar": {
 			handler:  cmdRandomChar,
@@ -542,6 +613,7 @@ func initCommands() {
 			usage:    "Usage: /randomchar",
 			desc:     "Selects a random free character.",
 			reqPerms: permissions.PermissionField["NONE"],
+			category: "general",
 		},
 		"randombg": {
 			handler:  cmdRandomBg,
@@ -549,6 +621,7 @@ func initCommands() {
 			usage:    "Usage: /randombg",
 			desc:     "Sets the area's background to a random one from the server list. Usable once every 5 seconds.",
 			reqPerms: permissions.PermissionField["CM"],
+			category: "area",
 		},
 		"randomsong": {
 			handler:  cmdRandomSong,
@@ -556,6 +629,7 @@ func initCommands() {
 			usage:    "Usage: /randomsong",
 			desc:     "Plays a random song from the server music list. Usable by everyone with a 10-second cooldown per user.",
 			reqPerms: permissions.PermissionField["NONE"],
+			category: "area",
 		},
 		"rps": {
 			handler:  cmdRps,
@@ -563,6 +637,7 @@ func initCommands() {
 			usage:    "Usage: /rps <rock|paper|scissors>",
 			desc:     "Play rock-paper-scissors.",
 			reqPerms: permissions.PermissionField["NONE"],
+			category: "general",
 		},
 		"coinflip": {
 			handler:  cmdCoinflip,
@@ -570,6 +645,7 @@ func initCommands() {
 			usage:    "Usage: /coinflip <heads|tails>",
 			desc:     "Challenge another player to a coinflip.",
 			reqPerms: permissions.PermissionField["NONE"],
+			category: "general",
 		},
 		"setrole": {
 			handler:  cmdChangeRole,
@@ -577,6 +653,7 @@ func initCommands() {
 			usage:    "Usage: /setrole <username> <role>",
 			desc:     "Changes a moderator user's role.",
 			reqPerms: permissions.PermissionField["ADMIN"],
+			category: "admin",
 		},
 		"spectate": {
 			handler:  cmdSpectate,
@@ -584,6 +661,7 @@ func initCommands() {
 			usage:    "Usage: /spectate [invite|uninvite <uid1>,<uid2>...]",
 			desc:     "Toggles spectate mode, or invites/uninvites users to speak in IC during spectate mode.",
 			reqPerms: permissions.PermissionField["CM"],
+			category: "area",
 		},
 		"status": {
 			handler:  cmdStatus,
@@ -591,6 +669,7 @@ func initCommands() {
 			usage:    "Usage: /status <status>",
 			desc:     "Sets the current area's status.",
 			reqPerms: permissions.PermissionField["CM"],
+			category: "area",
 		},
 		"suicide": {
 			handler:  cmdSuicide,
@@ -598,6 +677,7 @@ func initCommands() {
 			usage:    "Usage: /suicide",
 			desc:     "If you want to die.",
 			reqPerms: permissions.PermissionField["NONE"],
+			category: "general",
 		},
 		"summon": {
 			handler:  cmdSummon,
@@ -605,6 +685,7 @@ func initCommands() {
 			usage:    "Usage: /summon <area>",
 			desc:     "Summons all users to the specified area.",
 			reqPerms: permissions.PermissionField["MOVE_USERS"],
+			category: "moderation",
 		},
 		"swapevi": {
 			handler:  cmdSwapEvi,
@@ -612,6 +693,7 @@ func initCommands() {
 			usage:    "Usage: /swapevi <id1> <id2>",
 			desc:     "Swaps index of evidence.",
 			reqPerms: permissions.PermissionField["NONE"],
+			category: "general",
 		},
 		"testimony": {
 			handler:  cmdTestimony,
@@ -619,6 +701,7 @@ func initCommands() {
 			usage:    "Usage: /testimony <record|stop|play|update|insert|delete>\nUse /testimony record to start recording. Witnesses must be in /pos wit for their IC messages to be recorded.",
 			desc:     "Manages the area's testimony recorder. Use /testimony record to start recording. Witnesses must be in /pos wit for their IC messages to be captured.",
 			reqPerms: permissions.PermissionField["NONE"],
+			category: "testimony",
 		},
 		"testify": {
 			handler:  cmdTestify,
@@ -626,6 +709,7 @@ func initCommands() {
 			usage:    "Usage: /testify",
 			desc:     "Starts recording IC messages as testimony.",
 			reqPerms: permissions.PermissionField["CM"],
+			category: "testimony",
 		},
 		"unban": {
 			handler:  cmdUnban,
@@ -633,6 +717,7 @@ func initCommands() {
 			usage:    "Usage: /unban <id1>,<id2>...",
 			desc:     "Nullifies ban(s).",
 			reqPerms: permissions.PermissionField["BAN"],
+			category: "moderation",
 		},
 		"uncm": {
 			handler:  cmdUnCM,
@@ -640,6 +725,7 @@ func initCommands() {
 			usage:    "Usage: /uncm [uid1],[uid2]...",
 			desc:     "Removes CM(s) from the current area.",
 			reqPerms: permissions.PermissionField["CM"],
+			category: "area",
 		},
 		"update": {
 			handler:  cmdUpdate,
@@ -647,6 +733,7 @@ func initCommands() {
 			usage:    "Usage: /update",
 			desc:     "Updates the current testimony statement with the next IC message from the witness.",
 			reqPerms: permissions.PermissionField["CM"],
+			category: "testimony",
 		},
 		"uninvite": {
 			handler:  cmdUninvite,
@@ -654,6 +741,7 @@ func initCommands() {
 			usage:    "Usage: /uninvite <uid1>,<uid2>...",
 			desc:     "Uninvites user(s) from the current area.",
 			reqPerms: permissions.PermissionField["CM"],
+			category: "area",
 		},
 		"unjail": {
 			handler:  cmdUnjail,
@@ -661,6 +749,7 @@ func initCommands() {
 			usage:    "Usage: /unjail <uid1>,<uid2>...",
 			desc:     "Releases user(s) from jail.",
 			reqPerms: permissions.PermissionField["BAN"],
+			category: "moderation",
 		},
 		"uncharstuck": {
 			handler:  cmdUnCharStuck,
@@ -668,6 +757,7 @@ func initCommands() {
 			usage:    "Usage: /uncharstuck <uid1>,<uid2>...",
 			desc:     "Removes the character-stuck restriction from user(s).",
 			reqPerms: permissions.PermissionField["MUTE"],
+			category: "moderation",
 		},
 		"unlock": {
 			handler:  cmdUnlock,
@@ -675,6 +765,7 @@ func initCommands() {
 			usage:    "Usage: /unlock",
 			desc:     "Unlocks the current area.",
 			reqPerms: permissions.PermissionField["CM"],
+			category: "area",
 		},
 		"unmute": {
 			handler:  cmdUnmute,
@@ -682,6 +773,7 @@ func initCommands() {
 			usage:    "Usage: /unmute <uid1>,<uid2>...",
 			desc:     "Unmutes user(s).",
 			reqPerms: permissions.PermissionField["MUTE"],
+			category: "moderation",
 		},
 		"untorment": {
 			handler:  cmdUntorment,
@@ -689,6 +781,7 @@ func initCommands() {
 			usage:    "Usage: /untorment <ipid>",
 			desc:     "Removes an IPID from the automod torment list.",
 			reqPerms: permissions.PermissionField["BAN"],
+			category: "moderation",
 		},
 		"vote": {
 			handler:  cmdVote,
@@ -696,6 +789,7 @@ func initCommands() {
 			usage:    "Usage: /vote <option_number>",
 			desc:     "Vote on the active poll.",
 			reqPerms: permissions.PermissionField["NONE"],
+			category: "area",
 		},
 		// Punishment commands - Text Modification
 		"whisper": {
@@ -704,6 +798,7 @@ func initCommands() {
 			usage:    "Usage: /whisper [-d duration] [-r reason] <uid1>,<uid2>...",
 			desc:     "Makes messages only visible to mods and CMs.",
 			reqPerms: permissions.PermissionField["MUTE"],
+			category: "punishment",
 		},
 		"backward": {
 			handler:  cmdBackward,
@@ -711,6 +806,7 @@ func initCommands() {
 			usage:    "Usage: /backward [-d duration] [-r reason] <uid1>,<uid2>...",
 			desc:     "Reverses character order in messages.",
 			reqPerms: permissions.PermissionField["MUTE"],
+			category: "punishment",
 		},
 		"stutterstep": {
 			handler:  cmdStutterstep,
@@ -718,6 +814,7 @@ func initCommands() {
 			usage:    "Usage: /stutterstep [-d duration] [-r reason] <uid1>,<uid2>...",
 			desc:     "Doubles every word in messages.",
 			reqPerms: permissions.PermissionField["MUTE"],
+			category: "punishment",
 		},
 		"elongate": {
 			handler:  cmdElongate,
@@ -725,6 +822,7 @@ func initCommands() {
 			usage:    "Usage: /elongate [-d duration] [-r reason] <uid1>,<uid2>...",
 			desc:     "Repeats vowels in messages.",
 			reqPerms: permissions.PermissionField["MUTE"],
+			category: "punishment",
 		},
 		"uppercase": {
 			handler:  cmdUppercase,
@@ -732,6 +830,7 @@ func initCommands() {
 			usage:    "Usage: /uppercase [-d duration] [-r reason] <uid1>,<uid2>...",
 			desc:     "Forces messages to UPPERCASE.",
 			reqPerms: permissions.PermissionField["MUTE"],
+			category: "punishment",
 		},
 		"lowercase": {
 			handler:  cmdLowercase,
@@ -739,6 +838,7 @@ func initCommands() {
 			usage:    "Usage: /lowercase [-d duration] [-r reason] <uid1>,<uid2>...",
 			desc:     "Forces messages to lowercase.",
 			reqPerms: permissions.PermissionField["MUTE"],
+			category: "punishment",
 		},
 		"robotic": {
 			handler:  cmdRobotic,
@@ -746,6 +846,7 @@ func initCommands() {
 			usage:    "Usage: /robotic [-d duration] [-r reason] <uid1>,<uid2>...",
 			desc:     "Replaces messages with [BEEP] [BOOP] robotic sounds.",
 			reqPerms: permissions.PermissionField["MUTE"],
+			category: "punishment",
 		},
 		"alternating": {
 			handler:  cmdAlternating,
@@ -753,6 +854,7 @@ func initCommands() {
 			usage:    "Usage: /alternating [-d duration] [-r reason] <uid1>,<uid2>...",
 			desc:     "Makes messages AlTeRnAtInG cAsE.",
 			reqPerms: permissions.PermissionField["MUTE"],
+			category: "punishment",
 		},
 		"fancy": {
 			handler:  cmdFancy,
@@ -760,6 +862,7 @@ func initCommands() {
 			usage:    "Usage: /fancy [-d duration] [-r reason] <uid1>,<uid2>...",
 			desc:     "Converts messages to Unicode fancy characters.",
 			reqPerms: permissions.PermissionField["MUTE"],
+			category: "punishment",
 		},
 		"uwu": {
 			handler:  cmdUwu,
@@ -767,6 +870,7 @@ func initCommands() {
 			usage:    "Usage: /uwu [-d duration] [-r reason] <uid1>,<uid2>...",
 			desc:     "Converts messages to UwU speak.",
 			reqPerms: permissions.PermissionField["MUTE"],
+			category: "punishment",
 		},
 		"pirate": {
 			handler:  cmdPirate,
@@ -774,6 +878,7 @@ func initCommands() {
 			usage:    "Usage: /pirate [-d duration] [-r reason] <uid1>,<uid2>...",
 			desc:     "Converts messages to pirate speech.",
 			reqPerms: permissions.PermissionField["MUTE"],
+			category: "punishment",
 		},
 		"shakespearean": {
 			handler:  cmdShakespearean,
@@ -781,6 +886,7 @@ func initCommands() {
 			usage:    "Usage: /shakespearean [-d duration] [-r reason] <uid1>,<uid2>...",
 			desc:     "Converts messages to Shakespearean English.",
 			reqPerms: permissions.PermissionField["MUTE"],
+			category: "punishment",
 		},
 		"caveman": {
 			handler:  cmdCaveman,
@@ -788,6 +894,7 @@ func initCommands() {
 			usage:    "Usage: /caveman [-d duration] [-r reason] <uid1>,<uid2>...",
 			desc:     "Converts messages to caveman grunts.",
 			reqPerms: permissions.PermissionField["MUTE"],
+			category: "punishment",
 		},
 		// Punishment commands - Visibility/Cosmetic
 		"emoji": {
@@ -796,6 +903,7 @@ func initCommands() {
 			usage:    "Usage: /emoji [-d duration] [-r reason] <uid1>,<uid2>...",
 			desc:     "Replaces name with random emojis.",
 			reqPerms: permissions.PermissionField["MUTE"],
+			category: "punishment",
 		},
 		"invisible": {
 			handler:  cmdInvisible,
@@ -803,6 +911,7 @@ func initCommands() {
 			usage:    "Usage: /invisible [-d duration] [-r reason] <uid1>,<uid2>...",
 			desc:     "Prevents user from seeing other players' messages.",
 			reqPerms: permissions.PermissionField["MUTE"],
+			category: "punishment",
 		},
 		// Punishment commands - Timing Effects
 		"slowpoke": {
@@ -811,6 +920,7 @@ func initCommands() {
 			usage:    "Usage: /slowpoke [-d duration] [-r reason] <uid1>,<uid2>...",
 			desc:     "Delays messages before sending.",
 			reqPerms: permissions.PermissionField["MUTE"],
+			category: "punishment",
 		},
 		"fastspammer": {
 			handler:  cmdFastspammer,
@@ -818,6 +928,7 @@ func initCommands() {
 			usage:    "Usage: /fastspammer [-d duration] [-r reason] <uid1>,<uid2>...",
 			desc:     "Rate limits messages heavily.",
 			reqPerms: permissions.PermissionField["MUTE"],
+			category: "punishment",
 		},
 		"pause": {
 			handler:  cmdPause,
@@ -825,6 +936,7 @@ func initCommands() {
 			usage:    "Usage: /pause",
 			desc:     "Stops testimony recording.",
 			reqPerms: permissions.PermissionField["CM"],
+			category: "testimony",
 		},
 		"lag": {
 			handler:  cmdLag,
@@ -832,6 +944,7 @@ func initCommands() {
 			usage:    "Usage: /lag [-d duration] [-r reason] <uid1>,<uid2>...",
 			desc:     "Batches and delays messages.",
 			reqPerms: permissions.PermissionField["MUTE"],
+			category: "punishment",
 		},
 		// Punishment commands - Social Chaos
 		"subtitles": {
@@ -840,6 +953,7 @@ func initCommands() {
 			usage:    "Usage: /subtitles [-d duration] [-r reason] <uid1>,<uid2>...",
 			desc:     "Adds confusing subtitles to messages.",
 			reqPerms: permissions.PermissionField["MUTE"],
+			category: "punishment",
 		},
 		"roulette": {
 			handler:  cmdRoulette,
@@ -847,6 +961,7 @@ func initCommands() {
 			usage:    "Usage: /roulette join | /roulette [-d duration] [-r reason] <uid1>,<uid2>...",
 			desc:     "Join Russian Roulette game, or apply roulette punishment to user(s) (requires MUTE permission).",
 			reqPerms: permissions.PermissionField["NONE"],
+			category: "minigames",
 		},
 		"spotlight": {
 			handler:  cmdSpotlight,
@@ -854,6 +969,7 @@ func initCommands() {
 			usage:    "Usage: /spotlight [-d duration] [-r reason] <uid1>,<uid2>...",
 			desc:     "Announces all actions publicly.",
 			reqPerms: permissions.PermissionField["MUTE"],
+			category: "punishment",
 		},
 		// Punishment commands - Text Processing
 		"censor": {
@@ -862,6 +978,7 @@ func initCommands() {
 			usage:    "Usage: /censor [-d duration] [-r reason] <uid1>,<uid2>...",
 			desc:     "Replaces words with [CENSORED].",
 			reqPerms: permissions.PermissionField["MUTE"],
+			category: "punishment",
 		},
 		"confused": {
 			handler:  cmdConfused,
@@ -869,6 +986,7 @@ func initCommands() {
 			usage:    "Usage: /confused [-d duration] [-r reason] <uid1>,<uid2>...",
 			desc:     "Randomly reorders words in messages.",
 			reqPerms: permissions.PermissionField["MUTE"],
+			category: "punishment",
 		},
 		"paranoid": {
 			handler:  cmdParanoid,
@@ -876,6 +994,7 @@ func initCommands() {
 			usage:    "Usage: /paranoid [-d duration] [-r reason] <uid1>,<uid2>...",
 			desc:     "Adds paranoid text to messages.",
 			reqPerms: permissions.PermissionField["MUTE"],
+			category: "punishment",
 		},
 		"drunk": {
 			handler:  cmdDrunk,
@@ -883,6 +1002,7 @@ func initCommands() {
 			usage:    "Usage: /drunk [-d duration] [-r reason] <uid1>,<uid2>...",
 			desc:     "Slurs and repeats words in messages.",
 			reqPerms: permissions.PermissionField["MUTE"],
+			category: "punishment",
 		},
 		"hiccup": {
 			handler:  cmdHiccup,
@@ -890,6 +1010,7 @@ func initCommands() {
 			usage:    "Usage: /hiccup [-d duration] [-r reason] <uid1>,<uid2>...",
 			desc:     "Interrupts words with 'hic'.",
 			reqPerms: permissions.PermissionField["MUTE"],
+			category: "punishment",
 		},
 		"whistle": {
 			handler:  cmdWhistle,
@@ -897,6 +1018,7 @@ func initCommands() {
 			usage:    "Usage: /whistle [-d duration] [-r reason] <uid1>,<uid2>...",
 			desc:     "Replaces letters with whistles.",
 			reqPerms: permissions.PermissionField["MUTE"],
+			category: "punishment",
 		},
 		"mumble": {
 			handler:  cmdMumble,
@@ -904,6 +1026,7 @@ func initCommands() {
 			usage:    "Usage: /mumble [-d duration] [-r reason] <uid1>,<uid2>...",
 			desc:     "Obscures message text.",
 			reqPerms: permissions.PermissionField["MUTE"],
+			category: "punishment",
 		},
 		// Punishment commands - Complex Effects
 		"spaghetti": {
@@ -912,6 +1035,7 @@ func initCommands() {
 			usage:    "Usage: /spaghetti [-d duration] [-r reason] <uid1>,<uid2>...",
 			desc:     "Combines multiple random effects.",
 			reqPerms: permissions.PermissionField["MUTE"],
+			category: "punishment",
 		},
 		"torment": {
 			handler:  cmdTorment,
@@ -919,6 +1043,7 @@ func initCommands() {
 			usage:    "Usage: /torment [-d duration] [-r reason] <uid1>,<uid2>...",
 			desc:     "Cycles through different effects.",
 			reqPerms: permissions.PermissionField["MUTE"],
+			category: "punishment",
 		},
 		"rng": {
 			handler:  cmdRng,
@@ -926,6 +1051,7 @@ func initCommands() {
 			usage:    "Usage: /rng [-d duration] [-r reason] <uid1>,<uid2>...",
 			desc:     "Applies random effect from pool each message.",
 			reqPerms: permissions.PermissionField["MUTE"],
+			category: "punishment",
 		},
 		"essay": {
 			handler:  cmdEssay,
@@ -933,6 +1059,7 @@ func initCommands() {
 			usage:    "Usage: /essay [-d duration] [-r reason] <uid1>,<uid2>...",
 			desc:     "Requires minimum 50 characters.",
 			reqPerms: permissions.PermissionField["MUTE"],
+			category: "punishment",
 		},
 		// Punishment commands - Advanced
 		"haiku": {
@@ -941,6 +1068,7 @@ func initCommands() {
 			usage:    "Usage: /haiku [-d duration] [-r reason] <uid1>,<uid2>...",
 			desc:     "Requires 5-7-5 syllable format.",
 			reqPerms: permissions.PermissionField["MUTE"],
+			category: "punishment",
 		},
 		"autospell": {
 			handler:  cmdAutospell,
@@ -948,6 +1076,7 @@ func initCommands() {
 			usage:    "Usage: /autospell [-d duration] [-r reason] <uid1>,<uid2>...",
 			desc:     "Autocorrects to wrong words.",
 			reqPerms: permissions.PermissionField["MUTE"],
+			category: "punishment",
 		},
 		// Punishment commands - Animal Sounds
 		"monkey": {
@@ -956,6 +1085,7 @@ func initCommands() {
 			usage:    "Usage: /monkey [-d duration] [-r reason] <uid1>,<uid2>...",
 			desc:     "Replaces messages with monkey noises (ook, eek, ooh ooh).",
 			reqPerms: permissions.PermissionField["MUTE"],
+			category: "punishment",
 		},
 		"snake": {
 			handler:  cmdSnake,
@@ -963,6 +1093,7 @@ func initCommands() {
 			usage:    "Usage: /snake [-d duration] [-r reason] <uid1>,<uid2>...",
 			desc:     "Makes messages hissss like a ssssnake.",
 			reqPerms: permissions.PermissionField["MUTE"],
+			category: "punishment",
 		},
 		"dog": {
 			handler:  cmdDog,
@@ -970,6 +1101,7 @@ func initCommands() {
 			usage:    "Usage: /dog [-d duration] [-r reason] <uid1>,<uid2>...",
 			desc:     "Replaces messages with dog sounds (woof, arf, grr, bork).",
 			reqPerms: permissions.PermissionField["MUTE"],
+			category: "punishment",
 		},
 		"cat": {
 			handler:  cmdCat,
@@ -977,6 +1109,7 @@ func initCommands() {
 			usage:    "Usage: /cat [-d duration] [-r reason] <uid1>,<uid2>...",
 			desc:     "Replaces messages with cat sounds (meow, purrr~, mrrrow).",
 			reqPerms: permissions.PermissionField["MUTE"],
+			category: "punishment",
 		},
 		"bird": {
 			handler:  cmdBird,
@@ -984,6 +1117,7 @@ func initCommands() {
 			usage:    "Usage: /bird [-d duration] [-r reason] <uid1>,<uid2>...",
 			desc:     "Replaces messages with bird sounds (tweet, chirp, squawk).",
 			reqPerms: permissions.PermissionField["MUTE"],
+			category: "punishment",
 		},
 		"cow": {
 			handler:  cmdCow,
@@ -991,6 +1125,7 @@ func initCommands() {
 			usage:    "Usage: /cow [-d duration] [-r reason] <uid1>,<uid2>...",
 			desc:     "Replaces messages with cow sounds (moo, mooo, MOOO).",
 			reqPerms: permissions.PermissionField["MUTE"],
+			category: "punishment",
 		},
 		"frog": {
 			handler:  cmdFrog,
@@ -998,6 +1133,7 @@ func initCommands() {
 			usage:    "Usage: /frog [-d duration] [-r reason] <uid1>,<uid2>...",
 			desc:     "Replaces messages with frog sounds (ribbit, croak).",
 			reqPerms: permissions.PermissionField["MUTE"],
+			category: "punishment",
 		},
 		"duck": {
 			handler:  cmdDuck,
@@ -1005,6 +1141,7 @@ func initCommands() {
 			usage:    "Usage: /duck [-d duration] [-r reason] <uid1>,<uid2>...",
 			desc:     "Replaces messages with duck sounds (quack, QUACK).",
 			reqPerms: permissions.PermissionField["MUTE"],
+			category: "punishment",
 		},
 		"horse": {
 			handler:  cmdHorse,
@@ -1012,6 +1149,7 @@ func initCommands() {
 			usage:    "Usage: /horse [-d duration] [-r reason] <uid1>,<uid2>...",
 			desc:     "Replaces messages with horse sounds (neigh, whinny, snort).",
 			reqPerms: permissions.PermissionField["MUTE"],
+			category: "punishment",
 		},
 		"lion": {
 			handler:  cmdLion,
@@ -1019,6 +1157,7 @@ func initCommands() {
 			usage:    "Usage: /lion [-d duration] [-r reason] <uid1>,<uid2>...",
 			desc:     "Replaces messages with lion sounds (ROAR, grrr, rawr).",
 			reqPerms: permissions.PermissionField["MUTE"],
+			category: "punishment",
 		},
 		"zoo": {
 			handler:  cmdZoo,
@@ -1026,6 +1165,7 @@ func initCommands() {
 			usage:    "Usage: /zoo [-d duration] [-r reason] <uid1>,<uid2>...",
 			desc:     "Applies a random animal sound punishment to each message.",
 			reqPerms: permissions.PermissionField["MUTE"],
+			category: "punishment",
 		},
 		"bunny": {
 			handler:  cmdBunny,
@@ -1033,6 +1173,7 @@ func initCommands() {
 			usage:    "Usage: /bunny [-d duration] [-r reason] <uid1>,<uid2>...",
 			desc:     "Replaces messages with bunny sounds (*thump*, *binky!*, *flops*).",
 			reqPerms: permissions.PermissionField["MUTE"],
+			category: "punishment",
 		},
 		"tsundere": {
 			handler:  cmdTsundere,
@@ -1040,6 +1181,7 @@ func initCommands() {
 			usage:    "Usage: /tsundere [-d duration] [-r reason] <uid1>,<uid2>...",
 			desc:     "It's not like I wanted to punish you, b-baka!! Wraps messages in tsundere denial.",
 			reqPerms: permissions.PermissionField["MUTE"],
+			category: "punishment",
 		},
 		"yandere": {
 			handler:  cmdYandere,
@@ -1047,6 +1189,7 @@ func initCommands() {
 			usage:    "Usage: /yandere [-d duration] [-r reason] <uid1>,<uid2>...",
 			desc:     "Hehehe~ wraps messages in obsessive yandere flavour.",
 			reqPerms: permissions.PermissionField["MUTE"],
+			category: "punishment",
 		},
 		"kuudere": {
 			handler:  cmdKuudere,
@@ -1054,6 +1197,7 @@ func initCommands() {
 			usage:    "Usage: /kuudere [-d duration] [-r reason] <uid1>,<uid2>...",
 			desc:     "Delivers messages in cold, emotionless monotone.",
 			reqPerms: permissions.PermissionField["MUTE"],
+			category: "punishment",
 		},
 		"dandere": {
 			handler:  cmdDandere,
@@ -1061,6 +1205,7 @@ func initCommands() {
 			usage:    "Usage: /dandere [-d duration] [-r reason] <uid1>,<uid2>...",
 			desc:     "Makes messages extremely shy and hesitant with stutters.",
 			reqPerms: permissions.PermissionField["MUTE"],
+			category: "punishment",
 		},
 		"deredere": {
 			handler:  cmdDeredere,
@@ -1068,6 +1213,7 @@ func initCommands() {
 			usage:    "Usage: /deredere [-d duration] [-r reason] <uid1>,<uid2>...",
 			desc:     "Wraps messages in over-the-top lovey-dovey sweetness.",
 			reqPerms: permissions.PermissionField["MUTE"],
+			category: "punishment",
 		},
 		"himedere": {
 			handler:  cmdHimedere,
@@ -1075,6 +1221,7 @@ func initCommands() {
 			usage:    "Usage: /himedere [-d duration] [-r reason] <uid1>,<uid2>...",
 			desc:     "Makes messages imperious and royalty-like, commoner.",
 			reqPerms: permissions.PermissionField["MUTE"],
+			category: "punishment",
 		},
 		"kamidere": {
 			handler:  cmdKamidere,
@@ -1082,6 +1229,7 @@ func initCommands() {
 			usage:    "Usage: /kamidere [-d duration] [-r reason] <uid1>,<uid2>...",
 			desc:     "Delivers messages as a self-proclaimed god to unworthy mortals.",
 			reqPerms: permissions.PermissionField["MUTE"],
+			category: "punishment",
 		},
 		"undere": {
 			handler:  cmdUndere,
@@ -1089,6 +1237,7 @@ func initCommands() {
 			usage:    "Usage: /undere [-d duration] [-r reason] <uid1>,<uid2>...",
 			desc:     "Forces messages to agree with everything unconditionally.",
 			reqPerms: permissions.PermissionField["MUTE"],
+			category: "punishment",
 		},
 		"bakadere": {
 			handler:  cmdBakadere,
@@ -1096,6 +1245,7 @@ func initCommands() {
 			usage:    "Usage: /bakadere [-d duration] [-r reason] <uid1>,<uid2>...",
 			desc:     "Inserts clumsy, airheaded interjections into every message.",
 			reqPerms: permissions.PermissionField["MUTE"],
+			category: "punishment",
 		},
 		"mayadere": {
 			handler:  cmdMayadere,
@@ -1103,6 +1253,7 @@ func initCommands() {
 			usage:    "Usage: /mayadere [-d duration] [-r reason] <uid1>,<uid2>...",
 			desc:     "Wraps messages in eerie, enigmatic mystery. Kukuku~",
 			reqPerms: permissions.PermissionField["MUTE"],
+			category: "punishment",
 		},
 		"emoticon": {
 			handler:  cmdEmoticon,
@@ -1110,6 +1261,7 @@ func initCommands() {
 			usage:    "Usage: /emoticon [-d duration] [-r reason] <uid1>,<uid2>...",
 			desc:     "Forces user to speak only in emoticons (:P, :D, :3, etc.).",
 			reqPerms: permissions.PermissionField["MUTE"],
+			category: "punishment",
 		},
 		// Social Torment Punishments
 		"lovebomb": {
@@ -1118,6 +1270,7 @@ func initCommands() {
 			usage:    "Usage: /lovebomb [global [off]] | /lovebomb [-d duration] [-r reason] [uid1 [uid2]]\n  global           – love-bomb all non-moderators in the area.\n  global off       – remove lovebomb from everyone in the area.\n  -d <duration>    – duration (e.g. 10m, 1h). Default: 10m. Max: 24h.\n  -r <reason>      – optional reason for the log.\n  1 uid            – apply to that uid (random area target per message).\n  2 uids           – uid1 will love-bomb uid2 specifically.",
 			desc:     "Forces IC messages to be replaced with silly love declarations. Moderator only.",
 			reqPerms: permissions.PermissionField["MUTE"],
+			category: "punishment",
 		},
 		"unlovebomb": {
 			handler:  cmdUnlovebomb,
@@ -1125,6 +1278,7 @@ func initCommands() {
 			usage:    "Usage: /unlovebomb <uid1>,<uid2>...",
 			desc:     "Removes lovebomb punishment from user(s). Moderator only.",
 			reqPerms: permissions.PermissionField["MUTE"],
+			category: "punishment",
 		},
 		"degrade": {
 			handler:  cmdDegrade,
@@ -1132,6 +1286,7 @@ func initCommands() {
 			usage:    "Usage: /degrade [-d duration] [-r reason] <uid1>,<uid2>...",
 			desc:     "Forces IC messages to be replaced with degrading self-insults. Moderator only.",
 			reqPerms: permissions.PermissionField["MUTE"],
+			category: "punishment",
 		},
 		"undegrade": {
 			handler:  cmdUndegrade,
@@ -1139,6 +1294,7 @@ func initCommands() {
 			usage:    "Usage: /undegrade <uid1>,<uid2>...",
 			desc:     "Removes degrade punishment from user(s). Moderator only.",
 			reqPerms: permissions.PermissionField["MUTE"],
+			category: "punishment",
 		},
 		"tourettes": {
 			handler:  cmdTourettes,
@@ -1146,6 +1302,7 @@ func initCommands() {
 			usage:    "Usage: /tourettes [-d duration] [-r reason] <uid1>,<uid2>...",
 			desc:     "Causes random outbursts to be inserted into IC messages (swearing, random objects, nonsense, animal noises). Moderator only.",
 			reqPerms: permissions.PermissionField["MUTE"],
+			category: "punishment",
 		},
 		"slang": {
 			handler:  cmdSlang,
@@ -1153,6 +1310,7 @@ func initCommands() {
 			usage:    "Usage: /slang [-d duration] [-r reason] <uid1>,<uid2>...",
 			desc:     "Converts messages to internet slang abbreviations (e.g. 'i don't know' -> 'idk', 'got to go' -> 'gtg').",
 			reqPerms: permissions.PermissionField["MUTE"],
+			category: "punishment",
 		},
 		"unslang": {
 			handler:  cmdUnslang,
@@ -1160,6 +1318,7 @@ func initCommands() {
 			usage:    "Usage: /unslang <uid1>,<uid2>...",
 			desc:     "Removes slang punishment from user(s). Moderator only.",
 			reqPerms: permissions.PermissionField["MUTE"],
+			category: "punishment",
 		},
 		"thesaurusoverload": {
 			handler:  cmdThesaurusOverload,
@@ -1167,6 +1326,7 @@ func initCommands() {
 			usage:    "Usage: /thesaurusoverload [-d duration] [-r reason] <uid1>,<uid2>...",
 			desc:     "Forces IC messages to use comically pompous synonyms and smug parentheticals. Moderator only.",
 			reqPerms: permissions.PermissionField["MUTE"],
+			category: "punishment",
 		},
 		"unthesaurusoverload": {
 			handler:  cmdUnthesaurusoverload,
@@ -1174,6 +1334,7 @@ func initCommands() {
 			usage:    "Usage: /unthesaurusoverload <uid1>,<uid2>...",
 			desc:     "Removes thesaurusoverload punishment from user(s). Moderator only.",
 			reqPerms: permissions.PermissionField["MUTE"],
+			category: "punishment",
 		},
 		"valleygirl": {
 			handler:  cmdValleyGirl,
@@ -1181,6 +1342,7 @@ func initCommands() {
 			usage:    "Usage: /valleygirl [-d duration] [-r reason] <uid1>,<uid2>...",
 			desc:     "Injects valley-girl filler words, vowel stretching, and dramatic tone into IC messages. Moderator only.",
 			reqPerms: permissions.PermissionField["MUTE"],
+			category: "punishment",
 		},
 		"unvalleygirl": {
 			handler:  cmdUnvalleygirl,
@@ -1188,6 +1350,7 @@ func initCommands() {
 			usage:    "Usage: /unvalleygirl <uid1>,<uid2>...",
 			desc:     "Removes valleygirl punishment from user(s). Moderator only.",
 			reqPerms: permissions.PermissionField["MUTE"],
+			category: "punishment",
 		},
 		"babytalk": {
 			handler:  cmdBabytalk,
@@ -1195,6 +1358,7 @@ func initCommands() {
 			usage:    "Usage: /babytalk [-d duration] [-r reason] <uid1>,<uid2>...",
 			desc:     "Converts IC messages to toddler-style baby talk with phonetic substitutions and stage directions. Moderator only.",
 			reqPerms: permissions.PermissionField["MUTE"],
+			category: "punishment",
 		},
 		"unbabytalk": {
 			handler:  cmdUnbabytalk,
@@ -1202,6 +1366,7 @@ func initCommands() {
 			usage:    "Usage: /unbabytalk <uid1>,<uid2>...",
 			desc:     "Removes babytalk punishment from user(s). Moderator only.",
 			reqPerms: permissions.PermissionField["MUTE"],
+			category: "punishment",
 		},
 		"thirdperson": {
 			handler:  cmdThirdPerson,
@@ -1209,6 +1374,7 @@ func initCommands() {
 			usage:    "Usage: /thirdperson [-d duration] [-r reason] <uid1>,<uid2>...",
 			desc:     "Forces IC messages into third-person narration using the player's display name, with mood tags. Moderator only.",
 			reqPerms: permissions.PermissionField["MUTE"],
+			category: "punishment",
 		},
 		"unthirdperson": {
 			handler:  cmdUnthirdperson,
@@ -1216,6 +1382,7 @@ func initCommands() {
 			usage:    "Usage: /unthirdperson <uid1>,<uid2>...",
 			desc:     "Removes thirdperson punishment from user(s). Moderator only.",
 			reqPerms: permissions.PermissionField["MUTE"],
+			category: "punishment",
 		},
 		"unreliablenarrator": {
 			handler:  cmdUnreliableNarrator,
@@ -1223,6 +1390,7 @@ func initCommands() {
 			usage:    "Usage: /unreliablenarrator [-d duration] [-r reason] <uid1>,<uid2>...",
 			desc:     "Makes IC messages sound suspiciously unreliable with hedges, contradictions, and self-doubting commentary. Moderator only.",
 			reqPerms: permissions.PermissionField["MUTE"],
+			category: "punishment",
 		},
 		"ununreliablenarrator": {
 			handler:  cmdUnunreliablenarrator,
@@ -1230,6 +1398,7 @@ func initCommands() {
 			usage:    "Usage: /ununreliablenarrator <uid1>,<uid2>...",
 			desc:     "Removes unreliablenarrator punishment from user(s). Moderator only.",
 			reqPerms: permissions.PermissionField["MUTE"],
+			category: "punishment",
 		},
 		"uncannyvalley": {
 			handler:  cmdUncannyValley,
@@ -1237,6 +1406,7 @@ func initCommands() {
 			usage:    "Usage: /uncannyvalley [-d duration] [-r reason] <uid1>,<uid2>...",
 			desc:     "Adds glitchy system notes to IC messages and subtly mutates the player's display name each message. Moderator only.",
 			reqPerms: permissions.PermissionField["MUTE"],
+			category: "punishment",
 		},
 		"ununcannyvalley": {
 			handler:  cmdUnuncannyvalley,
@@ -1244,6 +1414,7 @@ func initCommands() {
 			usage:    "Usage: /ununcannyvalley <uid1>,<uid2>...",
 			desc:     "Removes uncannyvalley punishment from user(s). Moderator only.",
 			reqPerms: permissions.PermissionField["MUTE"],
+			category: "punishment",
 		},
 		"51": {
 			handler:  cmd51,
@@ -1251,6 +1422,7 @@ func initCommands() {
 			usage:    "Usage: /51 [-d duration] [-r reason] <uid1>,<uid2>...",
 			desc:     "Replaces each IC message with a random line from the 51-messages story. Moderator only.",
 			reqPerms: permissions.PermissionField["MUTE"],
+			category: "punishment",
 		},
 		"un51": {
 			handler:  cmdUn51,
@@ -1258,6 +1430,7 @@ func initCommands() {
 			usage:    "Usage: /un51 <uid1>,<uid2>...",
 			desc:     "Removes 51 punishment from user(s). Moderator only.",
 			reqPerms: permissions.PermissionField["MUTE"],
+			category: "punishment",
 		},
 		"unpunish": {
 			handler:  cmdUnpunish,
@@ -1265,6 +1438,7 @@ func initCommands() {
 			usage:    "Usage: /unpunish [-t punishment_type] <uid1>,<uid2>...\n-t: Specific punishment type to remove (omit to remove all).",
 			desc:     "Removes punishment(s) from user(s).",
 			reqPerms: permissions.PermissionField["MUTE"],
+			category: "punishment",
 		},
 		"stack": {
 			handler:  cmdStack,
@@ -1272,6 +1446,7 @@ func initCommands() {
 			usage:    "Usage: /stack <punishment1> <punishment2> [<punishment3>...] [-d duration] [-r reason] <uid1>,<uid2>...",
 			desc:     "Applies multiple punishment effects to user(s) simultaneously.",
 			reqPerms: permissions.PermissionField["MUTE"],
+			category: "punishment",
 		},
 		"tournament": {
 			handler:  cmdTournament,
@@ -1279,6 +1454,7 @@ func initCommands() {
 			usage:    "Usage: /tournament <start|stop|status>",
 			desc:     "Manages punishment tournament mode.",
 			reqPerms: permissions.PermissionField["MUTE"],
+			category: "punishment",
 		},
 		"join-tournament": {
 			handler:  cmdJoinTournament,
@@ -1286,6 +1462,7 @@ func initCommands() {
 			usage:    "Usage: /join-tournament",
 			desc:     "Join the active punishment tournament.",
 			reqPerms: permissions.PermissionField["NONE"],
+			category: "minigames",
 		},
 		"hotpotato": {
 			handler:  cmdHotPotato,
@@ -1293,6 +1470,7 @@ func initCommands() {
 			usage:    "Usage: /hotpotato | /hotpotato accept | /hotpotato pass",
 			desc:     "Start or join a Hot Potato mini-game event. The carrier can use /hotpotato pass to pass the potato randomly.",
 			reqPerms: permissions.PermissionField["NONE"],
+			category: "minigames",
 		},
 		"giveaway": {
 			handler:  cmdGiveaway,
@@ -1300,6 +1478,7 @@ func initCommands() {
 			usage:    "Usage: /giveaway start <item> | /giveaway enter",
 			desc:     "Start a giveaway or enter an active one.",
 			reqPerms: permissions.PermissionField["NONE"],
+			category: "minigames",
 		},
 		"quickdraw": {
 			handler:  cmdQuickdraw,
@@ -1307,6 +1486,7 @@ func initCommands() {
 			usage:    "Usage: /quickdraw <uid> | /quickdraw accept | /quickdraw decline",
 			desc:     "Challenge another player to a quickdraw duel. The loser gets a random punishment.",
 			reqPerms: permissions.PermissionField["NONE"],
+			category: "minigames",
 		},
 		"russianroulette": {
 			handler:  cmdRussianRoulette,
@@ -1314,6 +1494,7 @@ func initCommands() {
 			usage:    "Usage: /russianroulette | /russianroulette join",
 			desc:     "Start or join a Russian Roulette game. The unlucky loser receives a wild random punishment.",
 			reqPerms: permissions.PermissionField["NONE"],
+			category: "minigames",
 		},
 		// Casino commands
 		"bj": {
@@ -1323,6 +1504,7 @@ func initCommands() {
 			desc:      "Play blackjack. Requires casino to be enabled in the area.",
 			reqPerms:  permissions.PermissionField["NONE"],
 			casinoCmd: true,
+			category: "casino",
 		},
 		"poker": {
 			handler:   cmdPoker,
@@ -1331,6 +1513,7 @@ func initCommands() {
 			desc:      "Play Texas Hold'em poker. Requires casino to be enabled in the area.",
 			reqPerms:  permissions.PermissionField["NONE"],
 			casinoCmd: true,
+			category: "casino",
 		},
 		"slots": {
 			handler:   cmdSlots,
@@ -1339,6 +1522,7 @@ func initCommands() {
 			desc:      "Play slot machines. Requires casino to be enabled in the area.",
 			reqPerms:  permissions.PermissionField["NONE"],
 			casinoCmd: true,
+			category: "casino",
 		},
 		"croulette": {
 			handler:   cmdCasinoRoulette,
@@ -1347,6 +1531,7 @@ func initCommands() {
 			desc:      "Play European roulette. Requires casino to be enabled in the area.",
 			reqPerms:  permissions.PermissionField["NONE"],
 			casinoCmd: true,
+			category: "casino",
 		},
 		"baccarat": {
 			handler:   cmdBaccarat,
@@ -1355,6 +1540,7 @@ func initCommands() {
 			desc:      "Play baccarat. Requires casino to be enabled in the area.",
 			reqPerms:  permissions.PermissionField["NONE"],
 			casinoCmd: true,
+			category: "casino",
 		},
 		"craps": {
 			handler:   cmdCraps,
@@ -1363,6 +1549,7 @@ func initCommands() {
 			desc:      "Play craps. Requires casino to be enabled in the area.",
 			reqPerms:  permissions.PermissionField["NONE"],
 			casinoCmd: true,
+			category: "casino",
 		},
 		"crash": {
 			handler:   cmdCrash,
@@ -1371,6 +1558,7 @@ func initCommands() {
 			desc:      "Play crash. 45s cooldown between rounds; cashout locked for first 5s (instant eject = loss). Requires casino to be enabled.",
 			reqPerms:  permissions.PermissionField["NONE"],
 			casinoCmd: true,
+			category: "casino",
 		},
 		"mines": {
 			handler:   cmdMines,
@@ -1379,6 +1567,7 @@ func initCommands() {
 			desc:      "Play mines. Requires casino to be enabled in the area.",
 			reqPerms:  permissions.PermissionField["NONE"],
 			casinoCmd: true,
+			category: "casino",
 		},
 		"keno": {
 			handler:   cmdKeno,
@@ -1387,6 +1576,7 @@ func initCommands() {
 			desc:      "Play keno. Requires casino to be enabled in the area.",
 			reqPerms:  permissions.PermissionField["NONE"],
 			casinoCmd: true,
+			category: "casino",
 		},
 		"wheel": {
 			handler:   cmdWheel,
@@ -1395,6 +1585,7 @@ func initCommands() {
 			desc:      "Spin the prize wheel. Requires casino to be enabled in the area.",
 			reqPerms:  permissions.PermissionField["NONE"],
 			casinoCmd: true,
+			category: "casino",
 		},
 		"plinko": {
 			handler:   cmdPlinko,
@@ -1403,6 +1594,7 @@ func initCommands() {
 			desc:      "Drop a chip down the Plinko peg board. Risk level controls payout spread (low: 0.3x-2.5x, med: 0.1x-5x, high: 0x-12x). Requires casino to be enabled in the area.",
 			reqPerms:  permissions.PermissionField["NONE"],
 			casinoCmd: true,
+			category: "casino",
 		},
 		"bar": {
 			handler:   cmdBar,
@@ -1411,6 +1603,7 @@ func initCommands() {
 			desc:      fmt.Sprintf("Visit the bar! %d drinks each with RISK and wild variance — huge wins or big losses. Use /bar menu to see all drinks.", len(barMenu)),
 			reqPerms:  permissions.PermissionField["NONE"],
 			casinoCmd: true,
+			category: "casino",
 		},
 		"rob": {
 			handler:   cmdRob,
@@ -1419,6 +1612,7 @@ func initCommands() {
 			desc:      "Attempt to rob a location for chips. 20% success rate — catastrophic failures drain your chips and may mute you.",
 			reqPerms:  permissions.PermissionField["NONE"],
 			casinoCmd: true,
+			category: "chips",
 		},
 		"gamble": {
 			handler:   cmdGamble,
@@ -1427,6 +1621,7 @@ func initCommands() {
 			desc:      "Toggle visibility of gambling broadcast messages in the area chat.",
 			reqPerms:  permissions.PermissionField["NONE"],
 			casinoCmd: true,
+			category: "casino",
 		},
 		"chips": {
 			handler:   cmdChipsEnhanced,
@@ -1435,6 +1630,7 @@ func initCommands() {
 			desc:      "Check your Nyathena Chip balance, view leaderboards, or give chips to another player.",
 			reqPerms:  permissions.PermissionField["NONE"],
 			casinoCmd: true,
+			category: "chips",
 		},
 		"richest": {
 			handler:   cmdRichest,
@@ -1443,6 +1639,7 @@ func initCommands() {
 			desc:      "Show the global chip leaderboard (top 10 richest players by default, max 50).",
 			reqPerms:  permissions.PermissionField["NONE"],
 			casinoCmd: true,
+			category: "chips",
 		},
 		"casino": {
 			handler:   cmdCasino,
@@ -1451,6 +1648,7 @@ func initCommands() {
 			desc:      "View the casino dashboard or status for the current area.",
 			reqPerms:  permissions.PermissionField["NONE"],
 			casinoCmd: true,
+			category: "casino",
 		},
 		"casinoenable": {
 			handler:   cmdCasinoEnable,
@@ -1459,6 +1657,7 @@ func initCommands() {
 			desc:      "Enables or disables the casino for this area.",
 			reqPerms:  permissions.PermissionField["MODIFY_AREA"],
 			casinoCmd: true,
+			category: "casino",
 		},
 		"casinoset": {
 			handler:   cmdCasinoSet,
@@ -1467,6 +1666,7 @@ func initCommands() {
 			desc:      "Configures casino settings for this area.",
 			reqPerms:  permissions.PermissionField["MODIFY_AREA"],
 			casinoCmd: true,
+			category: "casino",
 		},
 		"grantchips": {
 			handler:   cmdGrantChips,
@@ -1475,6 +1675,7 @@ func initCommands() {
 			desc:      "Admin: Grant any amount of chips to an online player by UID.",
 			reqPerms:  permissions.PermissionField["ADMIN"],
 			casinoCmd: true,
+			category: "admin",
 		},
 		"register": {
 			handler:   cmdRegister,
@@ -1483,6 +1684,7 @@ func initCommands() {
 			desc:      "Start creating a free player account (a captcha confirmation is required). Tracks chips, playtime, and leaderboard standings.",
 			reqPerms:  permissions.PermissionField["NONE"],
 			casinoCmd: true,
+			category: "account",
 		},
 		"captcha": {
 			handler:   cmdCaptcha,
@@ -1491,6 +1693,7 @@ func initCommands() {
 			desc:      "Complete a pending /register by entering the captcha token you were given.",
 			reqPerms:  permissions.PermissionField["NONE"],
 			casinoCmd: true,
+			category: "account",
 		},
 		"account": {
 			handler:   cmdAccount,
@@ -1499,6 +1702,7 @@ func initCommands() {
 			desc:      "View your account profile: username, chip balance, and playtime.",
 			reqPerms:  permissions.PermissionField["NONE"],
 			casinoCmd: true,
+			category: "account",
 		},
 		"playtime": {
 			handler:  cmdPlaytimeTop,
@@ -1506,6 +1710,7 @@ func initCommands() {
 			usage:    "Usage: /playtime [top] [n]",
 			desc:     "Show the playtime leaderboard. Displays account names for registered players.",
 			reqPerms: permissions.PermissionField["NONE"],
+			category: "general",
 		},
 		"unscramble": {
 			handler:   cmdUnscramble,
@@ -1514,6 +1719,7 @@ func initCommands() {
 			desc:      "Check your unscramble wins or view the unscramble leaderboard. Answer active puzzles in IC chat to win chips!",
 			reqPerms:  permissions.PermissionField["NONE"],
 			casinoCmd: true,
+			category: "chips",
 		},
 		"jobs": {
 			handler:   cmdJobs,
@@ -1522,6 +1728,7 @@ func initCommands() {
 			desc:      "List all available jobs that earn small chip rewards.",
 			reqPerms:  permissions.PermissionField["NONE"],
 			casinoCmd: true,
+			category: "jobs",
 		},
 		"jobtop": {
 			handler:   cmdJobTop,
@@ -1530,6 +1737,7 @@ func initCommands() {
 			desc:      "Show the job earnings leaderboard (top chip earners from jobs).",
 			reqPerms:  permissions.PermissionField["NONE"],
 			casinoCmd: true,
+			category: "chips",
 		},
 		"janitor": {
 			handler:   cmdJanitor,
@@ -1538,6 +1746,7 @@ func initCommands() {
 			desc:      "Work as a janitor to earn chips (45-minute cooldown).",
 			reqPerms:  permissions.PermissionField["NONE"],
 			casinoCmd: true,
+			category: "jobs",
 		},
 		"busker": {
 			handler:   cmdBusker,
@@ -1546,6 +1755,7 @@ func initCommands() {
 			desc:      "Busk for tips outside the courthouse to earn chips (30-minute cooldown).",
 			reqPerms:  permissions.PermissionField["NONE"],
 			casinoCmd: true,
+			category: "jobs",
 		},
 		"paperboy": {
 			handler:   cmdPaperboy,
@@ -1554,6 +1764,7 @@ func initCommands() {
 			desc:      "Deliver newspapers and briefs to earn chips (60-minute cooldown).",
 			reqPerms:  permissions.PermissionField["NONE"],
 			casinoCmd: true,
+			category: "jobs",
 		},
 		"bailiffjob": {
 			handler:   cmdBailiffJob,
@@ -1562,6 +1773,7 @@ func initCommands() {
 			desc:      "Stand guard duty as a bailiff to earn chips (2-hour cooldown).",
 			reqPerms:  permissions.PermissionField["NONE"],
 			casinoCmd: true,
+			category: "jobs",
 		},
 		"clerk": {
 			handler:   cmdClerk,
@@ -1570,6 +1782,7 @@ func initCommands() {
 			desc:      "File paperwork as a clerk to earn chips (90-minute cooldown).",
 			reqPerms:  permissions.PermissionField["NONE"],
 			casinoCmd: true,
+			category: "jobs",
 		},
 		"shop": {
 			handler:   cmdShop,
@@ -1578,6 +1791,7 @@ func initCommands() {
 			desc:      "Browse the Nyathena Shop: 115+ cosmetic tags, job passes, and passive income upgrades. Categories: gambling attorney anime gamer girly meme prestige.",
 			reqPerms:  permissions.PermissionField["NONE"],
 			casinoCmd: true,
+			category: "chips",
 		},
 		"settag": {
 			handler:   cmdSetTag,
@@ -1586,6 +1800,7 @@ func initCommands() {
 			desc:      "Equip or swap a purchased cosmetic tag. Your active tag appears next to your name in /gas and /players.",
 			reqPerms:  permissions.PermissionField["NONE"],
 			casinoCmd: true,
+			category: "chips",
 		},
 		"favourite": {
 			handler:   cmdFavourite,
@@ -1594,6 +1809,7 @@ func initCommands() {
 			desc:      "Toggle a character in your wardrobe favourites. Add or remove with the same command.",
 			reqPerms:  permissions.PermissionField["NONE"],
 			casinoCmd: true,
+			category: "account",
 		},
 		"wardrobe": {
 			handler:   cmdWardrobe,
@@ -1602,6 +1818,7 @@ func initCommands() {
 			desc:      "View your saved favourite characters, or swap to one instantly.",
 			reqPerms:  permissions.PermissionField["NONE"],
 			casinoCmd: true,
+			category: "account",
 		},
 		// ── Mafia / Werewolf social deduction minigame ──────────────────────
 		"mafia": {
@@ -1610,6 +1827,7 @@ func initCommands() {
 			usage:    mafiaUsage,
 			desc:     "Social deduction minigame (Mafia/Werewolf). Type /mafia help for subcommands.",
 			reqPerms: permissions.PermissionField["NONE"],
+			category: "mafia",
 		},
 		"werewolf": {
 			handler:  cmdMafia,
@@ -1617,6 +1835,7 @@ func initCommands() {
 			usage:    mafiaUsage,
 			desc:     "Alias for /mafia — social deduction minigame.",
 			reqPerms: permissions.PermissionField["NONE"],
+			category: "mafia",
 		},
 		// ── Lotto scratch card ───────────────────────────────────────────────
 		"lotto": {
@@ -1626,8 +1845,40 @@ func initCommands() {
 			desc:      "Buy an instant scratch-card lottery ticket. Three matching symbols = big win!",
 			reqPerms:  permissions.PermissionField["NONE"],
 			casinoCmd: true,
+			category: "casino",
 		},
 	}
+}
+
+// helpCategory describes a top-level /help section visible to players.
+type helpCategory struct {
+	name  string
+	emoji string
+	title string
+	desc  string
+}
+
+// helpCategoryList defines display order and descriptions for /help categories.
+var helpCategoryList = []helpCategory{
+	{"general", "🎮", "General", "Movement, chat, dice, info commands."},
+	{"area", "🏛️", "Area", "Area management — backgrounds, music, locks, polls."},
+	{"testimony", "📝", "Testimony", "Testimony recorder — record and replay witness statements."},
+	{"minigames", "🎲", "Mini-games", "Hot Potato, Quick Draw, Russian Roulette, giveaways."},
+	{"mafia", "🕵️", "Mafia / Werewolf", "Social-deduction minigame with roles, votes and night actions."},
+	{"casino", "🎰", "Casino", "Blackjack, Poker, Slots, Roulette, and more."},
+	{"chips", "💰", "Chips", "Chip balance, leaderboards, shop, and the bar."},
+	{"jobs", "💼", "Jobs", "Earn chips without gambling — cooldown-based jobs."},
+	{"account", "👤", "Account", "Register, login, wardrobe, and profile."},
+	{"moderation", "🔨", "Moderation", "Mute, kick, ban, jail, and other staff tools."},
+	{"punishment", "🎭", "Punishments", "Text-effect and behaviour punishments for players."},
+	{"admin", "⚙️", "Admin", "Server configuration, user management, runtime tweaks."},
+}
+
+// clientCanUseCommand reports whether the client has permission to use cmd,
+// factoring in the special CM check.
+func clientCanUseCommand(client *Client, cmd Command) bool {
+	return permissions.HasPermission(client.Perms(), cmd.reqPerms) ||
+		(cmd.reqPerms == permissions.PermissionField["CM"] && client.Area().HasCM(client.Uid()))
 }
 
 // ParseCommand calls the appropriate function for a given command.
@@ -1635,59 +1886,98 @@ func ParseCommand(client *Client, command string, args []string) {
 	casinoEnabled := config != nil && config.EnableCasino
 
 	if command == "help" {
-		var s []string
-		for name, cmd := range Commands {
-			// Hide casino/account commands when the feature is disabled.
-			if cmd.casinoCmd && !casinoEnabled {
-				continue
+		// /help <category|command> — drill down into a category or show command usage
+		if len(args) == 1 {
+			cmdName := strings.ToLower(args[0])
+
+			// Check if it's a known category first
+			for _, cat := range helpCategoryList {
+				if cmdName == cat.name {
+					var lines []string
+					for name, cmd := range Commands {
+						if cmd.category != cat.name {
+							continue
+						}
+						if cmd.casinoCmd && !casinoEnabled {
+							continue
+						}
+						if clientCanUseCommand(client, cmd) {
+							lines = append(lines, fmt.Sprintf("  /%v — %v", name, cmd.desc))
+						}
+					}
+					if len(lines) == 0 {
+						client.SendServerMessage(fmt.Sprintf("No accessible commands in the '%v' category.", cat.name))
+						return
+					}
+					sort.Strings(lines)
+					header := fmt.Sprintf("%v %v Commands\n%v\n\n", cat.emoji, cat.title, cat.desc)
+					client.SendServerMessage(header + strings.Join(lines, "\n") + "\n\nFor detailed usage on any command: /<command> -h")
+					return
+				}
 			}
-			if permissions.HasPermission(client.Perms(), cmd.reqPerms) || (cmd.reqPerms == permissions.PermissionField["CM"] && client.Area().HasCM(client.Uid())) {
-				s = append(s, fmt.Sprintf("- /%v: %v", name, cmd.desc))
+
+			// Not a category — try to look up as a specific command
+			cmd, exists := Commands[cmdName]
+			if exists && !(cmd.casinoCmd && !casinoEnabled) {
+				if clientCanUseCommand(client, cmd) {
+					client.SendServerMessage(cmd.usage)
+				} else {
+					client.SendServerMessage("You do not have permission to use that command.")
+				}
+				return
 			}
+
+			client.SendServerMessage(fmt.Sprintf("Unknown category or command '%v'.\nType /help to see all available categories.", args[0]))
+			return
 		}
-		sort.Strings(s)
+
+		// /help (no args) — show category overview
 
 		// Build a context-aware header.
 		var header string
 		if client.Authenticated() {
 			header = fmt.Sprintf("Logged in as: %v\n\n", client.ModName())
 			if casinoEnabled {
-				header += "👗 Your Wardrobe (Favourites):\n" +
-					"  Ever feel overwhelmed by the huge character list? Save your go-to characters!\n" +
-					"  • /favourite <char>   — add or remove a character from your wardrobe (toggles).\n" +
-					"  • /wardrobe           — view all your saved favourites.\n" +
-					"  • /wardrobe <char>    — instantly swap to any character in your wardrobe.\n" +
-					fmt.Sprintf("  You can save up to %d characters. Favourites are tied to your account.\n\n", db.MaxFavourites)
+				header += "👗 Your Wardrobe: /favourite <char> to save | /wardrobe to view | /wardrobe <char> to swap\n\n"
 			}
 		} else if casinoEnabled {
-			header = "💡 Player Accounts (optional):\n" +
-				"  • Already have an account? Use /login <username> <password> — no new account needed.\n" +
-				"  • New here? /register <username> <password> creates a free account that tracks\n" +
-				"    chips, playtime, unscramble wins, and casino standings. No extra permissions granted.\n" +
-				"  • 🔒 Passwords are stored with bcrypt (industry-standard one-way hashing).\n" +
-				"    Your password is never stored in plain text.\n\n" +
-				"👗 Wardrobe (requires free account):\n" +
-				"  Ever been overwhelmed by the huge character list? Your Wardrobe lets you save a\n" +
-				"  personal shortlist of favourite characters and swap to them instantly!\n" +
-				"  • /favourite <char>   — add or remove a character from your saved favourites.\n" +
-				"  • /wardrobe           — view your personal favourites list.\n" +
-				"  • /wardrobe <char>    — swap to any character in your wardrobe in one command.\n" +
-				fmt.Sprintf("  Save up to %d characters — no more scrolling through the entire list!\n\n", db.MaxFavourites) +
-				"🎰 Casino Tips:\n" +
-				"  • /chips                        — check your chip balance.\n" +
-				"  • /chips give <uid> <amount>    — send chips to another player.\n" +
-				"  • /chips top                    — see the global chip leaderboard.\n\n" +
-				"💰 Earn Chips Without Gambling:\n" +
-				"  • /jobs                         — list all available jobs (small rewards, unique cooldowns).\n" +
-				"  • /janitor /busker /paperboy     — work a job to earn chips.\n" +
-				"  • /bailiffjob /clerk             — more jobs available.\n" +
-				"  • /jobtop                        — see the job earnings leaderboard.\n" +
-				"  • Unscramble events post every 30–60 min — answer in IC chat to win 10 chips!\n" +
-				"  • /unscramble                   — see your wins & any active puzzle.\n" +
-				"  • /unscramble top               — see the unscramble leaderboard.\n\n"
+			header = "💡 New here? /register <username> <password> — free account, no extra permissions.\n" +
+				"   Already have one? /login <username> <password>\n\n"
 		}
 
-		client.SendServerMessage(header + "Recognized commands:\n" + strings.Join(s, "\n") + "\n\nTo view detailed usage on a command, do /<command> -h")
+		// Compute max label width for aligned formatting.
+		maxLabelLen := 0
+		for _, cat := range helpCategoryList {
+			if l := len("/help " + cat.name); l > maxLabelLen {
+				maxLabelLen = l
+			}
+		}
+		labelFmt := fmt.Sprintf("  %%v %%-%dv — %%v", maxLabelLen)
+
+		// Build the category list, showing only categories with at least one accessible command.
+		var catLines []string
+		for _, cat := range helpCategoryList {
+			hasAny := false
+			for _, cmd := range Commands {
+				if cmd.category != cat.name {
+					continue
+				}
+				if cmd.casinoCmd && !casinoEnabled {
+					continue
+				}
+				if clientCanUseCommand(client, cmd) {
+					hasAny = true
+					break
+				}
+			}
+			if hasAny {
+				catLines = append(catLines, fmt.Sprintf(labelFmt, cat.emoji, "/help "+cat.name, cat.desc))
+			}
+		}
+
+		client.SendServerMessage(header + "📖 Help Categories — type /help <category> to explore:\n\n" +
+			strings.Join(catLines, "\n") +
+			"\n\nFor usage on any specific command: /<command> -h")
 		return
 	}
 
@@ -1701,7 +1991,7 @@ func ParseCommand(client *Client, command string, args []string) {
 		client.SendServerMessage("The casino and player account system is not enabled on this server.")
 		return
 	}
-	if permissions.HasPermission(client.Perms(), cmd.reqPerms) || (cmd.reqPerms == permissions.PermissionField["CM"] && client.Area().HasCM(client.Uid())) {
+	if clientCanUseCommand(client, cmd) {
 		if sliceutil.ContainsString(args, "-h") {
 			client.SendServerMessage(cmd.usage)
 			return
