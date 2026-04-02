@@ -102,8 +102,8 @@ func TestApplyUpsidedownReversed(t *testing.T) {
 	result := applyUpsidedown(input)
 	// Reversed, 'b' → 'q' should be first.
 	firstRune, _ := utf8.DecodeRuneInString(result)
-	if firstRune != upsidedownMap['b'] {
-		t.Errorf("applyUpsidedown(%q) first rune: got %q, want %q", input, firstRune, upsidedownMap['b'])
+	if firstRune != flipRune('b') {
+		t.Errorf("applyUpsidedown(%q) first rune: got %q, want %q", input, firstRune, flipRune('b'))
 	}
 }
 
@@ -113,9 +113,9 @@ func TestApplyUpsidedownKnownChars(t *testing.T) {
 		in   string
 		want rune
 	}{
-		{"a", 'ɐ'},
-		{"e", 'ǝ'},
-		{"h", 'ɥ'},
+		{"a", flipRune('a')},
+		{"e", flipRune('e')},
+		{"h", flipRune('h')},
 	}
 	for _, tc := range cases {
 		// Single character input — reversed is still a single character.

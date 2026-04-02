@@ -64,9 +64,13 @@ func chipCacheGet(ipid string) (int64, bool) {
 		return 0, false
 	}
 	if time.Now().After(e.expiry) {
-		// Entry has expired — remove it so the map doesn't grow unbounded.
+		// Entry appears expired.  Re-check under the write lock in case another
+		// goroutine refreshed it between our RUnlock and Lock — we must not
+		// evict a valid, freshly-written entry.
 		chipCache.Lock()
-		delete(chipCache.m, ipid)
+		if e2, still := chipCache.m[ipid]; still && time.Now().After(e2.expiry) {
+			delete(chipCache.m, ipid)
+		}
 		chipCache.Unlock()
 		return 0, false
 	}

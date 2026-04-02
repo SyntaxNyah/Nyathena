@@ -5,6 +5,7 @@ import (
 	"math/rand"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 	"unicode"
 
@@ -22,14 +23,19 @@ const (
 // typingRaceState is the mutex-protected global state for the typing race minigame.
 type typingRaceState struct {
 	mu           sync.Mutex
-	optInActive  bool            // true during the 30-second join window
-	raceActive   bool            // true while the phrase is posted and awaiting answer
+	optInActive  bool             // true during the 30-second join window
+	raceActive   bool             // true while the phrase is posted and awaiting answer
 	participants map[int]struct{} // UIDs who joined during opt-in
-	phrase       string          // the phrase players must type (lowercased for comparison)
-	phraseRaw    string          // the phrase as announced (original case)
-	postedAt     time.Time       // when the phrase was posted
-	lastRaceEnd  time.Time       // used to enforce cooldown
+	phrase       string           // the phrase players must type (lowercased for comparison)
+	phraseRaw    string           // the phrase as announced (original case)
+	postedAt     time.Time        // when the phrase was posted
+	lastRaceEnd  time.Time        // used to enforce cooldown
 }
+
+// typingRaceActiveFast is an atomic mirror of typingRace.raceActive.
+// typingRaceOnIC reads it without acquiring the mutex so the common case
+// (no race active) is a single atomic load instead of a mutex acquisition.
+var typingRaceActiveFast atomic.Bool
 
 var typingRace = typingRaceState{
 	participants: make(map[int]struct{}),
@@ -168,6 +174,7 @@ func typingRaceOptInTimer() {
 
 	typingRace.mu.Lock()
 	typingRace.raceActive = true
+	typingRaceActiveFast.Store(true)
 	typingRace.phrase = phraseKey
 	typingRace.phraseRaw = phraseRaw
 	typingRace.postedAt = time.Now()
@@ -186,6 +193,7 @@ func typingRaceOptInTimer() {
 			return
 		}
 		typingRace.raceActive = false
+		typingRaceActiveFast.Store(false)
 		typingRace.lastRaceEnd = time.Now()
 		typingRace.mu.Unlock()
 		sendGlobalServerMessage(fmt.Sprintf("⌨️ Time's up! Nobody typed the phrase in time. The answer was: \"%s\"", phraseRaw))
@@ -195,6 +203,16 @@ func typingRaceOptInTimer() {
 // typingRaceOnIC is called from the IC packet handler for every in-character message.
 // It checks whether the message matches the active race phrase.
 func typingRaceOnIC(client *Client, msgText string) {
+	// Atomic fast path: skip the mutex entirely when no race is active.
+	// This is the common case — most IC messages arrive outside a race.
+	if !typingRaceActiveFast.Load() {
+		return
+	}
+
+	// Normalise before acquiring the lock so we hold the lock for the
+	// minimum time necessary.
+	guess := normaliseTypingPhrase(msgText)
+
 	typingRace.mu.Lock()
 	if !typingRace.raceActive {
 		typingRace.mu.Unlock()
@@ -207,7 +225,6 @@ func typingRaceOnIC(client *Client, msgText string) {
 		return
 	}
 
-	guess := normaliseTypingPhrase(msgText)
 	if guess != typingRace.phrase {
 		typingRace.mu.Unlock()
 		return
@@ -217,6 +234,7 @@ func typingRaceOnIC(client *Client, msgText string) {
 	elapsed := time.Since(typingRace.postedAt)
 	phraseRaw := typingRace.phraseRaw
 	typingRace.raceActive = false
+	typingRaceActiveFast.Store(false)
 	typingRace.lastRaceEnd = time.Now()
 	typingRace.mu.Unlock()
 
@@ -239,23 +257,32 @@ func typingRaceOnIC(client *Client, msgText string) {
 	))
 }
 
-// normaliseTypingPhrase lowercases, collapses whitespace, and strips leading/trailing
-// punctuation so that minor formatting differences don't disqualify a valid answer.
+// normaliseTypingPhrase lowercases, collapses whitespace, and strips punctuation
+// at word boundaries so that minor formatting differences don't disqualify a
+// valid answer.
+//
+// Optimisation notes:
+//   - Characters are lowercased inline with unicode.ToLower, avoiding the
+//     intermediate string allocation that strings.ToLower would produce.
+//   - A "pending space" flag defers space emission until the next valid
+//     character is seen, so neither TrimSpace nor a second pass is needed.
 func normaliseTypingPhrase(s string) string {
-	// Lower-case and strip non-letter/digit/space runes from each word boundary.
 	var b strings.Builder
 	b.Grow(len(s))
-	prevSpace := true
-	for _, r := range strings.ToLower(s) {
+	pendingSpace := false
+	for _, r := range s {
+		r = unicode.ToLower(r)
 		if unicode.IsSpace(r) {
-			if !prevSpace {
-				b.WriteByte(' ')
+			if b.Len() > 0 {
+				pendingSpace = true
 			}
-			prevSpace = true
 		} else if unicode.IsLetter(r) || unicode.IsDigit(r) || r == '\'' {
+			if pendingSpace {
+				b.WriteByte(' ')
+				pendingSpace = false
+			}
 			b.WriteRune(r)
-			prevSpace = false
 		}
 	}
-	return strings.TrimSpace(b.String())
+	return b.String()
 }

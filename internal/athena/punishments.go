@@ -2156,42 +2156,182 @@ func applyPoet(text string) string {
 	return truncateText(prefix + text + " " + suffix)
 }
 
-// upsidedownMap maps ASCII printable characters to their Unicode upside-down equivalents.
-// Characters without a visual flip are left as-is.
-var upsidedownMap = map[rune]rune{
-	'a': 'ɐ', 'b': 'q', 'c': 'ɔ', 'd': 'p', 'e': 'ǝ',
-	'f': 'ɟ', 'g': 'ƃ', 'h': 'ɥ', 'i': 'ı', 'j': 'ɾ',
-	'k': 'ʞ', 'l': 'l', 'm': 'ɯ', 'n': 'u', 'o': 'o',
-	'p': 'd', 'q': 'b', 'r': 'ɹ', 's': 's', 't': 'ʇ',
-	'u': 'n', 'v': 'ʌ', 'w': 'ʍ', 'x': 'x', 'y': 'ʎ',
-	'z': 'z',
-	'A': '∀', 'B': 'B', 'C': 'Ɔ', 'D': 'D', 'E': 'Ǝ',
-	'F': 'Ⅎ', 'G': 'פ', 'H': 'H', 'I': 'I', 'J': 'ſ',
-	'K': 'K', 'L': '˥', 'M': 'W', 'N': 'N', 'O': 'O',
-	'P': 'Ԁ', 'Q': 'Q', 'R': 'R', 'S': 'S', 'T': '┴',
-	'U': '∩', 'V': 'Λ', 'W': 'M', 'X': 'X', 'Y': '⅄',
-	'Z': 'Z',
-	'0': '0', '1': 'Ɩ', '2': 'ᄅ', '3': 'Ɛ', '4': 'ㄣ',
-	'5': 'ϛ', '6': '9', '7': 'ㄥ', '8': '8', '9': '6',
-	'.': '˙', ',': '\'', '?': '¿', '!': '¡', '"': '„',
-	'&': '⅋', '_': '‾',
+// flipRune returns the upside-down Unicode equivalent of r, or r unchanged if
+// there is no mapping.  Implemented as a switch so the compiler can emit a
+// static lookup rather than a hash-map query.
+func flipRune(r rune) rune {
+	switch r {
+	// Lowercase letters
+	case 'a':
+		return 'ɐ'
+	case 'b':
+		return 'q'
+	case 'c':
+		return 'ɔ'
+	case 'd':
+		return 'p'
+	case 'e':
+		return 'ǝ'
+	case 'f':
+		return 'ɟ'
+	case 'g':
+		return 'ƃ'
+	case 'h':
+		return 'ɥ'
+	case 'i':
+		return 'ı'
+	case 'j':
+		return 'ɾ'
+	case 'k':
+		return 'ʞ'
+	case 'l':
+		return 'l'
+	case 'm':
+		return 'ɯ'
+	case 'n':
+		return 'u'
+	case 'o':
+		return 'o'
+	case 'p':
+		return 'd'
+	case 'q':
+		return 'b'
+	case 'r':
+		return 'ɹ'
+	case 's':
+		return 's'
+	case 't':
+		return 'ʇ'
+	case 'u':
+		return 'n'
+	case 'v':
+		return 'ʌ'
+	case 'w':
+		return 'ʍ'
+	case 'x':
+		return 'x'
+	case 'y':
+		return 'ʎ'
+	case 'z':
+		return 'z'
+	// Uppercase letters
+	case 'A':
+		return '∀'
+	case 'B':
+		return 'B'
+	case 'C':
+		return 'Ɔ'
+	case 'D':
+		return 'D'
+	case 'E':
+		return 'Ǝ'
+	case 'F':
+		return 'Ⅎ'
+	case 'G':
+		return 'פ'
+	case 'H':
+		return 'H'
+	case 'I':
+		return 'I'
+	case 'J':
+		return 'ſ'
+	case 'K':
+		return 'K'
+	case 'L':
+		return '˥'
+	case 'M':
+		return 'W'
+	case 'N':
+		return 'N'
+	case 'O':
+		return 'O'
+	case 'P':
+		return 'Ԁ'
+	case 'Q':
+		return 'Q'
+	case 'R':
+		return 'R'
+	case 'S':
+		return 'S'
+	case 'T':
+		return '┴'
+	case 'U':
+		return '∩'
+	case 'V':
+		return 'Λ'
+	case 'W':
+		return 'M'
+	case 'X':
+		return 'X'
+	case 'Y':
+		return '⅄'
+	case 'Z':
+		return 'Z'
+	// Digits
+	case '0':
+		return '0'
+	case '1':
+		return 'Ɩ'
+	case '2':
+		return 'ᄅ'
+	case '3':
+		return 'Ɛ'
+	case '4':
+		return 'ㄣ'
+	case '5':
+		return 'ϛ'
+	case '6':
+		return '9'
+	case '7':
+		return 'ㄥ'
+	case '8':
+		return '8'
+	case '9':
+		return '6'
+	// Punctuation
+	case '.':
+		return '˙'
+	case ',':
+		return '\''
+	case '?':
+		return '¿'
+	case '!':
+		return '¡'
+	case '"':
+		return '„'
+	case '&':
+		return '⅋'
+	case '_':
+		return '‾'
+	default:
+		return r
+	}
 }
 
 // applyUpsidedown flips the text upside-down by reversing it and replacing
 // each character with its Unicode upside-down equivalent.
+//
+// Optimisation: the reverse and flip are combined into a single
+// strings.Builder pass over the original rune slice, eliminating the
+// need for a second iteration.  The map[rune]rune used previously is
+// replaced by a switch so there is no hash computation per character.
 func applyUpsidedown(text string) string {
 	runes := []rune(text)
-	// Reverse the rune slice
-	for i, j := 0, len(runes)-1; i < j; i, j = i+1, j-1 {
-		runes[i], runes[j] = runes[j], runes[i]
+	n := len(runes)
+	if n == 0 {
+		return ""
 	}
-	// Replace each rune with its upside-down equivalent
-	for i, r := range runes {
-		if flipped, ok := upsidedownMap[r]; ok {
-			runes[i] = flipped
-		}
+	var b strings.Builder
+	// Pre-grow using the original byte length as a reasonable lower-bound.
+	// Many flipped characters encode to 2-3 UTF-8 bytes (e.g. '∀', 'Ǝ'),
+	// so the true output may be larger, but starting from len(text) avoids
+	// re-allocation for typical short messages.
+	b.Grow(len(text))
+	// Walk the rune slice backwards and emit the flipped character.
+	for i := n - 1; i >= 0; i-- {
+		b.WriteRune(flipRune(runes[i]))
 	}
-	return truncateText(string(runes))
+	return truncateText(b.String())
 }
 
 // sarcasmCommentaries are parenthetical sarcastic remarks appended to messages.
@@ -2287,5 +2427,13 @@ var recipeEndings = []string{
 func applyRecipe(text string) string {
 	verb := recipeStepVerbs[rand.Intn(len(recipeStepVerbs))]
 	ending := recipeEndings[rand.Intn(len(recipeEndings))]
-	return truncateText(fmt.Sprintf("Step 1: %s \"%s\". %s", verb, text, ending))
+	var b strings.Builder
+	b.Grow(len("Step 1: ") + len(verb) + len(" \"") + len(text) + len("\". ") + len(ending))
+	b.WriteString("Step 1: ")
+	b.WriteString(verb)
+	b.WriteString(" \"")
+	b.WriteString(text)
+	b.WriteString("\". ")
+	b.WriteString(ending)
+	return truncateText(b.String())
 }

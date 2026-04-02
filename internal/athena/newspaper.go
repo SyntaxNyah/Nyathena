@@ -199,11 +199,11 @@ func buildSectionChipLeaderboard() string {
 		return "💰 CHIP LEADERBOARD\nNo data available yet."
 	}
 	var sb strings.Builder
-	sb.WriteString("💰 CHIP LEADERBOARD — Top Earners\n")
+	sb.WriteString("💰 CHIP LEADERBOARD — Top Earners")
 	for i, e := range entries {
-		sb.WriteString(fmt.Sprintf("  %d. %s — %d chips\n", i+1, e.Username, e.Balance))
+		fmt.Fprintf(&sb, "\n  %d. %s — %d chips", i+1, e.Username, e.Balance)
 	}
-	return strings.TrimRight(sb.String(), "\n")
+	return sb.String()
 }
 
 func buildSectionPlaytimeTop() string {
@@ -212,11 +212,11 @@ func buildSectionPlaytimeTop() string {
 		return "⏱️ PLAYTIME HALL OF FAME\nNo data available yet."
 	}
 	var sb strings.Builder
-	sb.WriteString("⏱️ PLAYTIME HALL OF FAME — Most Dedicated Players\n")
+	sb.WriteString("⏱️ PLAYTIME HALL OF FAME — Most Dedicated Players")
 	for i, e := range entries {
-		sb.WriteString(fmt.Sprintf("  %d. %s — %s\n", i+1, e.Username, formatPlaytime(e.Playtime)))
+		fmt.Fprintf(&sb, "\n  %d. %s — %s", i+1, e.Username, formatPlaytime(e.Playtime))
 	}
-	return strings.TrimRight(sb.String(), "\n")
+	return sb.String()
 }
 
 func buildSectionUnscrambleTop() string {
@@ -225,11 +225,11 @@ func buildSectionUnscrambleTop() string {
 		return "🔤 UNSCRAMBLE CHAMPIONS\nNo data available yet."
 	}
 	var sb strings.Builder
-	sb.WriteString("🔤 UNSCRAMBLE CHAMPIONS — Fastest Solvers\n")
+	sb.WriteString("🔤 UNSCRAMBLE CHAMPIONS — Fastest Solvers")
 	for i, e := range entries {
-		sb.WriteString(fmt.Sprintf("  %d. %s — %d win(s)\n", i+1, e.Username, e.Wins))
+		fmt.Fprintf(&sb, "\n  %d. %s — %d win(s)", i+1, e.Username, e.Wins)
 	}
-	return strings.TrimRight(sb.String(), "\n")
+	return sb.String()
 }
 
 func buildSectionRecentBans() string {
@@ -238,15 +238,15 @@ func buildSectionRecentBans() string {
 		return "⚖️ RECENT JUDGEMENTS\nThe courtroom has been quiet lately."
 	}
 	var sb strings.Builder
-	sb.WriteString("⚖️ RECENT JUDGEMENTS — Justice Served\n")
+	sb.WriteString("⚖️ RECENT JUDGEMENTS — Justice Served")
 	for _, b := range bans {
 		reason := b.Reason
 		if reason == "" {
 			reason = "no reason given"
 		}
-		sb.WriteString(fmt.Sprintf("  • Banned by %s — %s\n", b.Moderator, reason))
+		fmt.Fprintf(&sb, "\n  • Banned by %s — %s", b.Moderator, reason)
 	}
-	return strings.TrimRight(sb.String(), "\n")
+	return sb.String()
 }
 
 func buildSectionServerStats() string {
@@ -278,11 +278,11 @@ func buildSectionCasino() string {
 		return "🎰 CASINO REPORT\nNo casino activity to report."
 	}
 	var sb strings.Builder
-	sb.WriteString("🎰 CASINO REPORT — High Rollers This Issue\n")
+	sb.WriteString("🎰 CASINO REPORT — High Rollers This Issue")
 	for i, e := range entries {
-		sb.WriteString(fmt.Sprintf("  %d. %s — %d chips\n", i+1, e.Username, e.Balance))
+		fmt.Fprintf(&sb, "\n  %d. %s — %d chips", i+1, e.Username, e.Balance)
 	}
-	return strings.TrimRight(sb.String(), "\n")
+	return sb.String()
 }
 
 func buildSectionAreaHighlight() string {
@@ -313,18 +313,18 @@ func buildSectionJobMarket() string {
 		return "💼 JOB MARKET REPORT\nNo job earnings data available yet."
 	}
 	var sb strings.Builder
-	sb.WriteString("💼 JOB MARKET REPORT — Top Workers This Issue\n")
+	sb.WriteString("💼 JOB MARKET REPORT — Top Workers This Issue")
 	for i, e := range entries {
-		sb.WriteString(fmt.Sprintf("  %d. %s — %d chips earned\n", i+1, e.Username, e.Total))
+		fmt.Fprintf(&sb, "\n  %d. %s — %d chips earned", i+1, e.Username, e.Total)
 	}
-	return strings.TrimRight(sb.String(), "\n")
+	return sb.String()
 }
 
 func buildSectionPunishmentReport() string {
-	// Count currently punished clients.
+	// Count currently punished clients without copying their punishment slices.
 	count := 0
 	clients.ForEach(func(c *Client) {
-		if len(c.Punishments()) > 0 {
+		if c.HasAnyPunishment() {
 			count++
 		}
 	})

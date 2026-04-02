@@ -1562,6 +1562,15 @@ func (client *Client) Punishments() []PunishmentState {
 	return snap
 }
 
+// HasAnyPunishment reports whether the client has at least one active
+// punishment.  Unlike Punishments(), it never allocates a copy of the slice.
+func (client *Client) HasAnyPunishment() bool {
+	client.mu.Lock()
+	n := len(client.punishments)
+	client.mu.Unlock()
+	return n > 0
+}
+
 // UpdatePunishmentState updates the state of a punishment (e.g., message counts).
 func (client *Client) UpdatePunishmentState(pType PunishmentType, updateFunc func(*PunishmentState)) {
 	client.mu.Lock()
