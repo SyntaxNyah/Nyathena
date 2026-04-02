@@ -91,8 +91,17 @@ type ServerConfig struct {
 	RandomSongCooldown         int    `toml:"random_song_cooldown"`
 	BotBanPlaytimeThreshold    int    `toml:"botban_playtime_threshold"`
 	IPHubAPIKey                string `toml:"iphub_api_key"`
-	EnableCasino               bool   `toml:"enable_casino"`
-	RegisterCaptcha            bool   `toml:"register_captcha"`
+	EnableCasino               bool     `toml:"enable_casino"`
+	RegisterCaptcha            bool     `toml:"register_captcha"`
+	TypingRacePhrases          []string `toml:"typing_race_phrases"`
+	EnableNewspaper            bool     `toml:"enable_newspaper"`
+	NewspaperInterval          string   `toml:"newspaper_interval"`
+	NewspaperSections          []string `toml:"newspaper_sections"`
+	// MaxConnectionGoroutines caps the number of concurrent connection-handling
+	// goroutines.  When the pool is full, new connections wait until a slot
+	// becomes available rather than spinning up an unbounded number of goroutines.
+	// 0 (the default) disables the pool and preserves the original unbounded behaviour.
+	MaxConnectionGoroutines int `toml:"max_connection_goroutines"`
 }
 
 type LogConfig struct {

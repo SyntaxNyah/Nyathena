@@ -95,6 +95,14 @@ func (cl *ClientList) CountByIPID(ipid string) int {
 	return n
 }
 
+// Count returns the total number of currently connected clients.
+func (cl *ClientList) Count() int {
+	cl.mu.RLock()
+	n := len(cl.list)
+	cl.mu.RUnlock()
+	return n
+}
+
 // GetByIPID returns a slice of all clients whose IPID matches ipid.
 // The slice is freshly allocated on each call; the read lock is held only
 // for the iteration itself so callers may safely invoke client methods after.

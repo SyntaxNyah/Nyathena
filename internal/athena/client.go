@@ -143,6 +143,13 @@ const (
 	PunishmentUncannyValley
 	// 51 Messages Punishment
 	Punishment51
+	// Philosophical / Literary Punishments
+	PunishmentPhilosopher
+	PunishmentPoet
+	PunishmentUpsidedown
+	PunishmentSarcasm
+	PunishmentAcademic
+	PunishmentRecipe
 )
 
 type PunishmentState struct {
@@ -1545,6 +1552,25 @@ func (client *Client) GetPunishment(pType PunishmentType) *PunishmentState {
 	return nil
 }
 
+// Punishments returns a snapshot copy of the client's active punishment list.
+// The returned slice is a copy; modifying it has no effect on the client.
+func (client *Client) Punishments() []PunishmentState {
+	client.mu.Lock()
+	defer client.mu.Unlock()
+	snap := make([]PunishmentState, len(client.punishments))
+	copy(snap, client.punishments)
+	return snap
+}
+
+// HasAnyPunishment reports whether the client has at least one active
+// punishment.  Unlike Punishments(), it never allocates a copy of the slice.
+func (client *Client) HasAnyPunishment() bool {
+	client.mu.Lock()
+	n := len(client.punishments)
+	client.mu.Unlock()
+	return n > 0
+}
+
 // UpdatePunishmentState updates the state of a punishment (e.g., message counts).
 func (client *Client) UpdatePunishmentState(pType PunishmentType, updateFunc func(*PunishmentState)) {
 	client.mu.Lock()
@@ -1743,6 +1769,18 @@ func (p PunishmentType) String() string {
 		return "uncannyvalley"
 	case Punishment51:
 		return "51"
+	case PunishmentPhilosopher:
+		return "philosopher"
+	case PunishmentPoet:
+		return "poet"
+	case PunishmentUpsidedown:
+		return "upsidedown"
+	case PunishmentSarcasm:
+		return "sarcasm"
+	case PunishmentAcademic:
+		return "academic"
+	case PunishmentRecipe:
+		return "recipe"
 	default:
 		return "none"
 	}

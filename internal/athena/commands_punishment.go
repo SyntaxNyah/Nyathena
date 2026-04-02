@@ -1048,4 +1048,184 @@ func cmdUn51(client *Client, args []string, usage string) {
 	addToBuffer(client, "CMD", fmt.Sprintf("Removed 51 from %v.", report), false)
 }
 
+func cmdPhilosopher(client *Client, args []string, usage string) {
+	cmdPunishment(client, args, usage, PunishmentPhilosopher)
+}
+
+// cmdUnphilosopher removes the philosopher punishment from user(s).
+func cmdUnphilosopher(client *Client, args []string, usage string) {
+	if len(args) == 0 {
+		client.SendServerMessage("Not enough arguments:\n" + usage)
+		return
+	}
+	toUnpunish := getUidList(strings.Split(args[0], ","))
+	var count int
+	var report string
+	for _, c := range toUnpunish {
+		if !c.HasPunishment(PunishmentPhilosopher) {
+			continue
+		}
+		c.RemovePunishment(PunishmentPhilosopher)
+		if err := db.DeleteTextPunishment(c.Ipid(), int(PunishmentPhilosopher)); err != nil {
+			logger.LogErrorf("Failed to remove philosopher punishment for %v: %v", c.Ipid(), err)
+		}
+		c.SendServerMessage("Philosopher punishment has been removed.")
+		count++
+		report += fmt.Sprintf("%v, ", c.Uid())
+	}
+	report = strings.TrimSuffix(report, ", ")
+	client.SendServerMessage(fmt.Sprintf("Removed philosopher punishment from %v clients.", count))
+	addToBuffer(client, "CMD", fmt.Sprintf("Removed philosopher from %v.", report), false)
+}
+
+func cmdPoet(client *Client, args []string, usage string) {
+	cmdPunishment(client, args, usage, PunishmentPoet)
+}
+
+// cmdUnpoet removes the poet punishment from user(s).
+func cmdUnpoet(client *Client, args []string, usage string) {
+	if len(args) == 0 {
+		client.SendServerMessage("Not enough arguments:\n" + usage)
+		return
+	}
+	toUnpunish := getUidList(strings.Split(args[0], ","))
+	var count int
+	var report string
+	for _, c := range toUnpunish {
+		if !c.HasPunishment(PunishmentPoet) {
+			continue
+		}
+		c.RemovePunishment(PunishmentPoet)
+		if err := db.DeleteTextPunishment(c.Ipid(), int(PunishmentPoet)); err != nil {
+			logger.LogErrorf("Failed to remove poet punishment for %v: %v", c.Ipid(), err)
+		}
+		c.SendServerMessage("Poet punishment has been removed.")
+		count++
+		report += fmt.Sprintf("%v, ", c.Uid())
+	}
+	report = strings.TrimSuffix(report, ", ")
+	client.SendServerMessage(fmt.Sprintf("Removed poet punishment from %v clients.", count))
+	addToBuffer(client, "CMD", fmt.Sprintf("Removed poet from %v.", report), false)
+}
+
+func cmdUpsidedown(client *Client, args []string, usage string) {
+	cmdPunishment(client, args, usage, PunishmentUpsidedown)
+}
+
+// cmdUnupsidedown removes the upsidedown punishment from user(s).
+func cmdUnupsidedown(client *Client, args []string, usage string) {
+	if len(args) == 0 {
+		client.SendServerMessage("Not enough arguments:\n" + usage)
+		return
+	}
+	toUnpunish := getUidList(strings.Split(args[0], ","))
+	var count int
+	var report string
+	for _, c := range toUnpunish {
+		if !c.HasPunishment(PunishmentUpsidedown) {
+			continue
+		}
+		c.RemovePunishment(PunishmentUpsidedown)
+		if err := db.DeleteTextPunishment(c.Ipid(), int(PunishmentUpsidedown)); err != nil {
+			logger.LogErrorf("Failed to remove upsidedown punishment for %v: %v", c.Ipid(), err)
+		}
+		c.SendServerMessage("Upsidedown punishment has been removed.")
+		count++
+		report += fmt.Sprintf("%v, ", c.Uid())
+	}
+	report = strings.TrimSuffix(report, ", ")
+	client.SendServerMessage(fmt.Sprintf("Removed upsidedown punishment from %v clients.", count))
+	addToBuffer(client, "CMD", fmt.Sprintf("Removed upsidedown from %v.", report), false)
+}
+
+func cmdSarcasm(client *Client, args []string, usage string) {
+	cmdPunishment(client, args, usage, PunishmentSarcasm)
+}
+
+// cmdUnsarcasm removes the sarcasm punishment from user(s).
+func cmdUnsarcasm(client *Client, args []string, usage string) {
+	if len(args) == 0 {
+		client.SendServerMessage("Not enough arguments:\n" + usage)
+		return
+	}
+	toUnpunish := getUidList(strings.Split(args[0], ","))
+	var count int
+	var report string
+	for _, c := range toUnpunish {
+		if !c.HasPunishment(PunishmentSarcasm) {
+			continue
+		}
+		c.RemovePunishment(PunishmentSarcasm)
+		if err := db.DeleteTextPunishment(c.Ipid(), int(PunishmentSarcasm)); err != nil {
+			logger.LogErrorf("Failed to remove sarcasm punishment for %v: %v", c.Ipid(), err)
+		}
+		c.SendServerMessage("Sarcasm punishment has been removed.")
+		count++
+		report += fmt.Sprintf("%v, ", c.Uid())
+	}
+	report = strings.TrimSuffix(report, ", ")
+	client.SendServerMessage(fmt.Sprintf("Removed sarcasm punishment from %v clients.", count))
+	addToBuffer(client, "CMD", fmt.Sprintf("Removed sarcasm from %v.", report), false)
+}
+
+func cmdAcademic(client *Client, args []string, usage string) {
+	cmdPunishment(client, args, usage, PunishmentAcademic)
+}
+
+// cmdUnacademic removes the academic punishment from user(s).
+func cmdUnacademic(client *Client, args []string, usage string) {
+	if len(args) == 0 {
+		client.SendServerMessage("Not enough arguments:\n" + usage)
+		return
+	}
+	toUnpunish := getUidList(strings.Split(args[0], ","))
+	var count int
+	var report string
+	for _, c := range toUnpunish {
+		if !c.HasPunishment(PunishmentAcademic) {
+			continue
+		}
+		c.RemovePunishment(PunishmentAcademic)
+		if err := db.DeleteTextPunishment(c.Ipid(), int(PunishmentAcademic)); err != nil {
+			logger.LogErrorf("Failed to remove academic punishment for %v: %v", c.Ipid(), err)
+		}
+		c.SendServerMessage("Academic punishment has been removed.")
+		count++
+		report += fmt.Sprintf("%v, ", c.Uid())
+	}
+	report = strings.TrimSuffix(report, ", ")
+	client.SendServerMessage(fmt.Sprintf("Removed academic punishment from %v clients.", count))
+	addToBuffer(client, "CMD", fmt.Sprintf("Removed academic from %v.", report), false)
+}
+
+func cmdRecipe(client *Client, args []string, usage string) {
+	cmdPunishment(client, args, usage, PunishmentRecipe)
+}
+
+// cmdUnrecipe removes the recipe punishment from user(s).
+func cmdUnrecipe(client *Client, args []string, usage string) {
+	if len(args) == 0 {
+		client.SendServerMessage("Not enough arguments:\n" + usage)
+		return
+	}
+	toUnpunish := getUidList(strings.Split(args[0], ","))
+	var count int
+	var report string
+	for _, c := range toUnpunish {
+		if !c.HasPunishment(PunishmentRecipe) {
+			continue
+		}
+		c.RemovePunishment(PunishmentRecipe)
+		if err := db.DeleteTextPunishment(c.Ipid(), int(PunishmentRecipe)); err != nil {
+			logger.LogErrorf("Failed to remove recipe punishment for %v: %v", c.Ipid(), err)
+		}
+		c.SendServerMessage("Recipe punishment has been removed.")
+		count++
+		report += fmt.Sprintf("%v, ", c.Uid())
+	}
+	report = strings.TrimSuffix(report, ", ")
+	client.SendServerMessage(fmt.Sprintf("Removed recipe punishment from %v clients.", count))
+	addToBuffer(client, "CMD", fmt.Sprintf("Removed recipe from %v.", report), false)
+}
+
 // cmdTournament manages punishment tournament mode
