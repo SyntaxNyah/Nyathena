@@ -56,6 +56,11 @@ const (
 // Set in NewServer immediately after config is wired up; never modified afterwards.
 var encodedServerName string
 
+// connPool is a semaphore channel that limits the number of concurrently active
+// connection goroutines when config.MaxConnectionGoroutines > 0.
+// A nil channel means the pool is disabled (unbounded behaviour).
+var connPool chan struct{}
+
 var (
 	config                                 *settings.Config
 	characters, music, backgrounds, parrot []string
@@ -450,10 +455,19 @@ func NewServer(conf *settings.Config) (*Server, error) {
 
 	initCommands()
 	initAutoMod(conf)
+	// Initialise the goroutine pool if a limit is configured.
+	if conf.MaxConnectionGoroutines > 0 {
+		connPool = make(chan struct{}, conf.MaxConnectionGoroutines)
+	} else {
+		connPool = nil
+	}
 	go startConnTrackerCleanup()
 	if conf.EnableCasino {
 		go startHourlyChipAward()
 		go startUnscrambleLoop()
+	}
+	if conf.EnableNewspaper {
+		go startNewspaperLoop()
 	}
 	return s, nil
 }
@@ -538,6 +552,13 @@ func (s *Server) ListenTCP() {
 // goroutine — it blocks for the lifetime of the connection, which is the
 // standard one-goroutine-per-connection pattern in Go.
 func acceptTCPConnection(conn net.Conn, rawIP, ipid string) {
+	// Acquire a pool slot when the goroutine pool is enabled.  This blocks
+	// until a slot is free, bounding the total number of active connections
+	// that are in the "setup + serve" phase at any moment.
+	if connPool != nil {
+		connPool <- struct{}{}
+		defer func() { <-connPool }()
+	}
 	if checkFirewallForIP(rawIP, ipid) {
 		logger.LogInfof("Connection from %v rejected (VPN/proxy detected by IPHub firewall)", ipid)
 		conn.Close()

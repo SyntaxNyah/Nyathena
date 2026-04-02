@@ -379,6 +379,60 @@ enable_casino = false
 # Default: true
 register_captcha = true
 
+# ─── Typing Race ────────────────────────────────────────────────────────────
+
+# Custom phrases for the /typingrace minigame.
+# If left empty, the built-in phrase pool (30+ phrases) is used.
+# Each phrase should be at least 4 words for a meaningful WPS reading.
+# Example:
+#   typing_race_phrases = [
+#     "the quick brown fox jumps over the lazy dog",
+#     "objection your honour the witness is lying",
+#   ]
+typing_race_phrases = []
+
+# ─── Daily Newspaper ────────────────────────────────────────────────────────
+
+# Enable the auto-generated IC newspaper that is broadcast at a fixed interval.
+# Default: false
+enable_newspaper = false
+
+# How often the newspaper is broadcast.
+# Accepts duration strings such as "24h", "12h", "6h".
+# Default: "24h"
+newspaper_interval = "24h"
+
+# Which sections to include in each newspaper issue, in display order.
+# Available sections:
+#   chip_leaderboard   — Top 5 players by chip balance
+#   playtime_top       — Top 5 players by playtime
+#   unscramble_top     — Top 5 unscramble champions
+#   recent_bans        — 5 most recent ban summaries (no IDs shown)
+#   server_stats       — Current player count and area count
+#   weather            — Random flavour weather forecast
+#   horoscope          — Random daily horoscope sign + message
+#   word_of_the_day    — Legal/courtroom vocabulary entry
+#   casino             — Top 3 chip holders (casino feature only)
+#   area_highlight     — Most populated area spotlight
+#   job_market         — Top 3 job earners
+#   punishment_report  — Count of currently punished players
+#   tip_of_the_day     — Courtroom/RP tip
+#   classifieds        — Humorous classified ad
+#   holiday_greeting   — Random seasonal greeting
+# Default (used when this list is empty):
+#   server_stats, weather, horoscope, tip_of_the_day, chip_leaderboard, area_highlight
+newspaper_sections = []
+
+# ─── Goroutine Pool ─────────────────────────────────────────────────────────
+
+# Maximum number of concurrent connection-handling goroutines.
+# When the server receives more simultaneous connections than this limit, new
+# connections wait for a slot rather than spawning unbounded goroutines.
+# Set to 0 (the default) to disable the pool and preserve unlimited behaviour.
+# A value of 2× max_players is a reasonable starting point.
+# Default: 0 (disabled)
+max_connection_goroutines = 0
+
 [Logging]
 # Sets the number of actions (IC chat messages, OOC chat messages, judge actions, etc.) each area should store.
 # When a user calls a mod, this buffer will be flushed to a report file for review.

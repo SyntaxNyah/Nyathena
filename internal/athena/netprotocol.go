@@ -718,6 +718,9 @@ func pktIC(client *Client, p *packet.Packet) {
 	// Quickdraw: record the reaction for any active duel.
 	quickdrawOnIC(client)
 
+	// Typing race: check whether the IC message matches the active race phrase.
+	typingRaceOnIC(client, msgText)
+
 	// Unscramble: check whether the IC message is the correct answer.
 	if config != nil && config.EnableCasino {
 		unscrambleOnIC(client, msgText)

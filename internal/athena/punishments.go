@@ -1471,6 +1471,18 @@ func ApplyPunishmentToText(text string, pType PunishmentType) string {
 		return applyUncannyValley(text)
 	case Punishment51:
 		return apply51(text)
+	case PunishmentPhilosopher:
+		return applyPhilosopher(text)
+	case PunishmentPoet:
+		return applyPoet(text)
+	case PunishmentUpsidedown:
+		return applyUpsidedown(text)
+	case PunishmentSarcasm:
+		return applySarcasm(text)
+	case PunishmentAcademic:
+		return applyAcademic(text)
+	case PunishmentRecipe:
+		return applyRecipe(text)
 	default:
 		return text
 	}
@@ -2069,4 +2081,211 @@ func applyLovebombMessage(targetShowname string) string {
 		return "I LOVE EVERYONE HERE SO MUCH!! ♥"
 	}
 	return fmt.Sprintf(lovebombTemplates[rand.Intn(len(lovebombTemplates))], targetShowname)
+}
+
+// --- Philosophical / Literary Punishments ---
+
+// philosopherQuestions is a curated list of deep philosophical questions
+// that get appended to the punished player's IC messages.
+var philosopherQuestions = []string{
+	"But what IS reality, really?",
+	"If a tree falls in the forest and no one is around to hear it, does it make a sound?",
+	"Do we choose our fate, or does fate choose us?",
+	"What is the true nature of consciousness?",
+	"Is morality absolute or merely a social construct?",
+	"If everything is relative, is that statement itself relative?",
+	"Can one truly know anything, or is all knowledge an illusion?",
+	"What came before the beginning of time?",
+	"Does the self persist through change, or are we new people every moment?",
+	"If I replace every plank of my ship, is it still the same ship?",
+	"Why is there something rather than nothing?",
+	"Is free will compatible with a deterministic universe?",
+	"What separates right from wrong at the fundamental level?",
+	"Is the examined life truly the only one worth living?",
+	"Can language ever fully capture the truth of experience?",
+	"What would you do if you had to live this moment forever?",
+	"Are numbers discovered or invented?",
+	"If your memories were replaced, would you still be you?",
+	"Is justice the same as fairness?",
+	"What is the value of a life well-lived versus a life well-enjoyed?",
+	"Does the universe have meaning, or do we project meaning onto it?",
+	"Can something be both true and unknowable?",
+	"Is compassion an evolutionary accident or a moral imperative?",
+	"What would it mean to live without regret?",
+	"Is perfection even a coherent concept?",
+}
+
+// applyPhilosopher appends a random deep philosophical question to the text.
+func applyPhilosopher(text string) string {
+	q := philosopherQuestions[rand.Intn(len(philosopherQuestions))]
+	return truncateText(text + " " + q)
+}
+
+// poeticSuffixes are lyrical flourishes appended after a poem-style message.
+var poeticSuffixes = []string{
+	"— as the moon weeps silver tears",
+	"— sung by the nightingale at dusk",
+	"— etched upon the wind's lament",
+	"— whispered to the dying stars",
+	"— carved in the bones of the earth",
+	"— lost in the amber of memory",
+	"— breathed by the lips of twilight",
+	"— cast upon the trembling sea",
+	"— woven through the veil of dreams",
+	"— written in the ash of forgotten fires",
+}
+
+// poeticPrefixes are lyrical phrases prepended to create a poetic opening.
+var poeticPrefixes = []string{
+	"O, hark! ",
+	"Lo, and behold — ",
+	"Hear me, ye muses: ",
+	"From the depths of my soul: ",
+	"In iambic devotion: ",
+	"Thus spake the bard: ",
+	"By the light of verse: ",
+	"Sing, O Muse, of ",
+	"With quill and trembling hand: ",
+	"In rhyme and meter: ",
+}
+
+// applyPoet wraps the text in poetic flourishes.
+func applyPoet(text string) string {
+	prefix := poeticPrefixes[rand.Intn(len(poeticPrefixes))]
+	suffix := poeticSuffixes[rand.Intn(len(poeticSuffixes))]
+	return truncateText(prefix + text + " " + suffix)
+}
+
+// upsidedownMap maps ASCII printable characters to their Unicode upside-down equivalents.
+// Characters without a visual flip are left as-is.
+var upsidedownMap = map[rune]rune{
+	'a': 'ɐ', 'b': 'q', 'c': 'ɔ', 'd': 'p', 'e': 'ǝ',
+	'f': 'ɟ', 'g': 'ƃ', 'h': 'ɥ', 'i': 'ı', 'j': 'ɾ',
+	'k': 'ʞ', 'l': 'l', 'm': 'ɯ', 'n': 'u', 'o': 'o',
+	'p': 'd', 'q': 'b', 'r': 'ɹ', 's': 's', 't': 'ʇ',
+	'u': 'n', 'v': 'ʌ', 'w': 'ʍ', 'x': 'x', 'y': 'ʎ',
+	'z': 'z',
+	'A': '∀', 'B': 'B', 'C': 'Ɔ', 'D': 'D', 'E': 'Ǝ',
+	'F': 'Ⅎ', 'G': 'פ', 'H': 'H', 'I': 'I', 'J': 'ſ',
+	'K': 'K', 'L': '˥', 'M': 'W', 'N': 'N', 'O': 'O',
+	'P': 'Ԁ', 'Q': 'Q', 'R': 'R', 'S': 'S', 'T': '┴',
+	'U': '∩', 'V': 'Λ', 'W': 'M', 'X': 'X', 'Y': '⅄',
+	'Z': 'Z',
+	'0': '0', '1': 'Ɩ', '2': 'ᄅ', '3': 'Ɛ', '4': 'ㄣ',
+	'5': 'ϛ', '6': '9', '7': 'ㄥ', '8': '8', '9': '6',
+	'.': '˙', ',': '\'', '?': '¿', '!': '¡', '"': '„',
+	'&': '⅋', '_': '‾',
+}
+
+// applyUpsidedown flips the text upside-down by reversing it and replacing
+// each character with its Unicode upside-down equivalent.
+func applyUpsidedown(text string) string {
+	runes := []rune(text)
+	// Reverse the rune slice
+	for i, j := 0, len(runes)-1; i < j; i, j = i+1, j-1 {
+		runes[i], runes[j] = runes[j], runes[i]
+	}
+	// Replace each rune with its upside-down equivalent
+	for i, r := range runes {
+		if flipped, ok := upsidedownMap[r]; ok {
+			runes[i] = flipped
+		}
+	}
+	return truncateText(string(runes))
+}
+
+// sarcasmCommentaries are parenthetical sarcastic remarks appended to messages.
+var sarcasmCommentaries = []string{
+	"(wow, really?)",
+	"(how original)",
+	"(please, tell me more)",
+	"(groundbreaking stuff)",
+	"(I am absolutely shocked)",
+	"(never seen that one before)",
+	"(oh, do go on)",
+	"(you don't say)",
+	"(what a revelation)",
+	"(thanks for that insight)",
+	"(truly stunning analysis)",
+	"(absolutely riveting)",
+	"(I'll try to contain my excitement)",
+	"(cool story, bro)",
+	"(fascinating, truly)",
+	"(I'm taking notes)",
+	"(bold claim, no notes)",
+	"(the wisdom, it overwhelms me)",
+	"(a real Einstein, this one)",
+	"(I had no idea until you told me)",
+}
+
+// applySarcasm appends a sarcastic parenthetical remark to the text.
+func applySarcasm(text string) string {
+	comment := sarcasmCommentaries[rand.Intn(len(sarcasmCommentaries))]
+	return truncateText(text + " " + comment)
+}
+
+// academicPrefixes are overly formal academic-style openers.
+var academicPrefixes = []string{
+	"It is worth noting that ",
+	"According to my analysis, ",
+	"Empirical evidence suggests that ",
+	"As postulated by contemporary scholarship, ",
+	"Within the theoretical framework of discourse, ",
+	"One must consider, in this context, that ",
+	"Preliminary research indicates that ",
+	"A critical examination reveals that ",
+	"The prevailing academic consensus holds that ",
+	"Notwithstanding the aforementioned, ",
+}
+
+// academicSuffixes are pompous academic-style closers.
+var academicSuffixes = []string{
+	" — as documented in peer-reviewed literature.",
+	", which warrants further investigation.",
+	", per the extant scholarly record.",
+	" — a hypothesis requiring empirical validation.",
+	", consistent with the theoretical underpinnings of the field.",
+	" — subject to methodological caveats, of course.",
+	", as outlined in the seminal corpus.",
+	" — a nuanced perspective demanding interdisciplinary inquiry.",
+	", insofar as the data are to be believed.",
+	", within the broader socio-cultural paradigm.",
+}
+
+// applyAcademic wraps the text in overly formal academic language.
+func applyAcademic(text string) string {
+	prefix := academicPrefixes[rand.Intn(len(academicPrefixes))]
+	suffix := academicSuffixes[rand.Intn(len(academicSuffixes))]
+	return truncateText(prefix + text + suffix)
+}
+
+// recipeStepVerbs are culinary verbs used to format recipe-step messages.
+var recipeStepVerbs = []string{
+	"Combine", "Mix", "Fold in", "Whisk together", "Stir in",
+	"Blend", "Layer", "Season with", "Garnish with", "Add",
+	"Incorporate", "Marinate with", "Drizzle over", "Sprinkle",
+	"Reduce", "Simmer", "Bring to a boil", "Bake at 350°F with",
+}
+
+// recipeEndings are amusing cooking-instruction suffixes.
+var recipeEndings = []string{
+	"Serve immediately.",
+	"Let rest for 5 minutes before plating.",
+	"Garnish with fresh confusion.",
+	"Pairs well with a dry sense of humour.",
+	"Best enjoyed piping hot.",
+	"Cover and refrigerate for 24 hours.",
+	"Yields approximately one awkward situation.",
+	"Do not overmix.",
+	"Season to taste.",
+	"Sprinkle with regret before serving.",
+	"Baste every 15 minutes for optimal results.",
+	"Allow to cool before consuming.",
+}
+
+// applyRecipe reformats the text as a cooking recipe instruction step.
+func applyRecipe(text string) string {
+	verb := recipeStepVerbs[rand.Intn(len(recipeStepVerbs))]
+	ending := recipeEndings[rand.Intn(len(recipeEndings))]
+	return truncateText(fmt.Sprintf("Step 1: %s \"%s\". %s", verb, text, ending))
 }

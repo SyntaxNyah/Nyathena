@@ -21,11 +21,84 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"golang.org/x/crypto/bcrypt"
 	_ "modernc.org/sqlite"
 )
+
+// ─── Chip balance cache ────────────────────────────────────────────────────
+//
+// GetChipBalance is called on every casino command, chip display, and several
+// hot-path checks.  A short-lived in-memory cache avoids hammering SQLite for
+// the same IPID within a single player session.
+//
+// Cache entries expire after chipCacheTTL.  Writes (AddChips, SpendChips,
+// SetChips) invalidate the relevant entry immediately so stale reads are only
+// possible during the TTL window for pure read paths.
+
+const chipCacheTTL = 10 * time.Second
+
+type chipCacheEntry struct {
+	balance int64
+	expiry  time.Time
+}
+
+var chipCache struct {
+	sync.RWMutex
+	m map[string]chipCacheEntry
+}
+
+func init() {
+	chipCache.m = make(map[string]chipCacheEntry)
+}
+
+// chipCacheGet returns (balance, true) if a valid cache entry exists for ipid.
+// Expired entries are removed immediately to prevent unbounded map growth.
+func chipCacheGet(ipid string) (int64, bool) {
+	chipCache.RLock()
+	e, ok := chipCache.m[ipid]
+	chipCache.RUnlock()
+	if !ok {
+		return 0, false
+	}
+	if time.Now().After(e.expiry) {
+		// Entry has expired — remove it so the map doesn't grow unbounded.
+		chipCache.Lock()
+		delete(chipCache.m, ipid)
+		chipCache.Unlock()
+		return 0, false
+	}
+	return e.balance, true
+}
+
+// chipCacheSet stores balance for ipid with a fresh TTL.
+func chipCacheSet(ipid string, balance int64) {
+	chipCache.Lock()
+	chipCache.m[ipid] = chipCacheEntry{balance: balance, expiry: time.Now().Add(chipCacheTTL)}
+	chipCache.Unlock()
+}
+
+// chipCacheInvalidate removes a cache entry so the next read hits the DB.
+func chipCacheInvalidate(ipid string) {
+	chipCache.Lock()
+	delete(chipCache.m, ipid)
+	chipCache.Unlock()
+}
+
+// PurgeChipCache removes all expired entries from the cache.  It is called
+// periodically by PurgeExpired so the map doesn't grow unbounded.
+func PurgeChipCache() {
+	now := time.Now()
+	chipCache.Lock()
+	for k, v := range chipCache.m {
+		if now.After(v.expiry) {
+			delete(chipCache.m, k)
+		}
+	}
+	chipCache.Unlock()
+}
 
 type BanInfo struct {
 	Id        int
@@ -654,6 +727,9 @@ func LinkIPIDToUser(username, ipid string) error {
 		if _, err := db.Exec("UPDATE CHIPS SET BALANCE = 0 WHERE IPID = ?", oldIPID); err != nil {
 			return err
 		}
+		// Invalidate cached values for both IPIDs so subsequent reads hit the DB.
+		chipCacheInvalidate(ipid)
+		chipCacheInvalidate(oldIPID)
 	}
 
 	return nil
@@ -728,6 +804,9 @@ func GetBan(by BanLookup, value any) ([]BanInfo, error) {
 
 // GetRecentBans returns the 5 most recent bans.
 func GetRecentBans() ([]BanInfo, error) {
+	if db == nil {
+		return nil, nil
+	}
 	result, err := db.Query("SELECT * FROM BANS ORDER BY TIME DESC LIMIT 5")
 	if err != nil {
 		return []BanInfo{}, err
@@ -893,6 +972,7 @@ func GetPunishments(ipid string) ([]PersistentPunishment, error) {
 // It is safe to call from a background goroutine.
 func PurgeExpired() error {
 	_, err := db.Exec("DELETE FROM PUNISHMENTS WHERE EXPIRES != 0 AND EXPIRES <= ?", time.Now().Unix())
+	PurgeChipCache()
 	return err
 }
 
@@ -1188,6 +1268,10 @@ func GetChipBalance(ipid string) (int64, error) {
 	if db == nil {
 		return 0, nil
 	}
+	// Check the cache first.
+	if bal, ok := chipCacheGet(ipid); ok {
+		return bal, nil
+	}
 	row := db.QueryRow("SELECT BALANCE FROM CHIPS WHERE IPID = ?", ipid)
 	var balance int64
 	if err := row.Scan(&balance); err != nil {
@@ -1196,6 +1280,7 @@ func GetChipBalance(ipid string) (int64, error) {
 		}
 		return 0, err
 	}
+	chipCacheSet(ipid, balance)
 	return balance, nil
 }
 
@@ -1216,6 +1301,7 @@ func AddChips(ipid string, amount int64) (int64, error) {
 	if err != nil {
 		return 0, err
 	}
+	chipCacheSet(ipid, newBalance)
 	return newBalance, nil
 }
 
@@ -1238,11 +1324,13 @@ func SpendChips(ipid string, amount int64) (int64, error) {
 		// Fetch the actual balance so callers can show it without an extra query.
 		var cur int64
 		_ = db.QueryRow("SELECT BALANCE FROM CHIPS WHERE IPID = ?", ipid).Scan(&cur)
+		chipCacheInvalidate(ipid) // ensure stale cached value doesn't linger
 		return cur, fmt.Errorf("insufficient chips")
 	}
 	if err != nil {
 		return 0, err
 	}
+	chipCacheSet(ipid, newBalance)
 	return newBalance, nil
 }
 
