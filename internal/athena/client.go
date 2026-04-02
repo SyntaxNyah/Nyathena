@@ -838,6 +838,9 @@ func (client *Client) JoinArea(area *area.Area) {
 	client.SendPacket("HP", "1", strconv.Itoa(def))
 	client.SendPacket("HP", "2", strconv.Itoa(pro))
 	client.SendPacket("BN", area.Background())
+	if desc := area.Description(); desc != "" {
+		client.SendServerMessage("📍 " + desc)
+	}
 	sendPlayerArup()
 }
 

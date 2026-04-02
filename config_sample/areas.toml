@@ -2,6 +2,10 @@
 # Sets the name of the area.
 name = "Lobby"
 
+# Sets a short description shown to players when they enter the area.
+# Leave blank for no description.
+description = ""
+
 # Sets the area's default background. This must be in the server's background list.
 background = "gs4"
 

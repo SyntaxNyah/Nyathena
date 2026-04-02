@@ -1076,3 +1076,42 @@ func cmdSpectate(client *Client, args []string, usage string) {
 
 // Handles /unmute
 
+// cmdAreaDesc prints or updates the area's entry description.
+// Any CM or moderator with MODIFY_AREA permission can use this command.
+// Usage: /areadesc [-c] [description]
+func cmdAreaDesc(client *Client, args []string, _ string) {
+	flags := flag.NewFlagSet("", 0)
+	flags.SetOutput(io.Discard)
+	clear := flags.Bool("c", false, "")
+	flags.Parse(args)
+
+	if len(args) == 0 {
+		desc := client.Area().Description()
+		if desc == "" {
+			client.SendServerMessage("This area does not have a description set.")
+		} else {
+			client.SendServerMessage("Area description: " + desc)
+		}
+		return
+	}
+
+	if !client.HasCMPermission() {
+		client.SendServerMessage("You do not have permission to change the area description.")
+		return
+	}
+
+	if *clear {
+		client.Area().SetDescription("")
+		sendAreaServerMessage(client.Area(), fmt.Sprintf("%v cleared the area description.", client.OOCName()))
+		addToBuffer(client, "CMD", "Cleared area description.", false)
+		return
+	}
+
+	if len(flags.Args()) != 0 {
+		newDesc := strings.Join(flags.Args(), " ")
+		client.Area().SetDescription(newDesc)
+		sendAreaServerMessage(client.Area(), fmt.Sprintf("%v updated the area description.", client.OOCName()))
+		addToBuffer(client, "CMD", fmt.Sprintf("Set area description: %v", newDesc), false)
+	}
+}
+

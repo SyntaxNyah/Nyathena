@@ -58,7 +58,7 @@ const MaxChipBalance = 10_000_000
 
 // Database version.
 // This should be incremented whenever changes are made to the DB that require existing databases to upgrade.
-const ver = 14
+const ver = 15
 
 // MaxFavourites is the maximum number of favourite characters a player can save.
 const MaxFavourites = 100
@@ -221,6 +221,16 @@ func Open() error {
 		CHAR_NAME TEXT NOT NULL,
 		ADDED_AT  INTEGER NOT NULL DEFAULT 0,
 		PRIMARY KEY (USERNAME, CHAR_NAME)
+	)`)
+	if err != nil {
+		return err
+	}
+	_, err = db.Exec(`CREATE TABLE IF NOT EXISTS MODNOTES(
+		ID        INTEGER PRIMARY KEY AUTOINCREMENT,
+		IPID      TEXT    NOT NULL,
+		NOTE      TEXT    NOT NULL,
+		ADDED_BY  TEXT    NOT NULL DEFAULT '',
+		ADDED_AT  INTEGER NOT NULL DEFAULT 0
 	)`)
 	if err != nil {
 		return err
@@ -420,6 +430,21 @@ func upgradeDB(v int) error {
 			}
 		}
 		if _, err := db.Exec("PRAGMA user_version = 14"); err != nil {
+			return err
+		}
+		fallthrough
+	case 14:
+		// Create MODNOTES table for per-IPID freeform moderator notes.
+		if _, err := db.Exec(`CREATE TABLE IF NOT EXISTS MODNOTES(
+			ID        INTEGER PRIMARY KEY AUTOINCREMENT,
+			IPID      TEXT    NOT NULL,
+			NOTE      TEXT    NOT NULL,
+			ADDED_BY  TEXT    NOT NULL DEFAULT '',
+			ADDED_AT  INTEGER NOT NULL DEFAULT 0
+		)`); err != nil {
+			return err
+		}
+		if _, err := db.Exec("PRAGMA user_version = 15"); err != nil {
 			return err
 		}
 	}
@@ -1679,4 +1704,69 @@ func SetGambleHide(username string, hide bool) error {
 	}
 	_, err := db.Exec("UPDATE USERS SET GAMBLE_HIDE = ? WHERE USERNAME = ?", val, username)
 	return err
+}
+
+// ModnoteEntry holds a single moderator note retrieved from the database.
+type ModnoteEntry struct {
+	ID      int64
+	IPID    string
+	Note    string
+	AddedBy string
+	AddedAt int64
+}
+
+// AddModnote inserts a new moderator note for the given IPID.
+func AddModnote(ipid, note, addedBy string) error {
+	if db == nil {
+		return nil
+	}
+	_, err := db.Exec(
+		"INSERT INTO MODNOTES(IPID, NOTE, ADDED_BY, ADDED_AT) VALUES(?, ?, ?, ?)",
+		ipid, note, addedBy, time.Now().UTC().Unix(),
+	)
+	return err
+}
+
+// GetModnotes returns all moderator notes for the given IPID, ordered oldest first.
+func GetModnotes(ipid string) ([]ModnoteEntry, error) {
+	if db == nil {
+		return nil, nil
+	}
+	rows, err := db.Query(
+		"SELECT ID, IPID, NOTE, ADDED_BY, ADDED_AT FROM MODNOTES WHERE IPID = ? ORDER BY ADDED_AT ASC",
+		ipid,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var entries []ModnoteEntry
+	for rows.Next() {
+		var e ModnoteEntry
+		if err := rows.Scan(&e.ID, &e.IPID, &e.Note, &e.AddedBy, &e.AddedAt); err != nil {
+			return nil, err
+		}
+		entries = append(entries, e)
+	}
+	return entries, rows.Err()
+}
+
+// DeleteModnote removes a single moderator note by its numeric ID.
+// It returns sql.ErrNoRows if no note with that ID exists.
+func DeleteModnote(id int64) error {
+	if db == nil {
+		return nil
+	}
+	res, err := db.Exec("DELETE FROM MODNOTES WHERE ID = ?", id)
+	if err != nil {
+		return err
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if n == 0 {
+		return sql.ErrNoRows
+	}
+	return nil
 }
