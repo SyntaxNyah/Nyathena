@@ -207,7 +207,7 @@ func WriteNetworkLog(ipid, hdid, direction, content string) {
 	}
 
 	timestamp := time.Now().UTC().Format("2006-01-02T15:04:05.000Z")
-	if _, err := networkLogFile.WriteString(fmt.Sprintf("[%v] %v | IPID:%v | HDID:%v | %v\n", timestamp, direction, ipid, hdid, content)); err != nil {
+	if _, err := fmt.Fprintf(networkLogFile, "[%v] %v | IPID:%v | HDID:%v | %v\n", timestamp, direction, ipid, hdid, content); err != nil {
 		LogError(err.Error())
 		networkLogFile.Close()
 		networkLogFile = nil
@@ -234,7 +234,7 @@ func WriteAudit(s string) {
 		auditLogFilePath = target
 	}
 
-	if _, err := auditLogFile.WriteString(fmt.Sprintf("[%v] %v\n", time.Now().UTC().Format("2006/01/02"), s)); err != nil {
+	if _, err := fmt.Fprintf(auditLogFile, "[%v] %v\n", time.Now().UTC().Format("2006/01/02"), s); err != nil {
 		LogError(err.Error())
 		auditLogFile.Close()
 		auditLogFile = nil
@@ -307,21 +307,25 @@ func CloseLogFiles() {
 	})
 }
 
-// sanitizeAreaName converts an area name to a safe folder name
+// areaNameReplacer is a pre-compiled replacer for converting area names to
+// filesystem-safe folder names. Defined at package level so it is built once
+// and reused across every sanitizeAreaName call rather than being re-created
+// on each invocation (which would happen on every WriteAreaLog call).
+var areaNameReplacer = strings.NewReplacer(
+	"/", "_",
+	"\\", "_",
+	":", "_",
+	"*", "_",
+	"?", "_",
+	"\"", "_",
+	"<", "_",
+	">", "_",
+	"|", "_",
+)
+
+// sanitizeAreaName converts an area name to a safe folder name.
 func sanitizeAreaName(name string) string {
-	// Replace slashes, backslashes, and other problematic characters
-	replacer := strings.NewReplacer(
-		"/", "_",
-		"\\", "_",
-		":", "_",
-		"*", "_",
-		"?", "_",
-		"\"", "_",
-		"<", "_",
-		">", "_",
-		"|", "_",
-	)
-	return replacer.Replace(name)
+	return areaNameReplacer.Replace(name)
 }
 
 // CreateAreaLogDirectory creates a log directory for an area if it doesn't exist

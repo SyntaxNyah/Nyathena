@@ -77,18 +77,6 @@ func (cl *ClientList) ForEach(fn func(*Client)) {
 	}
 }
 
-// GetAllClients returns a snapshot of all clients in the list.
-// A snapshot is returned so callers can iterate safely without holding a lock.
-func (cl *ClientList) GetAllClients() map[*Client]struct{} {
-	cl.mu.RLock()
-	snapshot := make(map[*Client]struct{}, len(cl.list))
-	for k := range cl.list {
-		snapshot[k] = struct{}{}
-	}
-	cl.mu.RUnlock()
-	return snapshot
-}
-
 // GetClientByUID returns a client by their UID, or nil if not found.
 // O(1) lookup via the UID index map.
 func (cl *ClientList) GetClientByUID(uid int) *Client {

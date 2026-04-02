@@ -373,7 +373,42 @@ func (client *Client) SendPacket(header string, contents ...string) {
 	packetBufPool.Put(b)
 }
 
-// clientClenup cleans up a disconnected client.
+// clientLogSnapshot holds the subset of client fields read by addToBuffer.
+// All fields are captured under a single mutex acquisition in logSnapshot,
+// eliminating the 6+ separate lock/unlock cycles that calling individual
+// getters would require.
+type clientLogSnapshot struct {
+	charName string
+	ipid     string
+	hdid     string
+	showname string
+	oocName  string
+	area     *area.Area
+}
+
+// logSnapshot captures the client fields needed for area-log and buffer entries
+// under a single mutex lock.
+func (client *Client) logSnapshot() clientLogSnapshot {
+	client.mu.Lock()
+	var charName string
+	if client.char == -1 {
+		charName = "Spectator"
+	} else if client.char >= 0 && client.char < len(characters) {
+		charName = characters[client.char]
+	}
+	snap := clientLogSnapshot{
+		charName: charName,
+		ipid:     client.ipid,
+		hdid:     client.hdid,
+		showname: client.showname,
+		oocName:  client.oocName,
+		area:     client.area,
+	}
+	client.mu.Unlock()
+	return snap
+}
+
+// clientCleanup cleans up a disconnected client.
 func (client *Client) clientCleanup() {
 	if client.Uid() != -1 {
 		logger.LogInfof("Client (IPID:%v UID:%v) left the server", client.ipid, client.Uid())
@@ -888,11 +923,7 @@ func (client *Client) ChangeArea(a *area.Area) bool {
 
 // HasCMPermission returns whether the client has CM permissions in it's area.
 func (client *Client) HasCMPermission() bool {
-	if client.Area().HasCM(client.Uid()) || permissions.HasPermission(client.Perms(), permissions.PermissionField["CM"]) {
-		return true
-	} else {
-		return false
-	}
+	return client.Area().HasCM(client.Uid()) || permissions.HasPermission(client.Perms(), permissions.PermissionField["CM"])
 }
 
 // CanSpeakIC returns whether the client can send IC messages.
