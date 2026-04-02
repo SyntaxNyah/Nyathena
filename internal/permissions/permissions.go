@@ -39,6 +39,7 @@ var PermissionField = map[string]uint64{
 	"MOD_CHAT":    1 << 9,
 	"MUTE":        1 << 10,
 	"LOG":         1 << 11,
+	"DJ":          1 << 12,
 	"ADMIN":       math.MaxUint64,
 }
 

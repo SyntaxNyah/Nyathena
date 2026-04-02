@@ -58,6 +58,20 @@ func NewPacket(data string) (*Packet, error) {
 }
 
 // String returns a string representation of the Packet.
+// A strings.Builder is used to construct the result in a single allocation,
+// avoiding the multiple intermediate strings that concatenation would produce.
 func (p Packet) String() string {
-	return p.Header + "#" + strings.Join(p.Body, "#") + "#%"
+	n := len(p.Header) + 2 // header + trailing "#%"
+	for _, s := range p.Body {
+		n += 1 + len(s) // "#" + field
+	}
+	var b strings.Builder
+	b.Grow(n)
+	b.WriteString(p.Header)
+	for _, s := range p.Body {
+		b.WriteByte('#')
+		b.WriteString(s)
+	}
+	b.WriteString("#%")
+	return b.String()
 }

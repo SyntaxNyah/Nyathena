@@ -18,6 +18,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>. */
 package athena
 
 import (
+	"database/sql"
 	"flag"
 	"fmt"
 	"io"
@@ -1472,4 +1473,82 @@ logger.LogErrorf("Failed to remove persistent ignore for %v -> %v: %v", client.I
 
 client.SendServerMessage(fmt.Sprintf("Unignored user [%d].", uid))
 addToBuffer(client, "CMD", fmt.Sprintf("unignored UID %d (IPID: %v)", uid, targetIPID), false)
+}
+
+// cmdModnote manages per-IPID freeform moderator notes.
+// Usage: /modnote add <ipid> <note>
+//
+//	/modnote list <ipid>
+//	/modnote delete <id>
+func cmdModnote(client *Client, args []string, usage string) {
+	if len(args) < 1 {
+		client.SendServerMessage("Not enough arguments:\n" + usage)
+		return
+	}
+
+	switch args[0] {
+	case "add":
+		if len(args) < 3 {
+			client.SendServerMessage("Not enough arguments:\n" + usage)
+			return
+		}
+		ipid := args[1]
+		note := strings.Join(args[2:], " ")
+		if err := db.AddModnote(ipid, note, client.ModName()); err != nil {
+			logger.LogErrorf("Failed to add modnote for IPID %v: %v", ipid, err)
+			client.SendServerMessage("Failed to add note.")
+			return
+		}
+		client.SendServerMessage(fmt.Sprintf("Note added for IPID %v.", ipid))
+		addToBuffer(client, "CMD", fmt.Sprintf("Added modnote for IPID %v: %v", ipid, note), true)
+
+	case "list":
+		if len(args) < 2 {
+			client.SendServerMessage("Not enough arguments:\n" + usage)
+			return
+		}
+		ipid := args[1]
+		notes, err := db.GetModnotes(ipid)
+		if err != nil {
+			logger.LogErrorf("Failed to fetch modnotes for IPID %v: %v", ipid, err)
+			client.SendServerMessage("Failed to retrieve notes.")
+			return
+		}
+		if len(notes) == 0 {
+			client.SendServerMessage(fmt.Sprintf("No notes found for IPID %v.", ipid))
+			return
+		}
+		var b strings.Builder
+		fmt.Fprintf(&b, "Notes for IPID %v:\n", ipid)
+		for _, n := range notes {
+			ts := time.Unix(n.AddedAt, 0).UTC().Format("2006-01-02 15:04 UTC")
+			fmt.Fprintf(&b, "[%d] %v | by %v | %v\n", n.ID, ts, n.AddedBy, n.Note)
+		}
+		client.SendServerMessage(strings.TrimRight(b.String(), "\n"))
+
+	case "delete":
+		if len(args) < 2 {
+			client.SendServerMessage("Not enough arguments:\n" + usage)
+			return
+		}
+		id, err := strconv.ParseInt(args[1], 10, 64)
+		if err != nil {
+			client.SendServerMessage("Invalid note ID.")
+			return
+		}
+		if err := db.DeleteModnote(id); err != nil {
+			if err == sql.ErrNoRows {
+				client.SendServerMessage(fmt.Sprintf("No note with ID %d found.", id))
+			} else {
+				logger.LogErrorf("Failed to delete modnote ID %d: %v", id, err)
+				client.SendServerMessage("Failed to delete note.")
+			}
+			return
+		}
+		client.SendServerMessage(fmt.Sprintf("Deleted note #%d.", id))
+		addToBuffer(client, "CMD", fmt.Sprintf("Deleted modnote #%d.", id), true)
+
+	default:
+		client.SendServerMessage("Unknown subcommand. " + usage)
+	}
 }

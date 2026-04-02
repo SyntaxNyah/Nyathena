@@ -15,6 +15,7 @@
 # MOD_CHAT:     Grants permission to use the server's mod chat with /modchat
 # MUTE:         Grants permission to mute and parrot users.
 # LOG:          Grants permission to view area logs.
+# DJ:           Grants permission to set area entry descriptions with /areadesc.
 # ADMIN:        Grants all permissions.
 
 [[Role]]

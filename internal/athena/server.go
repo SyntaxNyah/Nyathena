@@ -737,24 +737,21 @@ func writeToAllClients(header string, contents ...string) {
 }
 
 // addToBuffer writes to an area buffer according to a client's action.
+// All client fields are read in one logSnapshot call (one mutex acquisition)
+// rather than via individual getters, which would each acquire and release the
+// client lock separately.
 func addToBuffer(client *Client, action string, message string, audit bool) {
 	now := time.Now().UTC().Format("15:04:05")
+	snap := client.logSnapshot()
 	s := fmt.Sprintf("%v | %v | %v | %v | %v | %v",
-		now, action, client.CurrentCharacter(), client.Ipid(), client.OOCName(), message)
-	client.Area().UpdateBuffer(s)
+		now, action, snap.charName, snap.ipid, snap.oocName, message)
+	snap.area.UpdateBuffer(s)
 
-	// Write to area-specific log file if area logging is enabled
+	// Write to area-specific log file if area logging is enabled.
 	if logger.EnableAreaLogging {
 		logEntry := fmt.Sprintf("[%v] | %v | %v | %v | %v | %v | %v | %v",
-			now,
-			action,
-			client.CurrentCharacter(),
-			client.Ipid(),
-			client.Hdid(),
-			client.Showname(),
-			client.OOCName(),
-			message)
-		logger.WriteAreaLog(client.Area().Name(), logEntry)
+			now, action, snap.charName, snap.ipid, snap.hdid, snap.showname, snap.oocName, message)
+		logger.WriteAreaLog(snap.area.Name(), logEntry)
 	}
 
 	if audit {

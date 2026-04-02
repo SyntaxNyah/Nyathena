@@ -93,6 +93,7 @@ type Area struct {
 	lock              Lock
 	invited           map[int]struct{}
 	doc               string
+	description       string
 	tr                TestimonyRecorder
 	activePoll        *Poll
 	lastPollTime      time.Time
@@ -112,6 +113,7 @@ type Area struct {
 
 type AreaData struct {
 	Name              string `toml:"name"`
+	Description       string `toml:"description"`
 	Evi_mode          string `toml:"evidence_mode"`
 	Allow_iniswap     bool   `toml:"allow_iniswap"`
 	Force_noint       bool   `toml:"force_nointerrupt"`
@@ -132,6 +134,7 @@ type defaults struct {
 	allow_iniswap     bool
 	force_noint       bool
 	bg                string
+	description       string
 	allow_cms         bool
 	force_bglist      bool
 	lock_bg           bool
@@ -152,6 +155,7 @@ func NewArea(data AreaData, charlen int, bufsize int, evi_mode EvidenceMode) *Ar
 			allow_iniswap:     data.Allow_iniswap,
 			force_noint:       data.Force_noint,
 			bg:                data.Bg,
+			description:       data.Description,
 			allow_cms:         data.Allow_cms,
 			force_bglist:      data.Force_bglist,
 			lock_bg:           data.Lock_bg,
@@ -168,6 +172,7 @@ func NewArea(data AreaData, charlen int, bufsize int, evi_mode EvidenceMode) *Ar
 		buffer:          make([]string, bufsize),
 		last_msg:        -1,
 		evi_mode:        evi_mode,
+		description:     data.Description,
 		cms:             make(map[int]struct{}),
 		invited:         make(map[int]struct{}),
 		spectateInvited: make(map[int]struct{}),
@@ -714,6 +719,20 @@ func (a *Area) Doc() string {
 func (a *Area) SetDoc(s string) {
 	a.mu.Lock()
 	a.doc = s
+	a.mu.Unlock()
+}
+
+// Description returns the area's description shown to players on entry.
+func (a *Area) Description() string {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return a.description
+}
+
+// SetDescription sets the area's entry description.
+func (a *Area) SetDescription(s string) {
+	a.mu.Lock()
+	a.description = s
 	a.mu.Unlock()
 }
 

@@ -79,6 +79,14 @@ func initCommands() {
 			reqPerms: permissions.PermissionField["NONE"],
 			category: "general",
 		},
+		"areadesc": {
+			handler:  cmdAreaDesc,
+			minArgs:  0,
+			usage:    "Usage: /areadesc [-c] [description]\n-c: Clear the description.",
+			desc:     "Prints or sets the area's entry description shown to players when they join.",
+			reqPerms: permissions.PermissionField["NONE"],
+			category: "area",
+		},
 		"ban": {
 			handler:  cmdBan,
 			minArgs:  3,
@@ -422,6 +430,14 @@ func initCommands() {
 			desc:     "Moves to an area.",
 			reqPerms: permissions.PermissionField["NONE"],
 			category: "general",
+		},
+		"modnote": {
+			handler:  cmdModnote,
+			minArgs:  1,
+			usage:    "Usage: /modnote add <ipid> <note> | /modnote list <ipid> | /modnote delete <id>",
+			desc:     "Manages per-IPID moderator notes.",
+			reqPerms: permissions.PermissionField["BAN_INFO"],
+			category: "moderation",
 		},
 		"mute": {
 			handler:  cmdMute,
