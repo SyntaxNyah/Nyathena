@@ -1077,7 +1077,7 @@ func cmdSpectate(client *Client, args []string, usage string) {
 // Handles /unmute
 
 // cmdAreaDesc prints or updates the area's entry description.
-// Any CM or moderator with MODIFY_AREA permission can use this command.
+// Any user with DJ or MODIFY_AREA permission can set/clear the description.
 // Usage: /areadesc [-c] [description]
 func cmdAreaDesc(client *Client, args []string, _ string) {
 	flags := flag.NewFlagSet("", 0)
@@ -1095,7 +1095,8 @@ func cmdAreaDesc(client *Client, args []string, _ string) {
 		return
 	}
 
-	if !client.HasCMPermission() {
+	if !permissions.HasPermission(client.Perms(), permissions.PermissionField["DJ"]) &&
+		!permissions.HasPermission(client.Perms(), permissions.PermissionField["MODIFY_AREA"]) {
 		client.SendServerMessage("You do not have permission to change the area description.")
 		return
 	}
