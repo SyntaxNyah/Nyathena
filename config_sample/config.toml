@@ -401,8 +401,14 @@ vote_threshold = 3
 vote_duration = 120
 
 # Which moderation actions players are allowed to vote on.
-# Valid values: "kick", "mute", "ban"
+# Valid values:
+#   "kick"     — disconnect the player from the server
+#   "mute"     — silence the player for vote_mute_duration seconds
+#   "ban"      — ban the player (uses default_ban_duration)
+#   "warn"     — send the player a formal warning message (no persistent effect)
+#   "areakick" — move the player to the default area (soft removal)
 # Keep this list conservative — bans in particular should be used carefully.
+# All actions still require moderator approval via /cvote accept.
 # Default: ["kick"]
 vote_actions = [ "kick" ]
 

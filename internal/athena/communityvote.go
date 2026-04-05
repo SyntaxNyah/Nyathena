@@ -39,6 +39,8 @@ const (
 	cvoteActionKick cvoteActionType = iota
 	cvoteActionMute
 	cvoteActionBan
+	cvoteActionWarn
+	cvoteActionAreaKick
 )
 
 func (a cvoteActionType) String() string {
@@ -49,6 +51,10 @@ func (a cvoteActionType) String() string {
 		return "mute"
 	case cvoteActionBan:
 		return "ban"
+	case cvoteActionWarn:
+		return "warn"
+	case cvoteActionAreaKick:
+		return "areakick"
 	}
 	return "unknown"
 }
@@ -61,6 +67,10 @@ func parseCvoteAction(s string) (cvoteActionType, bool) {
 		return cvoteActionMute, true
 	case "ban":
 		return cvoteActionBan, true
+	case "warn":
+		return cvoteActionWarn, true
+	case "areakick":
+		return cvoteActionAreaKick, true
 	}
 	return 0, false
 }
@@ -155,7 +165,7 @@ func cvoteStart(client *Client, args []string) {
 	}
 
 	if len(args) < 2 {
-		client.SendServerMessage("Usage: /cvote <kick|mute|ban> <uid> [reason]")
+		client.SendServerMessage("Usage: /cvote <kick|mute|ban|warn|areakick> <uid> [reason]")
 		return
 	}
 
@@ -169,7 +179,7 @@ func cvoteStart(client *Client, args []string) {
 	action, ok := parseCvoteAction(args[0])
 	if !ok {
 		client.SendServerMessage(fmt.Sprintf(
-			"Unknown vote action '%s'. Valid actions: kick, mute, ban.", args[0]))
+			"Unknown vote action '%s'. Valid actions: kick, mute, ban, warn, areakick.", args[0]))
 		return
 	}
 
@@ -405,6 +415,10 @@ func cvoteAccept(client *Client, args []string) {
 		requiredPerm = permissions.PermissionField["MUTE"]
 	case cvoteActionBan:
 		requiredPerm = permissions.PermissionField["BAN"]
+	case cvoteActionWarn:
+		requiredPerm = permissions.PermissionField["KICK"]
+	case cvoteActionAreaKick:
+		requiredPerm = permissions.PermissionField["KICK"]
 	}
 	if !permissions.HasPermission(client.Perms(), requiredPerm) {
 		communityVotes.mu.Unlock()
@@ -534,6 +548,43 @@ func cvoteAccept(client *Client, args []string) {
 			fmt.Sprintf("Community vote BAN accepted for UID %d (%s): %s",
 				targetUID, targetName, reason),
 			true)
+
+	case cvoteActionWarn:
+		if targetErr != nil {
+			client.SendServerMessage(fmt.Sprintf(
+				"Player (UID %d) is no longer connected.", targetUID))
+		} else {
+			target.SendServerMessage(fmt.Sprintf(
+				"⚠️ You have received a formal warning by community vote. Reason: %s", reason,
+			))
+			sendGlobalServerMessage(fmt.Sprintf(
+				"⚖️ Community vote accepted: %s (UID %d) has been formally warned. [%s]",
+				targetName, targetUID, reason,
+			))
+			addToBuffer(client, "MOD",
+				fmt.Sprintf("Community vote WARN accepted for UID %d (%s): %s",
+					targetUID, targetName, reason),
+				true)
+		}
+
+	case cvoteActionAreaKick:
+		if targetErr != nil {
+			client.SendServerMessage(fmt.Sprintf(
+				"Player (UID %d) is no longer connected.", targetUID))
+		} else {
+			target.SendServerMessage(fmt.Sprintf(
+				"You have been moved to the default area by community vote. Reason: %s", reason,
+			))
+			target.ChangeArea(areas[0])
+			sendGlobalServerMessage(fmt.Sprintf(
+				"⚖️ Community vote accepted: %s (UID %d) has been moved to the default area. [%s]",
+				targetName, targetUID, reason,
+			))
+			addToBuffer(client, "MOD",
+				fmt.Sprintf("Community vote AREAKICK accepted for UID %d (%s): %s",
+					targetUID, targetName, reason),
+				true)
+		}
 	}
 }
 
