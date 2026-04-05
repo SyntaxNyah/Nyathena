@@ -664,14 +664,25 @@ func initCommands() {
 			category: "general",
 		},
 		"cvote": {
-			handler:  cmdCvote,
-			minArgs:  0,
-			usage:    "Usage: /cvote <kick|mute|ban> <uid> [reason]\n" +
-				"       /cvote accept <uid>   — mod: enforce a passed vote\n" +
-				"       /cvote reject <uid>   — mod: deny a passed vote\n" +
-				"       /cvote cancel <uid>   — mod: cancel any active vote\n" +
-				"       /cvote list           — show all active votes",
-			desc:     "Community moderation voting. Players can vote to kick/mute/ban; moderators have final say.",
+			handler: cmdCvote,
+			minArgs: 0,
+			usage: "Usage: /cvote <action> <uid> [reason]   — start or add your vote\n" +
+				"       /cvote list                       — show all active votes\n" +
+				"\n" +
+				"Actions players can vote on (server-configurable):\n" +
+				"  kick     — disconnect the player from the server\n" +
+				"  mute     — silence the player temporarily\n" +
+				"  ban      — ban the player (moderator must approve)\n" +
+				"  warn     — send the player a formal warning message\n" +
+				"  areakick — move the player to the default area\n" +
+				"\n" +
+				"Votes require a majority to pass; moderators always make the final call.\n" +
+				"\n" +
+				"Moderator sub-commands:\n" +
+				"  /cvote accept <uid>  — enforce a passed vote\n" +
+				"  /cvote reject <uid>  — deny a passed vote\n" +
+				"  /cvote cancel <uid>  — cancel any active vote",
+			desc:     "Community moderation voting. Players vote to kick/mute/ban/warn/areakick; moderators have final say.",
 			reqPerms: permissions.PermissionField["NONE"],
 			category: "general",
 		},
