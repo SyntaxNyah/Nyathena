@@ -26,6 +26,7 @@ import (
 	"github.com/MangosArentLiterature/Athena/internal/db"
 	"github.com/MangosArentLiterature/Athena/internal/logger"
 	"github.com/MangosArentLiterature/Athena/internal/permissions"
+	"github.com/MangosArentLiterature/Athena/internal/webhook"
 	str2duration "github.com/xhit/go-str2duration/v2"
 )
 
@@ -436,6 +437,11 @@ func cvoteAccept(client *Client, args []string) {
 		} else {
 			target.SendPacket("KK", communityReason)
 			target.conn.Close()
+			sendPlayerArup()
+			if err := webhook.PostKick(target.CurrentCharacter(), target.Showname(), target.OOCName(),
+				target.Ipid(), communityReason, modName, target.Uid()); err != nil {
+				logger.LogErrorf("while posting community vote kick webhook: %v", err)
+			}
 			sendGlobalServerMessage(fmt.Sprintf(
 				"⚖️ Community vote accepted: %s (UID %d) has been kicked. [%s]",
 				targetName, targetUID, reason,
@@ -486,14 +492,34 @@ func cvoteAccept(client *Client, args []string) {
 
 		if targetErr == nil {
 			// Target is online — ban and disconnect.
-			id, _ := db.AddBan(target.Ipid(), target.Hdid(), banTime, until, communityReason, modName)
+			id, addErr := db.AddBan(target.Ipid(), target.Hdid(), banTime, until, communityReason, modName)
+			if addErr != nil {
+				logger.LogErrorf("Failed to add community vote ban for %v: %v", target.Ipid(), addErr)
+				client.SendServerMessage("Failed to record ban in the database.")
+				break
+			}
 			target.SendPacket("KB", fmt.Sprintf("%s\nUntil: %s\nID: %d",
 				communityReason, untilS, id))
 			target.conn.Close()
+			forgetIP(target.Ipid())
+			deleteAccountForIPID(target.Ipid())
+			sendPlayerArup()
+			if err := webhook.PostBan(target.CurrentCharacter(), target.Showname(), target.OOCName(),
+				target.Ipid(), target.Uid(), id, config.BanLen, communityReason, modName); err != nil {
+				logger.LogErrorf("while posting community vote ban webhook: %v", err)
+			}
 		} else if targetIPID != "" {
 			// Target disconnected — ban by IPID only.
-			if _, banErr := db.AddBan(targetIPID, "", banTime, until, communityReason, modName); banErr != nil {
+			id, banErr := db.AddBan(targetIPID, "", banTime, until, communityReason, modName)
+			if banErr != nil {
 				logger.LogErrorf("Failed to record community vote ban for IPID %v: %v", targetIPID, banErr)
+			} else {
+				forgetIP(targetIPID)
+				deleteAccountForIPID(targetIPID)
+				if err := webhook.PostBan("N/A", "N/A", "N/A",
+					targetIPID, -1, id, config.BanLen, communityReason, modName); err != nil {
+					logger.LogErrorf("while posting community vote ban webhook: %v", err)
+				}
 			}
 			client.SendServerMessage(fmt.Sprintf(
 				"Player (UID %d) is no longer connected, but their IP has been banned until %s.",
