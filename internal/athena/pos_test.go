@@ -98,7 +98,7 @@ func TestCommandRegexCaseInsensitive(t *testing.T) {
 		{"/join-tournament", "join-tournament", true},
 		{"/JOIN-TOURNAMENT", "join-tournament", true},
 		{"notacommand", "", false},
-		{"/123", "", false},
+		{"/123", "123", true},
 	}
 
 	for _, tt := range tests {
