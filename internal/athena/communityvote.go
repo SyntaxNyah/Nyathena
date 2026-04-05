@@ -502,7 +502,6 @@ func cvoteAccept(client *Client, args []string) {
 				communityReason, untilS, id))
 			target.conn.Close()
 			forgetIP(target.Ipid())
-			deleteAccountForIPID(target.Ipid())
 			sendPlayerArup()
 			if err := webhook.PostBan(target.CurrentCharacter(), target.Showname(), target.OOCName(),
 				target.Ipid(), target.Uid(), id, config.BanLen, communityReason, modName); err != nil {
@@ -515,7 +514,6 @@ func cvoteAccept(client *Client, args []string) {
 				logger.LogErrorf("Failed to record community vote ban for IPID %v: %v", targetIPID, banErr)
 			} else {
 				forgetIP(targetIPID)
-				deleteAccountForIPID(targetIPID)
 				if err := webhook.PostBan("N/A", "N/A", "N/A",
 					targetIPID, -1, id, config.BanLen, communityReason, modName); err != nil {
 					logger.LogErrorf("while posting community vote ban webhook: %v", err)
