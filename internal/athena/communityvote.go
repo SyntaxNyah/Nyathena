@@ -26,6 +26,7 @@ import (
 	"github.com/MangosArentLiterature/Athena/internal/db"
 	"github.com/MangosArentLiterature/Athena/internal/logger"
 	"github.com/MangosArentLiterature/Athena/internal/permissions"
+	"github.com/MangosArentLiterature/Athena/internal/settings"
 	"github.com/MangosArentLiterature/Athena/internal/webhook"
 	str2duration "github.com/xhit/go-str2duration/v2"
 )
@@ -99,27 +100,34 @@ var communityVotes = &cvoteStore{active: make(map[int]*cvoteEntry)}
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
-// isCvoteActionAllowed reports whether the given action string is present in the
-// server's configured vote_actions list.
-func isCvoteActionAllowed(action string) bool {
-	for _, a := range config.VoteActions {
-		if strings.EqualFold(a, action) {
-			return true
+// cvoteAllowedActions is the set of actions enabled in config, built once at
+// server init by initCvote. Lookups are O(1) with no allocations.
+var cvoteAllowedActions map[cvoteActionType]struct{}
+
+// initCvote pre-builds the cvoteAllowedActions set from the server config so
+// that every /cvote command uses a cheap map lookup instead of a linear scan.
+func initCvote(conf *settings.Config) {
+	m := make(map[cvoteActionType]struct{}, len(conf.VoteActions))
+	for _, s := range conf.VoteActions {
+		if a, ok := parseCvoteAction(s); ok {
+			m[a] = struct{}{}
 		}
 	}
-	return false
+	cvoteAllowedActions = m
 }
 
 // notifyModsCvoteThreshold sends an alert to every connected moderator when a
 // community vote has collected enough votes and is now awaiting mod approval.
+// The notification string is formatted once and shared across all recipients.
 func notifyModsCvoteThreshold(action cvoteActionType, targetName string, targetUID int) {
+	msg := fmt.Sprintf(
+		"[MOD ALERT] Community vote to %s %s (UID %d) has PASSED the threshold! "+
+			"Run /cvote accept %d to enforce, or /cvote reject %d to deny.",
+		action, targetName, targetUID, targetUID, targetUID,
+	)
 	clients.ForEach(func(c *Client) {
 		if c.Authenticated() {
-			c.SendServerMessage(fmt.Sprintf(
-				"[MOD ALERT] Community vote to %s %s (UID %d) has PASSED the threshold! "+
-					"Run /cvote accept %d to enforce, or /cvote reject %d to deny.",
-				action, targetName, targetUID, targetUID, targetUID,
-			))
+			c.SendServerMessage(msg)
 		}
 	})
 }
@@ -183,7 +191,7 @@ func cvoteStart(client *Client, args []string) {
 		return
 	}
 
-	if !isCvoteActionAllowed(action.String()) {
+	if _, allowed := cvoteAllowedActions[action]; !allowed {
 		client.SendServerMessage(fmt.Sprintf(
 			"Voting for '%s' is not enabled on this server.", action))
 		return
@@ -221,6 +229,12 @@ func cvoteStart(client *Client, args []string) {
 	threshold := config.VoteThreshold
 	if threshold <= 0 {
 		threshold = 3
+	}
+
+	// Compute the vote duration once; reused for both initial and mod-response timers.
+	voteDur := time.Duration(config.VoteDuration) * time.Second
+	if voteDur <= 0 {
+		voteDur = 120 * time.Second
 	}
 
 	voterIPID := client.Ipid()
@@ -268,14 +282,10 @@ func cvoteStart(client *Client, args []string) {
 			if existing.timer != nil {
 				existing.timer.Stop()
 			}
-			modDeadline := time.Duration(config.VoteDuration) * time.Second
-			if modDeadline <= 0 {
-				modDeadline = 120 * time.Second
-			}
 			captureUID := targetUID
 			captureAction := existing.action
 			captureName := targetName
-			existing.timer = time.AfterFunc(modDeadline, func() {
+			existing.timer = time.AfterFunc(voteDur, func() {
 				communityVotes.mu.Lock()
 				e, ok := communityVotes.active[captureUID]
 				if !ok || !e.pending {
@@ -310,11 +320,6 @@ func cvoteStart(client *Client, args []string) {
 	}
 
 	// No existing vote — create a fresh one.
-	duration := time.Duration(config.VoteDuration) * time.Second
-	if duration <= 0 {
-		duration = 120 * time.Second
-	}
-
 	entry := &cvoteEntry{
 		action:     action,
 		targetUID:  targetUID,
@@ -331,7 +336,7 @@ func cvoteStart(client *Client, args []string) {
 	captureName := targetName
 	captureThreshold := threshold
 
-	entry.timer = time.AfterFunc(duration, func() {
+	entry.timer = time.AfterFunc(voteDur, func() {
 		communityVotes.mu.Lock()
 		e, ok := communityVotes.active[captureUID]
 		if !ok || e.pending {
@@ -711,20 +716,41 @@ func cvoteList(client *Client) {
 		return
 	}
 
-	lines := make([]string, 0, len(communityVotes.active))
-	for _, entry := range communityVotes.active {
-		status := fmt.Sprintf("%d/%d votes", len(entry.voters), entry.threshold)
-		if entry.pending {
+	// Snapshot the fields we need under the lock so we can release it before
+	// doing any string formatting (which allocates and can be slow).
+	type voteSnap struct {
+		action    cvoteActionType
+		targetUID int
+		targetName string
+		reason     string
+		votes      int
+		threshold  int
+		pending    bool
+	}
+	snaps := make([]voteSnap, 0, len(communityVotes.active))
+	for _, e := range communityVotes.active {
+		snaps = append(snaps, voteSnap{
+			action:     e.action,
+			targetUID:  e.targetUID,
+			targetName: e.targetName,
+			reason:     e.reason,
+			votes:      len(e.voters),
+			threshold:  e.threshold,
+			pending:    e.pending,
+		})
+	}
+	communityVotes.mu.Unlock()
+
+	lines := make([]string, 0, len(snaps))
+	for _, s := range snaps {
+		status := fmt.Sprintf("%d/%d votes", s.votes, s.threshold)
+		if s.pending {
 			status = "PASSED – awaiting moderator"
 		}
 		lines = append(lines, fmt.Sprintf(
 			"• /cvote %s %d  —  %s (%s)  [%s]  Reason: %s",
-			entry.action, entry.targetUID,
-			entry.targetName, entry.action,
-			status, entry.reason,
+			s.action, s.targetUID, s.targetName, s.action, status, s.reason,
 		))
 	}
-	communityVotes.mu.Unlock()
-
 	client.SendServerMessage("⚖️ Active community votes:\n" + strings.Join(lines, "\n"))
 }
