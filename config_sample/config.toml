@@ -385,19 +385,20 @@ register_captcha = true
 #
 # How it works:
 #   1. Immediately after the decryptor packet the server sends:
-#        HC#<base64-encoded HAMT>#%
+#        HC#<base64(nonce_16bytes || HAMT_keys_only)>#%
 #   2. The client must:
 #        a. Base64-decode the payload.
-#        b. Deserialize the binary HAMT (see internal/hamt for the wire format).
-#        c. Traverse every leaf node and XOR all values together.
-#        d. Reply within the timeout window:
+#        b. Extract the first 16 bytes as the nonce.
+#        c. Deserialize the remaining bytes as a HAMT (leaf nodes carry only
+#           keys — values are NOT in the wire format).
+#        d. For every leaf key k, compute first-4-bytes-of HMAC-SHA256(nonce, BE(k))
+#           as a big-endian uint32, then XOR all those uint32s together.
+#        e. Reply within the timeout window:
 #             HR#<lowercase hex uint32>#%
 #   3. A wrong answer or timeout closes the connection immediately.
 #
-# This is not cryptographic security — it is an implementation barrier.
-# A stock AO2 client will time out; only clients that implement the HAMT
-# deserializer can connect.  This raises the bar for script-kiddie abusers
-# who would otherwise only need to send a single HI packet.
+# Because values are absent from the payload, the answer cannot be recovered by
+# a raw byte-scan; trie traversal AND HMAC-SHA256 are both required.
 #
 # IMPORTANT: Enabling this will break unmodified AO2 clients.  Only enable on
 # a server whose client base you control (e.g. a custom fork of the client).

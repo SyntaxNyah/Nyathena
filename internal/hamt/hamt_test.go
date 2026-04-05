@@ -66,8 +66,9 @@ func TestUpdateValue(t *testing.T) {
 	}
 }
 
-// TestSerializeDeserialize verifies a round-trip through Serialize/Deserialize
-// and that all values survive intact.
+// TestSerializeDeserialize verifies a round-trip through Serialize/Deserialize.
+// Because leaf values are intentionally omitted from the wire format, only key
+// presence is checked after deserialization (values will be 0).
 func TestSerializeDeserialize(t *testing.T) {
 	h := New()
 	pairs := [][2]uint32{
@@ -92,15 +93,17 @@ func TestSerializeDeserialize(t *testing.T) {
 	for _, p := range pairs {
 		got, ok := h2.Get(p[0])
 		if !ok {
-			t.Errorf("after round-trip: Get(%#x) = not found; want %#x", p[0], p[1])
-		} else if got != p[1] {
-			t.Errorf("after round-trip: Get(%#x) = %#x; want %#x", p[0], got, p[1])
+			t.Errorf("after round-trip: Get(%#x) = not found", p[0])
+		} else if got != 0 {
+			// Values are not transmitted in the wire format; they should be 0
+			// after deserialization.
+			t.Errorf("after round-trip: Get(%#x) = %#x; want 0 (values not in wire)", p[0], got)
 		}
 	}
 }
 
 // TestXORAllValues verifies that XORAllValues returns the XOR of every stored
-// value.
+// value (in-memory only; values are not transmitted in the wire format).
 func TestXORAllValues(t *testing.T) {
 	h := New()
 	want := uint32(0)
@@ -120,49 +123,112 @@ func TestXORAllValues(t *testing.T) {
 	}
 }
 
-// TestXORAllValuesAfterRoundTrip verifies the XOR answer survives serialization.
-func TestXORAllValuesAfterRoundTrip(t *testing.T) {
+// TestCollectKeysAfterRoundTrip verifies that every key survives
+// Serialize/Deserialize and is returned by CollectKeys.
+func TestCollectKeysAfterRoundTrip(t *testing.T) {
 	h := New()
-	want := uint32(0)
-	for i := uint32(0); i < 32; i++ {
-		v := i*0x1111 + 0xFF
-		h.Insert(i, v)
-		want ^= v
+	wantKeys := map[uint32]struct{}{
+		0x00000000: {},
+		0xFFFFFFFF: {},
+		0x12345678: {},
+		0x0F0F0F0F: {},
+		0xF0F0F0F0: {},
+		0xDEADBEEF: {},
 	}
+	for k := range wantKeys {
+		h.Insert(k, 0)
+	}
+
 	data := Serialize(h.Root())
 	root, err := Deserialize(data)
 	if err != nil {
 		t.Fatalf("Deserialize error: %v", err)
 	}
-	got := XORAllValues(root)
-	if got != want {
-		t.Errorf("XORAllValues after round-trip = %#x; want %#x", got, want)
+
+	got := CollectKeys(root)
+	if len(got) != len(wantKeys) {
+		t.Fatalf("CollectKeys returned %d keys; want %d", len(got), len(wantKeys))
+	}
+	for _, k := range got {
+		if _, ok := wantKeys[k]; !ok {
+			t.Errorf("CollectKeys returned unexpected key %#x", k)
+		}
 	}
 }
 
-// TestLargeRandomRoundTrip inserts many random key/value pairs, serializes,
-// deserializes and checks that every key/value pair is still accessible and
-// the XOR answer is unchanged.
+// TestComputeHMACAnswer verifies that ComputeHMACAnswer produces a consistent,
+// non-trivial answer and that the answer changes when the nonce changes.
+func TestComputeHMACAnswer(t *testing.T) {
+	h := New()
+	keys := []uint32{0x00000001, 0x00000002, 0x00000003, 0x00000004}
+	for _, k := range keys {
+		h.Insert(k, 0)
+	}
+
+	nonce1 := []byte("nonce-number-one")
+	nonce2 := []byte("nonce-number-two")
+
+	ans1a := ComputeHMACAnswer(h.Root(), nonce1)
+	ans1b := ComputeHMACAnswer(h.Root(), nonce1)
+	ans2 := ComputeHMACAnswer(h.Root(), nonce2)
+
+	if ans1a != ans1b {
+		t.Errorf("ComputeHMACAnswer is not deterministic: %#x != %#x", ans1a, ans1b)
+	}
+	if ans1a == ans2 {
+		t.Errorf("different nonces produced the same answer %#x", ans1a)
+	}
+}
+
+// TestComputeHMACAnswerRoundTrip verifies that the expected answer can be
+// reproduced from a deserialized HAMT plus the original nonce.  This is the
+// exact flow a compliant client must implement.
+func TestComputeHMACAnswerRoundTrip(t *testing.T) {
+	h := New()
+	keys := []uint32{0xDEADBEEF, 0xCAFEBABE, 0x12345678, 0xABCDEF01}
+	for _, k := range keys {
+		h.Insert(k, 0)
+	}
+
+	nonce := []byte("test-nonce-16byt")
+	want := ComputeHMACAnswer(h.Root(), nonce)
+
+	// Simulate what the client receives and computes.
+	data := Serialize(h.Root())
+	root, err := Deserialize(data)
+	if err != nil {
+		t.Fatalf("Deserialize error: %v", err)
+	}
+	got := ComputeHMACAnswer(root, nonce)
+
+	if got != want {
+		t.Errorf("answer after round-trip = %#x; want %#x", got, want)
+	}
+}
+
+// TestLargeRandomRoundTrip inserts many random keys, serializes, deserializes
+// and checks that every key is still accessible.  It also verifies that
+// ComputeHMACAnswer is stable across a serialize/deserialize round-trip.
 func TestLargeRandomRoundTrip(t *testing.T) {
 	const n = 256
 	rng := rand.New(rand.NewSource(42))
 
 	h := New()
 	keys := make([]uint32, 0, n)
-	vals := make(map[uint32]uint32, n)
-	wantXOR := uint32(0)
+	keySet := make(map[uint32]struct{}, n)
 
 	for len(keys) < n {
 		k := rng.Uint32()
-		if _, exists := vals[k]; exists {
+		if _, exists := keySet[k]; exists {
 			continue
 		}
-		v := rng.Uint32()
-		h.Insert(k, v)
+		h.Insert(k, 0)
 		keys = append(keys, k)
-		vals[k] = v
-		wantXOR ^= v
+		keySet[k] = struct{}{}
 	}
+
+	nonce := []byte("large-test-nonce")
+	wantAnswer := ComputeHMACAnswer(h.Root(), nonce)
 
 	data := Serialize(h.Root())
 	root, err := Deserialize(data)
@@ -171,17 +237,14 @@ func TestLargeRandomRoundTrip(t *testing.T) {
 	}
 	h2 := &HAMT{root: root}
 	for _, k := range keys {
-		got, ok := h2.Get(k)
-		if !ok {
+		if _, ok := h2.Get(k); !ok {
 			t.Errorf("large round-trip: Get(%#x) not found", k)
-		} else if got != vals[k] {
-			t.Errorf("large round-trip: Get(%#x) = %#x; want %#x", k, got, vals[k])
 		}
 	}
 
-	gotXOR := XORAllValues(root)
-	if gotXOR != wantXOR {
-		t.Errorf("large round-trip: XOR = %#x; want %#x", gotXOR, wantXOR)
+	gotAnswer := ComputeHMACAnswer(root, nonce)
+	if gotAnswer != wantAnswer {
+		t.Errorf("large round-trip: HMAC answer = %#x; want %#x", gotAnswer, wantAnswer)
 	}
 }
 
@@ -195,7 +258,7 @@ func TestDeserializeErrors(t *testing.T) {
 		{"truncated tag", []byte{0x48, 0x4D}},
 		{"unknown tag", []byte{0x00, 0x00, 0x00, 0x00}},
 		{"array truncated bitmap", []byte{0x48, 0x4D, 0x41, 0x49}}, // "HMAI" only
-		{"leaf truncated", []byte{0x48, 0x4D, 0x4C, 0x46, 0x00, 0x00}}, // "HMLF" + 2 bytes (need 8 more)
+		{"leaf truncated", []byte{0x48, 0x4D, 0x4C, 0x46, 0x00}}, // "HMLF" + 1 byte (need 4 more)
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -206,3 +269,4 @@ func TestDeserializeErrors(t *testing.T) {
 		})
 	}
 }
+

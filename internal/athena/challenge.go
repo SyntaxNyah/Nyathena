@@ -35,20 +35,34 @@ func cryptoRandUint32() uint32 {
 	return binary.BigEndian.Uint32(buf[:])
 }
 
-// generateChallenge builds a HAMT containing n unique random uint32 key→value
-// pairs, serializes it to the wire format, base64-encodes it for transport
-// over the AO2 text protocol, and returns both the encoded payload and the
-// expected answer (XOR of all inserted values).
+// generateChallenge builds a HAMT containing n unique random keys, serializes
+// it to the wire format (keys only — values are NOT in the wire), and produces
+// a base64-encoded payload of the form:
+//
+//	base64( nonce(16 bytes) || serialized_HAMT )
+//
+// The expected answer is the XOR of HMAC-SHA256(nonce, big-endian(key)) for
+// every leaf key, i.e. hamt.ComputeHMACAnswer(root, nonce).
 //
 // The client must:
 //  1. Base64-decode the payload.
-//  2. Deserialize the binary HAMT (see internal/hamt for the wire format).
-//  3. Traverse every LeafNode and XOR all values together.
-//  4. Reply with that uint32 formatted as a lowercase hex string.
+//  2. Extract the first 16 bytes as the nonce.
+//  3. Deserialize the remaining bytes as a HAMT (leaf nodes carry keys only).
+//  4. For every leaf key k compute first-4-bytes-of HMAC-SHA256(nonce, BE(k)).
+//  5. XOR all those uint32 values together.
+//  6. Reply with that uint32 formatted as a lowercase hex string.
+//
+// Because leaf values are absent from the wire, the answer cannot be recovered
+// by a raw byte-scan of the payload; trie traversal and HMAC computation are
+// both required.
 func generateChallenge(n int) (payload string, answer uint32) {
+	var nonce [16]byte
+	if _, err := rand.Read(nonce[:]); err != nil {
+		panic("hamt challenge: crypto/rand.Read failed (nonce): " + err.Error())
+	}
+
 	h := hamt.New()
 	seen := make(map[uint32]struct{}, n)
-	var xorAcc uint32
 
 	for len(seen) < n {
 		k := cryptoRandUint32()
@@ -56,13 +70,15 @@ func generateChallenge(n int) (payload string, answer uint32) {
 			continue
 		}
 		seen[k] = struct{}{}
-		v := cryptoRandUint32()
-		h.Insert(k, v)
-		xorAcc ^= v
+		h.Insert(k, 0) // values are derived via HMAC; not stored in wire
 	}
 
-	raw := hamt.Serialize(h.Root())
-	payload = base64.StdEncoding.EncodeToString(raw)
-	answer = xorAcc
+	answer = hamt.ComputeHMACAnswer(h.Root(), nonce[:])
+
+	hamtBytes := hamt.Serialize(h.Root())
+	blob := make([]byte, 16+len(hamtBytes))
+	copy(blob[:16], nonce[:])
+	copy(blob[16:], hamtBytes)
+	payload = base64.StdEncoding.EncodeToString(blob)
 	return
 }

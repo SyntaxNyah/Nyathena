@@ -21,13 +21,18 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>. */
 // Wire format (big-endian throughout):
 //
 //	ArrayNode: tag(4) | bitmap(4) | children…
-//	LeafNode:  tag(4) | key(4)    | value(4)
+//	LeafNode:  tag(4) | key(4)
+//
+// Note: leaf values are intentionally absent from the wire format.  The answer
+// is derived by the client via HMAC-SHA256 (see ComputeHMACAnswer).
 //
 // The magic tag constants are intentionally opaque to make the format
 // non-trivial to reverse-engineer without reading this source.
 package hamt
 
 import (
+	"crypto/hmac"
+	"crypto/sha256"
 	"encoding/binary"
 	"fmt"
 	"math/bits"
@@ -156,7 +161,8 @@ func getFromArray(n *ArrayNode, key uint32, shift uint) (uint32, bool) {
 }
 
 // XORAllValues returns the XOR of every value stored in the subtree rooted at
-// root.  This is the expected answer for the login challenge.
+// root.  Useful for server-side answer computation on the in-memory HAMT before
+// serialization (in-memory values are set; wire values are not transmitted).
 func XORAllValues(root *ArrayNode) uint32 {
 	var acc uint32
 	xorNode(root, &acc)
@@ -174,8 +180,58 @@ func xorNode(n Node, acc *uint32) {
 	}
 }
 
+// CollectKeys returns every key stored in the subtree rooted at root, in
+// depth-first, left-to-right order.  This is the primary operation a client
+// performs after deserializing the challenge payload: collect all keys, then
+// derive each value via HMAC-SHA256 (see ComputeHMACAnswer).
+func CollectKeys(root *ArrayNode) []uint32 {
+	var keys []uint32
+	collectNode(root, &keys)
+	return keys
+}
+
+func collectNode(n Node, keys *[]uint32) {
+	switch node := n.(type) {
+	case *ArrayNode:
+		for _, child := range node.Children {
+			collectNode(child, keys)
+		}
+	case *LeafNode:
+		*keys = append(*keys, node.Key)
+	}
+}
+
+// ComputeHMACAnswer derives the challenge answer from a deserialized HAMT root
+// and the 16-byte nonce that was prepended to the challenge payload.
+//
+// For each leaf key k the value is defined as:
+//
+//	value(k) = first 4 bytes of HMAC-SHA256(nonce, big-endian(k))
+//
+// The answer is the XOR of all such values.  Because the values are not
+// transmitted in the wire format, a client must call this function (or
+// equivalent logic) to compute the correct response — a raw byte-scan of the
+// payload is therefore insufficient.
+func ComputeHMACAnswer(root *ArrayNode, nonce []byte) uint32 {
+	var acc uint32
+	for _, k := range CollectKeys(root) {
+		var keyBuf [4]byte
+		binary.BigEndian.PutUint32(keyBuf[:], k)
+		mac := hmac.New(sha256.New, nonce)
+		mac.Write(keyBuf[:])
+		sum := mac.Sum(nil)
+		acc ^= binary.BigEndian.Uint32(sum[:4])
+	}
+	return acc
+}
+
 // Serialize encodes the HAMT into its binary wire format and returns the
 // resulting byte slice.
+//
+// Leaf values are intentionally NOT included in the wire format.  The client
+// must derive each leaf's value from the HMAC-SHA256 keyed with the nonce that
+// is prepended to the challenge payload (see challenge.go).  This ensures the
+// answer cannot be extracted without actually traversing the trie.
 func Serialize(root *ArrayNode) []byte {
 	// Pre-allocate a reasonable buffer to reduce re-allocations.
 	buf := make([]byte, 0, 256)
@@ -194,7 +250,7 @@ func serializeNode(buf *[]byte, n Node) {
 	case *LeafNode:
 		*buf = appendU32(*buf, tagLeaf)
 		*buf = appendU32(*buf, node.Key)
-		*buf = appendU32(*buf, node.Value)
+		// Value is deliberately omitted from the wire format.
 	}
 }
 
@@ -243,12 +299,13 @@ func deserializeNode(data []byte, offset int) (Node, int, error) {
 		return &ArrayNode{Bitmap: bitmap, Children: children}, offset, nil
 
 	case tagLeaf:
-		if offset+8 > len(data) {
+		if offset+4 > len(data) {
 			return nil, offset, fmt.Errorf("hamt: unexpected EOF reading leaf at offset %d", offset)
 		}
 		key := binary.BigEndian.Uint32(data[offset:])
-		value := binary.BigEndian.Uint32(data[offset+4:])
-		return &LeafNode{Key: key, Value: value}, offset + 8, nil
+		// Value is not in the wire format; it must be derived by the client
+		// using ComputeHMACAnswer with the nonce from the challenge payload.
+		return &LeafNode{Key: key}, offset + 4, nil
 
 	default:
 		return nil, offset, fmt.Errorf("hamt: unknown node tag 0x%08x at offset %d", tag, offset-4)
