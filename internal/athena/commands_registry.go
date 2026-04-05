@@ -663,6 +663,18 @@ func initCommands() {
 			reqPerms: permissions.PermissionField["NONE"],
 			category: "general",
 		},
+		"cvote": {
+			handler:  cmdCvote,
+			minArgs:  0,
+			usage:    "Usage: /cvote <kick|mute|ban> <uid> [reason]\n" +
+				"       /cvote accept <uid>   — mod: enforce a passed vote\n" +
+				"       /cvote reject <uid>   — mod: deny a passed vote\n" +
+				"       /cvote cancel <uid>   — mod: cancel any active vote\n" +
+				"       /cvote list           — show all active votes",
+			desc:     "Community moderation voting. Players can vote to kick/mute/ban; moderators have final say.",
+			reqPerms: permissions.PermissionField["NONE"],
+			category: "general",
+		},
 		"setrole": {
 			handler:  cmdChangeRole,
 			minArgs:  2,

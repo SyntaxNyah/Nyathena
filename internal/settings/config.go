@@ -93,6 +93,11 @@ type ServerConfig struct {
 	IPHubAPIKey                string `toml:"iphub_api_key"`
 	EnableCasino               bool     `toml:"enable_casino"`
 	RegisterCaptcha            bool     `toml:"register_captcha"`
+	EnableCommunityVote        bool     `toml:"enable_community_vote"`
+	VoteThreshold              int      `toml:"vote_threshold"`
+	VoteDuration               int      `toml:"vote_duration"`
+	VoteActions                []string `toml:"vote_actions"`
+	VoteMuteDuration           int      `toml:"vote_mute_duration"`
 	TypingRacePhrases          []string `toml:"typing_race_phrases"`
 	EnableNewspaper            bool     `toml:"enable_newspaper"`
 	NewspaperInterval          string   `toml:"newspaper_interval"`
@@ -181,6 +186,11 @@ func DefaultConfig() *Config {
 			BotBanPlaytimeThreshold:    120,
 			EnableCasino:               false,
 			RegisterCaptcha:            true,
+			EnableCommunityVote:        false,
+			VoteThreshold:              3,
+			VoteDuration:               120,
+			VoteActions:                []string{"kick"},
+			VoteMuteDuration:           300,
 		},
 		LogConfig{
 			BufSize:              150,
