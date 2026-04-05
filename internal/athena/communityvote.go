@@ -126,7 +126,7 @@ func notifyModsCvoteThreshold(action cvoteActionType, targetName string, targetU
 		action, targetName, targetUID, targetUID, targetUID,
 	)
 	clients.ForEach(func(c *Client) {
-		if c.Authenticated() {
+		if c.Authenticated() && permissions.IsModerator(c.Perms()) {
 			c.SendServerMessage(msg)
 		}
 	})
@@ -178,7 +178,7 @@ func cvoteStart(client *Client, args []string) {
 	}
 
 	// Moderators use /cvote accept / reject, not /cvote to cast votes.
-	if client.Authenticated() {
+	if client.Authenticated() && permissions.IsModerator(client.Perms()) {
 		client.SendServerMessage("Moderators cannot participate in community votes. " +
 			"Use /cvote accept or /cvote reject instead.")
 		return
@@ -216,7 +216,7 @@ func cvoteStart(client *Client, args []string) {
 	}
 
 	// Prevent voting against moderators.
-	if target.Authenticated() {
+	if target.Authenticated() && permissions.IsModerator(target.Perms()) {
 		client.SendServerMessage("You cannot vote against a moderator.")
 		return
 	}
@@ -376,7 +376,7 @@ func cvoteAccept(client *Client, args []string) {
 		return
 	}
 
-	if !client.Authenticated() {
+	if !client.Authenticated() || !permissions.IsModerator(client.Perms()) {
 		client.SendServerMessage("Only moderators can accept community votes.")
 		return
 	}
@@ -600,7 +600,7 @@ func cvoteReject(client *Client, args []string) {
 		return
 	}
 
-	if !client.Authenticated() {
+	if !client.Authenticated() || !permissions.IsModerator(client.Perms()) {
 		client.SendServerMessage("Only moderators can reject community votes.")
 		return
 	}
@@ -657,7 +657,7 @@ func cvoteCancel(client *Client, args []string) {
 		return
 	}
 
-	if !client.Authenticated() {
+	if !client.Authenticated() || !permissions.IsModerator(client.Perms()) {
 		client.SendServerMessage("Only moderators can cancel community votes.")
 		return
 	}
