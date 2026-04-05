@@ -1440,15 +1440,15 @@ func estimateJoinedLen(ss []string) int {
 // strings.Join allocation on every connection.
 func buildSMPacket(areaNamesStr string, musicList []string) string {
 	// SM# + areaNames + # + music[0] + # + ... + music[n-1] + #%
-	// pre-size: len("SM#") + len(areaNamesStr) + len("#") + joined music + len("#%")
-	size := 3 + len(areaNamesStr) + 1 + estimateJoinedLen(musicList) + 2
+	// Add 8 bytes per entry as headroom for encoding expansion (worst case: '%' → "<percent>").
+	size := 3 + len(areaNamesStr) + 1 + estimateJoinedLen(musicList) + len(musicList)*8 + 2
 	var b strings.Builder
 	b.Grow(size)
 	b.WriteString("SM#")
 	b.WriteString(areaNamesStr)
 	for _, m := range musicList {
 		b.WriteByte('#')
-		b.WriteString(encode(m))
+		encoder.WriteString(&b, m) //nolint:errcheck // strings.Builder.Write never returns an error
 	}
 	b.WriteString("#%")
 	return b.String()
