@@ -379,6 +379,44 @@ enable_casino = false
 # Default: true
 register_captcha = true
 
+# ─── HAMT Login Challenge ────────────────────────────────────────────────────
+# When enabled, every new connection must solve a Hash Array Mapped Trie (HAMT)
+# puzzle before the AO2 handshake is allowed to proceed.
+#
+# How it works:
+#   1. Immediately after the decryptor packet the server sends:
+#        HC#<base64-encoded HAMT>#%
+#   2. The client must:
+#        a. Base64-decode the payload.
+#        b. Deserialize the binary HAMT (see internal/hamt for the wire format).
+#        c. Traverse every leaf node and XOR all values together.
+#        d. Reply within the timeout window:
+#             HR#<lowercase hex uint32>#%
+#   3. A wrong answer or timeout closes the connection immediately.
+#
+# This is not cryptographic security — it is an implementation barrier.
+# A stock AO2 client will time out; only clients that implement the HAMT
+# deserializer can connect.  This raises the bar for script-kiddie abusers
+# who would otherwise only need to send a single HI packet.
+#
+# IMPORTANT: Enabling this will break unmodified AO2 clients.  Only enable on
+# a server whose client base you control (e.g. a custom fork of the client).
+#
+# Default: false
+enable_hamt_challenge = false
+
+# Number of random key→value pairs inserted into the challenge HAMT.
+# Higher values produce larger payloads and require more traversal work on the
+# client side.  16 is a reasonable default; values above 512 may noticeably
+# increase connection latency on slow links.
+# Default: 16
+hamt_challenge_size = 16
+
+# Seconds the client has to respond to the HC challenge before the connection
+# is closed.  Should be generous enough for slow machines / high-latency links.
+# Default: 10
+hamt_challenge_timeout = 10
+
 # ─── Typing Race ────────────────────────────────────────────────────────────
 
 # Custom phrases for the /typingrace minigame.

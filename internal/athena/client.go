@@ -220,6 +220,8 @@ type Client struct {
 	pendingRegUser     string      // Username from a pending /register that is awaiting captcha confirmation
 	pendingRegPass     []byte      // bcrypt hash from a pending /register that is awaiting captcha confirmation
 	pendingRegCaptcha  string      // Expected captcha token for the pending registration
+	challengePassed    bool        // Whether the client has passed the HAMT login challenge (always true when challenge is disabled)
+	challengeAnswer    uint32      // Expected XOR answer for the current HAMT challenge
 	sessionChipsAwarded int64     // Chips already awarded mid-session (hourly ticker); subtracted at disconnect to avoid double-counting
 	ignoredIPIDs        sync.Map  // Set of IPIDs permanently ignored by this client. Key: IPID string, Value: struct{}. Lock-free reads.
 }
@@ -237,6 +239,32 @@ func NewClient(conn net.Conn, ipid string) *Client {
 		jailAreaID:      -1,
 		charStuckCharID: -1,
 	}
+}
+
+// ChallengePassed returns whether the client has passed the HAMT login challenge.
+// Safe to call from any goroutine.
+func (client *Client) ChallengePassed() bool {
+	client.mu.Lock()
+	defer client.mu.Unlock()
+	return client.challengePassed
+}
+
+// SetChallengePassed marks the client's challenge state.
+// Safe to call from any goroutine.
+func (client *Client) SetChallengePassed(v bool) {
+	client.mu.Lock()
+	client.challengePassed = v
+	client.mu.Unlock()
+}
+
+// ChallengeAnswer returns the expected XOR answer for the active HAMT challenge.
+// The value is written once during connection setup (before any concurrent
+// access is possible) and read only from the single packet-loop goroutine, so
+// this getter is provided purely for API consistency.
+func (client *Client) ChallengeAnswer() uint32 {
+	client.mu.Lock()
+	defer client.mu.Unlock()
+	return client.challengeAnswer
 }
 
 // handleClient handles a client connection to the server.
@@ -273,6 +301,26 @@ func (client *Client) HandleClient() {
 	go timeout(client)
 
 	client.SendPacket("decryptor", "NOENCRYPT") // Relic of FantaCrypt. AO2 requires a server to send this to proceed with the handshake.
+
+	// HAMT login challenge: if enabled, generate a puzzle and send it to the
+	// client before the handshake can proceed.  The client must reply with a
+	// HR#<hex_answer>#% packet within the configured timeout window.
+	if config.EnableHAMTChallenge {
+		payload, answer := generateChallenge(config.HAMTChallengeSize)
+		client.challengeAnswer = answer
+		client.SendPacket("HC", payload)
+		timeout := config.HAMTChallengeTimeout
+		go func() {
+			time.Sleep(time.Duration(timeout) * time.Second)
+			if !client.ChallengePassed() {
+				client.conn.Close()
+			}
+		}()
+	} else {
+		// Challenge disabled: treat the client as having passed so that the
+		// HI handler does not gate on it.
+		client.challengePassed = true
+	}
 	input := bufio.NewScanner(client.conn)
 
 	splitfn := func(data []byte, atEOF bool) (advance int, token []byte, err error) {

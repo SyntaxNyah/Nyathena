@@ -106,11 +106,17 @@ var PacketMap = map[string]pktMapValue{
 	"ZZ":      {0, true, pktModcall},
 	"SETCASE": {7, true, pktSetCase},
 	"CASEA":   {6, true, pktCaseAnn},
+	"HR":      {1, false, pktHAMTResponse},
 }
 
 // Handles HI#%
 func pktHdid(client *Client, p *packet.Packet) {
 	if strings.TrimSpace(p.Body[0]) == "" || client.Uid() != -1 || client.Hdid() != "" {
+		return
+	}
+
+	// Block the handshake until the HAMT challenge has been solved.
+	if config.EnableHAMTChallenge && !client.ChallengePassed() {
 		return
 	}
 
@@ -973,6 +979,24 @@ func pktPing(client *Client, _ *packet.Packet) {
 		return
 	}
 	client.SendPacket("CHECK")
+}
+
+// Handles HR#<hex_answer>#%
+// HR is the client-side response to the HC HAMT login challenge.
+// The client must XOR all leaf values in the deserialized HAMT and reply with
+// the result as a lowercase hexadecimal string.  A wrong answer closes the
+// connection immediately; a correct answer marks the challenge as passed and
+// allows the normal HI handshake to proceed.
+func pktHAMTResponse(client *Client, p *packet.Packet) {
+	if !config.EnableHAMTChallenge || client.ChallengePassed() {
+		return
+	}
+	val, err := strconv.ParseUint(strings.TrimSpace(p.Body[0]), 16, 32)
+	if err != nil || uint32(val) != client.ChallengeAnswer() {
+		client.conn.Close()
+		return
+	}
+	client.SetChallengePassed(true)
 }
 
 // Handles ZZ#%

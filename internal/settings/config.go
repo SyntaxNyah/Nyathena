@@ -93,6 +93,12 @@ type ServerConfig struct {
 	IPHubAPIKey                string `toml:"iphub_api_key"`
 	EnableCasino               bool     `toml:"enable_casino"`
 	RegisterCaptcha            bool     `toml:"register_captcha"`
+	// EnableHAMTChallenge makes every new connection solve a Hash Array Mapped
+	// Trie puzzle before the handshake may proceed.  When false (the default)
+	// the handshake is unchanged and vanilla AO2 clients connect normally.
+	EnableHAMTChallenge    bool `toml:"enable_hamt_challenge"`
+	HAMTChallengeSize      int  `toml:"hamt_challenge_size"`
+	HAMTChallengeTimeout   int  `toml:"hamt_challenge_timeout"`
 	TypingRacePhrases          []string `toml:"typing_race_phrases"`
 	EnableNewspaper            bool     `toml:"enable_newspaper"`
 	NewspaperInterval          string   `toml:"newspaper_interval"`
@@ -181,6 +187,9 @@ func DefaultConfig() *Config {
 			BotBanPlaytimeThreshold:    120,
 			EnableCasino:               false,
 			RegisterCaptcha:            true,
+			EnableHAMTChallenge:        false,
+			HAMTChallengeSize:          16,
+			HAMTChallengeTimeout:       10,
 		},
 		LogConfig{
 			BufSize:              150,
