@@ -1448,7 +1448,7 @@ func buildSMPacket(areaNamesStr string, musicList []string) string {
 	b.WriteString(areaNamesStr)
 	for _, m := range musicList {
 		b.WriteByte('#')
-		b.WriteString(m)
+		b.WriteString(encode(m))
 	}
 	b.WriteString("#%")
 	return b.String()
