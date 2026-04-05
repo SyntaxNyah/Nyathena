@@ -264,7 +264,6 @@ func cvoteStart(client *Client, args []string) {
 			captureUID := targetUID
 			captureAction := existing.action
 			captureName := targetName
-			captureThreshold := existing.threshold
 			existing.timer = time.AfterFunc(modDeadline, func() {
 				communityVotes.mu.Lock()
 				e, ok := communityVotes.active[captureUID]
@@ -278,7 +277,6 @@ func cvoteStart(client *Client, args []string) {
 					"⚖️ Community vote to %s %s (UID %d) expired with no moderator response.",
 					captureAction, captureName, captureUID,
 				))
-				_ = captureThreshold // unused after threshold check
 			})
 		}
 
@@ -494,7 +492,9 @@ func cvoteAccept(client *Client, args []string) {
 			target.conn.Close()
 		} else if targetIPID != "" {
 			// Target disconnected — ban by IPID only.
-			db.AddBan(targetIPID, "", banTime, until, communityReason, modName) //nolint:errcheck
+			if _, banErr := db.AddBan(targetIPID, "", banTime, until, communityReason, modName); banErr != nil {
+				logger.LogErrorf("Failed to record community vote ban for IPID %v: %v", targetIPID, banErr)
+			}
 			client.SendServerMessage(fmt.Sprintf(
 				"Player (UID %d) is no longer connected, but their IP has been banned until %s.",
 				targetUID, untilS))
