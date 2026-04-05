@@ -379,6 +379,44 @@ enable_casino = false
 # Default: true
 register_captcha = true
 
+# ─── Community Voting ────────────────────────────────────────────────────────
+
+# Enable the community moderation vote system.
+# When enabled, players can use /cvote to request moderation actions against
+# other players. Once enough votes are collected (vote_threshold), moderators
+# are notified and can accept or reject the vote with /cvote accept|reject.
+# Moderators always have final say — no action is taken automatically.
+# Default: false
+enable_community_vote = false
+
+# Number of unique player votes required to pass a community vote.
+# Votes are de-duplicated by IPID so each IP address can only contribute one vote.
+# Default: 3
+vote_threshold = 3
+
+# Seconds a community vote remains active before it expires.
+# This timer applies both to votes collecting signatures and to passed votes
+# waiting for a moderator response.
+# Default: 120
+vote_duration = 120
+
+# Which moderation actions players are allowed to vote on.
+# Valid values:
+#   "kick"     — disconnect the player from the server
+#   "mute"     — silence the player for vote_mute_duration seconds
+#   "ban"      — ban the player (uses default_ban_duration)
+#   "warn"     — send the player a formal warning message (no persistent effect)
+#   "areakick" — move the player to the default area (soft removal)
+# Keep this list conservative — bans in particular should be used carefully.
+# All actions still require moderator approval via /cvote accept.
+# Default: ["kick"]
+vote_actions = [ "kick" ]
+
+# Duration in seconds of a community-vote mute.
+# Only relevant when "mute" is included in vote_actions.
+# Default: 300 (5 minutes)
+vote_mute_duration = 300
+
 # ─── Typing Race ────────────────────────────────────────────────────────────
 
 # Custom phrases for the /typingrace minigame.
