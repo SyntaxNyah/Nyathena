@@ -755,7 +755,8 @@ func pktAM(client *Client, p *packet.Packet) {
 		return
 	}
 
-	if sliceutil.ContainsString(music, p.Body[0]) {
+	decodedSong := decode(p.Body[0])
+	if sliceutil.ContainsString(music, decodedSong) {
 		if !client.CanChangeMusic() {
 			client.SendServerMessage("You are not allowed to change the music in this area.")
 			return
@@ -763,11 +764,11 @@ func pktAM(client *Client, p *packet.Packet) {
 		song := p.Body[0]
 		name := client.Showname()
 		effects := "0"
-		if !strings.ContainsRune(p.Body[0], '.') { // Chosen song is a category, and should stop the music.
+		if !strings.ContainsRune(decodedSong, '.') { // Chosen song is a category, and should stop the music.
 			song = "~stop.mp3"
 			addToBuffer(client, "MUSIC", "Stopped the music.", false)
 		} else {
-			addToBuffer(client, "MUSIC", fmt.Sprintf("Changed music to %v.", song), false)
+			addToBuffer(client, "MUSIC", fmt.Sprintf("Changed music to %v.", decodedSong), false)
 		}
 		if len(p.Body) > 2 {
 			name = p.Body[2]
@@ -776,12 +777,12 @@ func pktAM(client *Client, p *packet.Packet) {
 			effects = p.Body[3]
 		}
 		writeToArea(client.Area(), "MC", song, p.Body[1], name, "1", "0", effects)
-	} else if strings.Contains(areaNames, p.Body[0]) {
-		if decode(p.Body[0]) == client.Area().Name() {
+	} else if strings.Contains(areaNames, decodedSong) {
+		if decodedSong == client.Area().Name() {
 			return
 		}
 		for _, a := range areas {
-			if a.Name() == decode(p.Body[0]) {
+			if a.Name() == decodedSong {
 				if !client.ChangeArea(a) {
 					client.SendServerMessage("You are not invited to that area.")
 					return
