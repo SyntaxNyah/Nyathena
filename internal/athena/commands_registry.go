@@ -319,6 +319,14 @@ func initCommands() {
 			reqPerms: permissions.PermissionField["BAN"],
 			category: "moderation",
 		},
+		"setlockdownthreshold": {
+			handler:  cmdSetLockdownThreshold,
+			minArgs:  1,
+			usage:    "Usage: /setlockdownthreshold <0-100>",
+			desc:     "Sets the auto-lockdown threshold (% of max players). 0 disables auto-lockdown.",
+			reqPerms: permissions.PermissionField["BAN"],
+			category: "moderation",
+		},
 		"botban": {
 			handler:  cmdBotBan,
 			minArgs:  0,
