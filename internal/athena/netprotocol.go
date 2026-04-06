@@ -153,14 +153,35 @@ func pktId(client *Client, _ *packet.Packet) {
 
 // Handles askchaa#%
 func pktResCount(client *Client, _ *packet.Packet) {
-	if client.Uid() != -1 || client.Hdid() == "" {
+	if client.Uid() != -1 || client.Hdid() == "" || client.joining {
 		return
+	}
+	if !ensureJoining(client) {
+		return
+	}
+	client.write(siPacket)
+}
+
+// ensureJoining runs the handshake gate (player-count check + semaphore) if the
+// client has not yet entered the joining state. It is called from pktResCount
+// (askchaa) and from pktReqChar / pktReqAM to support AO2 clients that use the
+// "fastloading" feature and skip askchaa, sending RC/RM directly after ID.
+// Returns true when the client is (or was already) in joining state and the
+// caller should proceed. Returns false when the client was rejected and the
+// connection has been closed.
+func ensureJoining(client *Client) bool {
+	if client.joining {
+		return true
+	}
+	if client.Hdid() == "" || client.Uid() != -1 {
+		client.conn.Close()
+		return false
 	}
 	if players.GetPlayerCount() >= config.MaxPlayers {
 		logger.LogInfo("Player limit reached")
 		client.SendPacket("BD", "This server is currently full.")
 		client.conn.Close()
-		return
+		return false
 	}
 	// Claim a handshake slot to cap the number of clients mid-handshake.
 	// This prevents bots that never send RD from exhausting goroutines and memory.
@@ -169,19 +190,19 @@ func pktResCount(client *Client, _ *packet.Packet) {
 	default:
 		client.SendPacket("BD", "Server is busy. Please try again later.")
 		client.conn.Close()
-		return
+		return false
 	}
 	client.joining = true
-	client.write(siPacket)
+	return true
 }
 
 // Handles RC#%
 func pktReqChar(client *Client, _ *packet.Packet) {
-	if !client.joining {
-		// Receiving RC out of order (before askchaa / without a handshake slot) is
-		// suspicious. Close the connection to free resources immediately rather than
-		// leaving the socket open for the handshake timeout to clean up.
-		client.conn.Close()
+	// AO2 clients with the "fastloading" feature skip askchaa and send RC directly,
+	// so joining may not be set yet. ensureJoining runs the handshake gate and sets
+	// joining=true if needed; it closes the connection for truly out-of-order requests
+	// (no HDID or already fully joined).
+	if !ensureJoining(client) {
 		return
 	}
 	client.write(scPacket)
@@ -189,8 +210,7 @@ func pktReqChar(client *Client, _ *packet.Packet) {
 
 // Handles RM#%
 func pktReqAM(client *Client, _ *packet.Packet) {
-	if !client.joining {
-		client.conn.Close()
+	if !ensureJoining(client) {
 		return
 	}
 	client.write(smPacket)
