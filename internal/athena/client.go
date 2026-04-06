@@ -421,6 +421,11 @@ func (client *Client) logSnapshot() clientLogSnapshot {
 
 // clientCleanup cleans up a disconnected client.
 func (client *Client) clientCleanup() {
+	// If this client claimed a handshake slot (joining == true) but never completed
+	// the handshake (Uid() == -1), release the slot so another client can join.
+	if client.joining && client.Uid() == -1 {
+		<-handshakeSem
+	}
 	if client.Uid() != -1 {
 		logger.LogInfof("Client (IPID:%v UID:%v) left the server", client.ipid, client.Uid())
 

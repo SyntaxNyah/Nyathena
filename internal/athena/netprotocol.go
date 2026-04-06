@@ -156,39 +156,61 @@ func pktResCount(client *Client, _ *packet.Packet) {
 	if client.Uid() != -1 || client.Hdid() == "" || client.joining {
 		return
 	}
+	if !ensureJoining(client) {
+		return
+	}
+	client.write(siPacket)
+}
+
+// ensureJoining runs the handshake gate (player-count check + semaphore) if the
+// client has not yet entered the joining state. It is called from pktResCount
+// (askchaa) and from pktReqChar / pktReqAM to support AO2 clients that use the
+// "fastloading" feature and skip askchaa, sending RC/RM directly after ID.
+// Returns true when the client is (or was already) in joining state and the
+// caller should proceed. Returns false when the client was rejected and the
+// connection has been closed.
+func ensureJoining(client *Client) bool {
+	if client.joining {
+		return true
+	}
+	if client.Hdid() == "" || client.Uid() != -1 {
+		client.conn.Close()
+		return false
+	}
 	if players.GetPlayerCount() >= config.MaxPlayers {
 		logger.LogInfo("Player limit reached")
 		client.SendPacket("BD", "This server is currently full.")
 		client.conn.Close()
-		return
+		return false
+	}
+	// Claim a handshake slot to cap the number of clients mid-handshake.
+	// This prevents bots that never send RD from exhausting goroutines and memory.
+	select {
+	case handshakeSem <- struct{}{}:
+	default:
+		client.SendPacket("BD", "Server is busy. Please try again later.")
+		client.conn.Close()
+		return false
 	}
 	client.joining = true
-	client.write(siPacket)
+	return true
 }
 
 // Handles RC#%
 func pktReqChar(client *Client, _ *packet.Packet) {
-	if !client.joining {
-		// AO2 clients using the "fastloading" feature skip askchaa and send RC
-		// directly after receiving the FL packet. Run the player-count gate here
-		// for those clients so they can complete the handshake normally.
-		if client.Hdid() == "" || client.Uid() != -1 {
-			return
-		}
-		if players.GetPlayerCount() >= config.MaxPlayers {
-			logger.LogInfo("Player limit reached")
-			client.SendPacket("BD", "This server is currently full.")
-			client.conn.Close()
-			return
-		}
-		client.joining = true
+	// AO2 clients with the "fastloading" feature skip askchaa and send RC directly,
+	// so joining may not be set yet. ensureJoining runs the handshake gate and sets
+	// joining=true if needed; it closes the connection for truly out-of-order requests
+	// (no HDID or already fully joined).
+	if !ensureJoining(client) {
+		return
 	}
 	client.write(scPacket)
 }
 
 // Handles RM#%
 func pktReqAM(client *Client, _ *packet.Packet) {
-	if !client.joining {
+	if !ensureJoining(client) {
 		return
 	}
 	client.write(smPacket)
@@ -200,13 +222,16 @@ func pktReqDone(client *Client, _ *packet.Packet) {
 		return
 	}
 	// Atomically claim a player slot. This closes the TOCTOU window between the
-	// early check in pktResCount/pktReqChar and this point: concurrent handshakes
-	// that all passed that check cannot all add themselves past MaxPlayers.
+	// early check in pktResCount and this point: concurrent handshakes that all
+	// passed that check cannot all add themselves past MaxPlayers.
 	if !players.TryAddPlayer(config.MaxPlayers) {
+		<-handshakeSem // release slot; client never becomes a full player
 		client.SendPacket("BD", "This server is currently full.")
 		client.conn.Close()
 		return
 	}
+	// Handshake complete — release the slot so another client can start joining.
+	<-handshakeSem
 	client.SetUid(uids.GetUid())
 	clients.RegisterUID(client)
 	client.SetConnectedAt(time.Now())

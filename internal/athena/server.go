@@ -61,6 +61,13 @@ var encodedServerName string
 // A nil channel means the pool is disabled (unbounded behaviour).
 var connPool chan struct{}
 
+// handshakeSem is a semaphore channel that caps the number of clients
+// simultaneously progressing through the join handshake (joining == true).
+// This bounds memory and goroutine usage when bots flood the server with
+// connections that complete askchaa/RC but never send RD.
+// Capacity is set to MaxPlayers at startup; never nil.
+var handshakeSem chan struct{}
+
 var (
 	config                                 *settings.Config
 	characters, music, backgrounds, parrot []string
@@ -136,6 +143,11 @@ var (
 	// serverLockdown, when set to true, prevents all new (previously-unseen) IPIDs from
 	// connecting. Known IPIDs (those in ipFirstSeenTracker) are still allowed through.
 	serverLockdown atomic.Bool
+
+	// autoLockdownThreshold holds the runtime auto-lockdown threshold (percentage of
+	// MaxPlayers, 0–100). Initialised from config.AutoLockdownThreshold at startup and
+	// may be updated on-the-fly via /setlockdownthreshold without a server restart.
+	autoLockdownThreshold atomic.Int32
 
 	// areaLastOOCMsg stores the last OOC message body (raw, as received) sent in each area.
 	// Used to prevent consecutive identical OOC messages from different clients in the same area.
@@ -469,6 +481,11 @@ func NewServer(conf *settings.Config) (*Server, error) {
 	} else {
 		connPool = nil
 	}
+	// Initialise the handshake semaphore to MaxPlayers.
+	// This caps how many clients can be mid-handshake (joining == true) at once,
+	// preventing bots that never send RD from exhausting goroutines and memory.
+	handshakeSem = make(chan struct{}, conf.MaxPlayers)
+	autoLockdownThreshold.Store(int32(conf.AutoLockdownThreshold))
 	go startConnTrackerCleanup()
 	go startIdleKicker()
 	if conf.EnableCasino {
@@ -1574,17 +1591,18 @@ func startIdleKicker() {
 }
 
 // checkAutoLockdown evaluates the server's current player count against
-// AutoLockdownThreshold and engages or releases lockdown mode accordingly.
+// autoLockdownThreshold and engages or releases lockdown mode accordingly.
 // It is called whenever a player joins or leaves. Does nothing when
-// AutoLockdownThreshold is 0 (disabled) or MaxPlayers is 0.
+// autoLockdownThreshold is 0 (disabled) or MaxPlayers is 0.
 func checkAutoLockdown() {
-	if config == nil || config.AutoLockdownThreshold <= 0 || config.MaxPlayers <= 0 {
+	threshold := int(autoLockdownThreshold.Load())
+	if config == nil || threshold <= 0 || config.MaxPlayers <= 0 {
 		return
 	}
 	// Use cross-multiplication to avoid integer division truncation:
 	// playerCount * 100 >= threshold * maxPlayers  ⟺  pct >= threshold
 	playerCount := players.GetPlayerCount()
-	atOrAbove := playerCount*100 >= config.AutoLockdownThreshold*config.MaxPlayers
+	atOrAbove := playerCount*100 >= threshold*config.MaxPlayers
 	if atOrAbove && !serverLockdown.Load() {
 		serverLockdown.Store(true)
 		writeToAll("CT", "OOC", "🔒 Server lockdown automatically engaged (capacity threshold reached). New unknown connections are restricted.", "1")
