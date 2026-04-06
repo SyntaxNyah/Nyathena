@@ -533,12 +533,13 @@ func timeout(client *Client) {
 		return
 	}
 	interval := time.Duration(deadline) * time.Second
+	intervalNanos := interval.Nanoseconds()
 	for {
 		time.Sleep(interval)
 		if client.Uid() == -1 {
 			return
 		}
-		if nanos := client.lastPingNano.Load(); nanos != 0 && time.Since(time.Unix(0, nanos)) > interval {
+		if nanos := client.lastPingNano.Load(); nanos != 0 && time.Now().UnixNano()-nanos > intervalNanos {
 			logger.LogInfof("Client (IPID:%v UID:%v) timed out: no CH packet in %v", client.Ipid(), client.Uid(), interval)
 			client.conn.Close()
 			return
