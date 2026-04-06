@@ -1017,15 +1017,15 @@ func pktModcall(client *Client, p *packet.Packet) {
 		s = p.Body[0]
 	}
 	addToBuffer(client, "MOD", fmt.Sprintf("Called moderator for reason: %v", s), false)
-	modcallMsg := fmt.Sprintf("MODCALL\n----------\nArea: %v\nUser: [%v] %v\nIPID: %v\nReason: %v",
-		client.Area().Name(), client.Uid(), client.CurrentCharacter(), client.Ipid(), s)
+	modcallMsg := fmt.Sprintf("MODCALL\n----------\nArea: %v\nUser: [%v] %v\nShowname: %v\nOOC Name: %v\nIPID: %v\nReason: %v",
+		client.Area().Name(), client.Uid(), client.CurrentCharacter(), client.EffectiveShowname(), client.OOCName(), client.Ipid(), s)
 	clients.ForEach(func(c *Client) {
 		if c.Authenticated() && permissions.IsModerator(c.Perms()) {
 			c.SendPacket("ZZ", modcallMsg)
 		}
 	})
 	if enableDiscord {
-		err := webhook.PostModcall(client.CurrentCharacter(), client.Area().Name(), s)
+		err := webhook.PostModcall(client.CurrentCharacter(), client.EffectiveShowname(), client.OOCName(), client.Ipid(), client.Area().Name(), s, client.Uid())
 		if err != nil {
 			logger.LogError(err.Error())
 		}
