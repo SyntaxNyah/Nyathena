@@ -36,3 +36,19 @@ func (pc *PlayerCount) AddPlayer() {
 func (pc *PlayerCount) RemovePlayer() {
 	atomic.AddInt64(&pc.players, -1)
 }
+
+// TryAddPlayer atomically increments the player count only if it is strictly
+// below max. It returns true when the slot was reserved, false when the server
+// is already full. Using compare-and-swap closes the TOCTOU race that would
+// otherwise let concurrent handshakes push the count past MaxPlayers.
+func (pc *PlayerCount) TryAddPlayer(max int) bool {
+	for {
+		current := atomic.LoadInt64(&pc.players)
+		if int(current) >= max {
+			return false
+		}
+		if atomic.CompareAndSwapInt64(&pc.players, current, current+1) {
+			return true
+		}
+	}
+}

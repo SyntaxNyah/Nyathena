@@ -168,11 +168,17 @@ func pktResCount(client *Client, _ *packet.Packet) {
 
 // Handles RC#%
 func pktReqChar(client *Client, _ *packet.Packet) {
+	if !client.joining {
+		return
+	}
 	client.SendPacket("SC", characters...)
 }
 
 // Handles RM#%
 func pktReqAM(client *Client, _ *packet.Packet) {
+	if !client.joining {
+		return
+	}
 	client.write(smPacket)
 }
 
@@ -181,10 +187,17 @@ func pktReqDone(client *Client, _ *packet.Packet) {
 	if client.Uid() != -1 || !client.joining || client.Hdid() == "" {
 		return
 	}
+	// Atomically claim a player slot. This closes the TOCTOU window between the
+	// early check in pktResCount and this point: concurrent handshakes that all
+	// passed that check cannot all add themselves past MaxPlayers.
+	if !players.TryAddPlayer(config.MaxPlayers) {
+		client.SendPacket("BD", "This server is currently full.")
+		client.conn.Close()
+		return
+	}
 	client.SetUid(uids.GetUid())
 	clients.RegisterUID(client)
 	client.SetConnectedAt(time.Now())
-	players.AddPlayer()
 	if config.Advertise {
 		updatePlayers <- players.GetPlayerCount()
 	}
