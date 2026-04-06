@@ -210,7 +210,6 @@ type Client struct {
 	possessedPos       string      // Position of the possessed target (saved at time of possession)
 	forcedShowname     string      // Showname forced by a moderator ("" if none)
 	connectedAt        time.Time   // Time the client joined the server (uid assigned); zero if not yet joined
-	lastPacketTime     time.Time   // Time the most recent packet was received; used for idle-kick enforcement
 	jailAreaID         int         // Area index where this client is jailed; -1 = no specific jail area
 	hidden             bool        // Whether the client is hidden from the player list and area counts
 	charStuckUntil     time.Time   // Time when the character-stuck restriction expires; zero = not stuck
@@ -292,9 +291,6 @@ func (client *Client) HandleClient() {
 
 	for input.Scan() {
 		rawPacket := strings.TrimSpace(input.Text())
-		client.mu.Lock()
-		client.lastPacketTime = time.Now()
-		client.mu.Unlock()
 		if logger.DebugNetwork {
 			logger.LogDebugf("From %v: %v", client.ipid, rawPacket)
 		}
@@ -485,7 +481,6 @@ func (client *Client) clientCleanup() {
 		if config.Advertise {
 			updatePlayers <- players.GetPlayerCount()
 		}
-		checkAutoLockdown()
 		client.Area().RemoveChar(client.CharID())
 		if !client.Hidden() {
 			client.Area().RemoveVisiblePlayer()
@@ -522,22 +517,13 @@ func (client *Client) CurrentCharacter() string {
 	}
 }
 
-// timeout closes an unjoined client's connection after the configured handshake
-// timeout (default 15 seconds). A shorter timeout frees goroutines and memory
-// faster when bots connect and stall mid-handshake.
+// timeout closes an unjoined client's connection after 1 minute.
 func timeout(client *Client) {
-	d := defaultHandshakeTimeout
-	if config != nil && config.HandshakeTimeout > 0 {
-		d = time.Duration(config.HandshakeTimeout) * time.Second
-	}
-	time.Sleep(d)
+	time.Sleep(1 * time.Minute)
 	if client.Uid() == -1 {
 		client.conn.Close()
 	}
 }
-
-// defaultHandshakeTimeout matches the HandshakeTimeout default in settings/config.go.
-const defaultHandshakeTimeout = 15 * time.Second
 
 // Hdid returns the client's hdid.
 func (client *Client) Hdid() string {

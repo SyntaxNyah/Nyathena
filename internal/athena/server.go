@@ -68,8 +68,6 @@ var (
 	areas                                  []*area.Area
 	areaNames                              string
 	smPacket                               string // pre-built SM#<areas>#<music>#% packet; built once at startup
-	scPacket                               string // pre-built SC#<char1>#<char2>#...#% packet; built once at startup
-	siPacket                               string // pre-built SI#<charCount>#<evidCount>#<musicCount>#% packet; built once at startup
 	bgListStr                              string // pre-built background list for /bglist; zero alloc per call
 	areaIndexMap                           map[*area.Area]int // pre-computed index lookup for O(1) getAreaIndex
 	roles                                  []permissions.Role
@@ -136,11 +134,6 @@ var (
 	// serverLockdown, when set to true, prevents all new (previously-unseen) IPIDs from
 	// connecting. Known IPIDs (those in ipFirstSeenTracker) are still allowed through.
 	serverLockdown atomic.Bool
-
-	// autoLockdownThreshold holds the runtime auto-lockdown threshold (percentage of
-	// MaxPlayers, 0–100). Initialised from config.AutoLockdownThreshold at startup and
-	// may be updated on-the-fly via /setlockdownthreshold without a server restart.
-	autoLockdownThreshold atomic.Int32
 
 	// areaLastOOCMsg stores the last OOC message body (raw, as received) sent in each area.
 	// Used to prevent consecutive identical OOC messages from different clients in the same area.
@@ -278,7 +271,7 @@ func NewServer(conf *settings.Config) (*Server, error) {
 
 	s := &Server{
 		config:                 conf,
-		clients:                &ClientList{list: make(map[*Client]struct{}), uidIndex: make(map[int]*Client), ipidCounts: make(map[string]int), hdidCounts: make(map[string]int)},
+		clients:                &ClientList{list: make(map[*Client]struct{}), uidIndex: make(map[int]*Client), ipidCounts: make(map[string]int)},
 		uids:                   &uidmanager.UidManager{},
 		updatePlayers:          updatePlayers,
 		advertDone:             advertDone,
@@ -459,11 +452,6 @@ func NewServer(conf *settings.Config) (*Server, error) {
 	// Pre-build the SM packet (sent to every client on join) once at startup
 	// so that pktReqAM performs a single write with no allocations.
 	smPacket = buildSMPacket(s.areaNames, s.music)
-	// Pre-build the SC packet (character list) and SI packet (counts) once at startup
-	// so that pktReqChar and pktResCount perform a single write with no per-connection allocations.
-	// The SC packet can be very large (thousands of characters), so caching it is a significant win.
-	scPacket = buildSCPacket(s.characters)
-	siPacket = buildSIPacket(len(s.characters), len(s.areas[0].Evidence()), len(s.music))
 
 	initCommands()
 	initAutoMod(conf)
@@ -474,9 +462,7 @@ func NewServer(conf *settings.Config) (*Server, error) {
 	} else {
 		connPool = nil
 	}
-	autoLockdownThreshold.Store(int32(conf.AutoLockdownThreshold))
 	go startConnTrackerCleanup()
-	go startIdleKicker()
 	if conf.EnableCasino {
 		go startHourlyChipAward()
 		go startUnscrambleLoop()
@@ -1468,30 +1454,6 @@ func buildSMPacket(areaNamesStr string, musicList []string) string {
 	return b.String()
 }
 
-// buildSCPacket constructs the full SC#<char0>#<char1>#...#% packet string that
-// is sent verbatim to every client during the join handshake (RC request).
-// With thousands of character names this can be tens of kilobytes; building it
-// once at startup eliminates the largest per-connection allocation.
-func buildSCPacket(chars []string) string {
-	// SC + # + char[0] + # + ... + char[n-1] + #%
-	size := 2 + estimateJoinedLen(chars) + 2
-	var b strings.Builder
-	b.Grow(size)
-	b.WriteString("SC")
-	for _, c := range chars {
-		b.WriteByte('#')
-		b.WriteString(c)
-	}
-	b.WriteString("#%")
-	return b.String()
-}
-
-// buildSIPacket constructs the SI#<charCount>#<evidCount>#<musicCount>#% packet
-// string. The counts are fixed at startup so this never needs rebuilding.
-func buildSIPacket(charCount, evidCount, musicCount int) string {
-	return "SI#" + strconv.Itoa(charCount) + "#" + strconv.Itoa(evidCount) + "#" + strconv.Itoa(musicCount) + "#%"
-}
-
 // hourlyChipMsg is the notification sent when a player earns exactly 1 chip from the
 // hourly ticker.  Defined as a constant to avoid a fmt.Sprintf allocation every tick.
 const hourlyChipMsg = "💰 You earned 1 chip for being online! Balance updated."
@@ -1546,59 +1508,5 @@ func startHourlyChipAward() {
 			}
 			client.SendServerMessage(msg)
 		})
-	}
-}
-
-// startIdleKicker runs in the background and disconnects fully-joined clients
-// that have not sent any packet within the configured idle_kick_duration window.
-// This defends against "ghost connection" floods where bots complete the AO2
-// handshake and then hold slots open indefinitely without ever doing anything.
-// Only clients with a UID (i.e. fully joined) are subject to idle kicks;
-// unjoined clients are handled by the per-connection timeout() goroutine.
-// Does nothing when IdleKickDuration is 0 (disabled).
-func startIdleKicker() {
-	ticker := time.NewTicker(30 * time.Second)
-	defer ticker.Stop()
-	for range ticker.C {
-		if config == nil || config.IdleKickDuration <= 0 {
-			continue
-		}
-		cutoff := time.Now().Add(-time.Duration(config.IdleKickDuration) * time.Second)
-		clients.ForEach(func(client *Client) {
-			if client.Uid() == -1 {
-				return // unjoined clients are handled by timeout()
-			}
-			client.mu.Lock()
-			last := client.lastPacketTime
-			client.mu.Unlock()
-			if last.IsZero() || last.Before(cutoff) {
-				client.SendServerMessage("You have been disconnected for being idle too long.")
-				client.conn.Close()
-			}
-		})
-	}
-}
-
-// checkAutoLockdown evaluates the server's current player count against
-// autoLockdownThreshold and engages or releases lockdown mode accordingly.
-// It is called whenever a player joins or leaves. Does nothing when
-// autoLockdownThreshold is 0 (disabled) or MaxPlayers is 0.
-func checkAutoLockdown() {
-	threshold := int(autoLockdownThreshold.Load())
-	if config == nil || threshold <= 0 || config.MaxPlayers <= 0 {
-		return
-	}
-	// Use cross-multiplication to avoid integer division truncation:
-	// playerCount * 100 >= threshold * maxPlayers  ⟺  pct >= threshold
-	playerCount := players.GetPlayerCount()
-	atOrAbove := playerCount*100 >= threshold*config.MaxPlayers
-	if atOrAbove && !serverLockdown.Load() {
-		serverLockdown.Store(true)
-		writeToAll("CT", "OOC", "🔒 Server lockdown automatically engaged (capacity threshold reached). New unknown connections are restricted.", "1")
-		logger.LogInfof("Auto-lockdown engaged (%d/%d players)", playerCount, config.MaxPlayers)
-	} else if !atOrAbove && serverLockdown.Load() {
-		serverLockdown.Store(false)
-		writeToAll("CT", "OOC", "🔓 Server lockdown automatically lifted (capacity back within threshold).", "1")
-		logger.LogInfof("Auto-lockdown lifted (%d/%d players)", playerCount, config.MaxPlayers)
 	}
 }

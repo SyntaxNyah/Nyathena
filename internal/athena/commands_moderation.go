@@ -1138,35 +1138,6 @@ func cmdLockdown(client *Client, _ []string, _ string) {
 	}
 }
 
-// cmdSetLockdownThreshold sets the auto-lockdown threshold on the fly.
-// Usage: /setlockdownthreshold <0-100>
-// A value of 0 disables automatic lockdown. 1–100 sets the percentage of
-// MaxPlayers at which the server automatically engages lockdown mode.
-// The change takes effect immediately and triggers a re-evaluation of the
-// current player count.
-func cmdSetLockdownThreshold(client *Client, args []string, usage string) {
-	if len(args) < 1 {
-		client.SendServerMessage(usage)
-		return
-	}
-	n, err := strconv.Atoi(args[0])
-	if err != nil || n < 0 || n > 100 {
-		client.SendServerMessage("Invalid threshold. Provide a value between 0 (disabled) and 100.")
-		return
-	}
-	autoLockdownThreshold.Store(int32(n))
-	if n == 0 {
-		client.SendServerMessage("Auto-lockdown disabled.")
-		addToBuffer(client, "CMD", "Disabled auto-lockdown threshold.", true)
-	} else {
-		client.SendServerMessage(fmt.Sprintf("Auto-lockdown threshold set to %d%%.", n))
-		addToBuffer(client, "CMD", fmt.Sprintf("Set auto-lockdown threshold to %d%%.", n), true)
-	}
-	// Re-evaluate immediately so the change takes effect without waiting for the
-	// next join/leave event.
-	checkAutoLockdown()
-}
-
 // cmdFirewall toggles the IPHub VPN/proxy firewall gate.
 // Usage: /firewall on | /firewall off
 // While the firewall is active, every new connection whose IP has not been seen

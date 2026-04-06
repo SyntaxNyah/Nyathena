@@ -297,29 +297,6 @@ global_new_ip_rate_limit_window = 10
 # Default: 0 (disabled)
 ip_retention_days = 0
 
-# Idle kick: Number of seconds a fully-joined client may go without sending any packet
-# before being disconnected. This prevents "ghost connection" floods where bots complete
-# the AO2 handshake and then silently hold player slots open without ever interacting.
-# Legitimate AO2 clients send periodic CH (ping) packets so real players are unaffected
-# as long as this value is higher than the client's ping interval (typically ~10 s).
-# Recommended value: 300 (5 minutes). Set to 0 to disable. Default: 0 (disabled).
-idle_kick_duration = 0
-
-# HDID multiclient limit: Maximum number of simultaneous connections that may share
-# the same hashed hardware ID (HDID), regardless of their source IP address.
-# This stops bot floods that rotate source IPs but all originate from the same client
-# installation (and therefore send the same HDID in their HI# handshake packet).
-# Set to 0 to disable HDID-based limiting. Default: 0 (disabled).
-hdid_multiclient_limit = 0
-
-# Automatic lockdown threshold: When the number of fully-joined players reaches this
-# percentage of max_players, the server automatically engages lockdown mode, blocking
-# all new (previously-unseen) IP addresses. Lockdown is lifted automatically once the
-# player count falls back below the threshold.
-# For example, 90 means lockdown engages when the server is 90% full.
-# Set to 0 to disable automatic lockdown. Default: 0 (disabled).
-auto_lockdown_threshold = 0
-
 # Sets the allowed origin hostname for WebSocket (WebAO) connections.
 # Only connections whose Origin header hostname matches this value will be accepted.
 # This is matched against the hostname portion of the Origin header (e.g. "web.aceattorneyonline.com"
