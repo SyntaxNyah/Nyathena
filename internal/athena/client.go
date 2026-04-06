@@ -26,6 +26,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/MangosArentLiterature/Athena/internal/area"
@@ -222,7 +223,7 @@ type Client struct {
 	pendingRegCaptcha  string      // Expected captcha token for the pending registration
 	sessionChipsAwarded int64     // Chips already awarded mid-session (hourly ticker); subtracted at disconnect to avoid double-counting
 	ignoredIPIDs        sync.Map  // Set of IPIDs permanently ignored by this client. Key: IPID string, Value: struct{}. Lock-free reads.
-	lastPingTime        time.Time // Time the client last sent a CH (ping) packet; zero until the client has joined.
+	lastPingNano        atomic.Int64 // Unix nanosecond timestamp of the last CH packet; 0 until seeded on join.
 }
 
 // NewClient returns a new client.
@@ -518,20 +519,6 @@ func (client *Client) CurrentCharacter() string {
 	}
 }
 
-// LastPingTime returns the time of the client's most recent CH (ping) packet.
-func (client *Client) LastPingTime() time.Time {
-	client.mu.Lock()
-	defer client.mu.Unlock()
-	return client.lastPingTime
-}
-
-// SetLastPingTime records the time of the client's most recent CH (ping) packet.
-func (client *Client) SetLastPingTime(t time.Time) {
-	client.mu.Lock()
-	client.lastPingTime = t
-	client.mu.Unlock()
-}
-
 // timeout closes an unjoined client's connection after 1 minute.
 // Once the client has joined, if ping_timeout is configured, it also disconnects
 // the client whenever the time since its last CH packet exceeds that threshold.
@@ -551,7 +538,7 @@ func timeout(client *Client) {
 		if client.Uid() == -1 {
 			return
 		}
-		if time.Since(client.LastPingTime()) > interval {
+		if nanos := client.lastPingNano.Load(); nanos != 0 && time.Since(time.Unix(0, nanos)) > interval {
 			logger.LogInfof("Client (IPID:%v UID:%v) timed out: no CH packet in %v", client.Ipid(), client.Uid(), interval)
 			client.conn.Close()
 			return
