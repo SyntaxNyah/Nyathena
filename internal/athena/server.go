@@ -135,6 +135,12 @@ var (
 	// connecting. Known IPIDs (those in ipFirstSeenTracker) are still allowed through.
 	serverLockdown atomic.Bool
 
+	// playerLockdownThreshold holds the runtime-adjustable player count cap for the
+	// capacity lockdown feature.  When the connected player count reaches this value,
+	// new join attempts are rejected.  0 means the threshold is disabled.
+	// Mods can change this at runtime with /setplayerlimit.
+	playerLockdownThreshold atomic.Int32
+
 	// areaLastOOCMsg stores the last OOC message body (raw, as received) sent in each area.
 	// Used to prevent consecutive identical OOC messages from different clients in the same area.
 	// Key: *area.Area, Value: string. sync.Map is zero-value ready; no initialisation required.
@@ -462,6 +468,8 @@ func NewServer(conf *settings.Config) (*Server, error) {
 	} else {
 		connPool = nil
 	}
+	// Initialise the player-capacity lockdown threshold from config.
+	playerLockdownThreshold.Store(int32(conf.PlayerLockdownThreshold))
 	go startConnTrackerCleanup()
 	if conf.EnableCasino {
 		go startHourlyChipAward()

@@ -343,6 +343,14 @@ func initCommands() {
 			reqPerms: permissions.PermissionField["ADMIN"],
 			category: "admin",
 		},
+		"setplayerlimit": {
+			handler:  cmdSetPlayerLimit,
+			minArgs:  1,
+			usage:    "Usage: /setplayerlimit <limit>\nSets the player capacity lockdown threshold. New connections are rejected when this many players are connected. Use 0 to disable.",
+			desc:     "Sets the player capacity lockdown threshold at runtime.",
+			reqPerms: permissions.PermissionField["BAN"],
+			category: "moderation",
+		},
 		"purgedb": {
 			handler:  cmdPurgeDB,
 			minArgs:  0,

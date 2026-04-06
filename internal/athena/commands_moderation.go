@@ -1266,6 +1266,25 @@ func cmdSetGlobalIPWindow(client *Client, args []string, usage string) {
 	addToBuffer(client, "CMD", fmt.Sprintf("Set global new-IP rate limit window to %v seconds.", val), true)
 }
 
+// cmdSetPlayerLimit updates the player capacity lockdown threshold at runtime.
+// While active, new join attempts are rejected once the connected player count
+// reaches the threshold.  Use 0 to disable the threshold.
+func cmdSetPlayerLimit(client *Client, args []string, usage string) {
+	val, err := strconv.Atoi(args[0])
+	if err != nil || val < 0 {
+		client.SendServerMessage("Invalid value. Must be a non-negative integer (0 = disabled).\n" + usage)
+		return
+	}
+	playerLockdownThreshold.Store(int32(val))
+	if val == 0 {
+		client.SendServerMessage("Player capacity lockdown disabled.")
+		addToBuffer(client, "CMD", "Disabled player capacity lockdown.", true)
+	} else {
+		client.SendServerMessage(fmt.Sprintf("Player capacity lockdown set to %v. New connections will be rejected once %v player(s) are connected.", val, val))
+		addToBuffer(client, "CMD", fmt.Sprintf("Set player capacity lockdown threshold to %v.", val), true)
+	}
+}
+
 // cmdPurgeDB purges all entries from the KNOWN_IPS table and clears the
 // in-memory first-seen tracker.  After this command every IPID will be treated
 // as completely new on its next connection.

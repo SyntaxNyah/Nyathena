@@ -107,6 +107,17 @@ type ServerConfig struct {
 	// becomes available rather than spinning up an unbounded number of goroutines.
 	// 0 (the default) disables the pool and preserves the original unbounded behaviour.
 	MaxConnectionGoroutines int `toml:"max_connection_goroutines"`
+
+	// PingTimeout is the number of seconds a joined client may go without sending
+	// a CH (ping) packet before being forcibly disconnected.  0 disables the check.
+	PingTimeout int `toml:"ping_timeout"`
+
+	// PlayerLockdownThreshold is the player count at which the server automatically
+	// stops accepting new connections.  When the connected player count reaches this
+	// value, new join attempts are rejected with a "server is full" message.
+	// 0 disables the threshold (only the hard max_players cap applies).
+	// Mods can change this at runtime with /setplayerlimit.
+	PlayerLockdownThreshold int `toml:"player_lockdown_threshold"`
 }
 
 type LogConfig struct {

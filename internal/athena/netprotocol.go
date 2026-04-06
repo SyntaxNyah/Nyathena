@@ -153,6 +153,14 @@ func pktResCount(client *Client, _ *packet.Packet) {
 		client.conn.Close()
 		return
 	}
+	// Capacity lockdown: reject new connections when the player count has reached
+	// the operator-configured threshold (0 = disabled).
+	if threshold := int(playerLockdownThreshold.Load()); threshold > 0 && players.GetPlayerCount() >= threshold {
+		logger.LogInfof("Connection from %v rejected (player capacity lockdown, threshold %v)", client.Ipid(), threshold)
+		client.SendPacket("BD", "This server is not currently accepting new connections.")
+		client.conn.Close()
+		return
+	}
 	client.joining = true // This simply exists to prevent skipping the askchaa#% packet and bypassing the player count check.
 	client.SendPacket("SI", strconv.Itoa(len(characters)), strconv.Itoa(len(areas[0].Evidence())), strconv.Itoa(len(music)))
 }
@@ -175,6 +183,7 @@ func pktReqDone(client *Client, _ *packet.Packet) {
 	client.SetUid(uids.GetUid())
 	clients.RegisterUID(client)
 	client.SetConnectedAt(time.Now())
+	client.SetLastPingTime(time.Now()) // seed so the ping timeout window starts from join time
 	players.AddPlayer()
 	if config.Advertise {
 		updatePlayers <- players.GetPlayerCount()
@@ -973,6 +982,7 @@ func pktPing(client *Client, _ *packet.Packet) {
 	if checkIPPingRateLimit(client.Ipid()) {
 		return
 	}
+	client.SetLastPingTime(time.Now())
 	client.SendPacket("CHECK")
 }
 
