@@ -107,6 +107,24 @@ type ServerConfig struct {
 	// becomes available rather than spinning up an unbounded number of goroutines.
 	// 0 (the default) disables the pool and preserves the original unbounded behaviour.
 	MaxConnectionGoroutines int `toml:"max_connection_goroutines"`
+	// IdleKickDuration is the number of seconds a fully-joined client may go
+	// without sending any packet before being disconnected.
+	// 0 disables idle kicking.
+	IdleKickDuration int `toml:"idle_kick_duration"`
+	// HDIDMCLimit is the maximum number of simultaneous connections that share
+	// the same HDID (hardware ID hash), regardless of their source IP.
+	// 0 disables HDID-based limiting.
+	HDIDMCLimit int `toml:"hdid_multiclient_limit"`
+	// AutoLockdownThreshold is the percentage of MaxPlayers at which the server
+	// automatically engages lockdown (blocks new unknown IPs).
+	// For example, 90 means lockdown is triggered when the server is 90% full.
+	// 0 disables automatic lockdown.
+	AutoLockdownThreshold int `toml:"auto_lockdown_threshold"`
+	// HandshakeTimeout is the number of seconds an unjoined client may take to
+	// complete the join handshake before being forcibly disconnected.
+	// Lower values free resources faster when bots connect and stall mid-handshake.
+	// Default: 15. Set to 0 to use the legacy 60-second timeout.
+	HandshakeTimeout int `toml:"handshake_timeout"`
 }
 
 type LogConfig struct {
@@ -191,6 +209,10 @@ func DefaultConfig() *Config {
 			VoteDuration:               120,
 			VoteActions:                []string{"kick"},
 			VoteMuteDuration:           300,
+			IdleKickDuration:           0,
+			HDIDMCLimit:                0,
+			AutoLockdownThreshold:      0,
+			HandshakeTimeout:           15,
 		},
 		LogConfig{
 			BufSize:              150,

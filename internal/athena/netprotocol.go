@@ -124,6 +124,15 @@ func pktHdid(client *Client, p *packet.Packet) {
 		return
 	}
 
+	// HDID multiclient limit: reject connections that share the same hardware ID
+	// as too many already-connected clients, regardless of source IP.
+	if config.HDIDMCLimit != 0 && clients.CountByHDID(client.Hdid()) >= config.HDIDMCLimit {
+		client.SendPacket("BD", "You have reached the server's multiclient limit.")
+		client.conn.Close()
+		return
+	}
+	clients.RegisterHDID(client)
+
 	client.SendPacket("ID", "0", "Athena", encode(version)) // Why does the client need this? Nobody knows.
 }
 
@@ -153,17 +162,37 @@ func pktResCount(client *Client, _ *packet.Packet) {
 		client.conn.Close()
 		return
 	}
-	client.joining = true // This simply exists to prevent skipping the askchaa#% packet and bypassing the player count check.
-	client.SendPacket("SI", strconv.Itoa(len(characters)), strconv.Itoa(len(areas[0].Evidence())), strconv.Itoa(len(music)))
+	// Claim a handshake slot to cap the number of clients mid-handshake.
+	// This prevents bots that never send RD from exhausting goroutines and memory.
+	select {
+	case handshakeSem <- struct{}{}:
+	default:
+		client.SendPacket("BD", "Server is busy. Please try again later.")
+		client.conn.Close()
+		return
+	}
+	client.joining = true
+	client.write(siPacket)
 }
 
 // Handles RC#%
 func pktReqChar(client *Client, _ *packet.Packet) {
-	client.SendPacket("SC", characters...)
+	if !client.joining {
+		// Receiving RC out of order (before askchaa / without a handshake slot) is
+		// suspicious. Close the connection to free resources immediately rather than
+		// leaving the socket open for the handshake timeout to clean up.
+		client.conn.Close()
+		return
+	}
+	client.write(scPacket)
 }
 
 // Handles RM#%
 func pktReqAM(client *Client, _ *packet.Packet) {
+	if !client.joining {
+		client.conn.Close()
+		return
+	}
 	client.write(smPacket)
 }
 
@@ -172,13 +201,24 @@ func pktReqDone(client *Client, _ *packet.Packet) {
 	if client.Uid() != -1 || !client.joining || client.Hdid() == "" {
 		return
 	}
+	// Atomically claim a player slot. This closes the TOCTOU window between the
+	// early check in pktResCount and this point: concurrent handshakes that all
+	// passed that check cannot all add themselves past MaxPlayers.
+	if !players.TryAddPlayer(config.MaxPlayers) {
+		<-handshakeSem // release slot; client never becomes a full player
+		client.SendPacket("BD", "This server is currently full.")
+		client.conn.Close()
+		return
+	}
+	// Handshake complete — release the slot so another client can start joining.
+	<-handshakeSem
 	client.SetUid(uids.GetUid())
 	clients.RegisterUID(client)
 	client.SetConnectedAt(time.Now())
-	players.AddPlayer()
 	if config.Advertise {
 		updatePlayers <- players.GetPlayerCount()
 	}
+	checkAutoLockdown()
 	client.JoinArea(areas[0])
 	client.SendPacket("DONE")
 	sendCMArup()
