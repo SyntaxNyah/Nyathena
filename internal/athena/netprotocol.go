@@ -178,6 +178,10 @@ func pktResCount(client *Client, _ *packet.Packet) {
 // Handles RC#%
 func pktReqChar(client *Client, _ *packet.Packet) {
 	if !client.joining {
+		// Receiving RC out of order (before askchaa / without a handshake slot) is
+		// suspicious. Close the connection to free resources immediately rather than
+		// leaving the socket open for the handshake timeout to clean up.
+		client.conn.Close()
 		return
 	}
 	client.write(scPacket)
@@ -186,6 +190,7 @@ func pktReqChar(client *Client, _ *packet.Packet) {
 // Handles RM#%
 func pktReqAM(client *Client, _ *packet.Packet) {
 	if !client.joining {
+		client.conn.Close()
 		return
 	}
 	client.write(smPacket)

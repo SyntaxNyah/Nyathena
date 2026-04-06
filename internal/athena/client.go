@@ -531,7 +531,7 @@ func (client *Client) CurrentCharacter() string {
 // timeout (default 15 seconds). A shorter timeout frees goroutines and memory
 // faster when bots connect and stall mid-handshake.
 func timeout(client *Client) {
-	d := 15 * time.Second
+	d := defaultHandshakeTimeout
 	if config != nil && config.HandshakeTimeout > 0 {
 		d = time.Duration(config.HandshakeTimeout) * time.Second
 	}
@@ -540,6 +540,9 @@ func timeout(client *Client) {
 		client.conn.Close()
 	}
 }
+
+// defaultHandshakeTimeout matches the HandshakeTimeout default in settings/config.go.
+const defaultHandshakeTimeout = 15 * time.Second
 
 // Hdid returns the client's hdid.
 func (client *Client) Hdid() string {
