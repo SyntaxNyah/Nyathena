@@ -22,6 +22,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"math"
 	"math/rand"
 	"strconv"
 	"strings"
@@ -1271,7 +1272,7 @@ func cmdSetGlobalIPWindow(client *Client, args []string, usage string) {
 // reaches the threshold.  Use 0 to disable the threshold.
 func cmdSetPlayerLimit(client *Client, args []string, usage string) {
 	val, err := strconv.Atoi(args[0])
-	if err != nil || val < 0 {
+	if err != nil || val < 0 || val > math.MaxInt32 {
 		client.SendServerMessage("Invalid value. Must be a non-negative integer (0 = disabled).\n" + usage)
 		return
 	}

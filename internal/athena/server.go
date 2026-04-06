@@ -468,7 +468,7 @@ func NewServer(conf *settings.Config) (*Server, error) {
 	} else {
 		connPool = nil
 	}
-	// Initialise the player-capacity lockdown threshold from config.
+	// Initialize the player-capacity lockdown threshold from config.
 	playerLockdownThreshold.Store(int32(conf.PlayerLockdownThreshold))
 	go startConnTrackerCleanup()
 	if conf.EnableCasino {

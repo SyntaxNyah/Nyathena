@@ -551,7 +551,7 @@ func timeout(client *Client) {
 		if client.Uid() == -1 {
 			return
 		}
-		if time.Since(client.LastPingTime()) >= interval {
+		if time.Since(client.LastPingTime()) > interval {
 			logger.LogInfof("Client (IPID:%v UID:%v) timed out: no CH packet in %v", client.Ipid(), client.Uid(), interval)
 			client.conn.Close()
 			return
