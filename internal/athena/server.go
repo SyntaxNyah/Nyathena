@@ -271,7 +271,7 @@ func NewServer(conf *settings.Config) (*Server, error) {
 
 	s := &Server{
 		config:                 conf,
-		clients:                &ClientList{list: make(map[*Client]struct{}), uidIndex: make(map[int]*Client), ipidCounts: make(map[string]int)},
+		clients:                &ClientList{list: make(map[*Client]struct{}), uidIndex: make(map[int]*Client), ipidCounts: make(map[string]int), hdidCounts: make(map[string]int)},
 		uids:                   &uidmanager.UidManager{},
 		updatePlayers:          updatePlayers,
 		advertDone:             advertDone,
@@ -463,6 +463,7 @@ func NewServer(conf *settings.Config) (*Server, error) {
 		connPool = nil
 	}
 	go startConnTrackerCleanup()
+	go startIdleKicker()
 	if conf.EnableCasino {
 		go startHourlyChipAward()
 		go startUnscrambleLoop()
@@ -1508,5 +1509,55 @@ func startHourlyChipAward() {
 			}
 			client.SendServerMessage(msg)
 		})
+	}
+}
+
+// startIdleKicker runs in the background and disconnects fully-joined clients
+// that have not sent any packet within the configured idle_kick_duration window.
+// This defends against "ghost connection" floods where bots complete the AO2
+// handshake and then hold slots open indefinitely without ever doing anything.
+// Only clients with a UID (i.e. fully joined) are subject to idle kicks;
+// unjoined clients are handled by the per-connection timeout() goroutine.
+// Does nothing when IdleKickDuration is 0 (disabled).
+func startIdleKicker() {
+	ticker := time.NewTicker(30 * time.Second)
+	defer ticker.Stop()
+	for range ticker.C {
+		if config == nil || config.IdleKickDuration <= 0 {
+			continue
+		}
+		cutoff := time.Now().Add(-time.Duration(config.IdleKickDuration) * time.Second)
+		clients.ForEach(func(client *Client) {
+			if client.Uid() == -1 {
+				return // unjoined clients are handled by timeout()
+			}
+			client.mu.Lock()
+			last := client.lastPacketTime
+			client.mu.Unlock()
+			if last.IsZero() || last.Before(cutoff) {
+				client.SendServerMessage("You have been disconnected for being idle too long.")
+				client.conn.Close()
+			}
+		})
+	}
+}
+
+// checkAutoLockdown evaluates the server's current player count against
+// AutoLockdownThreshold and engages or releases lockdown mode accordingly.
+// It is called whenever a player joins or leaves. Does nothing when
+// AutoLockdownThreshold is 0 (disabled) or MaxPlayers is 0.
+func checkAutoLockdown() {
+	if config == nil || config.AutoLockdownThreshold <= 0 || config.MaxPlayers <= 0 {
+		return
+	}
+	pct := players.GetPlayerCount() * 100 / config.MaxPlayers
+	if pct >= config.AutoLockdownThreshold && !serverLockdown.Load() {
+		serverLockdown.Store(true)
+		writeToAll("CT", "OOC", "🔒 Server lockdown automatically engaged (capacity threshold reached). New unknown connections are restricted.", "1")
+		logger.LogInfof("Auto-lockdown engaged (%d%% capacity)", pct)
+	} else if pct < config.AutoLockdownThreshold && serverLockdown.Load() {
+		serverLockdown.Store(false)
+		writeToAll("CT", "OOC", "🔓 Server lockdown automatically lifted (capacity back within threshold).", "1")
+		logger.LogInfof("Auto-lockdown lifted (%d%% capacity)", pct)
 	}
 }

@@ -124,6 +124,15 @@ func pktHdid(client *Client, p *packet.Packet) {
 		return
 	}
 
+	// HDID multiclient limit: reject connections that share the same hardware ID
+	// as too many already-connected clients, regardless of source IP.
+	if config.HDIDMCLimit != 0 && clients.CountByHDID(client.Hdid()) >= config.HDIDMCLimit {
+		client.SendPacket("BD", "You have reached the server's multiclient limit.")
+		client.conn.Close()
+		return
+	}
+	clients.RegisterHDID(client)
+
 	client.SendPacket("ID", "0", "Athena", encode(version)) // Why does the client need this? Nobody knows.
 }
 
@@ -179,6 +188,7 @@ func pktReqDone(client *Client, _ *packet.Packet) {
 	if config.Advertise {
 		updatePlayers <- players.GetPlayerCount()
 	}
+	checkAutoLockdown()
 	client.JoinArea(areas[0])
 	client.SendPacket("DONE")
 	sendCMArup()

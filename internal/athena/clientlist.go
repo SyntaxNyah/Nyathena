@@ -22,12 +22,15 @@ type ClientList struct {
 	list       map[*Client]struct{}
 	uidIndex   map[int]*Client
 	ipidCounts map[string]int
+	hdidCounts map[string]int
 	mu         sync.RWMutex
 }
 
 // AddClient adds a client to the list.
 // The UID index is not populated here because clients have uid == -1 at
 // connection time; call RegisterUID once the real UID has been assigned.
+// The HDID index is also not populated here (HDID is unknown until the HI
+// packet arrives); call RegisterHDID once the HDID has been set.
 func (cl *ClientList) AddClient(c *Client) {
 	cl.mu.Lock()
 	cl.list[c] = struct{}{}
@@ -56,6 +59,13 @@ func (cl *ClientList) RemoveClient(c *Client) {
 		delete(cl.ipidCounts, c.Ipid())
 	} else {
 		cl.ipidCounts[c.Ipid()] = n - 1
+	}
+	if hdid := c.Hdid(); hdid != "" {
+		if n := cl.hdidCounts[hdid]; n <= 1 {
+			delete(cl.hdidCounts, hdid)
+		} else {
+			cl.hdidCounts[hdid] = n - 1
+		}
 	}
 	cl.mu.Unlock()
 }
@@ -93,6 +103,25 @@ func (cl *ClientList) CountByIPID(ipid string) int {
 	n := cl.ipidCounts[ipid]
 	cl.mu.RUnlock()
 	return n
+}
+
+// CountByHDID returns the number of connected clients with the given HDID.
+// O(1) lookup via the HDID count map.
+func (cl *ClientList) CountByHDID(hdid string) int {
+	cl.mu.RLock()
+	n := cl.hdidCounts[hdid]
+	cl.mu.RUnlock()
+	return n
+}
+
+// RegisterHDID increments the HDID count for client c.
+// Call this once the client's HDID has been set (after the HI handshake packet).
+func (cl *ClientList) RegisterHDID(c *Client) {
+	if hdid := c.Hdid(); hdid != "" {
+		cl.mu.Lock()
+		cl.hdidCounts[hdid]++
+		cl.mu.Unlock()
+	}
 }
 
 // Count returns the total number of currently connected clients.
