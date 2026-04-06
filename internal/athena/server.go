@@ -61,6 +61,13 @@ var encodedServerName string
 // A nil channel means the pool is disabled (unbounded behaviour).
 var connPool chan struct{}
 
+// handshakeSem is a semaphore channel that caps the number of clients
+// simultaneously progressing through the join handshake (joining == true).
+// This bounds memory and goroutine usage when bots flood the server with
+// connections that complete askchaa/RC but never send RD.
+// Capacity is set to MaxPlayers at startup; never nil.
+var handshakeSem chan struct{}
+
 var (
 	config                                 *settings.Config
 	characters, music, backgrounds, parrot []string
@@ -68,6 +75,8 @@ var (
 	areas                                  []*area.Area
 	areaNames                              string
 	smPacket                               string // pre-built SM#<areas>#<music>#% packet; built once at startup
+	scPacket                               string // pre-built SC#<char1>#<char2>#...#% packet; built once at startup
+	siPacket                               string // pre-built SI#<charCount>#<evidCount>#<musicCount>#% packet; built once at startup
 	bgListStr                              string // pre-built background list for /bglist; zero alloc per call
 	areaIndexMap                           map[*area.Area]int // pre-computed index lookup for O(1) getAreaIndex
 	roles                                  []permissions.Role
@@ -452,6 +461,11 @@ func NewServer(conf *settings.Config) (*Server, error) {
 	// Pre-build the SM packet (sent to every client on join) once at startup
 	// so that pktReqAM performs a single write with no allocations.
 	smPacket = buildSMPacket(s.areaNames, s.music)
+	// Pre-build the SC packet (character list) and SI packet (counts) once at startup
+	// so that pktReqChar and pktResCount perform a single write with no per-connection allocations.
+	// The SC packet can be very large (thousands of characters), so caching it is a significant win.
+	scPacket = buildSCPacket(s.characters)
+	siPacket = buildSIPacket(len(s.characters), len(s.areas[0].Evidence()), len(s.music))
 
 	initCommands()
 	initAutoMod(conf)
@@ -462,6 +476,10 @@ func NewServer(conf *settings.Config) (*Server, error) {
 	} else {
 		connPool = nil
 	}
+	// Initialise the handshake semaphore to MaxPlayers.
+	// This caps how many clients can be mid-handshake (joining == true) at once,
+	// preventing bots that never send RD from exhausting goroutines and memory.
+	handshakeSem = make(chan struct{}, conf.MaxPlayers)
 	go startConnTrackerCleanup()
 	go startIdleKicker()
 	if conf.EnableCasino {
@@ -1453,6 +1471,30 @@ func buildSMPacket(areaNamesStr string, musicList []string) string {
 	}
 	b.WriteString("#%")
 	return b.String()
+}
+
+// buildSCPacket constructs the full SC#<char0>#<char1>#...#% packet string that
+// is sent verbatim to every client during the join handshake (RC request).
+// With thousands of character names this can be tens of kilobytes; building it
+// once at startup eliminates the largest per-connection allocation.
+func buildSCPacket(chars []string) string {
+	// SC + # + char[0] + # + ... + char[n-1] + #%
+	size := 2 + estimateJoinedLen(chars) + 2
+	var b strings.Builder
+	b.Grow(size)
+	b.WriteString("SC")
+	for _, c := range chars {
+		b.WriteByte('#')
+		b.WriteString(c)
+	}
+	b.WriteString("#%")
+	return b.String()
+}
+
+// buildSIPacket constructs the SI#<charCount>#<evidCount>#<musicCount>#% packet
+// string. The counts are fixed at startup so this never needs rebuilding.
+func buildSIPacket(charCount, evidCount, musicCount int) string {
+	return "SI#" + strconv.Itoa(charCount) + "#" + strconv.Itoa(evidCount) + "#" + strconv.Itoa(musicCount) + "#%"
 }
 
 // hourlyChipMsg is the notification sent when a player earns exactly 1 chip from the

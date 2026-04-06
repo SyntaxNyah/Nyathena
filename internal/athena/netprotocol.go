@@ -162,8 +162,17 @@ func pktResCount(client *Client, _ *packet.Packet) {
 		client.conn.Close()
 		return
 	}
-	client.joining = true // This simply exists to prevent skipping the askchaa#% packet and bypassing the player count check.
-	client.SendPacket("SI", strconv.Itoa(len(characters)), strconv.Itoa(len(areas[0].Evidence())), strconv.Itoa(len(music)))
+	// Claim a handshake slot to cap the number of clients mid-handshake.
+	// This prevents bots that never send RD from exhausting goroutines and memory.
+	select {
+	case handshakeSem <- struct{}{}:
+	default:
+		client.SendPacket("BD", "Server is busy. Please try again later.")
+		client.conn.Close()
+		return
+	}
+	client.joining = true
+	client.write(siPacket)
 }
 
 // Handles RC#%
@@ -171,7 +180,7 @@ func pktReqChar(client *Client, _ *packet.Packet) {
 	if !client.joining {
 		return
 	}
-	client.SendPacket("SC", characters...)
+	client.write(scPacket)
 }
 
 // Handles RM#%
@@ -191,10 +200,13 @@ func pktReqDone(client *Client, _ *packet.Packet) {
 	// early check in pktResCount and this point: concurrent handshakes that all
 	// passed that check cannot all add themselves past MaxPlayers.
 	if !players.TryAddPlayer(config.MaxPlayers) {
+		<-handshakeSem // release slot; client never becomes a full player
 		client.SendPacket("BD", "This server is currently full.")
 		client.conn.Close()
 		return
 	}
+	// Handshake complete — release the slot so another client can start joining.
+	<-handshakeSem
 	client.SetUid(uids.GetUid())
 	clients.RegisterUID(client)
 	client.SetConnectedAt(time.Now())

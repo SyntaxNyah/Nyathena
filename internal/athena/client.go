@@ -421,6 +421,11 @@ func (client *Client) logSnapshot() clientLogSnapshot {
 
 // clientCleanup cleans up a disconnected client.
 func (client *Client) clientCleanup() {
+	// If this client claimed a handshake slot (joining == true) but never completed
+	// the handshake (Uid() == -1), release the slot so another client can join.
+	if client.joining && client.Uid() == -1 {
+		<-handshakeSem
+	}
 	if client.Uid() != -1 {
 		logger.LogInfof("Client (IPID:%v UID:%v) left the server", client.ipid, client.Uid())
 
@@ -522,9 +527,15 @@ func (client *Client) CurrentCharacter() string {
 	}
 }
 
-// timeout closes an unjoined client's connection after 1 minute.
+// timeout closes an unjoined client's connection after the configured handshake
+// timeout (default 15 seconds). A shorter timeout frees goroutines and memory
+// faster when bots connect and stall mid-handshake.
 func timeout(client *Client) {
-	time.Sleep(1 * time.Minute)
+	d := 15 * time.Second
+	if config != nil && config.HandshakeTimeout > 0 {
+		d = time.Duration(config.HandshakeTimeout) * time.Second
+	}
+	time.Sleep(d)
 	if client.Uid() == -1 {
 		client.conn.Close()
 	}

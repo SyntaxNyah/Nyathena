@@ -120,6 +120,11 @@ type ServerConfig struct {
 	// For example, 90 means lockdown is triggered when the server is 90% full.
 	// 0 disables automatic lockdown.
 	AutoLockdownThreshold int `toml:"auto_lockdown_threshold"`
+	// HandshakeTimeout is the number of seconds an unjoined client may take to
+	// complete the join handshake before being forcibly disconnected.
+	// Lower values free resources faster when bots connect and stall mid-handshake.
+	// Default: 15. Set to 0 to use the legacy 60-second timeout.
+	HandshakeTimeout int `toml:"handshake_timeout"`
 }
 
 type LogConfig struct {
@@ -207,6 +212,7 @@ func DefaultConfig() *Config {
 			IdleKickDuration:           0,
 			HDIDMCLimit:                0,
 			AutoLockdownThreshold:      0,
+			HandshakeTimeout:           15,
 		},
 		LogConfig{
 			BufSize:              150,
