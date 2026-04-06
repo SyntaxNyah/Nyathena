@@ -1550,14 +1550,17 @@ func checkAutoLockdown() {
 	if config == nil || config.AutoLockdownThreshold <= 0 || config.MaxPlayers <= 0 {
 		return
 	}
-	pct := players.GetPlayerCount() * 100 / config.MaxPlayers
-	if pct >= config.AutoLockdownThreshold && !serverLockdown.Load() {
+	// Use cross-multiplication to avoid integer division truncation:
+	// playerCount * 100 >= threshold * maxPlayers  ⟺  pct >= threshold
+	playerCount := players.GetPlayerCount()
+	atOrAbove := playerCount*100 >= config.AutoLockdownThreshold*config.MaxPlayers
+	if atOrAbove && !serverLockdown.Load() {
 		serverLockdown.Store(true)
 		writeToAll("CT", "OOC", "🔒 Server lockdown automatically engaged (capacity threshold reached). New unknown connections are restricted.", "1")
-		logger.LogInfof("Auto-lockdown engaged (%d%% capacity)", pct)
-	} else if pct < config.AutoLockdownThreshold && serverLockdown.Load() {
+		logger.LogInfof("Auto-lockdown engaged (%d/%d players)", playerCount, config.MaxPlayers)
+	} else if !atOrAbove && serverLockdown.Load() {
 		serverLockdown.Store(false)
 		writeToAll("CT", "OOC", "🔓 Server lockdown automatically lifted (capacity back within threshold).", "1")
-		logger.LogInfof("Auto-lockdown lifted (%d%% capacity)", pct)
+		logger.LogInfof("Auto-lockdown lifted (%d/%d players)", playerCount, config.MaxPlayers)
 	}
 }
