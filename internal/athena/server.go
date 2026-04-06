@@ -61,13 +61,6 @@ var encodedServerName string
 // A nil channel means the pool is disabled (unbounded behaviour).
 var connPool chan struct{}
 
-// handshakeSem is a semaphore channel that caps the number of clients
-// simultaneously progressing through the join handshake (joining == true).
-// This bounds memory and goroutine usage when bots flood the server with
-// connections that complete askchaa/RC but never send RD.
-// Capacity is set to MaxPlayers at startup; never nil.
-var handshakeSem chan struct{}
-
 var (
 	config                                 *settings.Config
 	characters, music, backgrounds, parrot []string
@@ -481,10 +474,6 @@ func NewServer(conf *settings.Config) (*Server, error) {
 	} else {
 		connPool = nil
 	}
-	// Initialise the handshake semaphore to MaxPlayers.
-	// This caps how many clients can be mid-handshake (joining == true) at once,
-	// preventing bots that never send RD from exhausting goroutines and memory.
-	handshakeSem = make(chan struct{}, conf.MaxPlayers)
 	autoLockdownThreshold.Store(int32(conf.AutoLockdownThreshold))
 	go startConnTrackerCleanup()
 	go startIdleKicker()
