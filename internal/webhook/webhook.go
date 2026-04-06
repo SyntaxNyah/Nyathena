@@ -229,11 +229,19 @@ func PostPacketFlood(ipid string, uid int) error {
 }
 
 // PostModcall sends a modcall to the discord webhook.
-func PostModcall(character string, area string, reason string) error {
+func PostModcall(character, showname, oocName, ipid, area, reason string, uid int) error {
 	e := discord.Embed{
-		Title:       fmt.Sprintf("%v sent a modcall in %v.", character, area),
-		Description: reason,
-		Color:       ServerColor,
+		Title: fmt.Sprintf("📢 Modcall in %v", area),
+		Color: ServerColor,
+		Fields: []discord.Field{
+			{Name: "IC Name", Value: nonEmpty(character), Inline: true},
+			{Name: "Showname", Value: nonEmpty(showname), Inline: true},
+			{Name: "OOC Name", Value: nonEmpty(oocName), Inline: true},
+			{Name: "IPID", Value: nonEmpty(ipid), Inline: true},
+			{Name: "UID", Value: fmt.Sprintf("%d", uid), Inline: true},
+			{Name: "Area", Value: nonEmpty(area), Inline: true},
+			{Name: "Reason", Value: nonEmpty(reason), Inline: false},
+		},
 	}
 	content := ""
 	if PingRoleID != "" {
