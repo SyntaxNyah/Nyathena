@@ -153,6 +153,21 @@ func pktResCount(client *Client, _ *packet.Packet) {
 		client.conn.Close()
 		return
 	}
+	// Capacity lockdown: reject new connections when the player count has reached
+	// the operator-configured threshold (0 = disabled).
+	// Known IPs (returning players in the DB) bypass this cap, matching the behaviour
+	// of serverLockdown which already exempts previously-seen IPIDs.
+	if threshold := int(playerLockdownThreshold.Load()); threshold > 0 && players.GetPlayerCount() >= threshold {
+		ipFirstSeenTracker.mu.Lock()
+		_, known := ipFirstSeenTracker.times[client.Ipid()]
+		ipFirstSeenTracker.mu.Unlock()
+		if !known {
+			logger.LogInfof("Connection from %v rejected (player capacity lockdown, threshold %v)", client.Ipid(), threshold)
+			client.SendPacket("BD", "This server is not currently accepting new connections.")
+			client.conn.Close()
+			return
+		}
+	}
 	client.joining = true // This simply exists to prevent skipping the askchaa#% packet and bypassing the player count check.
 	client.SendPacket("SI", strconv.Itoa(len(characters)), strconv.Itoa(len(areas[0].Evidence())), strconv.Itoa(len(music)))
 }
@@ -175,6 +190,7 @@ func pktReqDone(client *Client, _ *packet.Packet) {
 	client.SetUid(uids.GetUid())
 	clients.RegisterUID(client)
 	client.SetConnectedAt(time.Now())
+	client.lastPingNano.Store(time.Now().UnixNano()) // seed so the ping timeout window starts from join time
 	players.AddPlayer()
 	if config.Advertise {
 		updatePlayers <- players.GetPlayerCount()
@@ -973,6 +989,7 @@ func pktPing(client *Client, _ *packet.Packet) {
 	if checkIPPingRateLimit(client.Ipid()) {
 		return
 	}
+	client.lastPingNano.Store(time.Now().UnixNano())
 	client.SendPacket("CHECK")
 }
 

@@ -115,6 +115,13 @@ motd = "Welcome to my server!"
 # The maximum amount of players who can join the server at once.
 max_players = 100
 
+# Player capacity lockdown threshold: When the number of connected players reaches this value,
+# new connection attempts are rejected immediately ("server is not currently accepting new connections").
+# This is a soft, runtime-adjustable cap that sits below max_players.
+# Moderators can change this at any time with /setplayerlimit <n>.
+# Set to 0 to disable (only the hard max_players cap applies).
+player_lockdown_threshold = 0
+
 # The maximum amount of bytes that players can send in a message. Long messages can slow down clients, 
 # so don't make this too large.
 max_message_length = 256
@@ -259,6 +266,13 @@ ping_rate_limit = 10
 # an IP may send at most 10 pings every 5 seconds.
 # Default: 5 seconds
 ping_rate_limit_window = 5
+
+# CH idle timeout: If a joined client does not send a CH (ping/heartbeat) packet within
+# this many seconds, they are forcibly disconnected.
+# AO2 clients typically send a CH packet every 10 seconds, so a value of 60 (6 missed pings)
+# is a safe default that weeds out stale connections without affecting legitimate players.
+# Set to 0 to disable (connections are never timed out for missing pings).
+ping_timeout = 0
 
 # New IPID OOC cooldown: Number of seconds a brand-new IPID (one that has never connected
 # to this server session before) must wait before being allowed to send OOC chat messages.
