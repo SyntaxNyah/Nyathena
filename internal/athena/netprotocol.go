@@ -124,15 +124,6 @@ func pktHdid(client *Client, p *packet.Packet) {
 		return
 	}
 
-	// HDID multiclient limit: reject connections that share the same hardware ID
-	// as too many already-connected clients, regardless of source IP.
-	if config.HDIDMCLimit != 0 && clients.CountByHDID(client.Hdid()) >= config.HDIDMCLimit {
-		client.SendPacket("BD", "You have reached the server's multiclient limit.")
-		client.conn.Close()
-		return
-	}
-	clients.RegisterHDID(client)
-
 	client.SendPacket("ID", "0", "Athena", encode(version)) // Why does the client need this? Nobody knows.
 }
 
@@ -153,7 +144,7 @@ func pktId(client *Client, _ *packet.Packet) {
 
 // Handles askchaa#%
 func pktResCount(client *Client, _ *packet.Packet) {
-	if client.Uid() != -1 || client.Hdid() == "" || client.joining {
+	if client.Uid() != -1 || client.Hdid() == "" {
 		return
 	}
 	if players.GetPlayerCount() >= config.MaxPlayers {
@@ -162,35 +153,17 @@ func pktResCount(client *Client, _ *packet.Packet) {
 		client.conn.Close()
 		return
 	}
-	client.joining = true
-	client.write(siPacket)
+	client.joining = true // This simply exists to prevent skipping the askchaa#% packet and bypassing the player count check.
+	client.SendPacket("SI", strconv.Itoa(len(characters)), strconv.Itoa(len(areas[0].Evidence())), strconv.Itoa(len(music)))
 }
 
 // Handles RC#%
 func pktReqChar(client *Client, _ *packet.Packet) {
-	if !client.joining {
-		// AO2 clients using the "fastloading" feature skip askchaa and send RC
-		// directly after receiving the FL packet. Run the player-count gate here
-		// for those clients so they can complete the handshake normally.
-		if client.Hdid() == "" || client.Uid() != -1 {
-			return
-		}
-		if players.GetPlayerCount() >= config.MaxPlayers {
-			logger.LogInfo("Player limit reached")
-			client.SendPacket("BD", "This server is currently full.")
-			client.conn.Close()
-			return
-		}
-		client.joining = true
-	}
-	client.write(scPacket)
+	client.SendPacket("SC", characters...)
 }
 
 // Handles RM#%
 func pktReqAM(client *Client, _ *packet.Packet) {
-	if !client.joining {
-		return
-	}
 	client.write(smPacket)
 }
 
@@ -199,21 +172,13 @@ func pktReqDone(client *Client, _ *packet.Packet) {
 	if client.Uid() != -1 || !client.joining || client.Hdid() == "" {
 		return
 	}
-	// Atomically claim a player slot. This closes the TOCTOU window between the
-	// early check in pktResCount/pktReqChar and this point: concurrent handshakes
-	// that all passed that check cannot all add themselves past MaxPlayers.
-	if !players.TryAddPlayer(config.MaxPlayers) {
-		client.SendPacket("BD", "This server is currently full.")
-		client.conn.Close()
-		return
-	}
 	client.SetUid(uids.GetUid())
 	clients.RegisterUID(client)
 	client.SetConnectedAt(time.Now())
+	players.AddPlayer()
 	if config.Advertise {
 		updatePlayers <- players.GetPlayerCount()
 	}
-	checkAutoLockdown()
 	client.JoinArea(areas[0])
 	client.SendPacket("DONE")
 	sendCMArup()
