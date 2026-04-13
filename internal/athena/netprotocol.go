@@ -732,7 +732,7 @@ func pktIC(client *Client, p *packet.Packet) {
 	}
 
 	// Quickdraw: record the reaction for any active duel.
-	quickdrawOnIC(client)
+	quickdrawOnIC(client, msgText)
 
 	// Typing race: check whether the IC message matches the active race phrase.
 	typingRaceOnIC(client, msgText)

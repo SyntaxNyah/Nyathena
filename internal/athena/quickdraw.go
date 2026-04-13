@@ -17,8 +17,10 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>. */
 package athena
 
 import (
+"crypto/rand"
 "fmt"
-"math/rand"
+mrand "math/rand"
+"math/big"
 "strconv"
 "sync"
 "time"
@@ -32,15 +34,55 @@ quickdrawPunishDuration   = 10 * time.Minute // how long the loser's punishment 
 
 // randomQuickdrawPunishment picks a random punishment from the shared pool.
 func randomQuickdrawPunishment() PunishmentType {
-return hotPotatoPunishmentPool[rand.Intn(len(hotPotatoPunishmentPool))]
+return hotPotatoPunishmentPool[mrand.Intn(len(hotPotatoPunishmentPool))]
+}
+
+// quickdrawWords is the large, varied pool of words players must type after "DRAW!".
+// Words span multiple themes and difficulty levels to keep every duel unpredictable.
+var quickdrawWords = []string{
+// Duel / western theme
+"draw", "fire", "shoot", "bang", "aim", "duel", "ready", "blaze",
+"holster", "trigger", "gunshot", "bullet", "pistol", "revolver",
+"cowboy", "outlaw", "sheriff", "marshal", "bounty", "saloon",
+// Speed / reaction
+"quick", "flash", "bolt", "spark", "swift", "rapid", "dash",
+"sprint", "laser", "warp", "zoom", "rush", "burst", "snap",
+// Animals / nature
+"hawk", "eagle", "wolf", "tiger", "cobra", "viper", "falcon",
+"panther", "jaguar", "lynx", "raven", "coyote", "puma", "mamba",
+// Weapons / combat
+"blade", "sword", "arrow", "lance", "shield", "spear", "fist",
+"cannon", "dagger", "cutlass", "saber", "rapier", "mace", "axe",
+// Elements / forces
+"ember", "frost", "storm", "thunder", "gale", "quake", "flood",
+"inferno", "glacier", "tempest", "cyclone", "typhoon", "volt",
+// Attorney Online flavour
+"objection", "holdit", "evidence", "witness", "verdict", "alibi",
+"guilty", "innocent", "motive", "suspect", "courtroom", "gavel",
+// Misc short punchy words
+"chaos", "glory", "valor", "honor", "pride", "vengeance", "legend",
+"crimson", "shadow", "phantom", "specter", "wraith", "spirit",
+"gold", "silver", "iron", "steel", "copper", "diamond",
+}
+
+// quickdrawPickWord returns a cryptographically random word from the pool so that
+// picks are genuinely unpredictable across server restarts and sequential duels.
+func quickdrawPickWord() string {
+n, err := rand.Int(rand.Reader, big.NewInt(int64(len(quickdrawWords))))
+if err != nil {
+// crypto/rand failure is extraordinarily rare; fall back to math/rand.
+return quickdrawWords[mrand.Intn(len(quickdrawWords))]
+}
+return quickdrawWords[n.Int64()]
 }
 
 // quickdrawDuel holds the two participants and the current duel phase.
 type quickdrawDuel struct {
 challengerUID int
 challengedUID int
-drawSignaled  bool // true after "DRAW!" is announced
-resolved      bool // true once the outcome has been determined
+targetWord    string // word players must type after DRAW! (lower-case)
+drawSignaled  bool   // true after "DRAW!" is announced
+resolved      bool   // true once the outcome has been determined
 }
 
 // quickdrawState is the mutex-protected global state for all quickdraw duels.
@@ -239,10 +281,12 @@ if duel.resolved {
 qdState.mu.Unlock()
 return
 }
+duel.targetWord = quickdrawPickWord()
 duel.drawSignaled = true
+word := duel.targetWord // capture before unlock to avoid data race
 qdState.mu.Unlock()
 
-sendGlobalServerMessage("🔫 DRAW! Send an IC message — the first to react wins!")
+sendGlobalServerMessage(fmt.Sprintf("🔫 DRAW! Type this word in IC: \"%s\" — the first to type it wins!", word))
 time.Sleep(quickdrawReactionTimeout)
 
 qdState.mu.Lock()
@@ -270,14 +314,20 @@ challengerName, challengedName,
 }
 
 // quickdrawOnIC is called from pktIC whenever a client sends an IC message.
-// If the client is in an active duel after the DRAW signal, they win.
-func quickdrawOnIC(client *Client) {
+// If the client is in an active duel after the DRAW signal and typed the correct
+// word, they win. Wrong words are silently ignored so the duel continues.
+func quickdrawOnIC(client *Client, msgText string) {
 uid := client.Uid()
 
 qdState.mu.Lock()
 duel, ok := qdState.activeDuels[uid]
 if !ok || !duel.drawSignaled || duel.resolved {
 qdState.mu.Unlock()
+return
+}
+if normaliseTypingPhrase(msgText) != duel.targetWord {
+qdState.mu.Unlock()
+client.SendServerMessage(fmt.Sprintf("🔫 Wrong word! Type: \"%s\"", duel.targetWord))
 return
 }
 duel.resolved = true
