@@ -1483,6 +1483,8 @@ func ApplyPunishmentToText(text string, pType PunishmentType) string {
 		return applyAcademic(text)
 	case PunishmentRecipe:
 		return applyRecipe(text)
+	case PunishmentQuote:
+		return applyQuote(text)
 	default:
 		return text
 	}
@@ -2436,4 +2438,12 @@ func applyRecipe(text string) string {
 	b.WriteString("\". ")
 	b.WriteString(ending)
 	return truncateText(b.String())
+}
+
+// applyQuote wraps the text in quotation marks with a 50% chance.
+func applyQuote(text string) string {
+	if rand.Float32() < 0.5 {
+		return truncateText("\"" + text + "\"")
+	}
+	return text
 }

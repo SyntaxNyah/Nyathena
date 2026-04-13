@@ -511,6 +511,20 @@ func parsePunishmentType(s string) PunishmentType {
 		return PunishmentUncannyValley
 	case "51":
 		return Punishment51
+	case "philosopher":
+		return PunishmentPhilosopher
+	case "poet":
+		return PunishmentPoet
+	case "upsidedown":
+		return PunishmentUpsidedown
+	case "sarcasm":
+		return PunishmentSarcasm
+	case "academic":
+		return PunishmentAcademic
+	case "recipe":
+		return PunishmentRecipe
+	case "quote":
+		return PunishmentQuote
 	default:
 		return PunishmentNone
 	}
@@ -1226,6 +1240,36 @@ func cmdUnrecipe(client *Client, args []string, usage string) {
 	report = strings.TrimSuffix(report, ", ")
 	client.SendServerMessage(fmt.Sprintf("Removed recipe punishment from %v clients.", count))
 	addToBuffer(client, "CMD", fmt.Sprintf("Removed recipe from %v.", report), false)
+}
+
+func cmdQuote(client *Client, args []string, usage string) {
+	cmdPunishment(client, args, usage, PunishmentQuote)
+}
+
+// cmdUnquote removes the quote punishment from user(s).
+func cmdUnquote(client *Client, args []string, usage string) {
+	if len(args) == 0 {
+		client.SendServerMessage("Not enough arguments:\n" + usage)
+		return
+	}
+	toUnpunish := getUidList(strings.Split(args[0], ","))
+	var count int
+	var report string
+	for _, c := range toUnpunish {
+		if !c.HasPunishment(PunishmentQuote) {
+			continue
+		}
+		c.RemovePunishment(PunishmentQuote)
+		if err := db.DeleteTextPunishment(c.Ipid(), int(PunishmentQuote)); err != nil {
+			logger.LogErrorf("Failed to remove quote punishment for %v: %v", c.Ipid(), err)
+		}
+		c.SendServerMessage("Quote punishment has been removed.")
+		count++
+		report += fmt.Sprintf("%v, ", c.Uid())
+	}
+	report = strings.TrimSuffix(report, ", ")
+	client.SendServerMessage(fmt.Sprintf("Removed quote punishment from %v clients.", count))
+	addToBuffer(client, "CMD", fmt.Sprintf("Removed quote from %v.", report), false)
 }
 
 // cmdTournament manages punishment tournament mode
