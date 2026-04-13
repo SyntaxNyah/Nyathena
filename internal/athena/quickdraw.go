@@ -17,8 +17,10 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>. */
 package athena
 
 import (
+"crypto/rand"
 "fmt"
-"math/rand"
+mrand "math/rand"
+"math/big"
 "strconv"
 "sync"
 "time"
@@ -32,20 +34,46 @@ quickdrawPunishDuration   = 10 * time.Minute // how long the loser's punishment 
 
 // randomQuickdrawPunishment picks a random punishment from the shared pool.
 func randomQuickdrawPunishment() PunishmentType {
-return hotPotatoPunishmentPool[rand.Intn(len(hotPotatoPunishmentPool))]
+return hotPotatoPunishmentPool[mrand.Intn(len(hotPotatoPunishmentPool))]
 }
 
-// quickdrawWords is the pool of short words players must type after "DRAW!".
+// quickdrawWords is the large, varied pool of words players must type after "DRAW!".
+// Words span multiple themes and difficulty levels to keep every duel unpredictable.
 var quickdrawWords = []string{
-"draw", "fire", "shoot", "bang", "duel", "ready", "aim",
-"blaze", "flash", "quick", "swift", "sharp", "steel", "iron",
-"hawk", "eagle", "wolf", "tiger", "cobra", "viper",
-"bolt", "blast", "spark", "flare", "strike",
+// Duel / western theme
+"draw", "fire", "shoot", "bang", "aim", "duel", "ready", "blaze",
+"holster", "trigger", "gunshot", "bullet", "pistol", "revolver",
+"cowboy", "outlaw", "sheriff", "marshal", "bounty", "saloon",
+// Speed / reaction
+"quick", "flash", "bolt", "spark", "swift", "rapid", "dash",
+"sprint", "laser", "warp", "zoom", "rush", "burst", "snap",
+// Animals / nature
+"hawk", "eagle", "wolf", "tiger", "cobra", "viper", "falcon",
+"panther", "jaguar", "lynx", "raven", "coyote", "puma", "mamba",
+// Weapons / combat
+"blade", "sword", "arrow", "lance", "shield", "spear", "fist",
+"cannon", "dagger", "cutlass", "saber", "rapier", "mace", "axe",
+// Elements / forces
+"blaze", "frost", "storm", "thunder", "gale", "quake", "flood",
+"inferno", "glacier", "tempest", "cyclone", "typhoon", "volt",
+// Attorney Online flavour
+"objection", "holdit", "evidence", "witness", "verdict", "alibi",
+"guilty", "innocent", "motive", "suspect", "courtroom", "gavel",
+// Misc short punchy words
+"chaos", "glory", "valor", "honor", "pride", "vengeance", "legend",
+"crimson", "shadow", "phantom", "specter", "wraith", "spirit",
+"gold", "silver", "iron", "steel", "copper", "diamond",
 }
 
-// quickdrawPickWord returns a random word from the pool.
+// quickdrawPickWord returns a cryptographically random word from the pool so that
+// picks are genuinely unpredictable across server restarts and sequential duels.
 func quickdrawPickWord() string {
-return quickdrawWords[rand.Intn(len(quickdrawWords))]
+n, err := rand.Int(rand.Reader, big.NewInt(int64(len(quickdrawWords))))
+if err != nil {
+// crypto/rand failure is extraordinarily rare; fall back to math/rand.
+return quickdrawWords[mrand.Intn(len(quickdrawWords))]
+}
+return quickdrawWords[n.Int64()]
 }
 
 // quickdrawDuel holds the two participants and the current duel phase.
@@ -255,9 +283,10 @@ return
 }
 duel.targetWord = quickdrawPickWord()
 duel.drawSignaled = true
+word := duel.targetWord // capture before unlock to avoid data race
 qdState.mu.Unlock()
 
-sendGlobalServerMessage(fmt.Sprintf("🔫 DRAW! Type this word in IC: \"%s\" — the first to type it wins!", duel.targetWord))
+sendGlobalServerMessage(fmt.Sprintf("🔫 DRAW! Type this word in IC: \"%s\" — the first to type it wins!", word))
 time.Sleep(quickdrawReactionTimeout)
 
 qdState.mu.Lock()
