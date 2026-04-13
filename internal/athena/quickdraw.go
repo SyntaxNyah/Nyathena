@@ -54,7 +54,7 @@ var quickdrawWords = []string{
 "blade", "sword", "arrow", "lance", "shield", "spear", "fist",
 "cannon", "dagger", "cutlass", "saber", "rapier", "mace", "axe",
 // Elements / forces
-"blaze", "frost", "storm", "thunder", "gale", "quake", "flood",
+"ember", "frost", "storm", "thunder", "gale", "quake", "flood",
 "inferno", "glacier", "tempest", "cyclone", "typhoon", "volt",
 // Attorney Online flavour
 "objection", "holdit", "evidence", "witness", "verdict", "alibi",
