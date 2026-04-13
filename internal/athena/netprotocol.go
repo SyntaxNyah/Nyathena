@@ -390,15 +390,16 @@ func pktIC(client *Client, p *packet.Packet) {
 		client.SetPos(args[5])
 	}
 
-	// Check and clean up expired punishments
-	if client.CheckExpiredPunishments() {
+	// Check for expired punishments and collect the still-active ones in a single
+	// lock acquisition (avoids a second mutex cycle + second time.Now() call).
+	expired, punishments := client.CheckExpiredAndGetPunishments()
+	if expired {
 		client.SendServerMessage("One or more punishments have expired.")
 	}
 
 	// Apply punishment text modifications
 	// Note: punishments is a copy of the active punishments
 	// State modifications must use UpdatePunishmentState to persist changes
-	punishments := client.GetActivePunishments()
 	for i := range punishments {
 		p := &punishments[i]
 
@@ -477,7 +478,8 @@ func pktIC(client *Client, p *packet.Packet) {
 	} else if emote_mod == 4 { // Value of 4 can crash the client.
 		args[7] = "6"
 	}
-	objection, err := strconv.Atoi(strings.Split(args[10], "&")[0])
+	objStr, _, _ := strings.Cut(args[10], "&")
+	objection, err := strconv.Atoi(objStr)
 	if err != nil {
 		return
 	}
@@ -534,7 +536,7 @@ func pktIC(client *Client, p *packet.Packet) {
 		return
 	case emote_mod < 0 || emote_mod > 6:
 		return
-	case !isPossessing && args[8] != strconv.Itoa(client.CharID()): // char_id (skip check when possessing)
+	case !isPossessing && args[8] != client.CharIDStr(): // char_id (skip check when possessing)
 		return
 	case objection < 0 || objection > 4: // objection_mod
 		return
@@ -565,7 +567,7 @@ func pktIC(client *Client, p *packet.Packet) {
 	// courtroom position, preventing the pairing sprite from breaking on clients.
 	if client.ForcePairUID() >= 0 {
 		if partner, err := getClientByUid(client.ForcePairUID()); err == nil && partner.CharID() >= 0 {
-			args[16] = strconv.Itoa(partner.CharID())
+			args[16] = partner.CharIDStr()
 			client.SetPairWantedID(partner.CharID())
 			partner.SetPairWantedID(client.CharID())
 			if pos := partner.Pos(); pos != "" {
@@ -585,7 +587,8 @@ func pktIC(client *Client, p *packet.Packet) {
 
 	// Pairing validation
 	if args[16] != "" && args[16] != "-1" {
-		pid, err := strconv.Atoi(strings.Split(args[16], "^")[0])
+		pidStr, _, _ := strings.Cut(args[16], "^")
+		pid, err := strconv.Atoi(pidStr)
 		if err != nil {
 			return
 		}
@@ -691,7 +694,8 @@ func pktIC(client *Client, p *packet.Packet) {
 				writeToArea(client.Area(), "MS", client.Area().CurrentTstStatement())
 				return
 			}
-			id, err := strconv.Atoi(strings.Split(s, ">")[1])
+			_, idStr, _ := strings.Cut(s, ">")
+			id, err := strconv.Atoi(idStr)
 			if err != nil {
 				client.Area().TstAdvance()
 				writeToArea(client.Area(), "MS", client.Area().CurrentTstStatement())
@@ -767,7 +771,7 @@ func pktAM(client *Client, p *packet.Packet) {
 		return
 	}
 
-	if strconv.Itoa(client.CharID()) != p.Body[1] {
+	if client.CharIDStr() != p.Body[1] {
 		return
 	}
 
@@ -895,8 +899,9 @@ func pktOOC(client *Client, p *packet.Packet) {
 			writeToAll("PU", strconv.Itoa(client.Uid()), "0", username)
 		}
 		decoded := decode(p.Body[1])
-		command := strings.ToLower(strings.TrimPrefix(commandRegex.FindString(decoded), "/"))
-		args := strings.Split(strings.Join(commandRegex.Split(decoded, 1), ""), " ")[1:]
+		match := commandRegex.FindString(decoded)
+		command := strings.ToLower(strings.TrimPrefix(match, "/"))
+		args := strings.Split(decoded, " ")[1:]
 		ParseCommand(client, command, args)
 		return
 	}

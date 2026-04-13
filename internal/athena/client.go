@@ -183,6 +183,7 @@ type Client struct {
 	uid                int
 	area               *area.Area
 	char               int
+	charIDStr          string // cached strconv.Itoa(char); updated on every SetCharID call
 	ipid               string
 	oocName            string
 	lastmsg            string
@@ -234,6 +235,7 @@ func NewClient(conn net.Conn, ipid string) *Client {
 		conn:            conn,
 		uid:             -1,
 		char:            -1,
+		charIDStr:       "-1",
 		pair:            ClientPairInfo{wanted_id: -1},
 		ipid:            ipid,
 		forcePairUID:    -1,
@@ -602,7 +604,17 @@ func (client *Client) CharID() int {
 func (client *Client) SetCharID(id int) {
 	client.mu.Lock()
 	client.char = id
+	client.charIDStr = strconv.Itoa(id)
 	client.mu.Unlock()
+}
+
+// CharIDStr returns the client's character ID pre-converted to a string.
+// This avoids a strconv.Itoa allocation on every IC/MC packet validation.
+func (client *Client) CharIDStr() string {
+	client.mu.Lock()
+	s := client.charIDStr
+	client.mu.Unlock()
+	return s
 }
 
 // Ipid returns the client's ipid.
@@ -1650,6 +1662,49 @@ func (client *Client) GetActivePunishments() []PunishmentState {
 	}
 
 	return active
+}
+
+// CheckExpiredAndGetPunishments removes expired punishments and returns the remaining
+// active ones under a single mutex acquisition.  wasExpired is true if at least one
+// punishment was removed.  active is nil when there are no punishments.
+//
+// Use this instead of calling CheckExpiredPunishments() + GetActivePunishments()
+// separately; it halves the number of mutex lock/unlock cycles and eliminates the
+// redundant time.Now() call on every IC message.
+func (client *Client) CheckExpiredAndGetPunishments() (wasExpired bool, active []PunishmentState) {
+	client.mu.Lock()
+	defer client.mu.Unlock()
+
+	if len(client.punishments) == 0 {
+		return false, nil
+	}
+
+	now := time.Now().UTC()
+	w := 0
+	for i := range client.punishments {
+		p := &client.punishments[i]
+		if !p.expiresAt.IsZero() && now.After(p.expiresAt) {
+			wasExpired = true
+			pType := p.punishmentType
+			ipid := client.ipid
+			go func() {
+				if err := db.DeleteTextPunishment(ipid, int(pType)); err != nil {
+					logger.LogErrorf("Failed to remove expired punishment from DB for %v: %v", ipid, pType)
+				}
+			}()
+		} else {
+			client.punishments[w] = client.punishments[i]
+			w++
+		}
+	}
+	client.punishments = client.punishments[:w]
+
+	if w == 0 {
+		return wasExpired, nil
+	}
+	active = make([]PunishmentState, w)
+	copy(active, client.punishments)
+	return wasExpired, active
 }
 
 // String returns the string representation of a punishment type.
