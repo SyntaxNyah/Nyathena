@@ -21,6 +21,8 @@ import (
 	"math/rand"
 	"sync"
 	"time"
+
+	"github.com/MangosArentLiterature/Athena/internal/area"
 )
 
 // ── Constants ────────────────────────────────────────────────────────────────
@@ -252,18 +254,36 @@ type rrState struct {
 	mu         sync.Mutex
 	joinActive bool
 	gameActive bool
-	players    []int     // UIDs in shuffled turn order
-	lastEnd    time.Time // when the last game ended (drives cooldown)
+	players    []int        // UIDs in shuffled turn order
+	lastEnd    time.Time    // when the last game ended (drives cooldown)
+	area       *area.Area   // the area this game is scoped to
 }
 
-var rr = rrState{}
+// rrAreas maps each area to its own Russian Roulette state.
+// Access is guarded by rrAreasMu.
+var (
+	rrAreas   = map[*area.Area]*rrState{}
+	rrAreasMu sync.Mutex
+)
 
-// isRRCoolingDown reports whether the global cooldown is active and how many
-// whole seconds remain.
-func isRRCoolingDown() (bool, int) {
-	rr.mu.Lock()
-	end := rr.lastEnd
-	rr.mu.Unlock()
+// rrGetState returns the per-area rrState, creating it if necessary.
+func rrGetState(a *area.Area) *rrState {
+	rrAreasMu.Lock()
+	defer rrAreasMu.Unlock()
+	st, ok := rrAreas[a]
+	if !ok {
+		st = &rrState{area: a}
+		rrAreas[a] = st
+	}
+	return st
+}
+
+// isRRAreaCoolingDown reports whether the cooldown is active for the given area
+// state and how many whole seconds remain.
+func isRRAreaCoolingDown(st *rrState) (bool, int) {
+	st.mu.Lock()
+	end := st.lastEnd
+	st.mu.Unlock()
 
 	if end.IsZero() {
 		return false, 0
@@ -274,8 +294,6 @@ func isRRCoolingDown() (bool, int) {
 	return false, 0
 }
 
-// ── Command entry point ───────────────────────────────────────────────────────
-
 // cmdRussianRoulette handles /russianroulette and /russianroulette join.
 func cmdRussianRoulette(client *Client, args []string, usage string) {
 	if len(args) > 0 && args[0] == "join" {
@@ -283,9 +301,10 @@ func cmdRussianRoulette(client *Client, args []string, usage string) {
 		return
 	}
 	// No subcommand: start a new game or join the open window.
-	rr.mu.Lock()
-	joinOpen := rr.joinActive
-	rr.mu.Unlock()
+	st := rrGetState(client.Area())
+	st.mu.Lock()
+	joinOpen := st.joinActive
+	st.mu.Unlock()
 
 	if joinOpen {
 		rrJoin(client)
@@ -298,34 +317,35 @@ func cmdRussianRoulette(client *Client, args []string, usage string) {
 
 // rrStart opens the join window for a new Russian Roulette game.
 func rrStart(client *Client) {
-	rr.mu.Lock()
+	st := rrGetState(client.Area())
+	st.mu.Lock()
 
-	if rr.joinActive || rr.gameActive {
-		rr.mu.Unlock()
-		client.SendServerMessage("A Russian Roulette game is already in progress.")
+	if st.joinActive || st.gameActive {
+		st.mu.Unlock()
+		client.SendServerMessage("A Russian Roulette game is already in progress in this area.")
 		return
 	}
 
-	if !rr.lastEnd.IsZero() {
-		if rem := rrCooldown - time.Since(rr.lastEnd); rem > 0 {
-			rr.mu.Unlock()
-			client.SendServerMessage(fmt.Sprintf("Roulette is on cooldown. Please wait %d seconds.",
+	if !st.lastEnd.IsZero() {
+		if rem := rrCooldown - time.Since(st.lastEnd); rem > 0 {
+			st.mu.Unlock()
+			client.SendServerMessage(fmt.Sprintf("Roulette is on cooldown in this area. Please wait %d seconds.",
 				int((rem+time.Second-1)/time.Second)))
 			return
 		}
 	}
 
-	rr.joinActive = true
-	rr.players = rr.players[:0] // reuse backing array if present
-	rr.mu.Unlock()
+	st.joinActive = true
+	st.players = st.players[:0] // reuse backing array if present
+	st.mu.Unlock()
 
-	sendGlobalServerMessage(rrRules)
+	sendAreaServerMessage(client.Area(), rrRules)
 	addToBuffer(client, "CMD", "Started Russian Roulette join window", false)
 
 	// Auto-enrol the starter.
 	rrJoin(client)
 
-	go rrJoinTimer(client.OOCName())
+	go rrJoinTimer(st, client.OOCName())
 }
 
 // ── Join ──────────────────────────────────────────────────────────────────────
@@ -333,82 +353,83 @@ func rrStart(client *Client) {
 // rrJoin opts a player into the open join window.
 func rrJoin(client *Client) {
 	uid := client.Uid()
+	st := rrGetState(client.Area())
 
-	rr.mu.Lock()
-	if !rr.joinActive {
-		rr.mu.Unlock()
-		client.SendServerMessage("There is no Russian Roulette game to join right now.")
+	st.mu.Lock()
+	if !st.joinActive {
+		st.mu.Unlock()
+		client.SendServerMessage("There is no Russian Roulette game to join in this area right now.")
 		return
 	}
-	for _, p := range rr.players {
+	for _, p := range st.players {
 		if p == uid {
-			rr.mu.Unlock()
+			st.mu.Unlock()
 			client.SendServerMessage("You are already seated at the table.")
 			return
 		}
 	}
-	rr.players = append(rr.players, uid)
-	count := len(rr.players)
-	rr.mu.Unlock()
+	st.players = append(st.players, uid)
+	count := len(st.players)
+	st.mu.Unlock()
 
 	client.SendServerMessage(fmt.Sprintf("🔫 You took a seat at the table! (%d player(s) so far)", count))
-	sendGlobalServerMessage(fmt.Sprintf("🔫 %v sits down for Roulette! (%d player(s))", client.OOCName(), count))
+	sendAreaServerMessage(client.Area(), fmt.Sprintf("🔫 %v sits down for Roulette! (%d player(s))", client.OOCName(), count))
 }
 
 // ── Join timer ────────────────────────────────────────────────────────────────
 
 // rrJoinTimer waits for the join window to close, then kicks off the game or
 // cancels if too few players opted in.
-func rrJoinTimer(starterName string) {
+func rrJoinTimer(st *rrState, starterName string) {
 	time.Sleep(rrJoinWindow)
 
-	rr.mu.Lock()
-	if !rr.joinActive {
-		rr.mu.Unlock()
+	st.mu.Lock()
+	if !st.joinActive {
+		st.mu.Unlock()
 		return // already cancelled
 	}
 
-	// Filter players who are still connected.
+	// Filter players who are still connected and still in this area.
 	n := 0
-	for _, uid := range rr.players {
-		if _, err := getClientByUid(uid); err == nil {
-			rr.players[n] = uid
+	for _, uid := range st.players {
+		if c, err := getClientByUid(uid); err == nil && c.Area() == st.area {
+			st.players[n] = uid
 			n++
 		}
 	}
-	rr.players = rr.players[:n]
+	st.players = st.players[:n]
 
 	if n < rrMinPlayers {
-		rr.joinActive = false
-		rr.lastEnd = time.Now().UTC()
-		rr.mu.Unlock()
-		sendGlobalServerMessage(fmt.Sprintf(
+		st.joinActive = false
+		st.lastEnd = time.Now().UTC()
+		st.mu.Unlock()
+		sendAreaServerMessage(st.area, fmt.Sprintf(
 			"🔫 Russian Roulette cancelled — not enough players joined (need %d, got %d).", rrMinPlayers, n))
 		return
 	}
 
 	// Shuffle player order and load the cylinder.
-	rand.Shuffle(n, func(i, j int) { rr.players[i], rr.players[j] = rr.players[j], rr.players[i] })
+	rand.Shuffle(n, func(i, j int) { st.players[i], st.players[j] = st.players[j], st.players[i] })
 
 	bullets := rrInitialBullets()
-	rr.joinActive = false
-	rr.gameActive = true
+	st.joinActive = false
+	st.gameActive = true
 	players := make([]int, n)
-	copy(players, rr.players)
-	rr.mu.Unlock()
+	copy(players, st.players)
+	st.mu.Unlock()
 
 	gunName := rrGunNames[rand.Intn(len(rrGunNames))]
 	bulletWord := "bullet"
 	if bullets > 1 {
 		bulletWord = "bullets"
 	}
-	sendGlobalServerMessage(fmt.Sprintf(
+	sendAreaServerMessage(st.area, fmt.Sprintf(
 		"🔫 %v raises '%v' — %d %s loaded into %d chambers. The cylinder spins...\n%s",
 		starterName, gunName, bullets, bulletWord, rrChambers,
 		rrTensionMessages[rand.Intn(len(rrTensionMessages))],
 	))
 
-	go rrRun(players, bullets)
+	go rrRun(st, players, bullets)
 }
 
 // ── Game loop ─────────────────────────────────────────────────────────────────
@@ -424,7 +445,7 @@ func rrInitialBullets() int {
 // rrRun executes the full game loop in its own goroutine.
 // It cycles through players in order; each turn a chamber is fired.
 // The bullet probability is recalculated per shot (authentic RR mechanics).
-func rrRun(players []int, bullets int) {
+func rrRun(st *rrState, players []int, bullets int) {
 	remaining := rrChambers
 	alive := bullets // bullets still in the cylinder
 
@@ -442,10 +463,10 @@ func rrRun(players []int, bullets int) {
 		// Tension flavour: regular tension every other round; critical messages when ≤2 remain.
 		if i > 0 {
 			if remaining <= 2 {
-				sendGlobalServerMessage(rrCriticalMessages[rand.Intn(len(rrCriticalMessages))])
+				sendAreaServerMessage(st.area, rrCriticalMessages[rand.Intn(len(rrCriticalMessages))])
 				time.Sleep(time.Second)
 			} else if i%2 == 0 {
-				sendGlobalServerMessage(rrTensionMessages[rand.Intn(len(rrTensionMessages))])
+				sendAreaServerMessage(st.area, rrTensionMessages[rand.Intn(len(rrTensionMessages))])
 				time.Sleep(time.Second)
 			}
 		}
@@ -467,7 +488,7 @@ func rrRun(players []int, bullets int) {
 			if vc, verr := getClientByUid(victim); verr == nil {
 				victimName = vc.OOCName()
 			}
-			sendGlobalServerMessage(fmt.Sprintf(
+			sendAreaServerMessage(st.area, fmt.Sprintf(
 				"💫 RICOCHET! The bullet deflects off %v's wristwatch and veers toward %v!",
 				shooterName, victimName,
 			))
@@ -477,7 +498,7 @@ func rrRun(players []int, bullets int) {
 		if hit {
 			// ── BANG ──────────────────────────────────────────────────────────
 			bangMsg := rrBangMessages[rand.Intn(len(rrBangMessages))]
-			sendGlobalServerMessage(fmt.Sprintf("%s\n%v takes the hit!", bangMsg, victimName))
+			sendAreaServerMessage(st.area, fmt.Sprintf("%s\n%v takes the hit!", bangMsg, victimName))
 
 			pType := randomRRPunishment()
 
@@ -486,7 +507,7 @@ func rrRun(players []int, bullets int) {
 			var pType2 PunishmentType
 			if doubleHit {
 				pType2 = randomRRPunishmentExcluding(pType)
-				sendGlobalServerMessage(rrDoublePunishMessages[rand.Intn(len(rrDoublePunishMessages))])
+				sendAreaServerMessage(st.area, rrDoublePunishMessages[rand.Intn(len(rrDoublePunishMessages))])
 				time.Sleep(time.Second)
 			}
 
@@ -517,7 +538,7 @@ func rrRun(players []int, bullets int) {
 			// Chain Shot: a second random player also takes a (different) punishment.
 			if rand.Intn(100) < rrChainShotP && len(players) > 1 {
 				chainMsg := rrChainMessages[rand.Intn(len(rrChainMessages))]
-				sendGlobalServerMessage(chainMsg)
+				sendAreaServerMessage(st.area, chainMsg)
 				time.Sleep(time.Second)
 				// Build an explicit list of eligible players (everyone except the current victim).
 				eligible := make([]int, 0, len(players)-1)
@@ -533,7 +554,7 @@ func rrRun(players []int, bullets int) {
 						chainC.AddPunishment(chainPType, rrPunishDuration, "Russian Roulette: chain shot")
 						chainC.SendServerMessage(fmt.Sprintf(
 							"⛓️  The chain shot caught YOU! Punished with '%v' for %v.", chainPType, rrPunishDuration))
-						sendGlobalServerMessage(fmt.Sprintf(
+						sendAreaServerMessage(st.area, fmt.Sprintf(
 							"⛓️  Chain shot claims %v — punished with '%v'!", chainC.OOCName(), chainPType))
 						addToBuffer(chainC, "ROULETTE",
 							fmt.Sprintf("Chain-shot victim in Russian Roulette; punished with %v", chainPType), false)
@@ -545,7 +566,7 @@ func rrRun(players []int, bullets int) {
 			if doubleHit {
 				pLabel = fmt.Sprintf("'%v' & '%v'", pType, pType2)
 			}
-			sendGlobalServerMessage(fmt.Sprintf(
+			sendAreaServerMessage(st.area, fmt.Sprintf(
 				"☠️  ROULETTE OVER! %v drew the short straw and received %v. Better luck next life!",
 				victimName, pLabel,
 			))
@@ -562,13 +583,13 @@ func rrRun(players []int, bullets int) {
 				}
 			}
 			if len(survivors) > 0 {
-				sendGlobalServerMessage(fmt.Sprintf("🏆 Survivors: %v — well played!", joinNames(survivors)))
+				sendAreaServerMessage(st.area, fmt.Sprintf("🏆 Survivors: %v — well played!", joinNames(survivors)))
 			}
 
 			// Survivor Curse: rare chance all survivors also get a minor punishment.
 			if len(survivorUIDs) > 0 && rand.Intn(100) < rrSurvivorCurseP {
 				time.Sleep(time.Second)
-				sendGlobalServerMessage(rrSurvivorCurseMessages[rand.Intn(len(rrSurvivorCurseMessages))])
+				sendAreaServerMessage(st.area, rrSurvivorCurseMessages[rand.Intn(len(rrSurvivorCurseMessages))])
 				time.Sleep(time.Second)
 				for _, sUID := range survivorUIDs {
 					if sc, scerr := getClientByUid(sUID); scerr == nil {
@@ -587,17 +608,17 @@ func rrRun(players []int, bullets int) {
 			}
 
 			// Close the game.
-			rr.mu.Lock()
-			rr.gameActive = false
-			rr.players = rr.players[:0]
-			rr.lastEnd = time.Now().UTC()
-			rr.mu.Unlock()
+			st.mu.Lock()
+			st.gameActive = false
+			st.players = st.players[:0]
+			st.lastEnd = time.Now().UTC()
+			st.mu.Unlock()
 			return
 		}
 
 		// ── CLICK ─────────────────────────────────────────────────────────────
 		remaining--
-		sendGlobalServerMessage(fmt.Sprintf(
+		sendAreaServerMessage(st.area, fmt.Sprintf(
 			"%v's turn — %s (%d/%d chambers remain)",
 			shooterName,
 			rrClickMessages[rand.Intn(len(rrClickMessages))],
@@ -607,11 +628,11 @@ func rrRun(players []int, bullets int) {
 		// Cylinder Re-Spin: rare chance the cylinder resets mid-game.
 		if remaining > 0 && rand.Intn(100) < rrReSpinP {
 			time.Sleep(time.Second)
-			sendGlobalServerMessage(rrReSpinMessages[rand.Intn(len(rrReSpinMessages))])
+			sendAreaServerMessage(st.area, rrReSpinMessages[rand.Intn(len(rrReSpinMessages))])
 			remaining = rrChambers
 			alive = rrInitialBullets()
 			time.Sleep(time.Second)
-			sendGlobalServerMessage(fmt.Sprintf(
+			sendAreaServerMessage(st.area, fmt.Sprintf(
 				"🔄 Cylinder reset: %d bullet(s) lurk in %d fresh chambers!", alive, remaining))
 		}
 
@@ -625,7 +646,7 @@ func rrRun(players []int, bullets int) {
 			if verr == nil {
 				victimName = vc.OOCName()
 			}
-			sendGlobalServerMessage(fmt.Sprintf(
+			sendAreaServerMessage(st.area, fmt.Sprintf(
 				"😱 ALL CHAMBERS CLEARED... but wait — the gun fires on its own!\n"+
 					"💥 MISFIRE! %v is claimed by fate! Punished with '%v'!",
 				victimName, pType,
@@ -638,11 +659,11 @@ func rrRun(players []int, bullets int) {
 					fmt.Sprintf("Misfire victim in Russian Roulette; punished with %v", pType), false)
 			}
 
-			rr.mu.Lock()
-			rr.gameActive = false
-			rr.players = rr.players[:0]
-			rr.lastEnd = time.Now().UTC()
-			rr.mu.Unlock()
+			st.mu.Lock()
+			st.gameActive = false
+			st.players = st.players[:0]
+			st.lastEnd = time.Now().UTC()
+			st.mu.Unlock()
 			return
 		}
 	}
