@@ -23,6 +23,7 @@ import (
 	"sync"
 	"time"
 	"unicode"
+	"unicode/utf8"
 
 	"github.com/MangosArentLiterature/Athena/internal/area"
 	"github.com/MangosArentLiterature/Athena/internal/permissions"
@@ -166,17 +167,18 @@ func hangmanGetState(a *area.Area) *hangmanState {
 
 // hangmanDisplayWord builds the "_ a _ _ m a n" style board string.
 func hangmanDisplayWord(word string, revealed []bool) string {
-	runes := []rune(word)
 	var b strings.Builder
-	for i, ch := range runes {
-		if i > 0 {
+	ri := 0
+	for _, ch := range word {
+		if ri > 0 {
 			b.WriteByte(' ')
 		}
-		if revealed[i] {
+		if revealed[ri] {
 			b.WriteRune(ch)
 		} else {
 			b.WriteRune('_')
 		}
+		ri++
 	}
 	return b.String()
 }
@@ -194,17 +196,25 @@ func hangmanAllRevealed(revealed []bool) bool {
 // hangmanWrongStr formats the list of wrong single-letter guesses plus an
 // indicator for any wrong full-word attempts.
 func hangmanWrongStr(letters []rune, wordCount int) string {
-	var parts []string
-	for _, r := range letters {
-		parts = append(parts, strings.ToUpper(string(r)))
-	}
-	for i := 0; i < wordCount; i++ {
-		parts = append(parts, "★") // each ★ represents a wrong word guess
-	}
-	if len(parts) == 0 {
+	if len(letters) == 0 && wordCount == 0 {
 		return "(none)"
 	}
-	return strings.Join(parts, ", ")
+	// Pre-size: each letter is ≈3 bytes ("X, "); each word-strike is ≈6 bytes ("★, ").
+	var b strings.Builder
+	b.Grow(len(letters)*3 + wordCount*6)
+	for _, r := range letters {
+		if b.Len() > 0 {
+			b.WriteString(", ")
+		}
+		b.WriteRune(unicode.ToUpper(r))
+	}
+	for i := 0; i < wordCount; i++ {
+		if b.Len() > 0 {
+			b.WriteString(", ")
+		}
+		b.WriteString("★")
+	}
+	return b.String()
 }
 
 // hangmanTotalWrong returns the current total wrong-guess count.
@@ -340,11 +350,11 @@ func hangmanStart(client *Client, args []string) {
 		word = pickHangmanWord(theme)
 	}
 
-	wordRunes := []rune(word)
+	wordLen := utf8.RuneCountInString(word)
 	st.optInActive = true
 	st.gameActive = false
 	st.word = word
-	st.revealed = make([]bool, len(wordRunes))
+	st.revealed = make([]bool, wordLen)
 	st.wrongLetters = nil
 	st.wrongWordCount = 0
 	st.guessedLetters = make(map[rune]bool)
@@ -360,10 +370,10 @@ func hangmanStart(client *Client, args []string) {
 
 	sendAreaServerMessage(client.Area(), fmt.Sprintf(
 		hangmanRules+"\n\nTheme: %s | Word length: %d letters",
-		hangmanMaxWrong, themeDisplay, len(wordRunes),
+		hangmanMaxWrong, themeDisplay, wordLen,
 	))
 	addToBuffer(client, "CMD",
-		fmt.Sprintf("Started Hangman (theme=%s, len=%d)", theme, len(wordRunes)), false)
+		fmt.Sprintf("Started Hangman (theme=%s, len=%d)", theme, wordLen), false)
 
 	// Auto-enrol the host.
 	hangmanJoin(client)
@@ -468,10 +478,9 @@ func hangmanGuess(client *Client, raw string) {
 	}
 
 	word := st.word
-	guessRunes := []rune(guess)
 
 	// ── Full-word guess ───────────────────────────────────────────────────────
-	if len(guessRunes) > 1 {
+	if utf8.RuneCountInString(guess) > 1 {
 		if guess == word {
 			// Correct — reveal everything and end the game.
 			for i := range st.revealed {
@@ -503,10 +512,6 @@ func hangmanGuess(client *Client, raw string) {
 			for k, v := range st.wrongGuessers {
 				wrongGuessers[k] = v
 			}
-			participants := make(map[int]struct{}, len(st.participants))
-			for k := range st.participants {
-				participants[k] = struct{}{}
-			}
 			hangArea := st.area
 			st.gameActive = false
 			st.optInActive = false
@@ -530,7 +535,7 @@ func hangmanGuess(client *Client, raw string) {
 	}
 
 	// ── Single-letter guess ───────────────────────────────────────────────────
-	letter := guessRunes[0]
+	letter, _ := utf8.DecodeRuneInString(guess)
 	if st.guessedLetters[letter] {
 		st.mu.Unlock()
 		client.SendServerMessage(
@@ -542,12 +547,13 @@ func hangmanGuess(client *Client, raw string) {
 
 	// Check whether the letter appears in the word.
 	found := false
-	wordRunes := []rune(word)
-	for i, ch := range wordRunes {
+	ri := 0
+	for _, ch := range word {
 		if ch == letter {
-			st.revealed[i] = true
+			st.revealed[ri] = true
 			found = true
 		}
+		ri++
 	}
 	if !found {
 		st.wrongLetters = append(st.wrongLetters, letter)
@@ -671,18 +677,25 @@ func hangmanOptInTimer(st *hangmanState) {
 	}
 
 	word := st.word
-	wordLen := len([]rune(word))
+	wordLen := utf8.RuneCountInString(word)
 	st.gameActive = true
 	st.mu.Unlock()
 
-	// Build the initial board (all dashes).
-	initialBoard := strings.Repeat("_ ", wordLen)
+	// Build the initial board (all dashes) with a pre-sized Builder.
+	var initialBoard strings.Builder
+	initialBoard.Grow(2*wordLen - 1)
+	for i := 0; i < wordLen; i++ {
+		if i > 0 {
+			initialBoard.WriteByte(' ')
+		}
+		initialBoard.WriteByte('_')
+	}
 
 	sendAreaServerMessage(st.area, fmt.Sprintf(
 		"🔤 HANGMAN BEGINS! %d player(s) joined.\n%s\nWord (%d letters): %s\n"+
 			"Type /hangman guess <letter> or /hangman guess <full word>\n"+
 			"Type /hangman status to see the board at any time.",
-		count, hangmanArt[0], wordLen, strings.TrimRight(initialBoard, " "),
+		count, hangmanArt[0], wordLen, initialBoard.String(),
 	))
 }
 
