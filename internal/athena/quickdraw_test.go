@@ -132,6 +132,7 @@ const challengedUID = 6
 duel := &quickdrawDuel{
 challengerUID: challengerUID,
 challengedUID: challengedUID,
+targetWord:    "bolt",
 drawSignaled:  false,
 }
 
@@ -163,6 +164,7 @@ const challengedUID = 8
 duel := &quickdrawDuel{
 challengerUID: challengerUID,
 challengedUID: challengedUID,
+targetWord:    "draw",
 drawSignaled:  true,
 }
 
@@ -171,11 +173,11 @@ qdState.activeDuels[challengerUID] = duel
 qdState.activeDuels[challengedUID] = duel
 qdState.mu.Unlock()
 
-// Simulate quickdrawOnIC for the challenged player reacting first.
+// Simulate quickdrawOnIC for the challenged player reacting first with the correct word.
 uid := challengedUID
 qdState.mu.Lock()
 d, ok := qdState.activeDuels[uid]
-if ok && d.drawSignaled && !d.resolved {
+if ok && d.drawSignaled && !d.resolved && normaliseTypingPhrase("draw") == d.targetWord {
 d.resolved = true
 delete(qdState.activeDuels, d.challengerUID)
 delete(qdState.activeDuels, d.challengedUID)
@@ -207,6 +209,7 @@ const challengedUID = 10
 duel := &quickdrawDuel{
 challengerUID: challengerUID,
 challengedUID: challengedUID,
+targetWord:    "fire",
 drawSignaled:  true,
 resolved:      true, // already resolved — both UIDs already removed
 }
@@ -300,5 +303,52 @@ qdState.mu.Unlock()
 
 if a || b {
 t.Error("expected both UIDs to be removed from activeDuels after timeout")
+}
+}
+
+// TestQuickdrawOnICWrongWordIgnored verifies that typing the wrong word after DRAW
+// does not resolve the duel.
+func TestQuickdrawOnICWrongWordIgnored(t *testing.T) {
+resetQuickdrawState()
+
+const challengerUID = 15
+const challengedUID = 16
+
+duel := &quickdrawDuel{
+challengerUID: challengerUID,
+challengedUID: challengedUID,
+targetWord:    "draw",
+drawSignaled:  true,
+}
+
+qdState.mu.Lock()
+qdState.activeDuels[challengerUID] = duel
+qdState.activeDuels[challengedUID] = duel
+qdState.mu.Unlock()
+
+// Simulate quickdrawOnIC with the wrong word — should not resolve.
+uid := challengedUID
+qdState.mu.Lock()
+d, ok := qdState.activeDuels[uid]
+if ok && d.drawSignaled && !d.resolved {
+if normaliseTypingPhrase("wrongword") == d.targetWord {
+d.resolved = true
+delete(qdState.activeDuels, d.challengerUID)
+delete(qdState.activeDuels, d.challengedUID)
+}
+}
+qdState.mu.Unlock()
+
+if duel.resolved {
+t.Error("duel should not be resolved after wrong word")
+}
+
+qdState.mu.Lock()
+_, stillActive1 := qdState.activeDuels[challengerUID]
+_, stillActive2 := qdState.activeDuels[challengedUID]
+qdState.mu.Unlock()
+
+if !stillActive1 || !stillActive2 {
+t.Error("expected both UIDs to remain in activeDuels after wrong word")
 }
 }
