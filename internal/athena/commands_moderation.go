@@ -1122,18 +1122,82 @@ func cmdUntorment(client *Client, args []string, usage string) {
 }
 
 
-// cmdLockdown toggles server lockdown mode.
-// While active, only previously-known IPIDs (those already in the server's
-// first-seen tracker) are allowed to connect; all new IPIDs are rejected.
-func cmdLockdown(client *Client, _ []string, _ string) {
+// cmdLockdown toggles server lockdown mode, or manages the lockdown whitelist.
+// Subcommands:
+//
+//	/lockdown           - toggle lockdown on/off
+//	/lockdown add <UID> - whitelist a connected player's IPID so they can join during lockdown
+//	/lockdown whitelist all - whitelist all IPIDs currently in the caller's area
+func cmdLockdown(client *Client, args []string, usage string) {
+	// Subcommand dispatch.
+	if len(args) >= 1 {
+		switch args[0] {
+		case "add":
+			if len(args) < 2 {
+				client.SendServerMessage("Not enough arguments:\n" + usage)
+				return
+			}
+			uid, err := strconv.Atoi(args[1])
+			if err != nil {
+				client.SendServerMessage("Invalid UID.")
+				return
+			}
+			target := clients.GetClientByUID(uid)
+			if target == nil {
+				client.SendServerMessage("No client found with that UID.")
+				return
+			}
+			ipid := target.Ipid()
+			recordIPFirstSeen(ipid)
+			if err := db.MarkIPKnown(ipid); err != nil {
+				logger.LogErrorf("lockdown add: failed to persist IPID %s: %v", ipid, err)
+			}
+			client.SendServerMessage(fmt.Sprintf("Whitelisted IPID %v (UID %v) for lockdown.", ipid, uid))
+			addToBuffer(client, "CMD", fmt.Sprintf("Whitelisted IPID %v (UID %v) for lockdown.", ipid, uid), true)
+			return
+		case "whitelist":
+			if len(args) < 2 || args[1] != "all" {
+				client.SendServerMessage("Not enough arguments:\n" + usage)
+				return
+			}
+			currentArea := client.Area()
+			count := 0
+			clients.ForEach(func(c *Client) {
+				if c.Area() == currentArea && c.Uid() != -1 {
+					ipid := c.Ipid()
+					recordIPFirstSeen(ipid)
+					if err := db.MarkIPKnown(ipid); err != nil {
+						logger.LogErrorf("lockdown whitelist all: failed to persist IPID %s: %v", ipid, err)
+					}
+					count++
+				}
+			})
+			client.SendServerMessage(fmt.Sprintf("Whitelisted %v IPID(s) from the current area for lockdown.", count))
+			addToBuffer(client, "CMD", fmt.Sprintf("Whitelisted %v IPID(s) in area for lockdown.", count), true)
+			return
+		default:
+			client.SendServerMessage("Unknown subcommand:\n" + usage)
+			return
+		}
+	}
+
+	// Toggle lockdown.
 	active := !serverLockdown.Load()
 	serverLockdown.Store(active)
 	if active {
-		writeToAll("CT", "OOC", "🔒 Server lockdown is now ACTIVE. New connections are restricted to known players.", "1")
+		clients.ForEach(func(c *Client) {
+			if c.Uid() != -1 && permissions.IsModerator(c.Perms()) {
+				c.SendPacket("CT", "OOC", "🔒 Server lockdown is now ACTIVE. New connections are restricted to known players.", "1")
+			}
+		})
 		client.SendServerMessage("Lockdown enabled. New IPIDs will be rejected.")
 		addToBuffer(client, "CMD", "Enabled server lockdown.", true)
 	} else {
-		writeToAll("CT", "OOC", "🔓 Server lockdown has been LIFTED. New connections are now allowed.", "1")
+		clients.ForEach(func(c *Client) {
+			if c.Uid() != -1 && permissions.IsModerator(c.Perms()) {
+				c.SendPacket("CT", "OOC", "🔓 Server lockdown has been LIFTED. New connections are now allowed.", "1")
+			}
+		})
 		client.SendServerMessage("Lockdown disabled. New IPIDs are now allowed.")
 		addToBuffer(client, "CMD", "Disabled server lockdown.", true)
 	}
