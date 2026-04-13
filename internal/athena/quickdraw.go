@@ -253,12 +253,11 @@ if duel.resolved {
 qdState.mu.Unlock()
 return
 }
-word := quickdrawPickWord()
-duel.targetWord = word
+duel.targetWord = quickdrawPickWord()
 duel.drawSignaled = true
 qdState.mu.Unlock()
 
-sendGlobalServerMessage(fmt.Sprintf("🔫 DRAW! Type this word in IC: \"%s\" — the first to type it wins!", word))
+sendGlobalServerMessage(fmt.Sprintf("🔫 DRAW! Type this word in IC: \"%s\" — the first to type it wins!", duel.targetWord))
 time.Sleep(quickdrawReactionTimeout)
 
 qdState.mu.Lock()
