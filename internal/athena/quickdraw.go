@@ -24,6 +24,8 @@ mrand "math/rand"
 "strconv"
 "sync"
 "time"
+
+"github.com/MangosArentLiterature/Athena/internal/area"
 )
 
 const (
@@ -80,10 +82,11 @@ return quickdrawWords[n.Int64()]
 type quickdrawDuel struct {
 challengerUID int
 challengedUID int
-targetWord    string // word players must type after DRAW! (lower-case); empty in bullet mode
-bulletMode    bool   // true when the duel is a bullet duel (first ANY IC message wins)
-drawSignaled  bool   // true after "DRAW!" is announced
-resolved      bool   // true once the outcome has been determined
+targetWord    string     // word players must type after DRAW! (lower-case); empty in bullet mode
+bulletMode    bool       // true when the duel is a bullet duel (first ANY IC message wins)
+drawSignaled  bool       // true after "DRAW!" is announced
+resolved      bool       // true once the outcome has been determined
+area          *area.Area // area where the duel takes place (for local-only broadcasts)
 }
 
 // quickdrawState is the mutex-protected global state for all quickdraw duels.
@@ -249,7 +252,7 @@ bulletMode := qdState.pendingBulletMode[challengedUID]
 delete(qdState.pendingChallenges, challengedUID)
 delete(qdState.challengerBusy, challengerUID)
 delete(qdState.pendingBulletMode, challengedUID)
-duel := &quickdrawDuel{challengerUID: challengerUID, challengedUID: challengedUID, bulletMode: bulletMode}
+duel := &quickdrawDuel{challengerUID: challengerUID, challengedUID: challengedUID, bulletMode: bulletMode, area: challenger.Area()}
 qdState.activeDuels[challengerUID] = duel
 qdState.activeDuels[challengedUID] = duel
 qdState.mu.Unlock()
@@ -257,7 +260,7 @@ qdState.mu.Unlock()
 challengerName := challenger.OOCName()
 challengedName := client.OOCName()
 
-sendGlobalServerMessage(fmt.Sprintf(
+sendAreaServerMessage(duel.area, fmt.Sprintf(
 "🔫 QUICKDRAW DUEL: %v (UID %d) vs %v (UID %d)! Countdown starting...",
 challengerName, challengerUID, challengedName, challengedUID,
 ))
@@ -299,7 +302,7 @@ fmt.Sprintf("Declined quickdraw challenge from UID %d", challengerUID), false)
 // 3-2-1 countdown, DRAW signal, reaction window, and outcome resolution.
 func quickdrawRun(duel *quickdrawDuel, challengerName, challengedName string) {
 for i := 3; i > 0; i-- {
-sendGlobalServerMessage(fmt.Sprintf("%d...", i))
+sendAreaServerMessage(duel.area, fmt.Sprintf("%d...", i))
 time.Sleep(time.Second)
 }
 
@@ -317,9 +320,9 @@ word := duel.targetWord // capture before unlock to avoid data race
 qdState.mu.Unlock()
 
 if bullet {
-sendGlobalServerMessage("🔫 DRAW! — Send ANY IC message first to win!")
+sendAreaServerMessage(duel.area, "🔫 DRAW! — Send ANY IC message first to win!")
 } else {
-sendGlobalServerMessage(fmt.Sprintf("🔫 DRAW! Type this word in IC: \"%s\" — the first to type it wins!", word))
+sendAreaServerMessage(duel.area, fmt.Sprintf("🔫 DRAW! Type this word in IC: \"%s\" — the first to type it wins!", word))
 }
 time.Sleep(quickdrawReactionTimeout)
 
@@ -341,7 +344,7 @@ c.AddPunishment(pType, quickdrawPunishDuration, "Quickdraw: too slow")
 c.SendServerMessage(fmt.Sprintf("🐢 You were too slow! Punished with '%v' for %v.", pType, quickdrawPunishDuration))
 }
 }
-sendGlobalServerMessage(fmt.Sprintf(
+sendAreaServerMessage(duel.area, fmt.Sprintf(
 "😴 QUICKDRAW RESULT: Both %v and %v were too slow! Both receive a punishment!",
 challengerName, challengedName,
 ))
@@ -373,11 +376,11 @@ loserUID = duel.challengerUID
 }
 qdState.mu.Unlock()
 
-quickdrawResolve(uid, loserUID)
+quickdrawResolve(uid, loserUID, duel.area)
 }
 
 // quickdrawResolve applies the punishment to the loser and announces the outcome.
-func quickdrawResolve(winnerUID, loserUID int) {
+func quickdrawResolve(winnerUID, loserUID int, a *area.Area) {
 winner, _ := getClientByUid(winnerUID)
 loser, loserErr := getClientByUid(loserUID)
 
@@ -396,7 +399,7 @@ loser.AddPunishment(pType, quickdrawPunishDuration, "Quickdraw: loser")
 loser.SendServerMessage(fmt.Sprintf(
 "💀 You lost the quickdraw duel! Punished with '%v' for %v.", pType, quickdrawPunishDuration,
 ))
-sendGlobalServerMessage(fmt.Sprintf(
+sendAreaServerMessage(a, fmt.Sprintf(
 "🏆 QUICKDRAW RESULT: %v was faster! %v loses and receives '%v'!", winnerName, loserName, pType,
 ))
 if winner != nil {
@@ -405,7 +408,7 @@ addToBuffer(winner, "QUICKDRAW",
 fmt.Sprintf("Won duel vs UID %d (%v), loser punished with %v", loserUID, loserName, pType), false)
 }
 } else {
-sendGlobalServerMessage(fmt.Sprintf(
+sendAreaServerMessage(a, fmt.Sprintf(
 "🏆 QUICKDRAW RESULT: %v wins! Their opponent disconnected.", winnerName,
 ))
 if winner != nil {

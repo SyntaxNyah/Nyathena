@@ -1663,6 +1663,18 @@ func initCommands() {
 			reqPerms: permissions.PermissionField["NONE"],
 			category: "minigames",
 		},
+		"hangman": {
+			handler:  cmdHangman,
+			minArgs:  1,
+			usage: "Usage: /hangman start [animals|courtroom|nature|food|random|custom <word>]\n" +
+				"       /hangman join\n" +
+				"       /hangman guess <letter|word>\n" +
+				"       /hangman status\n" +
+				"       /hangman stop",
+			desc:     "Play Hangman! Host starts a game with a themed or custom secret word. Players guess letters (and optionally the full word). Wrong-guessers are punished on failure.",
+			reqPerms: permissions.PermissionField["NONE"],
+			category: "minigames",
+		},
 		// Casino commands
 		"bj": {
 			handler:   cmdBlackjack,
@@ -2038,7 +2050,7 @@ var helpCategoryList = []helpCategory{
 	{"general", "🎮", "General", "Movement, chat, dice, info commands."},
 	{"area", "🏛️", "Area", "Area management — backgrounds, music, locks, polls."},
 	{"testimony", "📝", "Testimony", "Testimony recorder — record and replay witness statements."},
-	{"minigames", "🎲", "Mini-games", "Hot Potato, Quick Draw, Russian Roulette, giveaways."},
+	{"minigames", "🎲", "Mini-games", "Hangman, Hot Potato, Quick Draw, Russian Roulette, Typing Race, giveaways."},
 	{"mafia", "🕵️", "Mafia / Werewolf", "Social-deduction minigame with roles, votes and night actions."},
 	{"casino", "🎰", "Casino", "Blackjack, Poker, Slots, Roulette, and more."},
 	{"chips", "💰", "Chips", "Chip balance, leaderboards, shop, and the bar."},
