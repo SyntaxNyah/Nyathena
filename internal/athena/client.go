@@ -151,6 +151,8 @@ const (
 	PunishmentSarcasm
 	PunishmentAcademic
 	PunishmentRecipe
+	// Quote Punishment
+	PunishmentQuote
 )
 
 type PunishmentState struct {
@@ -1803,6 +1805,8 @@ func (p PunishmentType) String() string {
 		return "academic"
 	case PunishmentRecipe:
 		return "recipe"
+	case PunishmentQuote:
+		return "quote"
 	default:
 		return "none"
 	}

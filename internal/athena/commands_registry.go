@@ -1575,6 +1575,22 @@ func initCommands() {
 			reqPerms: permissions.PermissionField["MUTE"],
 			category: "punishment",
 		},
+		"quote": {
+			handler:  cmdQuote,
+			minArgs:  1,
+			usage:    "Usage: /quote [-d duration] [-r reason] <uid1>,<uid2>...",
+			desc:     "Wraps IC messages in quotation marks with a 50% chance. Moderator only.",
+			reqPerms: permissions.PermissionField["MUTE"],
+			category: "punishment",
+		},
+		"unquote": {
+			handler:  cmdUnquote,
+			minArgs:  1,
+			usage:    "Usage: /unquote <uid1>,<uid2>...",
+			desc:     "Removes quote punishment from user(s). Moderator only.",
+			reqPerms: permissions.PermissionField["MUTE"],
+			category: "punishment",
+		},
 		"unpunish": {
 			handler:  cmdUnpunish,
 			minArgs:  1,
