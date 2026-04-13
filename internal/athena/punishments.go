@@ -2440,10 +2440,13 @@ func applyRecipe(text string) string {
 	return truncateText(b.String())
 }
 
-// applyQuote wraps the text in quotation marks with a 50% chance.
+// applyQuote wraps each word in quotation marks with a 20% chance per word.
 func applyQuote(text string) string {
-	if rand.Float32() < 0.5 {
-		return truncateText("\"" + text + "\"")
+	words := strings.Fields(text)
+	for i, word := range words {
+		if rand.Float32() < 0.2 {
+			words[i] = "\"" + word + "\""
+		}
 	}
-	return text
+	return truncateText(strings.Join(words, " "))
 }

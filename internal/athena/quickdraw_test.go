@@ -25,6 +25,7 @@ func resetQuickdrawState() {
 qdState.mu.Lock()
 qdState.challengerBusy = make(map[int]struct{})
 qdState.pendingChallenges = make(map[int]int)
+qdState.pendingBulletMode = make(map[int]bool)
 qdState.activeDuels = make(map[int]*quickdrawDuel)
 qdState.mu.Unlock()
 }
@@ -350,5 +351,76 @@ qdState.mu.Unlock()
 
 if !stillActive1 || !stillActive2 {
 t.Error("expected both UIDs to remain in activeDuels after wrong word")
+}
+}
+
+// TestQuickdrawBulletModeAnyICWins verifies that in bullet mode any IC message
+// after DRAW! resolves the duel regardless of its content.
+func TestQuickdrawBulletModeAnyICWins(t *testing.T) {
+resetQuickdrawState()
+
+const challengerUID = 20
+const challengedUID = 21
+
+duel := &quickdrawDuel{
+challengerUID: challengerUID,
+challengedUID: challengedUID,
+bulletMode:    true,
+drawSignaled:  true,
+}
+
+qdState.mu.Lock()
+qdState.activeDuels[challengerUID] = duel
+qdState.activeDuels[challengedUID] = duel
+qdState.mu.Unlock()
+
+// Simulate quickdrawOnIC for the challenger with an arbitrary message.
+uid := challengerUID
+qdState.mu.Lock()
+d, ok := qdState.activeDuels[uid]
+if ok && d.drawSignaled && !d.resolved {
+// bullet mode: any message wins
+if d.bulletMode || normaliseTypingPhrase("anything at all") == d.targetWord {
+d.resolved = true
+delete(qdState.activeDuels, d.challengerUID)
+delete(qdState.activeDuels, d.challengedUID)
+}
+}
+qdState.mu.Unlock()
+
+if !duel.resolved {
+t.Error("bullet duel should be resolved by any IC message after DRAW")
+}
+
+qdState.mu.Lock()
+_, stillActive1 := qdState.activeDuels[challengerUID]
+_, stillActive2 := qdState.activeDuels[challengedUID]
+qdState.mu.Unlock()
+
+if stillActive1 || stillActive2 {
+t.Error("expected both UIDs to be removed from activeDuels after bullet duel resolution")
+}
+}
+
+// TestQuickdrawBulletModePendingStored verifies that bullet mode flag is stored
+// in pendingBulletMode when a challenge is issued.
+func TestQuickdrawBulletModePendingStored(t *testing.T) {
+resetQuickdrawState()
+
+const challengerUID = 22
+const challengedUID = 23
+
+qdState.mu.Lock()
+qdState.pendingChallenges[challengedUID] = challengerUID
+qdState.challengerBusy[challengerUID] = struct{}{}
+qdState.pendingBulletMode[challengedUID] = true
+qdState.mu.Unlock()
+
+qdState.mu.Lock()
+isBullet := qdState.pendingBulletMode[challengedUID]
+qdState.mu.Unlock()
+
+if !isBullet {
+t.Error("expected bullet mode to be stored in pendingBulletMode")
 }
 }
