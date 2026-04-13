@@ -1,51 +1,43 @@
-/* Athena - A server for Attorney Online 2 written in Go
-Copyright (C) 2022 MangosArentLiterature <mango@transmenace.dev>
-
-This program is free software: you can redistribute it and/or modify
-it under the terms of the GNU Affero General Public License as published
-by the Free Software Foundation, either version 3 of the License, or
-(at your option) any later version.
-
-This program is distributed in the hope that it will be useful,
-but WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-GNU Affero General Public License for more details.
-
-You should have received a copy of the GNU Affero General Public License
-along with this program.  If not, see <https://www.gnu.org/licenses/>. */
-
 package athena
 
 import (
 	"testing"
 	"time"
+
+	"github.com/MangosArentLiterature/Athena/internal/area"
 )
 
-// resetRRState resets global Russian Roulette state between tests.
+// testRRArea is a shared dummy area used by Russian Roulette tests.
+// A non-nil pointer is sufficient — the tests never invoke area methods.
+var testRRArea = &area.Area{}
+
+// resetRRState resets the Russian Roulette state for testRRArea between tests.
 func resetRRState() {
-	rr.mu.Lock()
-	rr.joinActive = false
-	rr.gameActive = false
-	rr.players = nil
-	rr.lastEnd = time.Time{}
-	rr.mu.Unlock()
+	st := rrGetState(testRRArea)
+	st.mu.Lock()
+	st.joinActive = false
+	st.gameActive = false
+	st.players = nil
+	st.lastEnd = time.Time{}
+	st.mu.Unlock()
 }
 
 // TestRRCooldown verifies the cooldown helper returns the correct state.
 func TestRRCooldown(t *testing.T) {
 	resetRRState()
+	st := rrGetState(testRRArea)
 
 	// No game yet — should not be cooling down.
-	if cooling, _ := isRRCoolingDown(); cooling {
+	if cooling, _ := isRRAreaCoolingDown(st); cooling {
 		t.Error("expected no cooldown when no game has run yet")
 	}
 
 	// Game ended 1 second ago — cooldown must be active.
-	rr.mu.Lock()
-	rr.lastEnd = time.Now().Add(-1 * time.Second)
-	rr.mu.Unlock()
+	st.mu.Lock()
+	st.lastEnd = time.Now().Add(-1 * time.Second)
+	st.mu.Unlock()
 
-	cooling, secs := isRRCoolingDown()
+	cooling, secs := isRRAreaCoolingDown(st)
 	if !cooling {
 		t.Error("expected cooldown to be active after a recent game")
 	}
@@ -54,11 +46,11 @@ func TestRRCooldown(t *testing.T) {
 	}
 
 	// Game ended 6 minutes ago — cooldown must have expired.
-	rr.mu.Lock()
-	rr.lastEnd = time.Now().Add(-6 * time.Minute)
-	rr.mu.Unlock()
+	st.mu.Lock()
+	st.lastEnd = time.Now().Add(-6 * time.Minute)
+	st.mu.Unlock()
 
-	if cooling, _ := isRRCoolingDown(); cooling {
+	if cooling, _ := isRRAreaCoolingDown(st); cooling {
 		t.Error("expected cooldown to be expired after 6 minutes")
 	}
 }
@@ -66,23 +58,24 @@ func TestRRCooldown(t *testing.T) {
 // TestRRJoinDuplicateBlocked verifies a UID can only join once.
 func TestRRJoinDuplicateBlocked(t *testing.T) {
 	resetRRState()
+	st := rrGetState(testRRArea)
 
-	rr.mu.Lock()
-	rr.joinActive = true
-	rr.players = append(rr.players, 42)
-	rr.mu.Unlock()
+	st.mu.Lock()
+	st.joinActive = true
+	st.players = append(st.players, 42)
+	st.mu.Unlock()
 
 	// Simulate the duplicate-join check.
 	uid := 42
-	rr.mu.Lock()
+	st.mu.Lock()
 	alreadyIn := false
-	for _, p := range rr.players {
+	for _, p := range st.players {
 		if p == uid {
 			alreadyIn = true
 			break
 		}
 	}
-	rr.mu.Unlock()
+	st.mu.Unlock()
 
 	if !alreadyIn {
 		t.Error("expected UID 42 to already be in the player list")
@@ -92,12 +85,13 @@ func TestRRJoinDuplicateBlocked(t *testing.T) {
 // TestRRMinPlayers verifies that a game with fewer than rrMinPlayers is cancelled.
 func TestRRMinPlayers(t *testing.T) {
 	resetRRState()
+	st := rrGetState(testRRArea)
 
-	rr.mu.Lock()
-	rr.joinActive = true
-	rr.players = []int{1} // only 1 player
-	n := len(rr.players)
-	rr.mu.Unlock()
+	st.mu.Lock()
+	st.joinActive = true
+	st.players = []int{1} // only 1 player
+	n := len(st.players)
+	st.mu.Unlock()
 
 	if n >= rrMinPlayers {
 		t.Errorf("expected fewer than %d players, got %d", rrMinPlayers, n)
@@ -148,6 +142,7 @@ func TestRRPunishmentPool(t *testing.T) {
 // TestRROnlyOneGame verifies that concurrent starts are blocked.
 func TestRROnlyOneGame(t *testing.T) {
 	resetRRState()
+	st := rrGetState(testRRArea)
 
 	for _, tc := range []struct {
 		name       string
@@ -158,11 +153,11 @@ func TestRROnlyOneGame(t *testing.T) {
 		{"game active", false, true},
 		{"both active", true, true},
 	} {
-		rr.mu.Lock()
-		rr.joinActive = tc.joinActive
-		rr.gameActive = tc.gameActive
-		blocked := rr.joinActive || rr.gameActive
-		rr.mu.Unlock()
+		st.mu.Lock()
+		st.joinActive = tc.joinActive
+		st.gameActive = tc.gameActive
+		blocked := st.joinActive || st.gameActive
+		st.mu.Unlock()
 
 		if !blocked {
 			t.Errorf("%s: expected start to be blocked", tc.name)
@@ -191,24 +186,25 @@ func TestRRJoinNamesHelper(t *testing.T) {
 // TestRRGameClosedAfterShot simulates closing game state and verifies it resets.
 func TestRRGameClosedAfterShot(t *testing.T) {
 	resetRRState()
+	st := rrGetState(testRRArea)
 
-	rr.mu.Lock()
-	rr.gameActive = true
-	rr.players = []int{1, 2, 3}
-	rr.mu.Unlock()
+	st.mu.Lock()
+	st.gameActive = true
+	st.players = []int{1, 2, 3}
+	st.mu.Unlock()
 
 	// Simulate what rrRun does after a hit.
-	rr.mu.Lock()
-	rr.gameActive = false
-	rr.players = rr.players[:0]
-	rr.lastEnd = time.Now().UTC()
-	rr.mu.Unlock()
+	st.mu.Lock()
+	st.gameActive = false
+	st.players = st.players[:0]
+	st.lastEnd = time.Now().UTC()
+	st.mu.Unlock()
 
-	rr.mu.Lock()
-	active := rr.gameActive
-	players := len(rr.players)
-	ended := rr.lastEnd.IsZero()
-	rr.mu.Unlock()
+	st.mu.Lock()
+	active := st.gameActive
+	players := len(st.players)
+	ended := st.lastEnd.IsZero()
+	st.mu.Unlock()
 
 	if active {
 		t.Error("expected game to be inactive after shot")
