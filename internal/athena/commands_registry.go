@@ -1642,8 +1642,8 @@ func initCommands() {
 		"quickdraw": {
 			handler:  cmdQuickdraw,
 			minArgs:  1,
-			usage:    "Usage: /quickdraw <uid> | /quickdraw accept | /quickdraw decline",
-			desc:     "Challenge another player to a quickdraw duel. The loser gets a random punishment.",
+			usage:    "Usage: /quickdraw <uid> | /quickdraw bullet <uid> | /quickdraw accept | /quickdraw decline\n  /quickdraw <uid>        — Standard duel: both players must type a random word after DRAW!\n  /quickdraw bullet <uid> — Bullet duel: first player to send ANY IC message after DRAW! wins.\n  /quickdraw accept       — Accept an incoming duel challenge.\n  /quickdraw decline      — Decline an incoming duel challenge.",
+			desc:     "Challenge another player to a quickdraw duel. Standard mode: type a random word first. Bullet mode (/quickdraw bullet <uid>): first to send any IC message wins. The loser receives a random punishment.",
 			reqPerms: permissions.PermissionField["NONE"],
 			category: "minigames",
 		},

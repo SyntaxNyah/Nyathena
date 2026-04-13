@@ -80,7 +80,8 @@ return quickdrawWords[n.Int64()]
 type quickdrawDuel struct {
 challengerUID int
 challengedUID int
-targetWord    string // word players must type after DRAW! (lower-case)
+targetWord    string // word players must type after DRAW! (lower-case); empty in bullet mode
+bulletMode    bool   // true when the duel is a bullet duel (first ANY IC message wins)
 drawSignaled  bool   // true after "DRAW!" is announced
 resolved      bool   // true once the outcome has been determined
 }
@@ -92,34 +93,48 @@ type quickdrawState struct {
 mu                sync.Mutex
 challengerBusy    map[int]struct{}       // set of UIDs with an outgoing pending challenge
 pendingChallenges map[int]int            // challenged UID → challenger UID
+pendingBulletMode map[int]bool           // challenged UID → bullet mode flag
 activeDuels       map[int]*quickdrawDuel // UID → duel (both parties share the same pointer)
 }
 
 var qdState = quickdrawState{
 challengerBusy:    make(map[int]struct{}),
 pendingChallenges: make(map[int]int),
+pendingBulletMode: make(map[int]bool),
 activeDuels:       make(map[int]*quickdrawDuel),
 }
 
-// cmdQuickdraw handles /quickdraw <uid|accept|decline>.
+// cmdQuickdraw handles /quickdraw <uid|bullet <uid>|accept|decline>.
 func cmdQuickdraw(client *Client, args []string, usage string) {
 switch args[0] {
 case "accept":
 quickdrawAccept(client)
 case "decline":
 quickdrawDecline(client)
+case "bullet":
+if len(args) < 2 {
+client.SendServerMessage("Usage: /quickdraw bullet <uid>")
+return
+}
+uid, err := strconv.Atoi(args[1])
+if err != nil || uid < 0 {
+client.SendServerMessage("Invalid UID. Usage: /quickdraw bullet <uid>")
+return
+}
+quickdrawChallenge(client, uid, true)
 default:
 uid, err := strconv.Atoi(args[0])
 if err != nil || uid < 0 {
 client.SendServerMessage("Invalid UID. " + usage)
 return
 }
-quickdrawChallenge(client, uid)
+quickdrawChallenge(client, uid, false)
 }
 }
 
 // quickdrawChallenge sends a duel challenge from client to the player with targetUID.
-func quickdrawChallenge(client *Client, targetUID int) {
+// bulletMode=true starts a bullet duel where the first player to send ANY IC message wins.
+func quickdrawChallenge(client *Client, targetUID int, bulletMode bool) {
 challengerUID := client.Uid()
 
 if challengerUID == targetUID {
@@ -156,16 +171,23 @@ return
 }
 qdState.pendingChallenges[targetUID] = challengerUID
 qdState.challengerBusy[challengerUID] = struct{}{}
+if bulletMode {
+qdState.pendingBulletMode[targetUID] = true
+}
 qdState.mu.Unlock()
 
 challengerName := client.OOCName()
 targetName := target.OOCName()
 
+modeDesc := "standard (type a word)"
+if bulletMode {
+modeDesc = "bullet (first to send ANY message)"
+}
 target.SendServerMessage(fmt.Sprintf(
-"🔫 %v (UID %d) challenges you to a QUICKDRAW DUEL! "+
+"🔫 %v (UID %d) challenges you to a QUICKDRAW DUEL [%s]! "+
 "Type /quickdraw accept to accept or /quickdraw decline to decline. "+
 "You have 30 seconds.",
-challengerName, challengerUID,
+challengerName, challengerUID, modeDesc,
 ))
 client.SendServerMessage(fmt.Sprintf(
 "🔫 Challenge sent to %v (UID %d). Waiting for their response...",
@@ -188,6 +210,7 @@ return
 }
 delete(qdState.pendingChallenges, targetUID)
 delete(qdState.challengerBusy, challengerUID)
+delete(qdState.pendingBulletMode, targetUID)
 qdState.mu.Unlock()
 
 if challenger, err := getClientByUid(challengerUID); err == nil {
@@ -217,13 +240,16 @@ challenger, err := getClientByUid(challengerUID)
 if err != nil {
 delete(qdState.pendingChallenges, challengedUID)
 delete(qdState.challengerBusy, challengerUID)
+delete(qdState.pendingBulletMode, challengedUID)
 qdState.mu.Unlock()
 client.SendServerMessage("The challenger has disconnected. Challenge cancelled.")
 return
 }
+bulletMode := qdState.pendingBulletMode[challengedUID]
 delete(qdState.pendingChallenges, challengedUID)
 delete(qdState.challengerBusy, challengerUID)
-duel := &quickdrawDuel{challengerUID: challengerUID, challengedUID: challengedUID}
+delete(qdState.pendingBulletMode, challengedUID)
+duel := &quickdrawDuel{challengerUID: challengerUID, challengedUID: challengedUID, bulletMode: bulletMode}
 qdState.activeDuels[challengerUID] = duel
 qdState.activeDuels[challengedUID] = duel
 qdState.mu.Unlock()
@@ -254,6 +280,7 @@ return
 }
 delete(qdState.pendingChallenges, challengedUID)
 delete(qdState.challengerBusy, challengerUID)
+delete(qdState.pendingBulletMode, challengedUID)
 qdState.mu.Unlock()
 
 challengedName := client.OOCName()
@@ -281,12 +308,19 @@ if duel.resolved {
 qdState.mu.Unlock()
 return
 }
-duel.targetWord = quickdrawPickWord()
 duel.drawSignaled = true
+bullet := duel.bulletMode
+if !bullet {
+duel.targetWord = quickdrawPickWord()
+}
 word := duel.targetWord // capture before unlock to avoid data race
 qdState.mu.Unlock()
 
+if bullet {
+sendGlobalServerMessage("🔫 DRAW! — Send ANY IC message first to win!")
+} else {
 sendGlobalServerMessage(fmt.Sprintf("🔫 DRAW! Type this word in IC: \"%s\" — the first to type it wins!", word))
+}
 time.Sleep(quickdrawReactionTimeout)
 
 qdState.mu.Lock()
@@ -314,8 +348,8 @@ challengerName, challengedName,
 }
 
 // quickdrawOnIC is called from pktIC whenever a client sends an IC message.
-// If the client is in an active duel after the DRAW signal and typed the correct
-// word, they win. Wrong words are silently ignored so the duel continues.
+// In standard mode the client must type the target word to win; wrong words are
+// silently ignored. In bullet mode any IC message after DRAW wins immediately.
 func quickdrawOnIC(client *Client, msgText string) {
 uid := client.Uid()
 
@@ -325,7 +359,7 @@ if !ok || !duel.drawSignaled || duel.resolved {
 qdState.mu.Unlock()
 return
 }
-if normaliseTypingPhrase(msgText) != duel.targetWord {
+if !duel.bulletMode && normaliseTypingPhrase(msgText) != duel.targetWord {
 qdState.mu.Unlock()
 client.SendServerMessage(fmt.Sprintf("🔫 Wrong word! Type: \"%s\"", duel.targetWord))
 return
