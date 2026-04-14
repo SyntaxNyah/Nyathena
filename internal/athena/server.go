@@ -690,7 +690,15 @@ func HandleWS(w http.ResponseWriter, r *http.Request) {
 	if checkGlobalNewIPRateLimit(ipid) {
 		if lockdownReject := serverLockdownRejection(ipid); lockdownReject {
 			logger.LogInfof("Connection from new IP %v rejected (server lockdown active)", ipid)
-			http.Error(w, lockdownJoinMsg, http.StatusServiceUnavailable)
+			c, wsErr := websocket.Accept(w, r, &websocket.AcceptOptions{OriginPatterns: []string{config.WebAOAllowedOrigin}})
+			if wsErr != nil {
+				logger.LogError(wsErr.Error())
+				http.Error(w, lockdownJoinMsg, http.StatusServiceUnavailable)
+				return
+			}
+			client := NewClient(websocket.NetConn(r.Context(), c, websocket.MessageText), ipid)
+			client.SendPacket("BD", lockdownJoinMsg)
+			client.conn.Close()
 		} else {
 			logger.LogInfof("Connection from new IP %v rejected (global new IP rate limit exceeded)", ipid)
 			http.Error(w, "Too many connections", http.StatusTooManyRequests)
