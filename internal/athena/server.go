@@ -49,6 +49,7 @@ import (
 const (
 	version         = "v1.0.2"
 	secondsPerHour  = int64(3600) // seconds in one hour; used for playtime-to-chips conversions
+	lockdownJoinMsg = "Server is in lockdown. Please try again later."
 )
 
 // encodedServerName is the AO2-encoded form of config.Name, pre-computed once
@@ -67,18 +68,18 @@ var (
 	charactersByName                       map[string]int // O(1) lookup: lowercase name → character ID
 	areas                                  []*area.Area
 	areaNames                              string
-	smPacket                               string // pre-built SM#<areas>#<music>#% packet; built once at startup
-	bgListStr                              string // pre-built background list for /bglist; zero alloc per call
+	smPacket                               string             // pre-built SM#<areas>#<music>#% packet; built once at startup
+	bgListStr                              string             // pre-built background list for /bglist; zero alloc per call
 	areaIndexMap                           map[*area.Area]int // pre-computed index lookup for O(1) getAreaIndex
 	roles                                  []permissions.Role
 	uids                                   *uidmanager.UidManager
 	players                                playercount.PlayerCount
 	enableDiscord                          bool
 	clients                                *ClientList = &ClientList{list: make(map[*Client]struct{}), uidIndex: make(map[int]*Client), ipidCounts: make(map[string]int)}
-	updatePlayers                                     = make(chan int)      // Updates the advertiser's player count.
-	advertDone                                        = make(chan struct{}) // Signals the advertiser to stop.
-	FatalError                                        = make(chan error)    // Signals that the server should stop after a fatal error.
-	RestartRequest                                    = make(chan struct{}) // Signals that the server should restart.
+	updatePlayers                                      = make(chan int)      // Updates the advertiser's player count.
+	advertDone                                         = make(chan struct{}) // Signals the advertiser to stop.
+	FatalError                                         = make(chan error)    // Signals that the server should stop after a fatal error.
+	RestartRequest                                     = make(chan struct{}) // Signals that the server should restart.
 
 	// connTracker tracks connection attempts per IP for connection-rate limiting.
 	connTracker = struct {
@@ -543,7 +544,12 @@ func (s *Server) ListenTCP() {
 			continue
 		}
 		if checkGlobalNewIPRateLimit(ipid) {
-			logger.LogInfof("Connection from new IP %v rejected (global new IP rate limit exceeded)", ipid)
+			if lockdownReject := serverLockdownRejection(ipid); lockdownReject {
+				logger.LogInfof("Connection from new IP %v rejected (server lockdown active)", ipid)
+				NewClient(conn, ipid).SendPacket("BD", lockdownJoinMsg)
+			} else {
+				logger.LogInfof("Connection from new IP %v rejected (global new IP rate limit exceeded)", ipid)
+			}
 			conn.Close()
 			continue
 		}
@@ -682,8 +688,13 @@ func HandleWS(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if checkGlobalNewIPRateLimit(ipid) {
-		logger.LogInfof("Connection from new IP %v rejected (global new IP rate limit exceeded)", ipid)
-		http.Error(w, "Too many connections", http.StatusTooManyRequests)
+		if lockdownReject := serverLockdownRejection(ipid); lockdownReject {
+			logger.LogInfof("Connection from new IP %v rejected (server lockdown active)", ipid)
+			http.Error(w, lockdownJoinMsg, http.StatusServiceUnavailable)
+		} else {
+			logger.LogInfof("Connection from new IP %v rejected (global new IP rate limit exceeded)", ipid)
+			http.Error(w, "Too many connections", http.StatusTooManyRequests)
+		}
 		return
 	}
 	if checkFirewallForIP(extractIP(rawIP), ipid) {
@@ -1383,7 +1394,6 @@ func checkNewIPIDModcallCooldown(ipid string) (bool, int) {
 	return false, 0
 }
 
-
 // checkGlobalNewIPRateLimit checks whether too many new unique IPs have arrived within
 // the configured time window. If so, connections from IPs that have never been seen before
 // are rejected to protect the server against distributed floods using many unique IPs.
@@ -1428,6 +1438,18 @@ func checkGlobalNewIPRateLimit(ipid string) bool {
 	globalNewIPTracker.timestamps = times
 
 	return len(times) >= config.GlobalNewIPRateLimit
+}
+
+// serverLockdownRejection reports whether this IPID is being rejected specifically
+// because server lockdown is active (and not merely due to the global new-IP cap).
+func serverLockdownRejection(ipid string) bool {
+	if !serverLockdown.Load() {
+		return false
+	}
+	ipFirstSeenTracker.mu.Lock()
+	_, known := ipFirstSeenTracker.times[ipid]
+	ipFirstSeenTracker.mu.Unlock()
+	return !known
 }
 
 // estimateJoinedLen returns the total byte length of all strings in ss joined by newlines.
