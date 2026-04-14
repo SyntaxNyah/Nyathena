@@ -1127,6 +1127,14 @@ func cmdTung(client *Client, args []string, usage string) {
 	}
 
 	disable := len(args) >= 2 && strings.EqualFold(args[1], "off")
+	// Resolve the char_id that corresponds to tungForcedCharacterName so that
+	// observers' IC packets have a matching char_name/char_id pair. WebAO
+	// validates these fields and renders the character invisible when they
+	// disagree. getCharacterID returns -1 when the character is not in the
+	// server list; -1 is safe because the char_id validation is skipped for
+	// forced iniswaps in the IC handler.
+	tungID := getCharacterID(tungForcedCharacterName)
+	tungIDStr := strconv.Itoa(tungID)
 	if strings.EqualFold(args[0], "global") {
 		targetArea := client.Area()
 		affected := 0
@@ -1135,11 +1143,19 @@ func cmdTung(client *Client, args []string, usage string) {
 				return
 			}
 			if disable {
+				origIDStr := c.CharIDStr()
 				c.SetForcedIniswapChar("", "")
 				writeToAll("PU", strconv.Itoa(c.Uid()), "1", c.CurrentCharacter())
+				// Restore the client's emote panel to their real character.
+				c.SendPacket("PV", "0", "CID", origIDStr)
 			} else {
-				c.SetForcedIniswapChar(tungForcedCharacterName, c.CharIDStr())
+				c.SetForcedIniswapChar(tungForcedCharacterName, tungIDStr)
 				writeToAll("PU", strconv.Itoa(c.Uid()), "1", tungForcedCharacterName)
+				// Switch the client's emote panel to the tung character so
+				// their buttons and animations update on their own screen too.
+				if tungID >= 0 {
+					c.SendPacket("PV", "0", "CID", tungIDStr)
+				}
 			}
 			affected++
 		})
@@ -1165,16 +1181,24 @@ func cmdTung(client *Client, args []string, usage string) {
 	}
 
 	if disable {
+		origIDStr := target.CharIDStr()
 		target.SetForcedIniswapChar("", "")
 		writeToAll("PU", strconv.Itoa(target.Uid()), "1", target.CurrentCharacter())
+		// Restore the target's emote panel to their real character.
+		target.SendPacket("PV", "0", "CID", origIDStr)
 		target.SendServerMessage("A moderator removed your tung effect.")
 		client.SendServerMessage(fmt.Sprintf("Removed tung effect from UID %d.", uid))
 		addToBuffer(client, "CMD", fmt.Sprintf("removed tung effect from UID %d", uid), true)
 		return
 	}
 
-	target.SetForcedIniswapChar(tungForcedCharacterName, target.CharIDStr())
+	target.SetForcedIniswapChar(tungForcedCharacterName, tungIDStr)
 	writeToAll("PU", strconv.Itoa(target.Uid()), "1", tungForcedCharacterName)
+	// Switch the target's own emote panel to the tung character so their
+	// buttons and animations update on their screen (full iniswap effect).
+	if tungID >= 0 {
+		target.SendPacket("PV", "0", "CID", tungIDStr)
+	}
 	target.SendServerMessage("A moderator made your character display as tung tung sahur.")
 	client.SendServerMessage(fmt.Sprintf("Applied tung effect to UID %d.", uid))
 	addToBuffer(client, "CMD", fmt.Sprintf("applied tung effect to UID %d", uid), true)

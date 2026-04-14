@@ -1211,9 +1211,23 @@ func (client *Client) ForcedIniswapInfo() (charName, charIDStr string) {
 	return
 }
 
+// IsTunged returns true when the client has an active moderator-forced iniswap
+// (i.e. a /tung effect). While true the client must not be allowed to change
+// characters on their own — the lock is lifted by calling
+// SetForcedIniswapChar("", "").
+func (client *Client) IsTunged() bool {
+	client.mu.Lock()
+	active := client.forcedIniswapChar != ""
+	client.mu.Unlock()
+	return active
+}
+
 // SetForcedIniswapChar sets (or clears) the moderator-forced iniswap character.
 // Pass charName="" and charIDStr="" to clear the effect.
 // Both fields are written under a single mutex acquisition.
+// Note: these are distinct from client.char / client.charIDStr (the real
+// character slot). CharIDStr() always returns the real slot regardless of
+// whether a forced iniswap is active.
 func (client *Client) SetForcedIniswapChar(charName, charIDStr string) {
 	client.mu.Lock()
 	client.forcedIniswapChar, client.forcedIniswapIDStr = charName, charIDStr
