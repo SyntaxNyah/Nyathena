@@ -547,7 +547,7 @@ func initCommands() {
 			handler:  cmdTung,
 			minArgs:  1,
 			usage:    "Usage: /tung <uid> [off] | /tung global [off]",
-			desc:     "Forces IC messages to use the character \"tung tung sahur\" for a UID or everyone server-wide.",
+			desc:     "Forces display as \"tung tung sahur\" for a UID or everyone in the current area.",
 			reqPerms: permissions.PermissionField["KICK"],
 			category: "moderation",
 		},

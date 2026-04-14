@@ -1112,8 +1112,9 @@ func cmdUnnameShuffle(client *Client, _ []string, _ string) {
 	addToBuffer(client, "CMD", fmt.Sprintf("restored shownames of %d players in area %v", len(resetTargets), targetArea.Name()), true)
 }
 
-// cmdTung forces iniswap-style IC output to "tung tung sahur" without occupying
-// any character slot (the actual character assignment is never changed).
+// cmdTung forces an iniswap-style display to "tung tung sahur" for a specific UID
+// or for all players in the current area. The player's actual character slot is
+// unchanged; only IC output and the playerlist display are overridden.
 // Usage:
 //   /tung <uid>
 //   /tung global
@@ -1138,9 +1139,10 @@ func cmdTung(client *Client, args []string, usage string) {
 
 	disable := len(args) >= 2 && strings.EqualFold(args[1], "off")
 	if strings.EqualFold(args[0], "global") {
+		targetArea := client.Area()
 		affected := 0
 		clients.ForEach(func(c *Client) {
-			if c.Uid() == -1 {
+			if c.Uid() == -1 || c.Area() != targetArea {
 				return
 			}
 			if disable {
@@ -1153,11 +1155,11 @@ func cmdTung(client *Client, args []string, usage string) {
 			affected++
 		})
 		if disable {
-			client.SendServerMessage(fmt.Sprintf("Removed tung effect from %d client(s) server-wide.", affected))
-			addToBuffer(client, "CMD", fmt.Sprintf("Removed tung effect from %d clients server-wide.", affected), true)
+			client.SendServerMessage(fmt.Sprintf("Removed tung effect from %d client(s) in this area.", affected))
+			addToBuffer(client, "CMD", fmt.Sprintf("Removed tung effect from %d clients in area %v.", affected, targetArea.Name()), true)
 		} else {
-			client.SendServerMessage(fmt.Sprintf("Applied tung effect to %d client(s) server-wide.", affected))
-			addToBuffer(client, "CMD", fmt.Sprintf("Applied tung effect to %d clients server-wide.", affected), true)
+			client.SendServerMessage(fmt.Sprintf("Applied tung effect to %d client(s) in this area.", affected))
+			addToBuffer(client, "CMD", fmt.Sprintf("Applied tung effect to %d clients in area %v.", affected, targetArea.Name()), true)
 		}
 		return
 	}
