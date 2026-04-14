@@ -41,12 +41,6 @@ import (
 // character, so no server-side character ID exists for it.
 const tungForcedCharacterName = "tung tung sahur"
 
-// tungCharIDStr is the char_id sent in IC packets for the forced iniswap.
-// AO2 clients use -1 to indicate a web-asset character that is not in the
-// server's character list; validation of char_id is skipped on the server
-// side when hasForcedIniswap is true.
-const tungCharIDStr = "-1"
-
 func cmdBan(client *Client, args []string, usage string) {
 	flags := flag.NewFlagSet("", 0)
 	flags.SetOutput(io.Discard)
@@ -1144,7 +1138,7 @@ func cmdTung(client *Client, args []string, usage string) {
 				c.SetForcedIniswapChar("", "")
 				writeToAll("PU", strconv.Itoa(c.Uid()), "1", c.CurrentCharacter())
 			} else {
-				c.SetForcedIniswapChar(tungForcedCharacterName, tungCharIDStr)
+				c.SetForcedIniswapChar(tungForcedCharacterName, c.CharIDStr())
 				writeToAll("PU", strconv.Itoa(c.Uid()), "1", tungForcedCharacterName)
 			}
 			affected++
@@ -1179,7 +1173,7 @@ func cmdTung(client *Client, args []string, usage string) {
 		return
 	}
 
-	target.SetForcedIniswapChar(tungForcedCharacterName, tungCharIDStr)
+	target.SetForcedIniswapChar(tungForcedCharacterName, target.CharIDStr())
 	writeToAll("PU", strconv.Itoa(target.Uid()), "1", tungForcedCharacterName)
 	target.SendServerMessage("A moderator made your character display as tung tung sahur.")
 	client.SendServerMessage(fmt.Sprintf("Applied tung effect to UID %d.", uid))
