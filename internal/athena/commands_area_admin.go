@@ -444,15 +444,24 @@ func cmdAreaKick(client *Client, args []string, _ string) {
 // Handles /kickother
 
 func cmdKickOther(client *Client, args []string, _ string) {
+	callerHDID := client.Hdid()
+	if callerHDID == "" {
+		client.SendServerMessage("Unable to kick ghost clients: your HDID is unavailable.")
+		return
+	}
+
 	var count int
-	for _, c := range getClientsByIpid(client.Ipid()) {
+	clients.ForEach(func(c *Client) {
 		if c == client {
-			continue
+			return
+		}
+		if c.Hdid() != callerHDID {
+			return
 		}
 		c.SendPacket("KK", "Ghost client kicked.")
 		c.conn.Close()
 		count++
-	}
+	})
 	client.SendServerMessage(fmt.Sprintf("Kicked %v ghost client(s).", count))
 	sendPlayerArup()
 }
@@ -1115,4 +1124,3 @@ func cmdAreaDesc(client *Client, args []string, _ string) {
 		addToBuffer(client, "CMD", fmt.Sprintf("Set area description: %v", newDesc), false)
 	}
 }
-
