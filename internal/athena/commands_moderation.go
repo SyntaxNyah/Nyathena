@@ -14,7 +14,6 @@ GNU Affero General Public License for more details.
 You should have received a copy of the GNU Affero General Public License
 along with this program.  If not, see <https://www.gnu.org/licenses/>. */
 
-
 package athena
 
 import (
@@ -625,7 +624,7 @@ func cmdPlayers(client *Client, args []string, _ string) {
 	all := flags.Bool("a", false, "")
 	flags.Parse(args)
 
-	isAdmin   := permissions.HasPermission(client.Perms(), permissions.PermissionField["ADMIN"])
+	isAdmin := permissions.HasPermission(client.Perms(), permissions.PermissionField["ADMIN"])
 	hasBanInfo := permissions.HasPermission(client.Perms(), permissions.PermissionField["BAN_INFO"])
 	targetArea := client.Area()
 
@@ -1116,10 +1115,11 @@ func cmdUnnameShuffle(client *Client, _ []string, _ string) {
 // IC packet's char_name and char_id fields are overridden so every observer's
 // client loads assets from the tung tung sahur folder.
 // Usage:
-//   /tung <uid>
-//   /tung global
-//   /tung <uid> off
-//   /tung global off
+//
+//	/tung <uid>
+//	/tung global
+//	/tung <uid> off
+//	/tung global off
 func cmdTung(client *Client, args []string, usage string) {
 	if len(args) == 0 {
 		client.SendServerMessage("Not enough arguments:\n" + usage)
@@ -1206,10 +1206,65 @@ func cmdTung(client *Client, args []string, usage string) {
 
 // cmdUntung is a convenience alias for disabling /tung by UID or globally.
 // Usage:
-//   /untung <uid>
-//   /untung global
+//
+//	/untung <uid>
+//	/untung global
 func cmdUntung(client *Client, args []string, _ string) {
 	cmdTung(client, []string{args[0], "off"}, "Usage: /tung <uid> [off] | /tung global [off]")
+}
+
+// cmdAreaIniswap forces everyone in the caller's current area to iniswap as a
+// moderator-specified character from the server character list, or removes that
+// forced iniswap when called with "off".
+// Usage:
+//
+//	/areainiswap <character name>
+//	/areainiswap off
+func cmdAreaIniswap(client *Client, args []string, usage string) {
+	if len(args) == 0 {
+		client.SendServerMessage("Not enough arguments:\n" + usage)
+		return
+	}
+
+	targetArea := client.Area()
+	if strings.EqualFold(args[0], "off") {
+		affected := 0
+		clients.ForEach(func(c *Client) {
+			if c.Uid() == -1 || c.Area() != targetArea {
+				return
+			}
+			origIDStr := c.CharIDStr()
+			c.SetForcedIniswapChar("", "")
+			writeToAll("PU", strconv.Itoa(c.Uid()), "1", c.CurrentCharacter())
+			c.SendPacket("PV", "0", "CID", origIDStr)
+			affected++
+		})
+		client.SendServerMessage(fmt.Sprintf("Removed area iniswap effect from %d client(s).", affected))
+		addToBuffer(client, "CMD", fmt.Sprintf("Removed area iniswap effect from %d clients in area %v.", affected, targetArea.Name()), true)
+		return
+	}
+
+	charName := strings.TrimSpace(strings.Join(args, " "))
+	charID := getCharacterID(charName)
+	if charID < 0 {
+		client.SendServerMessage(fmt.Sprintf("Character %q was not found in the character list.", charName))
+		return
+	}
+	charName = characters[charID]
+	charIDStr := strconv.Itoa(charID)
+
+	affected := 0
+	clients.ForEach(func(c *Client) {
+		if c.Uid() == -1 || c.Area() != targetArea {
+			return
+		}
+		c.SetForcedIniswapChar(charName, charIDStr)
+		writeToAll("PU", strconv.Itoa(c.Uid()), "1", charName)
+		c.SendPacket("PV", "0", "CID", charIDStr)
+		affected++
+	})
+	client.SendServerMessage(fmt.Sprintf("Applied area iniswap as %q to %d client(s).", charName, affected))
+	addToBuffer(client, "CMD", fmt.Sprintf("Applied area iniswap as %q to %d clients in area %v.", charName, affected, targetArea.Name()), true)
 }
 
 // cmdUntorment removes an IPID from the automod torment list.
@@ -1227,7 +1282,6 @@ func cmdUntorment(client *Client, args []string, usage string) {
 	client.SendServerMessage(fmt.Sprintf("Removed %v from the torment list.", ipid))
 	addToBuffer(client, "CMD", fmt.Sprintf("removed IPID %v from torment list", ipid), true)
 }
-
 
 // cmdLockdown toggles server lockdown mode, or manages the lockdown whitelist.
 // Subcommands:
@@ -1605,65 +1659,65 @@ func cmdCharCurse(client *Client, args []string, usage string) {
 // messages are no longer shown to the caller. The ignore persists across
 // reconnections. The target is warned without revealing the caller's IPID.
 func cmdIgnore(client *Client, args []string, usage string) {
-uid, err := strconv.Atoi(args[0])
-if err != nil {
-client.SendServerMessage("Invalid UID.")
-return
-}
-target, err := getClientByUid(uid)
-if err != nil {
-client.SendServerMessage("Client not found.")
-return
-}
-if target == client {
-client.SendServerMessage("You cannot ignore yourself.")
-return
-}
+	uid, err := strconv.Atoi(args[0])
+	if err != nil {
+		client.SendServerMessage("Invalid UID.")
+		return
+	}
+	target, err := getClientByUid(uid)
+	if err != nil {
+		client.SendServerMessage("Client not found.")
+		return
+	}
+	if target == client {
+		client.SendServerMessage("You cannot ignore yourself.")
+		return
+	}
 
-targetIPID := target.Ipid()
-if client.IgnoresIPID(targetIPID) {
-client.SendServerMessage("You are already permanently ignoring that user.")
-return
-}
+	targetIPID := target.Ipid()
+	if client.IgnoresIPID(targetIPID) {
+		client.SendServerMessage("You are already permanently ignoring that user.")
+		return
+	}
 
-client.AddIgnoredIPID(targetIPID)
-if err := db.AddIgnoredIP(client.Ipid(), targetIPID); err != nil {
-logger.LogErrorf("Failed to persist ignore for %v -> %v: %v", client.Ipid(), targetIPID, err)
-}
+	client.AddIgnoredIPID(targetIPID)
+	if err := db.AddIgnoredIP(client.Ipid(), targetIPID); err != nil {
+		logger.LogErrorf("Failed to persist ignore for %v -> %v: %v", client.Ipid(), targetIPID, err)
+	}
 
-// Warn the target without revealing the ignorer's IPID.
-target.SendServerMessage("⚠️ Warning: You have been permanently ignored by another user. This will persist across your reconnections.")
+	// Warn the target without revealing the ignorer's IPID.
+	target.SendServerMessage("⚠️ Warning: You have been permanently ignored by another user. This will persist across your reconnections.")
 
-client.SendServerMessage(fmt.Sprintf("You are now permanently ignoring user [%d]. This will persist across their reconnections.", uid))
-addToBuffer(client, "CMD", fmt.Sprintf("permanently ignored UID %d (IPID: %v)", uid, targetIPID), false)
+	client.SendServerMessage(fmt.Sprintf("You are now permanently ignoring user [%d]. This will persist across their reconnections.", uid))
+	addToBuffer(client, "CMD", fmt.Sprintf("permanently ignored UID %d (IPID: %v)", uid, targetIPID), false)
 }
 
 // cmdUnignore removes a permanent IPID-based ignore for the given UID.
 func cmdUnignore(client *Client, args []string, usage string) {
-uid, err := strconv.Atoi(args[0])
-if err != nil {
-client.SendServerMessage("Invalid UID.")
-return
-}
-target, err := getClientByUid(uid)
-if err != nil {
-client.SendServerMessage("Client not found.")
-return
-}
+	uid, err := strconv.Atoi(args[0])
+	if err != nil {
+		client.SendServerMessage("Invalid UID.")
+		return
+	}
+	target, err := getClientByUid(uid)
+	if err != nil {
+		client.SendServerMessage("Client not found.")
+		return
+	}
 
-targetIPID := target.Ipid()
-if !client.IgnoresIPID(targetIPID) {
-client.SendServerMessage("You are not ignoring that user.")
-return
-}
+	targetIPID := target.Ipid()
+	if !client.IgnoresIPID(targetIPID) {
+		client.SendServerMessage("You are not ignoring that user.")
+		return
+	}
 
-client.RemoveIgnoredIPID(targetIPID)
-if err := db.RemoveIgnoredIP(client.Ipid(), targetIPID); err != nil {
-logger.LogErrorf("Failed to remove persistent ignore for %v -> %v: %v", client.Ipid(), targetIPID, err)
-}
+	client.RemoveIgnoredIPID(targetIPID)
+	if err := db.RemoveIgnoredIP(client.Ipid(), targetIPID); err != nil {
+		logger.LogErrorf("Failed to remove persistent ignore for %v -> %v: %v", client.Ipid(), targetIPID, err)
+	}
 
-client.SendServerMessage(fmt.Sprintf("Unignored user [%d].", uid))
-addToBuffer(client, "CMD", fmt.Sprintf("unignored UID %d (IPID: %v)", uid, targetIPID), false)
+	client.SendServerMessage(fmt.Sprintf("Unignored user [%d].", uid))
+	addToBuffer(client, "CMD", fmt.Sprintf("unignored UID %d (IPID: %v)", uid, targetIPID), false)
 }
 
 // cmdModnote manages per-IPID freeform moderator notes.

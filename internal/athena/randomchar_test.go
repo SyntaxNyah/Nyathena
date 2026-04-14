@@ -171,6 +171,20 @@ func TestTungAndUntungCommandsRegistered(t *testing.T) {
 	if untungCmd.reqPerms != permissions.PermissionField["KICK"] {
 		t.Errorf("untung reqPerms = %v, want KICK (%v)", untungCmd.reqPerms, permissions.PermissionField["KICK"])
 	}
+
+	areaIniswapCmd, ok := Commands["areainiswap"]
+	if !ok {
+		t.Fatal("areainiswap command is not registered in Commands map")
+	}
+	if areaIniswapCmd.handler == nil {
+		t.Error("areainiswap command has a nil handler")
+	}
+	if areaIniswapCmd.minArgs != 1 {
+		t.Errorf("areainiswap minArgs = %d, want 1", areaIniswapCmd.minArgs)
+	}
+	if areaIniswapCmd.reqPerms != permissions.PermissionField["KICK"] {
+		t.Errorf("areainiswap reqPerms = %v, want KICK (%v)", areaIniswapCmd.reqPerms, permissions.PermissionField["KICK"])
+	}
 }
 
 // TestForceRandomCharTargetsUID verifies the UID-lookup infrastructure that

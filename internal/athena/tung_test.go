@@ -17,16 +17,16 @@ import (
 
 // capturingConn is a net.Conn that records every Write call for inspection.
 type capturingConn struct {
-	mu   sync.Mutex
-	buf  bytes.Buffer
+	mu  sync.Mutex
+	buf bytes.Buffer
 }
 
-func (c *capturingConn) Read(_ []byte) (int, error)        { return 0, io.EOF }
-func (c *capturingConn) Close() error                      { return nil }
-func (c *capturingConn) LocalAddr() net.Addr               { return testAddr("local") }
-func (c *capturingConn) RemoteAddr() net.Addr              { return testAddr("remote") }
-func (c *capturingConn) SetDeadline(_ time.Time) error     { return nil }
-func (c *capturingConn) SetReadDeadline(_ time.Time) error { return nil }
+func (c *capturingConn) Read(_ []byte) (int, error)         { return 0, io.EOF }
+func (c *capturingConn) Close() error                       { return nil }
+func (c *capturingConn) LocalAddr() net.Addr                { return testAddr("local") }
+func (c *capturingConn) RemoteAddr() net.Addr               { return testAddr("remote") }
+func (c *capturingConn) SetDeadline(_ time.Time) error      { return nil }
+func (c *capturingConn) SetReadDeadline(_ time.Time) error  { return nil }
 func (c *capturingConn) SetWriteDeadline(_ time.Time) error { return nil }
 
 func (c *capturingConn) Write(p []byte) (int, error) {
@@ -271,5 +271,55 @@ func TestTungLocksCharacterChange(t *testing.T) {
 	pktChangeChar(target, p)
 	if target.CharID() != 2 {
 		t.Errorf("untunged client should be able to change character; char ID = %d, want 2", target.CharID())
+	}
+}
+
+func TestAreaIniswapAppliesAndClearsInCurrentArea(t *testing.T) {
+	origChars := characters
+	t.Cleanup(func() { characters = origChars })
+	characters = []string{"Phoenix Wright", "Miles Edgeworth", "Maya Fey"}
+
+	origClients := clients
+	t.Cleanup(func() { clients = origClients })
+	clients = &ClientList{list: make(map[*Client]struct{}), uidIndex: make(map[int]*Client), ipidCounts: make(map[string]int)}
+
+	adminArea := area.NewArea(area.AreaData{}, len(characters), 10, area.EviAny)
+	otherArea := area.NewArea(area.AreaData{}, len(characters), 10, area.EviAny)
+
+	admin := &Client{conn: &testConn{}, uid: 1, pair: ClientPairInfo{wanted_id: -1}}
+	admin.SetCharID(0)
+	admin.SetArea(adminArea)
+
+	inArea := &Client{conn: &testConn{}, uid: 2, pair: ClientPairInfo{wanted_id: -1}}
+	inArea.SetCharID(1)
+	inArea.SetArea(adminArea)
+
+	outArea := &Client{conn: &testConn{}, uid: 3, pair: ClientPairInfo{wanted_id: -1}}
+	outArea.SetCharID(2)
+	outArea.SetArea(otherArea)
+
+	for _, c := range []*Client{admin, inArea, outArea} {
+		clients.AddClient(c)
+		clients.RegisterUID(c)
+	}
+
+	cmdAreaIniswap(admin, []string{"Maya", "Fey"}, "Usage: /areainiswap <character name> | /areainiswap off")
+
+	wantID := strconv.Itoa(getCharacterID("Maya Fey"))
+	for _, c := range []*Client{admin, inArea} {
+		gotName, gotID := c.ForcedIniswapInfo()
+		if gotName != "Maya Fey" || gotID != wantID {
+			t.Fatalf("uid %d forced iniswap = (%q,%q), want (%q,%q)", c.Uid(), gotName, gotID, "Maya Fey", wantID)
+		}
+	}
+	if gotName, gotID := outArea.ForcedIniswapInfo(); gotName != "" || gotID != "" {
+		t.Fatalf("out-of-area client should be unchanged, got (%q,%q)", gotName, gotID)
+	}
+
+	cmdAreaIniswap(admin, []string{"off"}, "Usage: /areainiswap <character name> | /areainiswap off")
+	for _, c := range []*Client{admin, inArea} {
+		if gotName, gotID := c.ForcedIniswapInfo(); gotName != "" || gotID != "" {
+			t.Fatalf("uid %d forced iniswap should be cleared, got (%q,%q)", c.Uid(), gotName, gotID)
+		}
 	}
 }
