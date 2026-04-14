@@ -213,7 +213,8 @@ type Client struct {
 	possessing         int         // UID of the client being possessed (-1 if not possessing anyone)
 	possessedPos       string      // Position of the possessed target (saved at time of possession)
 	forcedShowname     string      // Showname forced by a moderator ("" if none)
-	forcedIniswapChar  string      // Character name forced for iniswap-style IC output ("" if none)
+	forcedIniswapChar   string // Character name forced for iniswap-style IC output ("" = none), protected by mu
+	forcedIniswapIDStr  string // Pre-computed strconv.Itoa(charID) for above ("" = none), protected by mu
 	connectedAt        time.Time   // Time the client joined the server (uid assigned); zero if not yet joined
 	jailAreaID         int         // Area index where this client is jailed; -1 = no specific jail area
 	hidden             bool        // Whether the client is hidden from the player list and area counts
@@ -1200,18 +1201,22 @@ func (client *Client) SetForcedShowname(s string) {
 	client.mu.Unlock()
 }
 
-// ForcedIniswapChar returns the character name forced by a moderator for
-// iniswap-style IC output, or "" if none is set.
-func (client *Client) ForcedIniswapChar() string {
+// ForcedIniswapInfo returns the moderator-forced iniswap character name and its
+// pre-computed char-ID string. Both values are read under a single mutex
+// acquisition. Returns two empty strings when no forced iniswap is active.
+func (client *Client) ForcedIniswapInfo() (charName, charIDStr string) {
 	client.mu.Lock()
-	defer client.mu.Unlock()
-	return client.forcedIniswapChar
+	charName, charIDStr = client.forcedIniswapChar, client.forcedIniswapIDStr
+	client.mu.Unlock()
+	return
 }
 
-// SetForcedIniswapChar sets the moderator-forced iniswap character name.
-func (client *Client) SetForcedIniswapChar(s string) {
+// SetForcedIniswapChar sets (or clears) the moderator-forced iniswap character.
+// Pass charName="" and charIDStr="" to clear the effect.
+// Both fields are written under a single mutex acquisition.
+func (client *Client) SetForcedIniswapChar(charName, charIDStr string) {
 	client.mu.Lock()
-	client.forcedIniswapChar = s
+	client.forcedIniswapChar, client.forcedIniswapIDStr = charName, charIDStr
 	client.mu.Unlock()
 }
 

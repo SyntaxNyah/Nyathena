@@ -117,18 +117,21 @@ func TestForcedIniswapCharState(t *testing.T) {
 		pair:       ClientPairInfo{wanted_id: -1},
 	}
 
-	if got := client.ForcedIniswapChar(); got != "" {
-		t.Fatalf("expected default forced iniswap char to be empty, got %q", got)
+	// Default: both fields should be empty.
+	if name, idStr := client.ForcedIniswapInfo(); name != "" || idStr != "" {
+		t.Fatalf("expected default forced iniswap info to be empty, got name=%q idStr=%q", name, idStr)
 	}
 
-	client.SetForcedIniswapChar("tung tung sahur")
-	if got := client.ForcedIniswapChar(); got != "tung tung sahur" {
-		t.Fatalf("expected forced iniswap char to be set, got %q", got)
+	// Set: both name and pre-computed ID string should be stored.
+	client.SetForcedIniswapChar("tung tung sahur", "42")
+	if name, idStr := client.ForcedIniswapInfo(); name != "tung tung sahur" || idStr != "42" {
+		t.Fatalf("expected forced iniswap info to be set, got name=%q idStr=%q", name, idStr)
 	}
 
-	client.SetForcedIniswapChar("")
-	if got := client.ForcedIniswapChar(); got != "" {
-		t.Fatalf("expected forced iniswap char to be cleared, got %q", got)
+	// Clear: both fields should return to empty.
+	client.SetForcedIniswapChar("", "")
+	if name, idStr := client.ForcedIniswapInfo(); name != "" || idStr != "" {
+		t.Fatalf("expected forced iniswap info to be cleared, got name=%q idStr=%q", name, idStr)
 	}
 }
 

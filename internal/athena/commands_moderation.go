@@ -38,6 +38,11 @@ import (
 
 const tungForcedCharacterName = "tung tung sahur"
 
+// tungCachedCharIDStr is the pre-computed strconv.Itoa of tungForcedCharacterName's
+// character ID. Set once on the first successful /tung invocation and reused
+// on every subsequent apply, avoiding repeated strconv.Itoa calls.
+var tungCachedCharIDStr string
+
 func cmdBan(client *Client, args []string, usage string) {
 	flags := flag.NewFlagSet("", 0)
 	flags.SetOutput(io.Discard)
@@ -1107,21 +1112,28 @@ func cmdUnnameShuffle(client *Client, _ []string, _ string) {
 	addToBuffer(client, "CMD", fmt.Sprintf("restored shownames of %d players in area %v", len(resetTargets), targetArea.Name()), true)
 }
 
-// cmdTung forces iniswap-style IC output to "tung tung sahur".
+// cmdTung forces iniswap-style IC output to "tung tung sahur" without occupying
+// any character slot (the actual character assignment is never changed).
 // Usage:
 //   /tung <uid>
 //   /tung global
 //   /tung <uid> off
 //   /tung global off
 func cmdTung(client *Client, args []string, usage string) {
-	if getCharacterID(tungForcedCharacterName) == -1 {
-		client.SendServerMessage(fmt.Sprintf("Character %q was not found in the server character list.", tungForcedCharacterName))
-		return
-	}
-
 	if len(args) == 0 {
 		client.SendServerMessage("Not enough arguments:\n" + usage)
 		return
+	}
+
+	// Resolve and cache the character ID string on first use. The character list
+	// is static after server startup, so this only runs once per server session.
+	if tungCachedCharIDStr == "" {
+		id := getCharacterID(tungForcedCharacterName)
+		if id == -1 {
+			client.SendServerMessage(fmt.Sprintf("Character %q was not found in the server character list.", tungForcedCharacterName))
+			return
+		}
+		tungCachedCharIDStr = strconv.Itoa(id)
 	}
 
 	disable := len(args) >= 2 && strings.EqualFold(args[1], "off")
@@ -1133,9 +1145,9 @@ func cmdTung(client *Client, args []string, usage string) {
 				return
 			}
 			if disable {
-				c.SetForcedIniswapChar("")
+				c.SetForcedIniswapChar("", "")
 			} else {
-				c.SetForcedIniswapChar(tungForcedCharacterName)
+				c.SetForcedIniswapChar(tungForcedCharacterName, tungCachedCharIDStr)
 			}
 			affected++
 		})
@@ -1161,14 +1173,14 @@ func cmdTung(client *Client, args []string, usage string) {
 	}
 
 	if disable {
-		target.SetForcedIniswapChar("")
+		target.SetForcedIniswapChar("", "")
 		target.SendServerMessage("A moderator removed your tung effect.")
 		client.SendServerMessage(fmt.Sprintf("Removed tung effect from UID %d.", uid))
 		addToBuffer(client, "CMD", fmt.Sprintf("removed tung effect from UID %d", uid), true)
 		return
 	}
 
-	target.SetForcedIniswapChar(tungForcedCharacterName)
+	target.SetForcedIniswapChar(tungForcedCharacterName, tungCachedCharIDStr)
 	target.SendServerMessage("A moderator made your IC messages use tung tung sahur.")
 	client.SendServerMessage(fmt.Sprintf("Applied tung effect to UID %d.", uid))
 	addToBuffer(client, "CMD", fmt.Sprintf("applied tung effect to UID %d", uid), true)

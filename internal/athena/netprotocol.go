@@ -308,18 +308,14 @@ func pktIC(client *Client, p *packet.Packet) {
 	}
 
 	// If a moderator has forced an iniswap character for this client, override
-	// the outgoing IC character name/id for this message.
-	if forcedChar := client.ForcedIniswapChar(); forcedChar != "" {
-		if forcedCharID := getCharacterID(forcedChar); forcedCharID != -1 {
-			hasForcedIniswap = true
-			ownCharName = forcedChar
-			args[2] = forcedChar
-			args[8] = strconv.Itoa(forcedCharID)
-		} else {
-			// Character no longer exists in character list; clear stale force.
-			logger.LogInfof("Clearing stale forced iniswap character %q for UID %d (IPID:%v).", forcedChar, client.Uid(), client.Ipid())
-			client.SetForcedIniswapChar("")
-		}
+	// the outgoing IC character name and ID. Both values are pre-computed at
+	// command invocation so this hot path performs only a single mutex
+	// acquisition and two string assignments — no map lookup or int conversion.
+	if charName, charIDStr := client.ForcedIniswapInfo(); charName != "" {
+		hasForcedIniswap = true
+		ownCharName = charName
+		args[2] = charName
+		args[8] = charIDStr
 	}
 
 	// Track if we're in fullpossess mode for validation adjustments
