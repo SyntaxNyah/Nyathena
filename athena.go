@@ -31,9 +31,8 @@ import (
 )
 
 var (
-	configFlag   = flag.String("c", "config", "path to config directory")
-	netDebugFlag = flag.Bool("netdebug", false, "log raw network traffic")
-	cliFlag      = flag.Bool("nocli", false, "disables listening for commands on stdin")
+	configFlag = flag.String("c", "config", "path to config directory")
+	cliFlag    = flag.Bool("nocli", false, "disables listening for commands on stdin")
 )
 
 func main() {
@@ -54,8 +53,6 @@ func main() {
 	}
 
 	switch config.LogLevel {
-	case "debug":
-		logger.CurrentLevel = logger.Debug
 	case "info":
 		logger.CurrentLevel = logger.Info
 	case "warning":
@@ -67,7 +64,6 @@ func main() {
 	}
 	logger.LogStdOut = sliceutil.ContainsString(config.LogMethods, "stdout")
 	logger.LogFile = sliceutil.ContainsString(config.LogMethods, "log_file")
-	logger.DebugNetwork = *netDebugFlag
 	db.DBPath = settings.ConfigPath + "/athena.db"
 
 	err = athena.InitServer(config)
@@ -79,11 +75,11 @@ func main() {
 	logger.LogInfo("Started server.")
 	go athena.ListenTCP()
 	go athena.StartDiscordBot()
-	
+
 	// When both WS and WSS are enabled with the same port (common in reverse proxy setups),
 	// only start one listener to avoid "address already in use" error
 	if config.EnableWS && config.EnableWSS && config.WSPort == config.WSSPort {
-		logger.LogDebugf("WS and WSS using same port %d, starting single listener", config.WSPort)
+		logger.LogInfof("WS and WSS using same port %d, starting single listener", config.WSPort)
 		go athena.ListenWS()
 	} else {
 		if config.EnableWS {

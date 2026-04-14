@@ -30,8 +30,7 @@ import (
 type LogLevel int
 
 const (
-	Debug LogLevel = iota
-	Info
+	Info LogLevel = iota
 	Warning
 	Error
 	Fatal
@@ -39,8 +38,7 @@ const (
 
 // levelToString maps a LogLevel to its display name.
 // Indexed by the iota value so lookup is O(1) with no hash overhead.
-var levelToString = [5]string{
-	Debug:   "DEBUG",
+var levelToString = [4]string{
 	Info:    "INFO",
 	Warning: "WARN",
 	Error:   "ERROR",
@@ -51,9 +49,8 @@ var (
 	LogPath              string
 	LogStdOut            bool
 	LogFile              bool
-	CurrentLevel         LogLevel
+	CurrentLevel         LogLevel = Info
 	outputLock           sync.Mutex
-	DebugNetwork         bool
 	EnableAreaLogging    bool
 	EnableNetworkLogging bool
 	areaLogLocks         sync.Map // Map of area names to their respective locks
@@ -100,19 +97,6 @@ func log(level LogLevel, s string) {
 	if LogFile {
 		WriteLog(msg)
 	}
-}
-
-// LogDebug prints a debug message to stdout. Arguments are handled in the manner of fmt.Print.
-func LogDebug(s string) {
-	log(Debug, s)
-}
-
-// LogDebugf prints a debug message to stdout. Arguments are handled in the manner of fmt.Printf.
-func LogDebugf(format string, v ...interface{}) {
-	if Debug < CurrentLevel {
-		return
-	}
-	log(Debug, fmt.Sprintf(format, v...))
 }
 
 // LogInfo prints an info message to stdout. Arguments are handled in the manner of fmt.Print.

@@ -491,7 +491,7 @@ max_connection_goroutines = 0
 log_buffer_size = 150
 
 # Sets the log level. Events of lower levels will not be logged.
-# Valid levels: debug, info, warning, error, fatal
+# Valid levels: info, warning, error, fatal
 log_level = "info"
 
 # Sets the path to the log directory.

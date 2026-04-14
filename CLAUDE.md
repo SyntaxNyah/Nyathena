@@ -78,7 +78,6 @@ make release      # goreleaser (requires goreleaser installed)
 ./bin/athena                          # config dir: ./config
 ./bin/athena -c /path/to/config       # custom config directory
 ./bin/athena -nocli                   # disable stdin CLI
-./bin/athena -netdebug                # log raw network traffic
 ```
 
 **First run:** after build, copy `config_sample/` to `config/`, edit config files, then launch and run `mkusr` in the CLI to create the first moderator account.
