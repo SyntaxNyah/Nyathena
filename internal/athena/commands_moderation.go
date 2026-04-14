@@ -1105,6 +1105,74 @@ func cmdUnnameShuffle(client *Client, _ []string, _ string) {
 	addToBuffer(client, "CMD", fmt.Sprintf("restored shownames of %d players in area %v", len(resetTargets), targetArea.Name()), true)
 }
 
+// cmdTung forces iniswap-style IC output to "tung tung sahur".
+// Usage:
+//   /tung <uid>
+//   /tung global
+//   /tung <uid> off
+//   /tung global off
+func cmdTung(client *Client, args []string, usage string) {
+	const tungChar = "tung tung sahur"
+	if getCharacterID(tungChar) == -1 {
+		client.SendServerMessage(fmt.Sprintf("Character %q was not found in the server character list.", tungChar))
+		return
+	}
+
+	if len(args) == 0 {
+		client.SendServerMessage("Not enough arguments:\n" + usage)
+		return
+	}
+
+	disable := len(args) >= 2 && strings.EqualFold(args[1], "off")
+	if strings.EqualFold(args[0], "global") {
+		targetArea := client.Area()
+		affected := 0
+		clients.ForEach(func(c *Client) {
+			if c.Uid() == -1 || c.Area() != targetArea {
+				return
+			}
+			if disable {
+				c.SetForcedIniswapChar("")
+			} else {
+				c.SetForcedIniswapChar(tungChar)
+			}
+			affected++
+		})
+		if disable {
+			client.SendServerMessage(fmt.Sprintf("Removed tung effect from %d client(s) in this area.", affected))
+			addToBuffer(client, "CMD", fmt.Sprintf("Removed tung effect from %d clients in area %v.", affected, targetArea.Name()), true)
+		} else {
+			client.SendServerMessage(fmt.Sprintf("Applied tung effect to %d client(s) in this area.", affected))
+			addToBuffer(client, "CMD", fmt.Sprintf("Applied tung effect to %d clients in area %v.", affected, targetArea.Name()), true)
+		}
+		return
+	}
+
+	uid, err := strconv.Atoi(args[0])
+	if err != nil {
+		client.SendServerMessage("Invalid UID.")
+		return
+	}
+	target, err := getClientByUid(uid)
+	if err != nil {
+		client.SendServerMessage("Invalid UID.")
+		return
+	}
+
+	if disable {
+		target.SetForcedIniswapChar("")
+		target.SendServerMessage("A moderator removed your tung effect.")
+		client.SendServerMessage(fmt.Sprintf("Removed tung effect from UID %d.", uid))
+		addToBuffer(client, "CMD", fmt.Sprintf("removed tung effect from UID %d", uid), true)
+		return
+	}
+
+	target.SetForcedIniswapChar(tungChar)
+	target.SendServerMessage("A moderator made your IC messages use tung tung sahur.")
+	client.SendServerMessage(fmt.Sprintf("Applied tung effect to UID %d.", uid))
+	addToBuffer(client, "CMD", fmt.Sprintf("applied tung effect to UID %d", uid), true)
+}
+
 // cmdUntorment removes an IPID from the automod torment list.
 func cmdUntorment(client *Client, args []string, usage string) {
 	ipid := strings.TrimSpace(args[0])
