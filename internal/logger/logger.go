@@ -49,7 +49,7 @@ var (
 	LogPath              string
 	LogStdOut            bool
 	LogFile              bool
-	CurrentLevel         = Info
+	CurrentLevel         LogLevel = Info
 	outputLock           sync.Mutex
 	EnableAreaLogging    bool
 	EnableNetworkLogging bool
