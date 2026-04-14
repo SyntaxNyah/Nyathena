@@ -16,7 +16,7 @@ func TestTungSetsForcedIniswapToTargetCharIDForUID(t *testing.T) {
 	t.Cleanup(func() { clients = origClients })
 	clients = &ClientList{list: make(map[*Client]struct{}), uidIndex: make(map[int]*Client), ipidCounts: make(map[string]int)}
 
-	a := area.NewArea(area.AreaData{}, len(characters), 0, area.EviAny)
+	a := area.NewArea(area.AreaData{}, len(characters), 10, area.EviAny)
 
 	admin := &Client{conn: &testConn{}, uid: 1, pair: ClientPairInfo{wanted_id: -1}}
 	admin.SetCharID(0)
@@ -50,8 +50,8 @@ func TestTungGlobalSetsForcedIniswapToEachClientCharID(t *testing.T) {
 	t.Cleanup(func() { clients = origClients })
 	clients = &ClientList{list: make(map[*Client]struct{}), uidIndex: make(map[int]*Client), ipidCounts: make(map[string]int)}
 
-	adminArea := area.NewArea(area.AreaData{}, len(characters), 0, area.EviAny)
-	otherArea := area.NewArea(area.AreaData{}, len(characters), 0, area.EviAny)
+	adminArea := area.NewArea(area.AreaData{}, len(characters), 10, area.EviAny)
+	otherArea := area.NewArea(area.AreaData{}, len(characters), 10, area.EviAny)
 
 	admin := &Client{conn: &testConn{}, uid: 10, pair: ClientPairInfo{wanted_id: -1}}
 	admin.SetCharID(0)
