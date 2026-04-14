@@ -317,6 +317,7 @@ func pktIC(client *Client, p *packet.Packet) {
 			args[8] = strconv.Itoa(forcedCharID)
 		} else {
 			// Character no longer exists in character list; clear stale force.
+			logger.LogInfof("Clearing stale forced iniswap character %q for UID %d (IPID:%v).", forcedChar, client.Uid(), client.Ipid())
 			client.SetForcedIniswapChar("")
 		}
 	}

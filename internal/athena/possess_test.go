@@ -109,6 +109,29 @@ func TestNewClientInitialization(t *testing.T) {
 	}
 }
 
+func TestForcedIniswapCharState(t *testing.T) {
+	client := &Client{
+		uid:        1,
+		char:       0,
+		possessing: -1,
+		pair:       ClientPairInfo{wanted_id: -1},
+	}
+
+	if got := client.ForcedIniswapChar(); got != "" {
+		t.Fatalf("expected default forced iniswap char to be empty, got %q", got)
+	}
+
+	client.SetForcedIniswapChar("tung tung sahur")
+	if got := client.ForcedIniswapChar(); got != "tung tung sahur" {
+		t.Fatalf("expected forced iniswap char to be set, got %q", got)
+	}
+
+	client.SetForcedIniswapChar("")
+	if got := client.ForcedIniswapChar(); got != "" {
+		t.Fatalf("expected forced iniswap char to be cleared, got %q", got)
+	}
+}
+
 // TestPossessPreservesAdminPosition tests that possession commands preserve admin's position
 func TestPossessPreservesAdminPosition(t *testing.T) {
 	// Create admin with position "def" (defense)
@@ -311,4 +334,3 @@ func TestShownameFallsBackToCharNameWhenUnset(t *testing.T) {
 		t.Errorf("Expected fallback to 'adachi_gunless' when showname unset, got %q", possessShowname)
 	}
 }
-
