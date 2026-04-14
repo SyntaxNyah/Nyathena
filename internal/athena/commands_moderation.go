@@ -39,7 +39,7 @@ import (
 // tungForcedCharacterName is the asset folder name for the tung tung sahur character
 // hosted on the web asset database (miku.pizza). This is not a server-list
 // character, so no server-side character ID exists for it.
-const tungForcedCharacterName = "tttomoetachibana"
+const tungForcedCharacterName = "tung tung sahur"
 
 // tungCharIDStr is the char_id sent in IC packets for the forced iniswap.
 // AO2 clients use -1 to indicate a web-asset character that is not in the
