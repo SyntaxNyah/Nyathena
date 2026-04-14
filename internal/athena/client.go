@@ -1214,6 +1214,9 @@ func (client *Client) ForcedIniswapInfo() (charName, charIDStr string) {
 // SetForcedIniswapChar sets (or clears) the moderator-forced iniswap character.
 // Pass charName="" and charIDStr="" to clear the effect.
 // Both fields are written under a single mutex acquisition.
+// Note: these are distinct from client.char / client.charIDStr (the real
+// character slot). CharIDStr() always returns the real slot regardless of
+// whether a forced iniswap is active.
 func (client *Client) SetForcedIniswapChar(charName, charIDStr string) {
 	client.mu.Lock()
 	client.forcedIniswapChar, client.forcedIniswapIDStr = charName, charIDStr
