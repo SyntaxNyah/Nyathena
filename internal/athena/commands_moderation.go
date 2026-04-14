@@ -1127,6 +1127,13 @@ func cmdTung(client *Client, args []string, usage string) {
 	}
 
 	disable := len(args) >= 2 && strings.EqualFold(args[1], "off")
+	// Resolve the char_id that corresponds to tungForcedCharacterName so that
+	// observers' IC packets have a matching char_name/char_id pair. WebAO
+	// validates these fields and renders the character invisible when they
+	// disagree. getCharacterID returns -1 when the character is not in the
+	// server list; -1 is safe because the char_id validation is skipped for
+	// forced iniswaps in the IC handler.
+	tungIDStr := strconv.Itoa(getCharacterID(tungForcedCharacterName))
 	if strings.EqualFold(args[0], "global") {
 		targetArea := client.Area()
 		affected := 0
@@ -1138,7 +1145,7 @@ func cmdTung(client *Client, args []string, usage string) {
 				c.SetForcedIniswapChar("", "")
 				writeToAll("PU", strconv.Itoa(c.Uid()), "1", c.CurrentCharacter())
 			} else {
-				c.SetForcedIniswapChar(tungForcedCharacterName, c.CharIDStr())
+				c.SetForcedIniswapChar(tungForcedCharacterName, tungIDStr)
 				writeToAll("PU", strconv.Itoa(c.Uid()), "1", tungForcedCharacterName)
 			}
 			affected++
@@ -1173,7 +1180,7 @@ func cmdTung(client *Client, args []string, usage string) {
 		return
 	}
 
-	target.SetForcedIniswapChar(tungForcedCharacterName, target.CharIDStr())
+	target.SetForcedIniswapChar(tungForcedCharacterName, tungIDStr)
 	writeToAll("PU", strconv.Itoa(target.Uid()), "1", tungForcedCharacterName)
 	target.SendServerMessage("A moderator made your character display as tung tung sahur.")
 	client.SendServerMessage(fmt.Sprintf("Applied tung effect to UID %d.", uid))

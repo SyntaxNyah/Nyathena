@@ -36,8 +36,8 @@ func TestTungSetsForcedIniswapToTargetCharIDForUID(t *testing.T) {
 	if gotName != tungForcedCharacterName {
 		t.Fatalf("forced iniswap name = %q, want %q", gotName, tungForcedCharacterName)
 	}
-	if gotID != target.CharIDStr() {
-		t.Fatalf("forced iniswap id = %q, want target char id %q", gotID, target.CharIDStr())
+	if gotID != "-1" {
+		t.Fatalf("forced iniswap id = %q, want char id of %q (%q)", gotID, tungForcedCharacterName, "-1")
 	}
 }
 
@@ -77,8 +77,8 @@ func TestTungGlobalSetsForcedIniswapToEachClientCharID(t *testing.T) {
 		if gotName != tungForcedCharacterName {
 			t.Fatalf("uid %d forced iniswap name = %q, want %q", c.Uid(), gotName, tungForcedCharacterName)
 		}
-		if gotID != c.CharIDStr() {
-			t.Fatalf("uid %d forced iniswap id = %q, want %q", c.Uid(), gotID, c.CharIDStr())
+		if gotID != "-1" {
+			t.Fatalf("uid %d forced iniswap id = %q, want char id of %q (%q)", c.Uid(), gotID, tungForcedCharacterName, "-1")
 		}
 	}
 
