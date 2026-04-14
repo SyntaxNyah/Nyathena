@@ -14,7 +14,6 @@ GNU Affero General Public License for more details.
 You should have received a copy of the GNU Affero General Public License
 along with this program.  If not, see <https://www.gnu.org/licenses/>. */
 
-
 package athena
 
 import (
@@ -625,7 +624,7 @@ func cmdPlayers(client *Client, args []string, _ string) {
 	all := flags.Bool("a", false, "")
 	flags.Parse(args)
 
-	isAdmin   := permissions.HasPermission(client.Perms(), permissions.PermissionField["ADMIN"])
+	isAdmin := permissions.HasPermission(client.Perms(), permissions.PermissionField["ADMIN"])
 	hasBanInfo := permissions.HasPermission(client.Perms(), permissions.PermissionField["BAN_INFO"])
 	targetArea := client.Area()
 
@@ -1069,12 +1068,24 @@ func cmdNameShuffle(client *Client, _ []string, _ string) {
 		names[i], names[j] = names[j], names[i]
 	}
 
-	// Apply shuffled shownames and broadcast PU updates.
+	// Apply shuffled shownames, send per-player messages, and collect PU data.
+	uidStrs := make([]string, len(targets))
+	decodedNames := make([]string, len(targets))
 	for i, c := range targets {
 		c.SetForcedShowname(names[i])
-		writeToAll("PU", strconv.Itoa(c.Uid()), "2", decode(names[i]))
+		uidStrs[i] = strconv.Itoa(c.Uid())
+		decodedNames[i] = decode(names[i])
 		c.SendServerMessage("A moderator has shuffled the shownames in this area.")
 	}
+	// Broadcast all PU updates in a single pass instead of one writeToAll per client.
+	clients.ForEach(func(c *Client) {
+		if c.Uid() == -1 {
+			return
+		}
+		for i, uid := range uidStrs {
+			c.SendPacket("PU", uid, "2", decodedNames[i])
+		}
+	})
 
 	client.SendServerMessage(fmt.Sprintf("Shuffled shownames of %d players in the area.", len(targets)))
 	addToBuffer(client, "CMD", fmt.Sprintf("shuffled shownames of %d players in area %v", len(targets), targetArea.Name()), true)
@@ -1100,29 +1111,45 @@ func cmdUnnameShuffle(client *Client, _ []string, _ string) {
 		return
 	}
 
-	for _, c := range resetTargets {
+	// Clear forced shownames, send per-player messages, and collect PU data.
+	uidStrs := make([]string, len(resetTargets))
+	restoredNames := make([]string, len(resetTargets))
+	for i, c := range resetTargets {
 		c.SetForcedShowname("")
-		writeToAll("PU", strconv.Itoa(c.Uid()), "2", decode(c.Showname()))
+		uidStrs[i] = strconv.Itoa(c.Uid())
+		restoredNames[i] = decode(c.Showname())
 		c.SendServerMessage("A moderator has restored shownames in this area.")
 	}
+	// Broadcast all PU updates in a single pass instead of one writeToAll per client.
+	clients.ForEach(func(c *Client) {
+		if c.Uid() == -1 {
+			return
+		}
+		for i, uid := range uidStrs {
+			c.SendPacket("PU", uid, "2", restoredNames[i])
+		}
+	})
 
 	client.SendServerMessage(fmt.Sprintf("Restored shownames of %d players in the area.", len(resetTargets)))
 	addToBuffer(client, "CMD", fmt.Sprintf("restored shownames of %d players in area %v", len(resetTargets), targetArea.Name()), true)
 }
 
 // cmdTung forces a real iniswap to the tung tung sahur character (asset folder
-// "tttomoetachibana" on the web asset database) for a specific UID or for all
-// players in the current area. The player's character slot is unchanged — the
-// IC packet's char_name and char_id fields are overridden so every observer's
-// client loads assets from the tung tung sahur folder.
+// "tttomoetachibana" on the web asset database) for all players in the caller's
+// current area. The players' character slots are unchanged — the IC packet's
+// char_name and char_id fields are overridden so every observer's client loads
+// assets from the tung tung sahur folder.
 // Usage:
-//   /tung <uid>
-//   /tung global
-//   /tung <uid> off
-//   /tung global off
+//
+//	/tung global
+//	/tung global off
 func cmdTung(client *Client, args []string, usage string) {
 	if len(args) == 0 {
 		client.SendServerMessage("Not enough arguments:\n" + usage)
+		return
+	}
+	if !strings.EqualFold(args[0], "global") {
+		client.SendServerMessage("Invalid argument. " + usage)
 		return
 	}
 
@@ -1135,81 +1162,159 @@ func cmdTung(client *Client, args []string, usage string) {
 	// forced iniswaps in the IC handler.
 	tungID := getCharacterID(tungForcedCharacterName)
 	tungIDStr := strconv.Itoa(tungID)
-	if strings.EqualFold(args[0], "global") {
-		targetArea := client.Area()
-		affected := 0
+	targetArea := client.Area()
+	capacity := targetArea.PlayerCount()
+	// Phase 1: modify each area client's state in one ForEach pass and collect
+	// the per-client data needed for the PU broadcast.  PV is sent to each
+	// target here so they see their own panel update immediately.
+	uidStrs := make([]string, 0, capacity)
+	if disable {
+		charNames := make([]string, 0, capacity)
 		clients.ForEach(func(c *Client) {
 			if c.Uid() == -1 || c.Area() != targetArea {
 				return
 			}
-			if disable {
-				origIDStr := c.CharIDStr()
-				c.SetForcedIniswapChar("", "")
-				writeToAll("PU", strconv.Itoa(c.Uid()), "1", c.CurrentCharacter())
-				// Restore the client's emote panel to their real character.
-				c.SendPacket("PV", "0", "CID", origIDStr)
-			} else {
-				c.SetForcedIniswapChar(tungForcedCharacterName, tungIDStr)
-				writeToAll("PU", strconv.Itoa(c.Uid()), "1", tungForcedCharacterName)
-				// Switch the client's emote panel to the tung character so
-				// their buttons and animations update on their own screen too.
-				if tungID >= 0 {
-					c.SendPacket("PV", "0", "CID", tungIDStr)
-				}
-			}
-			affected++
+			origIDStr := c.CharIDStr()
+			c.SetForcedIniswapChar("", "")
+			uidStrs = append(uidStrs, strconv.Itoa(c.Uid()))
+			charNames = append(charNames, c.CurrentCharacter())
+			// Restore the client's emote panel to their real character.
+			c.SendPacket("PV", "0", "CID", origIDStr)
 		})
-		if disable {
-			client.SendServerMessage(fmt.Sprintf("Removed tung effect from %d client(s) in this area.", affected))
-			addToBuffer(client, "CMD", fmt.Sprintf("Removed tung effect from %d clients in area %v.", affected, targetArea.Name()), true)
-		} else {
-			client.SendServerMessage(fmt.Sprintf("Applied tung effect to %d client(s) in this area.", affected))
-			addToBuffer(client, "CMD", fmt.Sprintf("Applied tung effect to %d clients in area %v.", affected, targetArea.Name()), true)
+		// Phase 2: broadcast all PU updates in a single pass over all clients,
+		// replacing the N separate writeToAll calls (each a full ForEach) with one.
+		if len(uidStrs) > 0 {
+			clients.ForEach(func(c *Client) {
+				if c.Uid() == -1 {
+					return
+				}
+				for i, uid := range uidStrs {
+					c.SendPacket("PU", uid, "1", charNames[i])
+				}
+			})
 		}
-		return
+		affected := len(uidStrs)
+		client.SendServerMessage(fmt.Sprintf("Removed tung effect from %d client(s) in this area.", affected))
+		addToBuffer(client, "CMD", fmt.Sprintf("Removed tung effect from %d clients in area %v.", affected, targetArea.Name()), true)
+	} else {
+		clients.ForEach(func(c *Client) {
+			if c.Uid() == -1 || c.Area() != targetArea {
+				return
+			}
+			c.SetForcedIniswapChar(tungForcedCharacterName, tungIDStr)
+			uidStrs = append(uidStrs, strconv.Itoa(c.Uid()))
+			// Switch the client's emote panel to the tung character so
+			// their buttons and animations update on their own screen too.
+			if tungID >= 0 {
+				c.SendPacket("PV", "0", "CID", tungIDStr)
+			}
+		})
+		// Phase 2: broadcast all PU updates in a single pass over all clients.
+		if len(uidStrs) > 0 {
+			clients.ForEach(func(c *Client) {
+				if c.Uid() == -1 {
+					return
+				}
+				for _, uid := range uidStrs {
+					c.SendPacket("PU", uid, "1", tungForcedCharacterName)
+				}
+			})
+		}
+		affected := len(uidStrs)
+		client.SendServerMessage(fmt.Sprintf("Applied tung effect to %d client(s) in this area.", affected))
+		addToBuffer(client, "CMD", fmt.Sprintf("Applied tung effect to %d clients in area %v.", affected, targetArea.Name()), true)
 	}
-
-	uid, err := strconv.Atoi(args[0])
-	if err != nil {
-		client.SendServerMessage("Invalid UID: must be a number.")
-		return
-	}
-	target, err := getClientByUid(uid)
-	if err != nil {
-		client.SendServerMessage(fmt.Sprintf("Client with UID %d not found.", uid))
-		return
-	}
-
-	if disable {
-		origIDStr := target.CharIDStr()
-		target.SetForcedIniswapChar("", "")
-		writeToAll("PU", strconv.Itoa(target.Uid()), "1", target.CurrentCharacter())
-		// Restore the target's emote panel to their real character.
-		target.SendPacket("PV", "0", "CID", origIDStr)
-		target.SendServerMessage("A moderator removed your tung effect.")
-		client.SendServerMessage(fmt.Sprintf("Removed tung effect from UID %d.", uid))
-		addToBuffer(client, "CMD", fmt.Sprintf("removed tung effect from UID %d", uid), true)
-		return
-	}
-
-	target.SetForcedIniswapChar(tungForcedCharacterName, tungIDStr)
-	writeToAll("PU", strconv.Itoa(target.Uid()), "1", tungForcedCharacterName)
-	// Switch the target's own emote panel to the tung character so their
-	// buttons and animations update on their screen (full iniswap effect).
-	if tungID >= 0 {
-		target.SendPacket("PV", "0", "CID", tungIDStr)
-	}
-	target.SendServerMessage("A moderator made your character display as tung tung sahur.")
-	client.SendServerMessage(fmt.Sprintf("Applied tung effect to UID %d.", uid))
-	addToBuffer(client, "CMD", fmt.Sprintf("applied tung effect to UID %d", uid), true)
 }
 
-// cmdUntung is a convenience alias for disabling /tung by UID or globally.
+// cmdUntung is a convenience alias for /tung global off.
 // Usage:
-//   /untung <uid>
-//   /untung global
+//
+//	/untung global
 func cmdUntung(client *Client, args []string, _ string) {
-	cmdTung(client, []string{args[0], "off"}, "Usage: /tung <uid> [off] | /tung global [off]")
+	cmdTung(client, []string{"global", "off"}, "Usage: /untung global")
+}
+
+// cmdAreaIniswap forces everyone in the caller's current area to iniswap as a
+// moderator-specified character from the server character list, or removes that
+// forced iniswap when called with "off".
+// Usage:
+//
+//	/areainiswap <character name>
+//	/areainiswap off
+func cmdAreaIniswap(client *Client, args []string, usage string) {
+	if len(args) == 0 {
+		client.SendServerMessage("Not enough arguments:\n" + usage)
+		return
+	}
+
+	targetArea := client.Area()
+	if strings.EqualFold(args[0], "off") {
+		// Phase 1: clear forced iniswap state, collect per-client PU data, send PV.
+		capacity := targetArea.PlayerCount()
+		uidStrs := make([]string, 0, capacity)
+		charNames := make([]string, 0, capacity)
+		clients.ForEach(func(c *Client) {
+			if c.Uid() == -1 || c.Area() != targetArea {
+				return
+			}
+			origIDStr := c.CharIDStr()
+			c.SetForcedIniswapChar("", "")
+			uidStrs = append(uidStrs, strconv.Itoa(c.Uid()))
+			charNames = append(charNames, c.CurrentCharacter())
+			c.SendPacket("PV", "0", "CID", origIDStr)
+		})
+		// Phase 2: broadcast all PU updates in a single pass instead of one
+		// writeToAll call per affected client (each a full ForEach).
+		if len(uidStrs) > 0 {
+			clients.ForEach(func(c *Client) {
+				if c.Uid() == -1 {
+					return
+				}
+				for i, uid := range uidStrs {
+					c.SendPacket("PU", uid, "1", charNames[i])
+				}
+			})
+		}
+		affected := len(uidStrs)
+		client.SendServerMessage(fmt.Sprintf("Removed area iniswap effect from %d client(s).", affected))
+		addToBuffer(client, "CMD", fmt.Sprintf("Removed area iniswap effect from %d clients in area %v.", affected, targetArea.Name()), true)
+		return
+	}
+
+	charName := strings.TrimSpace(strings.Join(args, " "))
+	charID := getCharacterID(charName)
+	if charID < 0 {
+		client.SendServerMessage(fmt.Sprintf("Character %q was not found in the character list.", charName))
+		return
+	}
+	charName = characters[charID]
+	charIDStr := strconv.Itoa(charID)
+
+	// Phase 1: apply forced iniswap state, collect affected UIDs, send PV to each target.
+	capacity := targetArea.PlayerCount()
+	uidStrs := make([]string, 0, capacity)
+	clients.ForEach(func(c *Client) {
+		if c.Uid() == -1 || c.Area() != targetArea {
+			return
+		}
+		c.SetForcedIniswapChar(charName, charIDStr)
+		uidStrs = append(uidStrs, strconv.Itoa(c.Uid()))
+		c.SendPacket("PV", "0", "CID", charIDStr)
+	})
+	// Phase 2: broadcast all PU updates in a single pass.
+	if len(uidStrs) > 0 {
+		clients.ForEach(func(c *Client) {
+			if c.Uid() == -1 {
+				return
+			}
+			for _, uid := range uidStrs {
+				c.SendPacket("PU", uid, "1", charName)
+			}
+		})
+	}
+	affected := len(uidStrs)
+	client.SendServerMessage(fmt.Sprintf("Applied area iniswap as %q to %d client(s).", charName, affected))
+	addToBuffer(client, "CMD", fmt.Sprintf("Applied area iniswap as %q to %d clients in area %v.", charName, affected, targetArea.Name()), true)
 }
 
 // cmdUntorment removes an IPID from the automod torment list.
@@ -1227,7 +1332,6 @@ func cmdUntorment(client *Client, args []string, usage string) {
 	client.SendServerMessage(fmt.Sprintf("Removed %v from the torment list.", ipid))
 	addToBuffer(client, "CMD", fmt.Sprintf("removed IPID %v from torment list", ipid), true)
 }
-
 
 // cmdLockdown toggles server lockdown mode, or manages the lockdown whitelist.
 // Subcommands:
@@ -1605,65 +1709,65 @@ func cmdCharCurse(client *Client, args []string, usage string) {
 // messages are no longer shown to the caller. The ignore persists across
 // reconnections. The target is warned without revealing the caller's IPID.
 func cmdIgnore(client *Client, args []string, usage string) {
-uid, err := strconv.Atoi(args[0])
-if err != nil {
-client.SendServerMessage("Invalid UID.")
-return
-}
-target, err := getClientByUid(uid)
-if err != nil {
-client.SendServerMessage("Client not found.")
-return
-}
-if target == client {
-client.SendServerMessage("You cannot ignore yourself.")
-return
-}
+	uid, err := strconv.Atoi(args[0])
+	if err != nil {
+		client.SendServerMessage("Invalid UID.")
+		return
+	}
+	target, err := getClientByUid(uid)
+	if err != nil {
+		client.SendServerMessage("Client not found.")
+		return
+	}
+	if target == client {
+		client.SendServerMessage("You cannot ignore yourself.")
+		return
+	}
 
-targetIPID := target.Ipid()
-if client.IgnoresIPID(targetIPID) {
-client.SendServerMessage("You are already permanently ignoring that user.")
-return
-}
+	targetIPID := target.Ipid()
+	if client.IgnoresIPID(targetIPID) {
+		client.SendServerMessage("You are already permanently ignoring that user.")
+		return
+	}
 
-client.AddIgnoredIPID(targetIPID)
-if err := db.AddIgnoredIP(client.Ipid(), targetIPID); err != nil {
-logger.LogErrorf("Failed to persist ignore for %v -> %v: %v", client.Ipid(), targetIPID, err)
-}
+	client.AddIgnoredIPID(targetIPID)
+	if err := db.AddIgnoredIP(client.Ipid(), targetIPID); err != nil {
+		logger.LogErrorf("Failed to persist ignore for %v -> %v: %v", client.Ipid(), targetIPID, err)
+	}
 
-// Warn the target without revealing the ignorer's IPID.
-target.SendServerMessage("⚠️ Warning: You have been permanently ignored by another user. This will persist across your reconnections.")
+	// Warn the target without revealing the ignorer's IPID.
+	target.SendServerMessage("⚠️ Warning: You have been permanently ignored by another user. This will persist across your reconnections.")
 
-client.SendServerMessage(fmt.Sprintf("You are now permanently ignoring user [%d]. This will persist across their reconnections.", uid))
-addToBuffer(client, "CMD", fmt.Sprintf("permanently ignored UID %d (IPID: %v)", uid, targetIPID), false)
+	client.SendServerMessage(fmt.Sprintf("You are now permanently ignoring user [%d]. This will persist across their reconnections.", uid))
+	addToBuffer(client, "CMD", fmt.Sprintf("permanently ignored UID %d (IPID: %v)", uid, targetIPID), false)
 }
 
 // cmdUnignore removes a permanent IPID-based ignore for the given UID.
 func cmdUnignore(client *Client, args []string, usage string) {
-uid, err := strconv.Atoi(args[0])
-if err != nil {
-client.SendServerMessage("Invalid UID.")
-return
-}
-target, err := getClientByUid(uid)
-if err != nil {
-client.SendServerMessage("Client not found.")
-return
-}
+	uid, err := strconv.Atoi(args[0])
+	if err != nil {
+		client.SendServerMessage("Invalid UID.")
+		return
+	}
+	target, err := getClientByUid(uid)
+	if err != nil {
+		client.SendServerMessage("Client not found.")
+		return
+	}
 
-targetIPID := target.Ipid()
-if !client.IgnoresIPID(targetIPID) {
-client.SendServerMessage("You are not ignoring that user.")
-return
-}
+	targetIPID := target.Ipid()
+	if !client.IgnoresIPID(targetIPID) {
+		client.SendServerMessage("You are not ignoring that user.")
+		return
+	}
 
-client.RemoveIgnoredIPID(targetIPID)
-if err := db.RemoveIgnoredIP(client.Ipid(), targetIPID); err != nil {
-logger.LogErrorf("Failed to remove persistent ignore for %v -> %v: %v", client.Ipid(), targetIPID, err)
-}
+	client.RemoveIgnoredIPID(targetIPID)
+	if err := db.RemoveIgnoredIP(client.Ipid(), targetIPID); err != nil {
+		logger.LogErrorf("Failed to remove persistent ignore for %v -> %v: %v", client.Ipid(), targetIPID, err)
+	}
 
-client.SendServerMessage(fmt.Sprintf("Unignored user [%d].", uid))
-addToBuffer(client, "CMD", fmt.Sprintf("unignored UID %d (IPID: %v)", uid, targetIPID), false)
+	client.SendServerMessage(fmt.Sprintf("Unignored user [%d].", uid))
+	addToBuffer(client, "CMD", fmt.Sprintf("unignored UID %d (IPID: %v)", uid, targetIPID), false)
 }
 
 // cmdModnote manages per-IPID freeform moderator notes.

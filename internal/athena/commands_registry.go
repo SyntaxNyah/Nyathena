@@ -546,18 +546,26 @@ func initCommands() {
 		"tung": {
 			handler:  cmdTung,
 			minArgs:  1,
-			usage:    "Usage: /tung <uid> [off] | /tung global [off]",
-			desc:     "Forces display as \"tung tung sahur\" for a UID or everyone in the current area.",
+			usage:    "Usage: /tung global [off]",
+			desc:     "Forces everyone in your current area to display as \"tung tung sahur\". Use \"off\" to remove.",
 			reqPerms: permissions.PermissionField["KICK"],
 			category: "moderation",
 		},
 		"untung": {
 			handler:  cmdUntung,
-			minArgs:  1,
-			usage:    "Usage: /untung <uid> | /untung global",
-			desc:     "Removes the tung effect from a UID or everyone server-wide.",
+			minArgs:  0,
+			usage:    "Usage: /untung global",
+			desc:     "Removes the tung effect from everyone in your current area.",
 			reqPerms: permissions.PermissionField["KICK"],
 			category: "moderation",
+		},
+		"areainiswap": {
+			handler:  cmdAreaIniswap,
+			minArgs:  1,
+			usage:    "Usage: /areainiswap <character name> | /areainiswap off",
+			desc:     "Forces everyone in your current area to iniswap as a chosen character.",
+			reqPerms: permissions.PermissionField["KICK"],
+			category: "punishment",
 		},
 		"unpair": {
 			handler:  cmdUnpair,
@@ -1680,8 +1688,8 @@ func initCommands() {
 			category: "minigames",
 		},
 		"hangman": {
-			handler:  cmdHangman,
-			minArgs:  1,
+			handler: cmdHangman,
+			minArgs: 1,
 			usage: "Usage: /hangman start [animals|courtroom|nature|food|random|custom <word>]\n" +
 				"       /hangman join\n" +
 				"       /hangman guess <letter|word>\n" +
@@ -1699,7 +1707,7 @@ func initCommands() {
 			desc:      "Play blackjack. Requires casino to be enabled in the area.",
 			reqPerms:  permissions.PermissionField["NONE"],
 			casinoCmd: true,
-			category: "casino",
+			category:  "casino",
 		},
 		"poker": {
 			handler:   cmdPoker,
@@ -1708,7 +1716,7 @@ func initCommands() {
 			desc:      "Play Texas Hold'em poker. Requires casino to be enabled in the area.",
 			reqPerms:  permissions.PermissionField["NONE"],
 			casinoCmd: true,
-			category: "casino",
+			category:  "casino",
 		},
 		"slots": {
 			handler:   cmdSlots,
@@ -1717,7 +1725,7 @@ func initCommands() {
 			desc:      "Play slot machines. Requires casino to be enabled in the area.",
 			reqPerms:  permissions.PermissionField["NONE"],
 			casinoCmd: true,
-			category: "casino",
+			category:  "casino",
 		},
 		"croulette": {
 			handler:   cmdCasinoRoulette,
@@ -1726,7 +1734,7 @@ func initCommands() {
 			desc:      "Play European roulette. Requires casino to be enabled in the area.",
 			reqPerms:  permissions.PermissionField["NONE"],
 			casinoCmd: true,
-			category: "casino",
+			category:  "casino",
 		},
 		"baccarat": {
 			handler:   cmdBaccarat,
@@ -1735,7 +1743,7 @@ func initCommands() {
 			desc:      "Play baccarat. Requires casino to be enabled in the area.",
 			reqPerms:  permissions.PermissionField["NONE"],
 			casinoCmd: true,
-			category: "casino",
+			category:  "casino",
 		},
 		"craps": {
 			handler:   cmdCraps,
@@ -1744,7 +1752,7 @@ func initCommands() {
 			desc:      "Play craps. Requires casino to be enabled in the area.",
 			reqPerms:  permissions.PermissionField["NONE"],
 			casinoCmd: true,
-			category: "casino",
+			category:  "casino",
 		},
 		"crash": {
 			handler:   cmdCrash,
@@ -1753,7 +1761,7 @@ func initCommands() {
 			desc:      "Play crash. 45s cooldown between rounds; cashout locked for first 5s (instant eject = loss). Requires casino to be enabled.",
 			reqPerms:  permissions.PermissionField["NONE"],
 			casinoCmd: true,
-			category: "casino",
+			category:  "casino",
 		},
 		"mines": {
 			handler:   cmdMines,
@@ -1762,7 +1770,7 @@ func initCommands() {
 			desc:      "Play mines. Requires casino to be enabled in the area.",
 			reqPerms:  permissions.PermissionField["NONE"],
 			casinoCmd: true,
-			category: "casino",
+			category:  "casino",
 		},
 		"keno": {
 			handler:   cmdKeno,
@@ -1771,7 +1779,7 @@ func initCommands() {
 			desc:      "Play keno. Requires casino to be enabled in the area.",
 			reqPerms:  permissions.PermissionField["NONE"],
 			casinoCmd: true,
-			category: "casino",
+			category:  "casino",
 		},
 		"wheel": {
 			handler:   cmdWheel,
@@ -1780,7 +1788,7 @@ func initCommands() {
 			desc:      "Spin the prize wheel. Requires casino to be enabled in the area.",
 			reqPerms:  permissions.PermissionField["NONE"],
 			casinoCmd: true,
-			category: "casino",
+			category:  "casino",
 		},
 		"plinko": {
 			handler:   cmdPlinko,
@@ -1789,7 +1797,7 @@ func initCommands() {
 			desc:      "Drop a chip down the Plinko peg board. Risk level controls payout spread (low: 0.3x-2.5x, med: 0.1x-5x, high: 0x-12x). Requires casino to be enabled in the area.",
 			reqPerms:  permissions.PermissionField["NONE"],
 			casinoCmd: true,
-			category: "casino",
+			category:  "casino",
 		},
 		"bar": {
 			handler:   cmdBar,
@@ -1798,7 +1806,7 @@ func initCommands() {
 			desc:      fmt.Sprintf("Visit the bar! %d drinks each with RISK and wild variance — huge wins or big losses. Use /bar menu to see all drinks.", len(barMenu)),
 			reqPerms:  permissions.PermissionField["NONE"],
 			casinoCmd: true,
-			category: "casino",
+			category:  "casino",
 		},
 		"rob": {
 			handler:   cmdRob,
@@ -1807,7 +1815,7 @@ func initCommands() {
 			desc:      "Attempt to rob a location for chips. 20% success rate — catastrophic failures drain your chips and may mute you.",
 			reqPerms:  permissions.PermissionField["NONE"],
 			casinoCmd: true,
-			category: "chips",
+			category:  "chips",
 		},
 		"gamble": {
 			handler:   cmdGamble,
@@ -1816,7 +1824,7 @@ func initCommands() {
 			desc:      "Toggle visibility of gambling broadcast messages in the area chat.",
 			reqPerms:  permissions.PermissionField["NONE"],
 			casinoCmd: true,
-			category: "casino",
+			category:  "casino",
 		},
 		"chips": {
 			handler:   cmdChipsEnhanced,
@@ -1825,7 +1833,7 @@ func initCommands() {
 			desc:      "Check your Nyathena Chip balance, view leaderboards, or give chips to another player.",
 			reqPerms:  permissions.PermissionField["NONE"],
 			casinoCmd: true,
-			category: "chips",
+			category:  "chips",
 		},
 		"richest": {
 			handler:   cmdRichest,
@@ -1834,7 +1842,7 @@ func initCommands() {
 			desc:      "Show the global chip leaderboard (top 10 richest players by default, max 50).",
 			reqPerms:  permissions.PermissionField["NONE"],
 			casinoCmd: true,
-			category: "chips",
+			category:  "chips",
 		},
 		"casino": {
 			handler:   cmdCasino,
@@ -1843,7 +1851,7 @@ func initCommands() {
 			desc:      "View the casino dashboard or status for the current area.",
 			reqPerms:  permissions.PermissionField["NONE"],
 			casinoCmd: true,
-			category: "casino",
+			category:  "casino",
 		},
 		"casinoenable": {
 			handler:   cmdCasinoEnable,
@@ -1852,7 +1860,7 @@ func initCommands() {
 			desc:      "Enables or disables the casino for this area.",
 			reqPerms:  permissions.PermissionField["MODIFY_AREA"],
 			casinoCmd: true,
-			category: "casino",
+			category:  "casino",
 		},
 		"casinoset": {
 			handler:   cmdCasinoSet,
@@ -1861,7 +1869,7 @@ func initCommands() {
 			desc:      "Configures casino settings for this area.",
 			reqPerms:  permissions.PermissionField["MODIFY_AREA"],
 			casinoCmd: true,
-			category: "casino",
+			category:  "casino",
 		},
 		"grantchips": {
 			handler:   cmdGrantChips,
@@ -1870,7 +1878,7 @@ func initCommands() {
 			desc:      "Admin: Grant any amount of chips to an online player by UID.",
 			reqPerms:  permissions.PermissionField["ADMIN"],
 			casinoCmd: true,
-			category: "admin",
+			category:  "admin",
 		},
 		"newspaper": {
 			handler:  cmdNewspaper,
@@ -1887,7 +1895,7 @@ func initCommands() {
 			desc:      "Start creating a free player account (a captcha confirmation is required). Tracks chips, playtime, and leaderboard standings.",
 			reqPerms:  permissions.PermissionField["NONE"],
 			casinoCmd: true,
-			category: "account",
+			category:  "account",
 		},
 		"captcha": {
 			handler:   cmdCaptcha,
@@ -1896,7 +1904,7 @@ func initCommands() {
 			desc:      "Complete a pending /register by entering the captcha token you were given.",
 			reqPerms:  permissions.PermissionField["NONE"],
 			casinoCmd: true,
-			category: "account",
+			category:  "account",
 		},
 		"account": {
 			handler:   cmdAccount,
@@ -1905,7 +1913,7 @@ func initCommands() {
 			desc:      "View your account profile: username, chip balance, and playtime.",
 			reqPerms:  permissions.PermissionField["NONE"],
 			casinoCmd: true,
-			category: "account",
+			category:  "account",
 		},
 		"playtime": {
 			handler:  cmdPlaytimeTop,
@@ -1922,7 +1930,7 @@ func initCommands() {
 			desc:      "Check your unscramble wins or view the unscramble leaderboard. Answer active puzzles in IC chat to win chips!",
 			reqPerms:  permissions.PermissionField["NONE"],
 			casinoCmd: true,
-			category: "chips",
+			category:  "chips",
 		},
 		"jobs": {
 			handler:   cmdJobs,
@@ -1931,7 +1939,7 @@ func initCommands() {
 			desc:      "List all available jobs that earn small chip rewards.",
 			reqPerms:  permissions.PermissionField["NONE"],
 			casinoCmd: true,
-			category: "jobs",
+			category:  "jobs",
 		},
 		"jobtop": {
 			handler:   cmdJobTop,
@@ -1940,7 +1948,7 @@ func initCommands() {
 			desc:      "Show the job earnings leaderboard (top chip earners from jobs).",
 			reqPerms:  permissions.PermissionField["NONE"],
 			casinoCmd: true,
-			category: "chips",
+			category:  "chips",
 		},
 		"janitor": {
 			handler:   cmdJanitor,
@@ -1949,7 +1957,7 @@ func initCommands() {
 			desc:      "Work as a janitor to earn chips (45-minute cooldown).",
 			reqPerms:  permissions.PermissionField["NONE"],
 			casinoCmd: true,
-			category: "jobs",
+			category:  "jobs",
 		},
 		"busker": {
 			handler:   cmdBusker,
@@ -1958,7 +1966,7 @@ func initCommands() {
 			desc:      "Busk for tips outside the courthouse to earn chips (30-minute cooldown).",
 			reqPerms:  permissions.PermissionField["NONE"],
 			casinoCmd: true,
-			category: "jobs",
+			category:  "jobs",
 		},
 		"paperboy": {
 			handler:   cmdPaperboy,
@@ -1967,7 +1975,7 @@ func initCommands() {
 			desc:      "Deliver newspapers and briefs to earn chips (60-minute cooldown).",
 			reqPerms:  permissions.PermissionField["NONE"],
 			casinoCmd: true,
-			category: "jobs",
+			category:  "jobs",
 		},
 		"bailiffjob": {
 			handler:   cmdBailiffJob,
@@ -1976,7 +1984,7 @@ func initCommands() {
 			desc:      "Stand guard duty as a bailiff to earn chips (2-hour cooldown).",
 			reqPerms:  permissions.PermissionField["NONE"],
 			casinoCmd: true,
-			category: "jobs",
+			category:  "jobs",
 		},
 		"clerk": {
 			handler:   cmdClerk,
@@ -1985,7 +1993,7 @@ func initCommands() {
 			desc:      "File paperwork as a clerk to earn chips (90-minute cooldown).",
 			reqPerms:  permissions.PermissionField["NONE"],
 			casinoCmd: true,
-			category: "jobs",
+			category:  "jobs",
 		},
 		"shop": {
 			handler:   cmdShop,
@@ -1994,7 +2002,7 @@ func initCommands() {
 			desc:      "Browse the Nyathena Shop: 115+ cosmetic tags, job passes, and passive income upgrades. Categories: gambling attorney anime gamer girly meme prestige.",
 			reqPerms:  permissions.PermissionField["NONE"],
 			casinoCmd: true,
-			category: "chips",
+			category:  "chips",
 		},
 		"settag": {
 			handler:   cmdSetTag,
@@ -2003,7 +2011,7 @@ func initCommands() {
 			desc:      "Equip or swap a purchased cosmetic tag. Your active tag appears next to your name in /gas and /players.",
 			reqPerms:  permissions.PermissionField["NONE"],
 			casinoCmd: true,
-			category: "chips",
+			category:  "chips",
 		},
 		"favourite": {
 			handler:   cmdFavourite,
@@ -2012,7 +2020,7 @@ func initCommands() {
 			desc:      "Toggle a character in your wardrobe favourites. Add or remove with the same command.",
 			reqPerms:  permissions.PermissionField["NONE"],
 			casinoCmd: true,
-			category: "account",
+			category:  "account",
 		},
 		"wardrobe": {
 			handler:   cmdWardrobe,
@@ -2021,7 +2029,7 @@ func initCommands() {
 			desc:      "View your saved favourite characters, or swap to one instantly.",
 			reqPerms:  permissions.PermissionField["NONE"],
 			casinoCmd: true,
-			category: "account",
+			category:  "account",
 		},
 		// ── Mafia / Werewolf social deduction minigame ──────────────────────
 		"mafia": {
@@ -2048,7 +2056,7 @@ func initCommands() {
 			desc:      "Buy an instant scratch-card lottery ticket. Three matching symbols = big win!",
 			reqPerms:  permissions.PermissionField["NONE"],
 			casinoCmd: true,
-			category: "casino",
+			category:  "casino",
 		},
 	}
 }
