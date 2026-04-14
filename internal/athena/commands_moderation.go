@@ -36,6 +36,8 @@ import (
 	"github.com/xhit/go-str2duration/v2"
 )
 
+const tungForcedCharacterName = "tung tung sahur"
+
 func cmdBan(client *Client, args []string, usage string) {
 	flags := flag.NewFlagSet("", 0)
 	flags.SetOutput(io.Discard)
@@ -1112,9 +1114,8 @@ func cmdUnnameShuffle(client *Client, _ []string, _ string) {
 //   /tung <uid> off
 //   /tung global off
 func cmdTung(client *Client, args []string, usage string) {
-	const tungChar = "tung tung sahur"
-	if getCharacterID(tungChar) == -1 {
-		client.SendServerMessage(fmt.Sprintf("Character %q was not found in the server character list.", tungChar))
+	if getCharacterID(tungForcedCharacterName) == -1 {
+		client.SendServerMessage(fmt.Sprintf("Character %q was not found in the server character list.", tungForcedCharacterName))
 		return
 	}
 
@@ -1134,7 +1135,7 @@ func cmdTung(client *Client, args []string, usage string) {
 			if disable {
 				c.SetForcedIniswapChar("")
 			} else {
-				c.SetForcedIniswapChar(tungChar)
+				c.SetForcedIniswapChar(tungForcedCharacterName)
 			}
 			affected++
 		})
@@ -1150,12 +1151,12 @@ func cmdTung(client *Client, args []string, usage string) {
 
 	uid, err := strconv.Atoi(args[0])
 	if err != nil {
-		client.SendServerMessage("Invalid UID.")
+		client.SendServerMessage("Invalid UID: must be a number.")
 		return
 	}
 	target, err := getClientByUid(uid)
 	if err != nil {
-		client.SendServerMessage("Invalid UID.")
+		client.SendServerMessage(fmt.Sprintf("Client with UID %d not found.", uid))
 		return
 	}
 
@@ -1167,7 +1168,7 @@ func cmdTung(client *Client, args []string, usage string) {
 		return
 	}
 
-	target.SetForcedIniswapChar(tungChar)
+	target.SetForcedIniswapChar(tungForcedCharacterName)
 	target.SendServerMessage("A moderator made your IC messages use tung tung sahur.")
 	client.SendServerMessage(fmt.Sprintf("Applied tung effect to UID %d.", uid))
 	addToBuffer(client, "CMD", fmt.Sprintf("applied tung effect to UID %d", uid), true)

@@ -298,7 +298,7 @@ func pktIC(client *Client, p *packet.Packet) {
 	ownEmote := args[3]
 	ownTextColor := args[14]
 	ownShowname := args[15]
-	isForcedIniswap := false
+	hasForcedIniswap := false
 
 	// If a moderator has forced a showname for this client, override whatever
 	// name the client sent in the packet.
@@ -311,7 +311,7 @@ func pktIC(client *Client, p *packet.Packet) {
 	// the outgoing IC character name/id for this message.
 	if forcedChar := client.ForcedIniswapChar(); forcedChar != "" {
 		if forcedCharID := getCharacterID(forcedChar); forcedCharID != -1 {
-			isForcedIniswap = true
+			hasForcedIniswap = true
 			ownCharName = forcedChar
 			args[2] = forcedChar
 			args[8] = strconv.Itoa(forcedCharID)
@@ -539,10 +539,10 @@ func pktIC(client *Client, p *packet.Packet) {
 	switch {
 	case !sliceutil.ContainsString(validDeskMods, args[0]): // desk_mod
 		return
-	case !isPossessing && !isForcedIniswap && !strings.EqualFold(characters[client.CharID()], args[2]) && !client.Area().IniswapAllowed(): // character name (skip check when possessing or forced iniswap)
+	case !isPossessing && !hasForcedIniswap && !strings.EqualFold(characters[client.CharID()], args[2]) && !client.Area().IniswapAllowed(): // character name (skip check when possessing or forced iniswap)
 		client.SendServerMessage("Iniswapping is not allowed in this area.")
 		return
-	case !isPossessing && !isForcedIniswap && stuckCharID >= 0 && !strings.EqualFold(characters[stuckCharID], args[2]): // block iniswap when charstuck unless forced iniswap
+	case !isPossessing && !hasForcedIniswap && stuckCharID >= 0 && !strings.EqualFold(characters[stuckCharID], args[2]): // block iniswap when charstuck unless forced iniswap
 		client.SendServerMessage(fmt.Sprintf("You are character stuck as %v and cannot iniswap.", characters[stuckCharID]))
 		return
 	case len(msgText) > config.MaxMsg: // message
@@ -552,7 +552,7 @@ func pktIC(client *Client, p *packet.Packet) {
 		return
 	case emote_mod < 0 || emote_mod > 6:
 		return
-	case !isPossessing && !isForcedIniswap && args[8] != client.CharIDStr(): // char_id (skip check when possessing or forced iniswap)
+	case !isPossessing && !hasForcedIniswap && args[8] != client.CharIDStr(): // char_id (skip check when possessing or forced iniswap)
 		return
 	case objection < 0 || objection > 4: // objection_mod
 		return
