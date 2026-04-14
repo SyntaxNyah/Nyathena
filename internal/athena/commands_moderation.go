@@ -1068,12 +1068,24 @@ func cmdNameShuffle(client *Client, _ []string, _ string) {
 		names[i], names[j] = names[j], names[i]
 	}
 
-	// Apply shuffled shownames and broadcast PU updates.
+	// Apply shuffled shownames, send per-player messages, and collect PU data.
+	uidStrs := make([]string, len(targets))
+	decodedNames := make([]string, len(targets))
 	for i, c := range targets {
 		c.SetForcedShowname(names[i])
-		writeToAll("PU", strconv.Itoa(c.Uid()), "2", decode(names[i]))
+		uidStrs[i] = strconv.Itoa(c.Uid())
+		decodedNames[i] = decode(names[i])
 		c.SendServerMessage("A moderator has shuffled the shownames in this area.")
 	}
+	// Broadcast all PU updates in a single pass instead of one writeToAll per client.
+	clients.ForEach(func(c *Client) {
+		if c.Uid() == -1 {
+			return
+		}
+		for i, uid := range uidStrs {
+			c.SendPacket("PU", uid, "2", decodedNames[i])
+		}
+	})
 
 	client.SendServerMessage(fmt.Sprintf("Shuffled shownames of %d players in the area.", len(targets)))
 	addToBuffer(client, "CMD", fmt.Sprintf("shuffled shownames of %d players in area %v", len(targets), targetArea.Name()), true)
@@ -1099,11 +1111,24 @@ func cmdUnnameShuffle(client *Client, _ []string, _ string) {
 		return
 	}
 
-	for _, c := range resetTargets {
+	// Clear forced shownames, send per-player messages, and collect PU data.
+	uidStrs := make([]string, len(resetTargets))
+	restoredNames := make([]string, len(resetTargets))
+	for i, c := range resetTargets {
 		c.SetForcedShowname("")
-		writeToAll("PU", strconv.Itoa(c.Uid()), "2", decode(c.Showname()))
+		uidStrs[i] = strconv.Itoa(c.Uid())
+		restoredNames[i] = decode(c.Showname())
 		c.SendServerMessage("A moderator has restored shownames in this area.")
 	}
+	// Broadcast all PU updates in a single pass instead of one writeToAll per client.
+	clients.ForEach(func(c *Client) {
+		if c.Uid() == -1 {
+			return
+		}
+		for i, uid := range uidStrs {
+			c.SendPacket("PU", uid, "2", restoredNames[i])
+		}
+	})
 
 	client.SendServerMessage(fmt.Sprintf("Restored shownames of %d players in the area.", len(resetTargets)))
 	addToBuffer(client, "CMD", fmt.Sprintf("restored shownames of %d players in area %v", len(resetTargets), targetArea.Name()), true)
@@ -1137,32 +1162,64 @@ func cmdTung(client *Client, args []string, usage string) {
 	tungIDStr := strconv.Itoa(tungID)
 	if strings.EqualFold(args[0], "global") {
 		targetArea := client.Area()
-		affected := 0
-		clients.ForEach(func(c *Client) {
-			if c.Uid() == -1 || c.Area() != targetArea {
-				return
-			}
-			if disable {
+		capacity := targetArea.PlayerCount()
+		// Phase 1: modify each area client's state in one ForEach pass and collect
+		// the per-client data needed for the PU broadcast.  PV is sent to each
+		// target here so they see their own panel update immediately.
+		uidStrs := make([]string, 0, capacity)
+		if disable {
+			charNames := make([]string, 0, capacity)
+			clients.ForEach(func(c *Client) {
+				if c.Uid() == -1 || c.Area() != targetArea {
+					return
+				}
 				origIDStr := c.CharIDStr()
 				c.SetForcedIniswapChar("", "")
-				writeToAll("PU", strconv.Itoa(c.Uid()), "1", c.CurrentCharacter())
+				uidStrs = append(uidStrs, strconv.Itoa(c.Uid()))
+				charNames = append(charNames, c.CurrentCharacter())
 				// Restore the client's emote panel to their real character.
 				c.SendPacket("PV", "0", "CID", origIDStr)
-			} else {
+			})
+			// Phase 2: broadcast all PU updates in a single pass over all clients,
+			// replacing the N separate writeToAll calls (each a full ForEach) with one.
+			if len(uidStrs) > 0 {
+				clients.ForEach(func(c *Client) {
+					if c.Uid() == -1 {
+						return
+					}
+					for i, uid := range uidStrs {
+						c.SendPacket("PU", uid, "1", charNames[i])
+					}
+				})
+			}
+			affected := len(uidStrs)
+			client.SendServerMessage(fmt.Sprintf("Removed tung effect from %d client(s) in this area.", affected))
+			addToBuffer(client, "CMD", fmt.Sprintf("Removed tung effect from %d clients in area %v.", affected, targetArea.Name()), true)
+		} else {
+			clients.ForEach(func(c *Client) {
+				if c.Uid() == -1 || c.Area() != targetArea {
+					return
+				}
 				c.SetForcedIniswapChar(tungForcedCharacterName, tungIDStr)
-				writeToAll("PU", strconv.Itoa(c.Uid()), "1", tungForcedCharacterName)
+				uidStrs = append(uidStrs, strconv.Itoa(c.Uid()))
 				// Switch the client's emote panel to the tung character so
 				// their buttons and animations update on their own screen too.
 				if tungID >= 0 {
 					c.SendPacket("PV", "0", "CID", tungIDStr)
 				}
+			})
+			// Phase 2: broadcast all PU updates in a single pass over all clients.
+			if len(uidStrs) > 0 {
+				clients.ForEach(func(c *Client) {
+					if c.Uid() == -1 {
+						return
+					}
+					for _, uid := range uidStrs {
+						c.SendPacket("PU", uid, "1", tungForcedCharacterName)
+					}
+				})
 			}
-			affected++
-		})
-		if disable {
-			client.SendServerMessage(fmt.Sprintf("Removed tung effect from %d client(s) in this area.", affected))
-			addToBuffer(client, "CMD", fmt.Sprintf("Removed tung effect from %d clients in area %v.", affected, targetArea.Name()), true)
-		} else {
+			affected := len(uidStrs)
 			client.SendServerMessage(fmt.Sprintf("Applied tung effect to %d client(s) in this area.", affected))
 			addToBuffer(client, "CMD", fmt.Sprintf("Applied tung effect to %d clients in area %v.", affected, targetArea.Name()), true)
 		}
@@ -1228,17 +1285,33 @@ func cmdAreaIniswap(client *Client, args []string, usage string) {
 
 	targetArea := client.Area()
 	if strings.EqualFold(args[0], "off") {
-		affected := 0
+		// Phase 1: clear forced iniswap state, collect per-client PU data, send PV.
+		capacity := targetArea.PlayerCount()
+		uidStrs := make([]string, 0, capacity)
+		charNames := make([]string, 0, capacity)
 		clients.ForEach(func(c *Client) {
 			if c.Uid() == -1 || c.Area() != targetArea {
 				return
 			}
 			origIDStr := c.CharIDStr()
 			c.SetForcedIniswapChar("", "")
-			writeToAll("PU", strconv.Itoa(c.Uid()), "1", c.CurrentCharacter())
+			uidStrs = append(uidStrs, strconv.Itoa(c.Uid()))
+			charNames = append(charNames, c.CurrentCharacter())
 			c.SendPacket("PV", "0", "CID", origIDStr)
-			affected++
 		})
+		// Phase 2: broadcast all PU updates in a single pass instead of one
+		// writeToAll call per affected client (each a full ForEach).
+		if len(uidStrs) > 0 {
+			clients.ForEach(func(c *Client) {
+				if c.Uid() == -1 {
+					return
+				}
+				for i, uid := range uidStrs {
+					c.SendPacket("PU", uid, "1", charNames[i])
+				}
+			})
+		}
+		affected := len(uidStrs)
 		client.SendServerMessage(fmt.Sprintf("Removed area iniswap effect from %d client(s).", affected))
 		addToBuffer(client, "CMD", fmt.Sprintf("Removed area iniswap effect from %d clients in area %v.", affected, targetArea.Name()), true)
 		return
@@ -1253,16 +1326,29 @@ func cmdAreaIniswap(client *Client, args []string, usage string) {
 	charName = characters[charID]
 	charIDStr := strconv.Itoa(charID)
 
-	affected := 0
+	// Phase 1: apply forced iniswap state, collect affected UIDs, send PV to each target.
+	capacity := targetArea.PlayerCount()
+	uidStrs := make([]string, 0, capacity)
 	clients.ForEach(func(c *Client) {
 		if c.Uid() == -1 || c.Area() != targetArea {
 			return
 		}
 		c.SetForcedIniswapChar(charName, charIDStr)
-		writeToAll("PU", strconv.Itoa(c.Uid()), "1", charName)
+		uidStrs = append(uidStrs, strconv.Itoa(c.Uid()))
 		c.SendPacket("PV", "0", "CID", charIDStr)
-		affected++
 	})
+	// Phase 2: broadcast all PU updates in a single pass.
+	if len(uidStrs) > 0 {
+		clients.ForEach(func(c *Client) {
+			if c.Uid() == -1 {
+				return
+			}
+			for _, uid := range uidStrs {
+				c.SendPacket("PU", uid, "1", charName)
+			}
+		})
+	}
+	affected := len(uidStrs)
 	client.SendServerMessage(fmt.Sprintf("Applied area iniswap as %q to %d client(s).", charName, affected))
 	addToBuffer(client, "CMD", fmt.Sprintf("Applied area iniswap as %q to %d clients in area %v.", charName, affected, targetArea.Name()), true)
 }
