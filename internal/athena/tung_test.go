@@ -11,6 +11,8 @@ import (
 	"time"
 
 	"github.com/MangosArentLiterature/Athena/internal/area"
+	"github.com/MangosArentLiterature/Athena/internal/packet"
+	"github.com/MangosArentLiterature/Athena/internal/settings"
 )
 
 // capturingConn is a net.Conn that records every Write call for inspection.
@@ -207,5 +209,67 @@ func TestTungNoPVWhenCharNotInList(t *testing.T) {
 	badPV := "PV#0#CID#-1"
 	if got := targetConn.Written(); bytes.Contains([]byte(got), []byte(badPV)) {
 		t.Errorf("target connection should not receive %q when tung char is not in list; got %q", badPV, got)
+	}
+}
+
+// TestTungLocksCharacterChange verifies that a tunged client cannot change
+// characters via pktChangeChar (the CC packet), and that the lock is lifted
+// once the tung effect is removed.
+func TestTungLocksCharacterChange(t *testing.T) {
+	origChars := characters
+	t.Cleanup(func() { characters = origChars })
+	characters = []string{"Phoenix Wright", tungForcedCharacterName, "Maya Fey"}
+
+	origClients := clients
+	t.Cleanup(func() { clients = origClients })
+	clients = &ClientList{list: make(map[*Client]struct{}), uidIndex: make(map[int]*Client), ipidCounts: make(map[string]int)}
+
+	// Disable rate limiting so pktChangeChar doesn't panic on nil config.
+	origCfg := config
+	t.Cleanup(func() { config = origCfg })
+	config = &settings.Config{}
+
+	a := area.NewArea(area.AreaData{}, len(characters), 10, area.EviAny)
+
+	admin := &Client{conn: &testConn{}, uid: 1, pair: ClientPairInfo{wanted_id: -1}}
+	admin.SetCharID(0)
+	admin.SetArea(a)
+
+	target := &Client{conn: &testConn{}, uid: 2, charStuckCharID: -1, pair: ClientPairInfo{wanted_id: -1}}
+	target.SetCharID(0) // Phoenix Wright
+	target.SetArea(a)
+
+	clients.AddClient(admin)
+	clients.RegisterUID(admin)
+	clients.AddClient(target)
+	clients.RegisterUID(target)
+
+	// Apply tung.
+	cmdTung(admin, []string{strconv.Itoa(target.Uid())}, "")
+
+	if !target.IsTunged() {
+		t.Fatal("expected target to be tunged after /tung")
+	}
+
+	// Attempt character change via pktChangeChar — should be blocked.
+	// Build a minimal packet with Body[1] = "2" (Maya Fey index).
+	p := &packet.Packet{Body: []string{"CC", "2"}}
+	pktChangeChar(target, p)
+
+	if target.CharID() != 0 {
+		t.Errorf("tunged client should be blocked from changing character; char ID = %d, want 0", target.CharID())
+	}
+
+	// Remove tung.
+	cmdTung(admin, []string{strconv.Itoa(target.Uid()), "off"}, "")
+
+	if target.IsTunged() {
+		t.Fatal("expected tung to be cleared after /tung off")
+	}
+
+	// Character change should now succeed.
+	pktChangeChar(target, p)
+	if target.CharID() != 2 {
+		t.Errorf("untunged client should be able to change character; char ID = %d, want 2", target.CharID())
 	}
 }

@@ -262,6 +262,10 @@ func pktChangeChar(client *Client, p *packet.Packet) {
 		client.SendServerMessage(fmt.Sprintf("You are character stuck as %v and cannot change characters.", characters[stuckID]))
 		return
 	}
+	if client.IsTunged() {
+		client.SendServerMessage("You have been tunged and cannot change characters until the effect is removed.")
+		return
+	}
 	client.ChangeCharacter(newid)
 }
 

@@ -126,6 +126,12 @@ func cmdWardrobe(client *Client, args []string, _ string) {
 			return
 		}
 
+		// Respect forced tung iniswap.
+		if client.IsTunged() {
+			client.SendServerMessage("You have been tunged and cannot change characters until the effect is removed.")
+			return
+		}
+
 		if client.Area().IsTaken(charID) && client.CharID() != charID {
 			client.SendServerMessage(fmt.Sprintf(
 				"Character \"%v\" is already taken in this area.", canonicalName))

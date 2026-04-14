@@ -124,6 +124,10 @@ func cmdCharSelect(client *Client, args []string, _ string) {
 			client.SendServerMessage(fmt.Sprintf("You are character stuck as %v and cannot return to character select.", characters[stuckID]))
 			return
 		}
+		if client.IsTunged() {
+			client.SendServerMessage("You have been tunged and cannot change characters until the effect is removed.")
+			return
+		}
 		client.ChangeCharacter(-1)
 		client.SendPacket("DONE")
 	} else {
@@ -162,6 +166,10 @@ func cmdRandomChar(client *Client, _ []string, _ string) {
 			unit = "second"
 		}
 		client.SendServerMessage(fmt.Sprintf("Please wait %d %s before using /randomchar again.", remaining, unit))
+		return
+	}
+	if client.IsTunged() {
+		client.SendServerMessage("You have been tunged and cannot change characters until the effect is removed.")
 		return
 	}
 	newid := getRandomFreeChar(client)
