@@ -565,7 +565,7 @@ func initCommands() {
 			usage:    "Usage: /areainiswap <character name> | /areainiswap off",
 			desc:     "Forces everyone in your current area to iniswap as a chosen character.",
 			reqPerms: permissions.PermissionField["KICK"],
-			category: "moderation",
+			category: "punishment",
 		},
 		"unpair": {
 			handler:  cmdUnpair,

@@ -329,6 +329,26 @@ Name mutations cycle through: vowel homoglyphs (`a→α`, `e→ε`, `o→ο`), t
 /uncannyvalley 14 -d 45m -r "Become slightly incorrect"
 ```
 
+## Area/Character Effect Commands (1)
+
+### `/areainiswap`
+Forces everyone in the current area to display as a chosen character from the server character list (same effect as `/tung` but with any character you specify). Everyone's IC sprite and emote panel switches to the target character instantly. Targets cannot change characters while the effect is active.
+
+- `/areainiswap <character name>` — apply to the whole area
+- `/areainiswap off` — remove the effect from the whole area
+
+**Permission:** KICK
+
+**Example:**
+```
+/areainiswap Maya Fey         # Force everyone in the area to display as Maya Fey
+/areainiswap off              # Clear the effect for everyone in the area
+```
+
+> **Note:** The character name must match an entry in the server's character list. The name is case-insensitive. This is an area-scoped command — only players in your current area are affected.
+
+---
+
 ## Safety Features
 - **Maximum duration:** 24 hours
 - **No stacking:** Same punishment type overwrites previous
