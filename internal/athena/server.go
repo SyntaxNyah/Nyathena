@@ -525,7 +525,7 @@ func (s *Server) ListenTCP() {
 		FatalError <- err
 		return
 	}
-	logger.LogDebug("TCP listener started.")
+	logger.LogInfo("TCP listener started.")
 	defer listener.Close()
 
 	for {
@@ -587,9 +587,6 @@ func acceptTCPConnection(conn net.Conn, rawIP, ipid string) {
 			logger.LogErrorf("Failed to update known IP %s: %v", ipid, err)
 		}
 	}()
-	if logger.DebugNetwork {
-		logger.LogDebugf("Connection received from %v", ipid)
-	}
 	client := NewClient(conn, ipid)
 	client.HandleClient()
 }
@@ -605,7 +602,7 @@ func (s *Server) ListenWS() {
 		FatalError <- err
 		return
 	}
-	logger.LogDebug("WS listener started.")
+	logger.LogInfo("WS listener started.")
 	defer listener.Close()
 
 	mux := http.NewServeMux()
@@ -632,7 +629,7 @@ func (s *Server) ListenWSS() {
 		FatalError <- err
 		return
 	}
-	logger.LogDebug("WSS listener started.")
+	logger.LogInfo("WSS listener started.")
 	defer listener.Close()
 
 	mux := http.NewServeMux()
@@ -644,10 +641,10 @@ func (s *Server) ListenWSS() {
 	// Use TLS if certificate and key paths are provided, otherwise serve plain HTTP
 	// (useful when behind a reverse proxy that handles TLS termination)
 	if config.TLSCertPath != "" && config.TLSKeyPath != "" {
-		logger.LogDebugf("WSS using TLS with cert: %s", config.TLSCertPath)
+		logger.LogInfof("WSS using TLS with cert: %s", config.TLSCertPath)
 		err = srv.ServeTLS(listener, config.TLSCertPath, config.TLSKeyPath)
 	} else {
-		logger.LogDebug("WSS using plain HTTP (expecting reverse proxy for TLS)")
+		logger.LogInfo("WSS using plain HTTP (expecting reverse proxy for TLS)")
 		err = srv.Serve(listener)
 	}
 
@@ -722,9 +719,6 @@ func HandleWS(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		logger.LogError(err.Error())
 		return
-	}
-	if logger.DebugNetwork {
-		logger.LogDebugf("Connection received from %v", ipid)
 	}
 	client := NewClient(websocket.NetConn(context.TODO(), c, websocket.MessageText), ipid)
 	go client.HandleClient()

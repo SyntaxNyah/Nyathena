@@ -175,59 +175,59 @@ type ClientPairInfo struct {
 }
 
 type Client struct {
-	pair               ClientPairInfo
-	mu                 sync.Mutex
-	conn               net.Conn
-	joining            bool
-	hdid               string
-	uid                int
-	area               *area.Area
-	char               int
-	charIDStr          string // cached strconv.Itoa(char); updated on every SetCharID call
-	ipid               string
-	oocName            string
-	lastmsg            string
-	lastTextColor      string
-	perms              uint64
-	authenticated      bool
-	mod_name           string
-	pos                string
-	case_prefs         [5]bool
-	muted              MuteState
-	muteuntil          time.Time
-	showname           string
-	narrator           bool
-	jailedUntil        time.Time
-	lastRpsTime        time.Time
-	punishments        []PunishmentState
-	msgTimestamps      []time.Time // Tracks message timestamps for rate limiting
-	oocMsgTimestamps   []time.Time // Tracks OOC message timestamps for OOC rate limiting
-	rawPktCount        int         // Packet count in the current raw-rate-limit window
-	rawPktWindowStart  time.Time   // Start time of the current raw-rate-limit window
-	lastModcallTime    time.Time   // Tracks last modcall time for cooldown
-	lastBarDrinkTime   time.Time   // Tracks last /bar buy time for cooldown
-	lastRandomCharTime time.Time   // Tracks last /randomchar time for cooldown
-	lastRandomBgTime   time.Time   // Tracks last /randombg time for cooldown
-	lastRandomSongTime time.Time   // Tracks last /randomsong time for cooldown
-	forcePairUID       int         // UID of the client this client is force-paired with (-1 if none)
-	possessing         int         // UID of the client being possessed (-1 if not possessing anyone)
-	possessedPos       string      // Position of the possessed target (saved at time of possession)
-	forcedShowname     string      // Showname forced by a moderator ("" if none)
-	forcedIniswapChar   string // Character name forced for iniswap-style IC output ("" = none)
-	forcedIniswapIDStr  string // Pre-computed strconv.Itoa(charID) matching forcedIniswapChar ("" = none)
-	connectedAt        time.Time   // Time the client joined the server (uid assigned); zero if not yet joined
-	jailAreaID         int         // Area index where this client is jailed; -1 = no specific jail area
-	hidden             bool        // Whether the client is hidden from the player list and area counts
-	charStuckUntil     time.Time   // Time when the character-stuck restriction expires; zero = not stuck
-	charStuckCharID    int         // Character ID the client is locked to; -1 = not stuck
-	dancing            bool        // Whether the client has dance mode active (flips sprite every message)
-	danceFlipped       bool        // Current flip state for dance mode; toggles each IC message
-	gambleHide         bool        // Whether the client has opted out of seeing gambling broadcast messages
-	pendingRegUser     string      // Username from a pending /register that is awaiting captcha confirmation
-	pendingRegPass     []byte      // bcrypt hash from a pending /register that is awaiting captcha confirmation
-	pendingRegCaptcha  string      // Expected captcha token for the pending registration
-	sessionChipsAwarded int64     // Chips already awarded mid-session (hourly ticker); subtracted at disconnect to avoid double-counting
-	ignoredIPIDs        sync.Map  // Set of IPIDs permanently ignored by this client. Key: IPID string, Value: struct{}. Lock-free reads.
+	pair                ClientPairInfo
+	mu                  sync.Mutex
+	conn                net.Conn
+	joining             bool
+	hdid                string
+	uid                 int
+	area                *area.Area
+	char                int
+	charIDStr           string // cached strconv.Itoa(char); updated on every SetCharID call
+	ipid                string
+	oocName             string
+	lastmsg             string
+	lastTextColor       string
+	perms               uint64
+	authenticated       bool
+	mod_name            string
+	pos                 string
+	case_prefs          [5]bool
+	muted               MuteState
+	muteuntil           time.Time
+	showname            string
+	narrator            bool
+	jailedUntil         time.Time
+	lastRpsTime         time.Time
+	punishments         []PunishmentState
+	msgTimestamps       []time.Time  // Tracks message timestamps for rate limiting
+	oocMsgTimestamps    []time.Time  // Tracks OOC message timestamps for OOC rate limiting
+	rawPktCount         int          // Packet count in the current raw-rate-limit window
+	rawPktWindowStart   time.Time    // Start time of the current raw-rate-limit window
+	lastModcallTime     time.Time    // Tracks last modcall time for cooldown
+	lastBarDrinkTime    time.Time    // Tracks last /bar buy time for cooldown
+	lastRandomCharTime  time.Time    // Tracks last /randomchar time for cooldown
+	lastRandomBgTime    time.Time    // Tracks last /randombg time for cooldown
+	lastRandomSongTime  time.Time    // Tracks last /randomsong time for cooldown
+	forcePairUID        int          // UID of the client this client is force-paired with (-1 if none)
+	possessing          int          // UID of the client being possessed (-1 if not possessing anyone)
+	possessedPos        string       // Position of the possessed target (saved at time of possession)
+	forcedShowname      string       // Showname forced by a moderator ("" if none)
+	forcedIniswapChar   string       // Character name forced for iniswap-style IC output ("" = none)
+	forcedIniswapIDStr  string       // Pre-computed strconv.Itoa(charID) matching forcedIniswapChar ("" = none)
+	connectedAt         time.Time    // Time the client joined the server (uid assigned); zero if not yet joined
+	jailAreaID          int          // Area index where this client is jailed; -1 = no specific jail area
+	hidden              bool         // Whether the client is hidden from the player list and area counts
+	charStuckUntil      time.Time    // Time when the character-stuck restriction expires; zero = not stuck
+	charStuckCharID     int          // Character ID the client is locked to; -1 = not stuck
+	dancing             bool         // Whether the client has dance mode active (flips sprite every message)
+	danceFlipped        bool         // Current flip state for dance mode; toggles each IC message
+	gambleHide          bool         // Whether the client has opted out of seeing gambling broadcast messages
+	pendingRegUser      string       // Username from a pending /register that is awaiting captcha confirmation
+	pendingRegPass      []byte       // bcrypt hash from a pending /register that is awaiting captcha confirmation
+	pendingRegCaptcha   string       // Expected captcha token for the pending registration
+	sessionChipsAwarded int64        // Chips already awarded mid-session (hourly ticker); subtracted at disconnect to avoid double-counting
+	ignoredIPIDs        sync.Map     // Set of IPIDs permanently ignored by this client. Key: IPID string, Value: struct{}. Lock-free reads.
 	lastPingNano        atomic.Int64 // Unix nanosecond timestamp of the last CH packet; 0 until seeded on join.
 }
 
@@ -275,7 +275,6 @@ func (client *Client) HandleClient() {
 		return
 	}
 
-	logger.LogDebugf("%v connected", client.ipid)
 	clients.AddClient(client)
 
 	go timeout(client)
@@ -299,9 +298,6 @@ func (client *Client) HandleClient() {
 
 	for input.Scan() {
 		rawPacket := strings.TrimSpace(input.Text())
-		if logger.DebugNetwork {
-			logger.LogDebugf("From %v: %v", client.ipid, rawPacket)
-		}
 		if logger.EnableNetworkLogging {
 			logger.WriteNetworkLog(client.ipid, client.Hdid(), "RECV", rawPacket)
 		}
@@ -336,7 +332,6 @@ func (client *Client) HandleClient() {
 			v.Func(client, packet)
 		}
 	}
-	logger.LogDebugf("%v disconnected", client.ipid)
 }
 
 // write sends the given message to the client's network socket.
@@ -345,9 +340,6 @@ func (client *Client) HandleClient() {
 func (client *Client) write(message string) {
 	client.mu.Lock()
 	io.WriteString(client.conn, message) //nolint:errcheck
-	if logger.DebugNetwork {
-		logger.LogDebugf("To %v: %v", client.ipid, message)
-	}
 	if logger.EnableNetworkLogging {
 		logger.WriteNetworkLog(client.ipid, client.hdid, "SEND", message)
 	}
@@ -370,16 +362,11 @@ func (client *Client) SendPacket(header string, contents ...string) {
 	b.WriteString("#%")
 
 	client.mu.Lock()
-	if logger.DebugNetwork || logger.EnableNetworkLogging {
+	if logger.EnableNetworkLogging {
 		// Logging paths need a string copy; keep them off the common fast path.
 		msg := b.String()
 		client.conn.Write(b.Bytes()) //nolint:errcheck
-		if logger.DebugNetwork {
-			logger.LogDebugf("To %v: %v", client.ipid, msg)
-		}
-		if logger.EnableNetworkLogging {
-			logger.WriteNetworkLog(client.ipid, client.hdid, "SEND", msg)
-		}
+		logger.WriteNetworkLog(client.ipid, client.hdid, "SEND", msg)
 	} else {
 		b.WriteTo(client.conn) //nolint:errcheck
 	}
@@ -443,7 +430,7 @@ func (client *Client) clientCleanup() {
 						return
 					}
 					oldPt := newPt - sessionSecs
-					chipsEarned := (newPt/secondsPerHour) - (oldPt/secondsPerHour) - alreadyAwarded
+					chipsEarned := (newPt / secondsPerHour) - (oldPt / secondsPerHour) - alreadyAwarded
 					if chipsEarned > 0 && config.EnableCasino {
 						if err := db.EnsureChipBalance(ipid); err == nil {
 							if _, err := db.AddChips(ipid, chipsEarned); err != nil {
