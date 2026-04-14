@@ -165,8 +165,8 @@ func TestTungAndUntungCommandsRegistered(t *testing.T) {
 	if untungCmd.handler == nil {
 		t.Error("untung command has a nil handler")
 	}
-	if untungCmd.minArgs != 1 {
-		t.Errorf("untung minArgs = %d, want 1", untungCmd.minArgs)
+	if untungCmd.minArgs != 0 {
+		t.Errorf("untung minArgs = %d, want 0", untungCmd.minArgs)
 	}
 	if untungCmd.reqPerms != permissions.PermissionField["KICK"] {
 		t.Errorf("untung reqPerms = %v, want KICK (%v)", untungCmd.reqPerms, permissions.PermissionField["KICK"])

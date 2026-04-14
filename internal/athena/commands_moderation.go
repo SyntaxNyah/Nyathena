@@ -1135,19 +1135,21 @@ func cmdUnnameShuffle(client *Client, _ []string, _ string) {
 }
 
 // cmdTung forces a real iniswap to the tung tung sahur character (asset folder
-// "tttomoetachibana" on the web asset database) for a specific UID or for all
-// players in the current area. The player's character slot is unchanged — the
-// IC packet's char_name and char_id fields are overridden so every observer's
-// client loads assets from the tung tung sahur folder.
+// "tttomoetachibana" on the web asset database) for all players in the caller's
+// current area. The players' character slots are unchanged — the IC packet's
+// char_name and char_id fields are overridden so every observer's client loads
+// assets from the tung tung sahur folder.
 // Usage:
 //
-//	/tung <uid>
 //	/tung global
-//	/tung <uid> off
 //	/tung global off
 func cmdTung(client *Client, args []string, usage string) {
 	if len(args) == 0 {
 		client.SendServerMessage("Not enough arguments:\n" + usage)
+		return
+	}
+	if !strings.EqualFold(args[0], "global") {
+		client.SendServerMessage("Invalid argument. " + usage)
 		return
 	}
 
@@ -1160,114 +1162,76 @@ func cmdTung(client *Client, args []string, usage string) {
 	// forced iniswaps in the IC handler.
 	tungID := getCharacterID(tungForcedCharacterName)
 	tungIDStr := strconv.Itoa(tungID)
-	if strings.EqualFold(args[0], "global") {
-		targetArea := client.Area()
-		capacity := targetArea.PlayerCount()
-		// Phase 1: modify each area client's state in one ForEach pass and collect
-		// the per-client data needed for the PU broadcast.  PV is sent to each
-		// target here so they see their own panel update immediately.
-		uidStrs := make([]string, 0, capacity)
-		if disable {
-			charNames := make([]string, 0, capacity)
-			clients.ForEach(func(c *Client) {
-				if c.Uid() == -1 || c.Area() != targetArea {
-					return
-				}
-				origIDStr := c.CharIDStr()
-				c.SetForcedIniswapChar("", "")
-				uidStrs = append(uidStrs, strconv.Itoa(c.Uid()))
-				charNames = append(charNames, c.CurrentCharacter())
-				// Restore the client's emote panel to their real character.
-				c.SendPacket("PV", "0", "CID", origIDStr)
-			})
-			// Phase 2: broadcast all PU updates in a single pass over all clients,
-			// replacing the N separate writeToAll calls (each a full ForEach) with one.
-			if len(uidStrs) > 0 {
-				clients.ForEach(func(c *Client) {
-					if c.Uid() == -1 {
-						return
-					}
-					for i, uid := range uidStrs {
-						c.SendPacket("PU", uid, "1", charNames[i])
-					}
-				})
-			}
-			affected := len(uidStrs)
-			client.SendServerMessage(fmt.Sprintf("Removed tung effect from %d client(s) in this area.", affected))
-			addToBuffer(client, "CMD", fmt.Sprintf("Removed tung effect from %d clients in area %v.", affected, targetArea.Name()), true)
-		} else {
-			clients.ForEach(func(c *Client) {
-				if c.Uid() == -1 || c.Area() != targetArea {
-					return
-				}
-				c.SetForcedIniswapChar(tungForcedCharacterName, tungIDStr)
-				uidStrs = append(uidStrs, strconv.Itoa(c.Uid()))
-				// Switch the client's emote panel to the tung character so
-				// their buttons and animations update on their own screen too.
-				if tungID >= 0 {
-					c.SendPacket("PV", "0", "CID", tungIDStr)
-				}
-			})
-			// Phase 2: broadcast all PU updates in a single pass over all clients.
-			if len(uidStrs) > 0 {
-				clients.ForEach(func(c *Client) {
-					if c.Uid() == -1 {
-						return
-					}
-					for _, uid := range uidStrs {
-						c.SendPacket("PU", uid, "1", tungForcedCharacterName)
-					}
-				})
-			}
-			affected := len(uidStrs)
-			client.SendServerMessage(fmt.Sprintf("Applied tung effect to %d client(s) in this area.", affected))
-			addToBuffer(client, "CMD", fmt.Sprintf("Applied tung effect to %d clients in area %v.", affected, targetArea.Name()), true)
-		}
-		return
-	}
-
-	uid, err := strconv.Atoi(args[0])
-	if err != nil {
-		client.SendServerMessage("Invalid UID: must be a number.")
-		return
-	}
-	target, err := getClientByUid(uid)
-	if err != nil {
-		client.SendServerMessage(fmt.Sprintf("Client with UID %d not found.", uid))
-		return
-	}
-
+	targetArea := client.Area()
+	capacity := targetArea.PlayerCount()
+	// Phase 1: modify each area client's state in one ForEach pass and collect
+	// the per-client data needed for the PU broadcast.  PV is sent to each
+	// target here so they see their own panel update immediately.
+	uidStrs := make([]string, 0, capacity)
 	if disable {
-		origIDStr := target.CharIDStr()
-		target.SetForcedIniswapChar("", "")
-		writeToAll("PU", strconv.Itoa(target.Uid()), "1", target.CurrentCharacter())
-		// Restore the target's emote panel to their real character.
-		target.SendPacket("PV", "0", "CID", origIDStr)
-		target.SendServerMessage("A moderator removed your tung effect.")
-		client.SendServerMessage(fmt.Sprintf("Removed tung effect from UID %d.", uid))
-		addToBuffer(client, "CMD", fmt.Sprintf("removed tung effect from UID %d", uid), true)
-		return
+		charNames := make([]string, 0, capacity)
+		clients.ForEach(func(c *Client) {
+			if c.Uid() == -1 || c.Area() != targetArea {
+				return
+			}
+			origIDStr := c.CharIDStr()
+			c.SetForcedIniswapChar("", "")
+			uidStrs = append(uidStrs, strconv.Itoa(c.Uid()))
+			charNames = append(charNames, c.CurrentCharacter())
+			// Restore the client's emote panel to their real character.
+			c.SendPacket("PV", "0", "CID", origIDStr)
+		})
+		// Phase 2: broadcast all PU updates in a single pass over all clients,
+		// replacing the N separate writeToAll calls (each a full ForEach) with one.
+		if len(uidStrs) > 0 {
+			clients.ForEach(func(c *Client) {
+				if c.Uid() == -1 {
+					return
+				}
+				for i, uid := range uidStrs {
+					c.SendPacket("PU", uid, "1", charNames[i])
+				}
+			})
+		}
+		affected := len(uidStrs)
+		client.SendServerMessage(fmt.Sprintf("Removed tung effect from %d client(s) in this area.", affected))
+		addToBuffer(client, "CMD", fmt.Sprintf("Removed tung effect from %d clients in area %v.", affected, targetArea.Name()), true)
+	} else {
+		clients.ForEach(func(c *Client) {
+			if c.Uid() == -1 || c.Area() != targetArea {
+				return
+			}
+			c.SetForcedIniswapChar(tungForcedCharacterName, tungIDStr)
+			uidStrs = append(uidStrs, strconv.Itoa(c.Uid()))
+			// Switch the client's emote panel to the tung character so
+			// their buttons and animations update on their own screen too.
+			if tungID >= 0 {
+				c.SendPacket("PV", "0", "CID", tungIDStr)
+			}
+		})
+		// Phase 2: broadcast all PU updates in a single pass over all clients.
+		if len(uidStrs) > 0 {
+			clients.ForEach(func(c *Client) {
+				if c.Uid() == -1 {
+					return
+				}
+				for _, uid := range uidStrs {
+					c.SendPacket("PU", uid, "1", tungForcedCharacterName)
+				}
+			})
+		}
+		affected := len(uidStrs)
+		client.SendServerMessage(fmt.Sprintf("Applied tung effect to %d client(s) in this area.", affected))
+		addToBuffer(client, "CMD", fmt.Sprintf("Applied tung effect to %d clients in area %v.", affected, targetArea.Name()), true)
 	}
-
-	target.SetForcedIniswapChar(tungForcedCharacterName, tungIDStr)
-	writeToAll("PU", strconv.Itoa(target.Uid()), "1", tungForcedCharacterName)
-	// Switch the target's own emote panel to the tung character so their
-	// buttons and animations update on their screen (full iniswap effect).
-	if tungID >= 0 {
-		target.SendPacket("PV", "0", "CID", tungIDStr)
-	}
-	target.SendServerMessage("A moderator made your character display as tung tung sahur.")
-	client.SendServerMessage(fmt.Sprintf("Applied tung effect to UID %d.", uid))
-	addToBuffer(client, "CMD", fmt.Sprintf("applied tung effect to UID %d", uid), true)
 }
 
-// cmdUntung is a convenience alias for disabling /tung by UID or globally.
+// cmdUntung is a convenience alias for /tung global off.
 // Usage:
 //
-//	/untung <uid>
 //	/untung global
 func cmdUntung(client *Client, args []string, _ string) {
-	cmdTung(client, []string{args[0], "off"}, "Usage: /tung <uid> [off] | /tung global [off]")
+	cmdTung(client, []string{"global", "off"}, "Usage: /untung global")
 }
 
 // cmdAreaIniswap forces everyone in the caller's current area to iniswap as a
