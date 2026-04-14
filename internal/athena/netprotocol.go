@@ -298,12 +298,24 @@ func pktIC(client *Client, p *packet.Packet) {
 	ownEmote := args[3]
 	ownTextColor := args[14]
 	ownShowname := args[15]
+	hasForcedIniswap := false
 
 	// If a moderator has forced a showname for this client, override whatever
 	// name the client sent in the packet.
 	if forced := client.ForcedShowname(); forced != "" {
 		ownShowname = forced
 		args[15] = forced
+	}
+
+	// If a moderator has forced an iniswap character for this client, override
+	// the outgoing IC character name and ID. Both values are pre-computed at
+	// command invocation so this hot path performs only a single mutex
+	// acquisition and two string assignments — no map lookup or int conversion.
+	if charName, charIDStr := client.ForcedIniswapInfo(); charName != "" {
+		hasForcedIniswap = true
+		ownCharName = charName
+		args[2] = charName
+		args[8] = charIDStr
 	}
 
 	// Track if we're in fullpossess mode for validation adjustments
@@ -523,10 +535,10 @@ func pktIC(client *Client, p *packet.Packet) {
 	switch {
 	case !sliceutil.ContainsString(validDeskMods, args[0]): // desk_mod
 		return
-	case !isPossessing && !strings.EqualFold(characters[client.CharID()], args[2]) && !client.Area().IniswapAllowed(): // character name (skip check when possessing)
+	case !isPossessing && !hasForcedIniswap && !strings.EqualFold(characters[client.CharID()], args[2]) && !client.Area().IniswapAllowed(): // character name (skip check when possessing or forced iniswap)
 		client.SendServerMessage("Iniswapping is not allowed in this area.")
 		return
-	case !isPossessing && stuckCharID >= 0 && !strings.EqualFold(characters[stuckCharID], args[2]): // block iniswap when charstuck
+	case !isPossessing && !hasForcedIniswap && stuckCharID >= 0 && !strings.EqualFold(characters[stuckCharID], args[2]): // block iniswap when charstuck unless forced iniswap
 		client.SendServerMessage(fmt.Sprintf("You are character stuck as %v and cannot iniswap.", characters[stuckCharID]))
 		return
 	case len(msgText) > config.MaxMsg: // message
@@ -536,7 +548,7 @@ func pktIC(client *Client, p *packet.Packet) {
 		return
 	case emote_mod < 0 || emote_mod > 6:
 		return
-	case !isPossessing && args[8] != client.CharIDStr(): // char_id (skip check when possessing)
+	case !isPossessing && !hasForcedIniswap && args[8] != client.CharIDStr(): // char_id (skip check when possessing or forced iniswap)
 		return
 	case objection < 0 || objection > 4: // objection_mod
 		return

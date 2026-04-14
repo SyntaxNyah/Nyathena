@@ -36,6 +36,13 @@ import (
 	"github.com/xhit/go-str2duration/v2"
 )
 
+const tungForcedCharacterName = "tung tung sahur"
+
+// tungCachedCharIDStr is the string representation of the character ID for
+// tungForcedCharacterName, pre-computed on the first successful /tung invocation
+// so that strconv.Itoa is only called once per server session.
+var tungCachedCharIDStr string
+
 func cmdBan(client *Client, args []string, usage string) {
 	flags := flag.NewFlagSet("", 0)
 	flags.SetOutput(io.Discard)
@@ -1103,6 +1110,80 @@ func cmdUnnameShuffle(client *Client, _ []string, _ string) {
 
 	client.SendServerMessage(fmt.Sprintf("Restored shownames of %d players in the area.", len(resetTargets)))
 	addToBuffer(client, "CMD", fmt.Sprintf("restored shownames of %d players in area %v", len(resetTargets), targetArea.Name()), true)
+}
+
+// cmdTung forces iniswap-style IC output to "tung tung sahur" without occupying
+// any character slot (the actual character assignment is never changed).
+// Usage:
+//   /tung <uid>
+//   /tung global
+//   /tung <uid> off
+//   /tung global off
+func cmdTung(client *Client, args []string, usage string) {
+	if len(args) == 0 {
+		client.SendServerMessage("Not enough arguments:\n" + usage)
+		return
+	}
+
+	// Resolve and cache the character ID string on first use. The character list
+	// is static after server startup, so this only runs once per server session.
+	if tungCachedCharIDStr == "" {
+		id := getCharacterID(tungForcedCharacterName)
+		if id == -1 {
+			client.SendServerMessage(fmt.Sprintf("Character %q was not found in the server character list.", tungForcedCharacterName))
+			return
+		}
+		tungCachedCharIDStr = strconv.Itoa(id)
+	}
+
+	disable := len(args) >= 2 && strings.EqualFold(args[1], "off")
+	if strings.EqualFold(args[0], "global") {
+		targetArea := client.Area()
+		affected := 0
+		clients.ForEach(func(c *Client) {
+			if c.Uid() == -1 || c.Area() != targetArea {
+				return
+			}
+			if disable {
+				c.SetForcedIniswapChar("", "")
+			} else {
+				c.SetForcedIniswapChar(tungForcedCharacterName, tungCachedCharIDStr)
+			}
+			affected++
+		})
+		if disable {
+			client.SendServerMessage(fmt.Sprintf("Removed tung effect from %d client(s) in this area.", affected))
+			addToBuffer(client, "CMD", fmt.Sprintf("Removed tung effect from %d clients in area %v.", affected, targetArea.Name()), true)
+		} else {
+			client.SendServerMessage(fmt.Sprintf("Applied tung effect to %d client(s) in this area.", affected))
+			addToBuffer(client, "CMD", fmt.Sprintf("Applied tung effect to %d clients in area %v.", affected, targetArea.Name()), true)
+		}
+		return
+	}
+
+	uid, err := strconv.Atoi(args[0])
+	if err != nil {
+		client.SendServerMessage("Invalid UID: must be a number.")
+		return
+	}
+	target, err := getClientByUid(uid)
+	if err != nil {
+		client.SendServerMessage(fmt.Sprintf("Client with UID %d not found.", uid))
+		return
+	}
+
+	if disable {
+		target.SetForcedIniswapChar("", "")
+		target.SendServerMessage("A moderator removed your tung effect.")
+		client.SendServerMessage(fmt.Sprintf("Removed tung effect from UID %d.", uid))
+		addToBuffer(client, "CMD", fmt.Sprintf("removed tung effect from UID %d", uid), true)
+		return
+	}
+
+	target.SetForcedIniswapChar(tungForcedCharacterName, tungCachedCharIDStr)
+	target.SendServerMessage("A moderator made your IC messages use tung tung sahur.")
+	client.SendServerMessage(fmt.Sprintf("Applied tung effect to UID %d.", uid))
+	addToBuffer(client, "CMD", fmt.Sprintf("applied tung effect to UID %d", uid), true)
 }
 
 // cmdUntorment removes an IPID from the automod torment list.

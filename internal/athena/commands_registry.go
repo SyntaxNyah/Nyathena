@@ -543,6 +543,14 @@ func initCommands() {
 			reqPerms: permissions.PermissionField["KICK"],
 			category: "moderation",
 		},
+		"tung": {
+			handler:  cmdTung,
+			minArgs:  1,
+			usage:    "Usage: /tung <uid> [off] | /tung global [off]",
+			desc:     "Forces IC messages to use the character \"tung tung sahur\" for a UID or the current area.",
+			reqPerms: permissions.PermissionField["KICK"],
+			category: "moderation",
+		},
 		"unpair": {
 			handler:  cmdUnpair,
 			minArgs:  0,

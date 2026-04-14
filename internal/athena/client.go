@@ -213,6 +213,8 @@ type Client struct {
 	possessing         int         // UID of the client being possessed (-1 if not possessing anyone)
 	possessedPos       string      // Position of the possessed target (saved at time of possession)
 	forcedShowname     string      // Showname forced by a moderator ("" if none)
+	forcedIniswapChar   string // Character name forced for iniswap-style IC output ("" = none)
+	forcedIniswapIDStr  string // Pre-computed strconv.Itoa(charID) matching forcedIniswapChar ("" = none)
 	connectedAt        time.Time   // Time the client joined the server (uid assigned); zero if not yet joined
 	jailAreaID         int         // Area index where this client is jailed; -1 = no specific jail area
 	hidden             bool        // Whether the client is hidden from the player list and area counts
@@ -1196,6 +1198,25 @@ func (client *Client) ForcedShowname() string {
 func (client *Client) SetForcedShowname(s string) {
 	client.mu.Lock()
 	client.forcedShowname = s
+	client.mu.Unlock()
+}
+
+// ForcedIniswapInfo returns the moderator-forced iniswap character name and its
+// pre-computed char-ID string. Both values are read under a single mutex
+// acquisition. Returns two empty strings when no forced iniswap is active.
+func (client *Client) ForcedIniswapInfo() (charName, charIDStr string) {
+	client.mu.Lock()
+	charName, charIDStr = client.forcedIniswapChar, client.forcedIniswapIDStr
+	client.mu.Unlock()
+	return
+}
+
+// SetForcedIniswapChar sets (or clears) the moderator-forced iniswap character.
+// Pass charName="" and charIDStr="" to clear the effect.
+// Both fields are written under a single mutex acquisition.
+func (client *Client) SetForcedIniswapChar(charName, charIDStr string) {
+	client.mu.Lock()
+	client.forcedIniswapChar, client.forcedIniswapIDStr = charName, charIDStr
 	client.mu.Unlock()
 }
 
