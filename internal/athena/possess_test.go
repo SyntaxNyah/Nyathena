@@ -123,8 +123,8 @@ func TestForcedIniswapCharState(t *testing.T) {
 	}
 
 	// Set: both name and pre-computed ID string should be stored.
-	client.SetForcedIniswapChar("tung tung sahur", "42")
-	if name, idStr := client.ForcedIniswapInfo(); name != "tung tung sahur" || idStr != "42" {
+	client.SetForcedIniswapChar(tungForcedCharacterName, tungCharIDStr)
+	if name, idStr := client.ForcedIniswapInfo(); name != tungForcedCharacterName || idStr != tungCharIDStr {
 		t.Fatalf("expected forced iniswap info to be set, got name=%q idStr=%q", name, idStr)
 	}
 

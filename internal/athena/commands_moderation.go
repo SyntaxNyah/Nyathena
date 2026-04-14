@@ -36,12 +36,16 @@ import (
 	"github.com/xhit/go-str2duration/v2"
 )
 
-const tungForcedCharacterName = "tung tung sahur"
+// tungForcedCharacterName is the asset folder name for the tung tung sahur character
+// hosted on the web asset database (miku.pizza). This is not a server-list
+// character, so no server-side character ID exists for it.
+const tungForcedCharacterName = "tttomoetachibana"
 
-// tungCachedCharIDStr is the string representation of the character ID for
-// tungForcedCharacterName, pre-computed on the first successful /tung invocation
-// so that strconv.Itoa is only called once per server session.
-var tungCachedCharIDStr string
+// tungCharIDStr is the char_id sent in IC packets for the forced iniswap.
+// AO2 clients use -1 to indicate a web-asset character that is not in the
+// server's character list; validation of char_id is skipped on the server
+// side when hasForcedIniswap is true.
+const tungCharIDStr = "-1"
 
 func cmdBan(client *Client, args []string, usage string) {
 	flags := flag.NewFlagSet("", 0)
@@ -1112,9 +1116,11 @@ func cmdUnnameShuffle(client *Client, _ []string, _ string) {
 	addToBuffer(client, "CMD", fmt.Sprintf("restored shownames of %d players in area %v", len(resetTargets), targetArea.Name()), true)
 }
 
-// cmdTung forces an iniswap-style display to "tung tung sahur" for a specific UID
-// or for all players in the current area. The player's actual character slot is
-// unchanged; only IC output and the playerlist display are overridden.
+// cmdTung forces a real iniswap to the tung tung sahur character (asset folder
+// "tttomoetachibana" on the web asset database) for a specific UID or for all
+// players in the current area. The player's character slot is unchanged — the
+// IC packet's char_name and char_id fields are overridden so every observer's
+// client loads assets from the tung tung sahur folder.
 // Usage:
 //   /tung <uid>
 //   /tung global
@@ -1124,17 +1130,6 @@ func cmdTung(client *Client, args []string, usage string) {
 	if len(args) == 0 {
 		client.SendServerMessage("Not enough arguments:\n" + usage)
 		return
-	}
-
-	// Resolve and cache the character ID string on first use. The character list
-	// is static after server startup, so this only runs once per server session.
-	if tungCachedCharIDStr == "" {
-		id := getCharacterID(tungForcedCharacterName)
-		if id == -1 {
-			client.SendServerMessage(fmt.Sprintf("Character %q was not found in the server character list.", tungForcedCharacterName))
-			return
-		}
-		tungCachedCharIDStr = strconv.Itoa(id)
 	}
 
 	disable := len(args) >= 2 && strings.EqualFold(args[1], "off")
@@ -1149,7 +1144,7 @@ func cmdTung(client *Client, args []string, usage string) {
 				c.SetForcedIniswapChar("", "")
 				writeToAll("PU", strconv.Itoa(c.Uid()), "1", c.CurrentCharacter())
 			} else {
-				c.SetForcedIniswapChar(tungForcedCharacterName, tungCachedCharIDStr)
+				c.SetForcedIniswapChar(tungForcedCharacterName, tungCharIDStr)
 				writeToAll("PU", strconv.Itoa(c.Uid()), "1", tungForcedCharacterName)
 			}
 			affected++
@@ -1184,9 +1179,9 @@ func cmdTung(client *Client, args []string, usage string) {
 		return
 	}
 
-	target.SetForcedIniswapChar(tungForcedCharacterName, tungCachedCharIDStr)
+	target.SetForcedIniswapChar(tungForcedCharacterName, tungCharIDStr)
 	writeToAll("PU", strconv.Itoa(target.Uid()), "1", tungForcedCharacterName)
-	target.SendServerMessage("A moderator made your IC messages use tung tung sahur.")
+	target.SendServerMessage("A moderator made your character display as tung tung sahur.")
 	client.SendServerMessage(fmt.Sprintf("Applied tung effect to UID %d.", uid))
 	addToBuffer(client, "CMD", fmt.Sprintf("applied tung effect to UID %d", uid), true)
 }
