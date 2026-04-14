@@ -1074,125 +1074,165 @@ func TestAreaOOCDedupIndependentPerArea(t *testing.T) {
 // resetGlobalNewIPTracker resets the global new-IP tracker and the first-seen tracker
 // to provide a clean state for global-rate-limit tests.
 func resetGlobalNewIPTracker() {
-globalNewIPTracker.mu.Lock()
-globalNewIPTracker.timestamps = make([]time.Time, 0)
-globalNewIPTracker.mu.Unlock()
+	globalNewIPTracker.mu.Lock()
+	globalNewIPTracker.timestamps = make([]time.Time, 0)
+	globalNewIPTracker.mu.Unlock()
 
-resetFirstSeenTracker()
+	resetFirstSeenTracker()
 }
 
 // TestGlobalNewIPRateLimitDisabled tests that the global limit can be disabled (limit=0).
 func TestGlobalNewIPRateLimitDisabled(t *testing.T) {
-oldConfig := config
-defer func() { config = oldConfig }()
+	oldConfig := config
+	defer func() { config = oldConfig }()
 
-config = &settings.Config{}
-config.GlobalNewIPRateLimit = 0
+	config = &settings.Config{}
+	config.GlobalNewIPRateLimit = 0
 
-resetGlobalNewIPTracker()
+	resetGlobalNewIPTracker()
 
-// Should never be rejected regardless of how many new IPs arrive.
-for i := 0; i < 100; i++ {
-ipid := fmt.Sprintf("testGlobalDisabled%d", i)
-if checkGlobalNewIPRateLimit(ipid) {
-t.Errorf("New IP %d was rejected when global rate limiting is disabled", i)
-return
-}
-recordIPFirstSeen(ipid)
-}
+	// Should never be rejected regardless of how many new IPs arrive.
+	for i := 0; i < 100; i++ {
+		ipid := fmt.Sprintf("testGlobalDisabled%d", i)
+		if checkGlobalNewIPRateLimit(ipid) {
+			t.Errorf("New IP %d was rejected when global rate limiting is disabled", i)
+			return
+		}
+		recordIPFirstSeen(ipid)
+	}
 }
 
 // TestGlobalNewIPRateLimitBasic tests that the Nth+1 new IP is rejected.
 func TestGlobalNewIPRateLimitBasic(t *testing.T) {
-oldConfig := config
-defer func() { config = oldConfig }()
+	oldConfig := config
+	defer func() { config = oldConfig }()
 
-config = &settings.Config{}
-config.GlobalNewIPRateLimit = 3
-config.GlobalNewIPRateLimitWindow = 60
+	config = &settings.Config{}
+	config.GlobalNewIPRateLimit = 3
+	config.GlobalNewIPRateLimitWindow = 60
 
-resetGlobalNewIPTracker()
+	resetGlobalNewIPTracker()
 
-// First 3 new IPs should be allowed.
-for i := 0; i < 3; i++ {
-ipid := fmt.Sprintf("testGlobalBasic%d", i)
-if checkGlobalNewIPRateLimit(ipid) {
-t.Errorf("New IP %d was rejected (limit is 3)", i)
-return
-}
-recordIPFirstSeen(ipid)
-}
+	// First 3 new IPs should be allowed.
+	for i := 0; i < 3; i++ {
+		ipid := fmt.Sprintf("testGlobalBasic%d", i)
+		if checkGlobalNewIPRateLimit(ipid) {
+			t.Errorf("New IP %d was rejected (limit is 3)", i)
+			return
+		}
+		recordIPFirstSeen(ipid)
+	}
 
-// 4th new IP should be rejected.
-if !checkGlobalNewIPRateLimit("testGlobalBasicExtra") {
-t.Errorf("4th new IP was not rejected after reaching the limit")
-}
+	// 4th new IP should be rejected.
+	if !checkGlobalNewIPRateLimit("testGlobalBasicExtra") {
+		t.Errorf("4th new IP was not rejected after reaching the limit")
+	}
 }
 
 // TestGlobalNewIPRateLimitKnownIPsNotAffected tests that known (returning) IPs bypass the limit.
 func TestGlobalNewIPRateLimitKnownIPsNotAffected(t *testing.T) {
-oldConfig := config
-defer func() { config = oldConfig }()
+	oldConfig := config
+	defer func() { config = oldConfig }()
 
-config = &settings.Config{}
-config.GlobalNewIPRateLimit = 1
-config.GlobalNewIPRateLimitWindow = 60
+	config = &settings.Config{}
+	config.GlobalNewIPRateLimit = 1
+	config.GlobalNewIPRateLimitWindow = 60
 
-resetGlobalNewIPTracker()
+	resetGlobalNewIPTracker()
 
-// Allow 1 new IP.
-ipidNew := "testGlobalKnownNew"
-if checkGlobalNewIPRateLimit(ipidNew) {
-t.Errorf("First new IP was unexpectedly rejected")
-return
-}
-recordIPFirstSeen(ipidNew)
+	// Allow 1 new IP.
+	ipidNew := "testGlobalKnownNew"
+	if checkGlobalNewIPRateLimit(ipidNew) {
+		t.Errorf("First new IP was unexpectedly rejected")
+		return
+	}
+	recordIPFirstSeen(ipidNew)
 
-// Another new IP should be rejected (limit reached).
-if !checkGlobalNewIPRateLimit("testGlobalKnownAnother") {
-t.Errorf("2nd new IP was not rejected after limit was reached")
-}
+	// Another new IP should be rejected (limit reached).
+	if !checkGlobalNewIPRateLimit("testGlobalKnownAnother") {
+		t.Errorf("2nd new IP was not rejected after limit was reached")
+	}
 
-// But the known IP (already seen) should be allowed.
-if checkGlobalNewIPRateLimit(ipidNew) {
-t.Errorf("Known IP was rejected by global rate limit (should be bypassed)")
-}
+	// But the known IP (already seen) should be allowed.
+	if checkGlobalNewIPRateLimit(ipidNew) {
+		t.Errorf("Known IP was rejected by global rate limit (should be bypassed)")
+	}
 }
 
 // TestGlobalNewIPRateLimitWindowExpiry tests that the limit resets after the window expires.
 func TestGlobalNewIPRateLimitWindowExpiry(t *testing.T) {
-oldConfig := config
-defer func() { config = oldConfig }()
+	oldConfig := config
+	defer func() { config = oldConfig }()
 
-config = &settings.Config{}
-config.GlobalNewIPRateLimit = 2
-config.GlobalNewIPRateLimitWindow = 1
+	config = &settings.Config{}
+	config.GlobalNewIPRateLimit = 2
+	config.GlobalNewIPRateLimitWindow = 1
 
-resetGlobalNewIPTracker()
+	resetGlobalNewIPTracker()
 
-// Fill up the limit.
-for i := 0; i < 2; i++ {
-ipid := fmt.Sprintf("testGlobalExpiry%d", i)
-if checkGlobalNewIPRateLimit(ipid) {
-t.Errorf("New IP %d was rejected prematurely", i)
-return
+	// Fill up the limit.
+	for i := 0; i < 2; i++ {
+		ipid := fmt.Sprintf("testGlobalExpiry%d", i)
+		if checkGlobalNewIPRateLimit(ipid) {
+			t.Errorf("New IP %d was rejected prematurely", i)
+			return
+		}
+		recordIPFirstSeen(ipid)
+	}
+
+	// Should be rejected now.
+	if !checkGlobalNewIPRateLimit("testGlobalExpiryExtra") {
+		t.Errorf("Extra new IP was not rejected after limit was reached")
+		return
+	}
+
+	// Wait for the window to expire.
+	time.Sleep(time.Duration(config.GlobalNewIPRateLimitWindow)*time.Second + 100*time.Millisecond)
+
+	// A fresh new IP should now be allowed.
+	if checkGlobalNewIPRateLimit("testGlobalExpiryFresh") {
+		t.Errorf("New IP was rejected after window expired")
+	}
 }
-recordIPFirstSeen(ipid)
+
+// TestServerLockdownRejectionUnknownIP verifies that unseen IPIDs are identified as
+// lockdown rejections when server lockdown is active.
+func TestServerLockdownRejectionUnknownIP(t *testing.T) {
+	resetGlobalNewIPTracker()
+	serverLockdown.Store(true)
+	defer serverLockdown.Store(false)
+
+	if !serverLockdownRejection("lockdownUnknown") {
+		t.Errorf("Expected unknown IPID to be treated as a lockdown rejection")
+	}
 }
 
-// Should be rejected now.
-if !checkGlobalNewIPRateLimit("testGlobalExpiryExtra") {
-t.Errorf("Extra new IP was not rejected after limit was reached")
-return
+// TestServerLockdownRejectionKnownIP verifies that known IPIDs are not identified as
+// lockdown rejections even when lockdown is active.
+func TestServerLockdownRejectionKnownIP(t *testing.T) {
+	resetGlobalNewIPTracker()
+	serverLockdown.Store(true)
+	defer serverLockdown.Store(false)
+
+	recordIPFirstSeen("lockdownKnown")
+	if serverLockdownRejection("lockdownKnown") {
+		t.Errorf("Expected known IPID not to be treated as a lockdown rejection")
+	}
 }
 
-// Wait for the window to expire.
-time.Sleep(time.Duration(config.GlobalNewIPRateLimitWindow)*time.Second + 100*time.Millisecond)
+// TestServerLockdownRejectionDisabled verifies that when lockdown is disabled no
+// IPID is marked as a lockdown rejection.
+func TestServerLockdownRejectionDisabled(t *testing.T) {
+	resetGlobalNewIPTracker()
+	serverLockdown.Store(false)
+	recordIPFirstSeen("lockdownDisabledKnown")
 
-// A fresh new IP should now be allowed.
-if checkGlobalNewIPRateLimit("testGlobalExpiryFresh") {
-t.Errorf("New IP was rejected after window expired")
-}
+	if serverLockdownRejection("lockdownDisabledUnknown") {
+		t.Errorf("Did not expect unknown IPID to be treated as lockdown rejection when lockdown is disabled")
+	}
+	if serverLockdownRejection("lockdownDisabledKnown") {
+		t.Errorf("Did not expect known IPID to be treated as lockdown rejection when lockdown is disabled")
+	}
 }
 
 // TestPacketFloodAutobanDefaultTrue verifies that the PacketFloodAutoban config
