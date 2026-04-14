@@ -38,9 +38,9 @@ import (
 
 const tungForcedCharacterName = "tung tung sahur"
 
-// tungCachedCharIDStr is the pre-computed strconv.Itoa of tungForcedCharacterName's
-// character ID. Set once on the first successful /tung invocation and reused
-// on every subsequent apply, avoiding repeated strconv.Itoa calls.
+// tungCachedCharIDStr is the string representation of the character ID for
+// tungForcedCharacterName, pre-computed on the first successful /tung invocation
+// so that strconv.Itoa is only called once per server session.
 var tungCachedCharIDStr string
 
 func cmdBan(client *Client, args []string, usage string) {

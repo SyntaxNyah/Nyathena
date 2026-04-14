@@ -213,8 +213,8 @@ type Client struct {
 	possessing         int         // UID of the client being possessed (-1 if not possessing anyone)
 	possessedPos       string      // Position of the possessed target (saved at time of possession)
 	forcedShowname     string      // Showname forced by a moderator ("" if none)
-	forcedIniswapChar   string // Character name forced for iniswap-style IC output ("" = none), protected by mu
-	forcedIniswapIDStr  string // Pre-computed strconv.Itoa(charID) for above ("" = none), protected by mu
+	forcedIniswapChar   string // Character name forced for iniswap-style IC output ("" = none)
+	forcedIniswapIDStr  string // Pre-computed strconv.Itoa(charID) matching forcedIniswapChar ("" = none)
 	connectedAt        time.Time   // Time the client joined the server (uid assigned); zero if not yet joined
 	jailAreaID         int         // Area index where this client is jailed; -1 = no specific jail area
 	hidden             bool        // Whether the client is hidden from the player list and area counts
