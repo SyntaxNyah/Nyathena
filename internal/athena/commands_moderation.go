@@ -1138,25 +1138,26 @@ func cmdTung(client *Client, args []string, usage string) {
 
 	disable := len(args) >= 2 && strings.EqualFold(args[1], "off")
 	if strings.EqualFold(args[0], "global") {
-		targetArea := client.Area()
 		affected := 0
 		clients.ForEach(func(c *Client) {
-			if c.Uid() == -1 || c.Area() != targetArea {
+			if c.Uid() == -1 {
 				return
 			}
 			if disable {
 				c.SetForcedIniswapChar("", "")
+				writeToAll("PU", strconv.Itoa(c.Uid()), "1", c.CurrentCharacter())
 			} else {
 				c.SetForcedIniswapChar(tungForcedCharacterName, tungCachedCharIDStr)
+				writeToAll("PU", strconv.Itoa(c.Uid()), "1", tungForcedCharacterName)
 			}
 			affected++
 		})
 		if disable {
-			client.SendServerMessage(fmt.Sprintf("Removed tung effect from %d client(s) in this area.", affected))
-			addToBuffer(client, "CMD", fmt.Sprintf("Removed tung effect from %d clients in area %v.", affected, targetArea.Name()), true)
+			client.SendServerMessage(fmt.Sprintf("Removed tung effect from %d client(s) server-wide.", affected))
+			addToBuffer(client, "CMD", fmt.Sprintf("Removed tung effect from %d clients server-wide.", affected), true)
 		} else {
-			client.SendServerMessage(fmt.Sprintf("Applied tung effect to %d client(s) in this area.", affected))
-			addToBuffer(client, "CMD", fmt.Sprintf("Applied tung effect to %d clients in area %v.", affected, targetArea.Name()), true)
+			client.SendServerMessage(fmt.Sprintf("Applied tung effect to %d client(s) server-wide.", affected))
+			addToBuffer(client, "CMD", fmt.Sprintf("Applied tung effect to %d clients server-wide.", affected), true)
 		}
 		return
 	}
@@ -1174,6 +1175,7 @@ func cmdTung(client *Client, args []string, usage string) {
 
 	if disable {
 		target.SetForcedIniswapChar("", "")
+		writeToAll("PU", strconv.Itoa(target.Uid()), "1", target.CurrentCharacter())
 		target.SendServerMessage("A moderator removed your tung effect.")
 		client.SendServerMessage(fmt.Sprintf("Removed tung effect from UID %d.", uid))
 		addToBuffer(client, "CMD", fmt.Sprintf("removed tung effect from UID %d", uid), true)
@@ -1181,9 +1183,18 @@ func cmdTung(client *Client, args []string, usage string) {
 	}
 
 	target.SetForcedIniswapChar(tungForcedCharacterName, tungCachedCharIDStr)
+	writeToAll("PU", strconv.Itoa(target.Uid()), "1", tungForcedCharacterName)
 	target.SendServerMessage("A moderator made your IC messages use tung tung sahur.")
 	client.SendServerMessage(fmt.Sprintf("Applied tung effect to UID %d.", uid))
 	addToBuffer(client, "CMD", fmt.Sprintf("applied tung effect to UID %d", uid), true)
+}
+
+// cmdUntung is a convenience alias for disabling /tung by UID or globally.
+// Usage:
+//   /untung <uid>
+//   /untung global
+func cmdUntung(client *Client, args []string, _ string) {
+	cmdTung(client, []string{args[0], "off"}, "Usage: /tung <uid> [off] | /tung global [off]")
 }
 
 // cmdUntorment removes an IPID from the automod torment list.

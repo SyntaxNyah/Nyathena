@@ -140,6 +140,39 @@ func TestForceRandomCharCommandRegistered(t *testing.T) {
 	}
 }
 
+// TestTungAndUntungCommandsRegistered verifies moderation command registration.
+func TestTungAndUntungCommandsRegistered(t *testing.T) {
+	initCommands()
+
+	tungCmd, ok := Commands["tung"]
+	if !ok {
+		t.Fatal("tung command is not registered in Commands map")
+	}
+	if tungCmd.handler == nil {
+		t.Error("tung command has a nil handler")
+	}
+	if tungCmd.minArgs != 1 {
+		t.Errorf("tung minArgs = %d, want 1", tungCmd.minArgs)
+	}
+	if tungCmd.reqPerms != permissions.PermissionField["KICK"] {
+		t.Errorf("tung reqPerms = %v, want KICK (%v)", tungCmd.reqPerms, permissions.PermissionField["KICK"])
+	}
+
+	untungCmd, ok := Commands["untung"]
+	if !ok {
+		t.Fatal("untung command is not registered in Commands map")
+	}
+	if untungCmd.handler == nil {
+		t.Error("untung command has a nil handler")
+	}
+	if untungCmd.minArgs != 1 {
+		t.Errorf("untung minArgs = %d, want 1", untungCmd.minArgs)
+	}
+	if untungCmd.reqPerms != permissions.PermissionField["KICK"] {
+		t.Errorf("untung reqPerms = %v, want KICK (%v)", untungCmd.reqPerms, permissions.PermissionField["KICK"])
+	}
+}
+
 // TestForceRandomCharTargetsUID verifies the UID-lookup infrastructure that
 // cmdForceRandomChar uses when called with a UID argument.
 func TestForceRandomCharTargetsUID(t *testing.T) {
