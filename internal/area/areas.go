@@ -103,12 +103,13 @@ type Area struct {
 	lastCoinflipTime  time.Time
 	spectateMode      bool
 	spectateInvited   map[int]struct{}
-	casinoEnabled     bool
-	casinoMinBet      int
-	casinoMaxBet      int
-	casinoMaxTables   int
-	casinoJackpot     bool
-	casinoJackpotPool int64
+	casinoEnabled        bool
+	casinoMinBet         int
+	casinoMaxBet         int
+	casinoMaxTables      int
+	casinoJackpot        bool
+	casinoJackpotPool    int64
+	randomPunishEnabled  bool
 }
 
 type AreaData struct {
@@ -176,11 +177,12 @@ func NewArea(data AreaData, charlen int, bufsize int, evi_mode EvidenceMode) *Ar
 		cms:             make(map[int]struct{}),
 		invited:         make(map[int]struct{}),
 		spectateInvited: make(map[int]struct{}),
-		casinoEnabled:   data.Casino_enabled,
-		casinoMinBet:    data.Casino_min_bet,
-		casinoMaxBet:    data.Casino_max_bet,
-		casinoMaxTables: data.Casino_max_tables,
-		casinoJackpot:   data.Casino_jackpot,
+		casinoEnabled:        data.Casino_enabled,
+		casinoMinBet:         data.Casino_min_bet,
+		casinoMaxBet:         data.Casino_max_bet,
+		casinoMaxTables:      data.Casino_max_tables,
+		casinoJackpot:        data.Casino_jackpot,
+		randomPunishEnabled:  true,
 	}
 }
 
@@ -1026,4 +1028,18 @@ func (a *Area) ResetCasinoJackpotPool() {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	a.casinoJackpotPool = 0
+}
+
+// RandomPunishEnabled returns whether /randompunishall is allowed in this area.
+func (a *Area) RandomPunishEnabled() bool {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return a.randomPunishEnabled
+}
+
+// SetRandomPunishEnabled enables or disables /randompunishall for this area.
+func (a *Area) SetRandomPunishEnabled(v bool) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	a.randomPunishEnabled = v
 }
