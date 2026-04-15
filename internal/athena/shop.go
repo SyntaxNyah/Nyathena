@@ -301,6 +301,8 @@ var shopItems = []shopItem{
 		description: "You have been ratio'd. Or you are the ratio."},
 	{id: "tag_skill_issue", name: "Skill Issue", kind: shopKindTag, category: "meme", price: 750,
 		description: "The diagnosis is in. The prognosis is practice more."},
+	{id: "tag_tung_tung_sahur", name: "Tung Tung Sahur", kind: shopKindTag, category: "meme", price: 1_000,
+		description: "Tung tung tung tung sahur. The drum calls. You answered."},
 	{id: "tag_based", name: "Based", kind: shopKindTag, category: "meme", price: 2_000,
 		description: "Certified based. No further explanation needed."},
 	{id: "tag_copium", name: "Copium", kind: shopKindTag, category: "meme", price: 4_000,

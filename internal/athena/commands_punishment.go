@@ -20,6 +20,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"math/rand"
 	"strconv"
 	"strings"
 	"time"
@@ -1272,4 +1273,88 @@ func cmdUnquote(client *Client, args []string, usage string) {
 	addToBuffer(client, "CMD", fmt.Sprintf("Removed quote from %v.", report), false)
 }
 
-// cmdTournament manages punishment tournament mode
+// randompunishPool is the set of punishments available to /randompunishall.
+var randompunishPool = rrPunishmentPool
+
+// cmdRandomPunishAll applies a random punishment to every client currently in
+// the caller's area. Each client receives an independently chosen punishment.
+// Requires MUTE permission. Blocked if the area has disabled random punishment
+// via /togglerandompunish.
+func cmdRandomPunishAll(client *Client, args []string, usage string) {
+	flags := flag.NewFlagSet("", 0)
+	flags.SetOutput(io.Discard)
+	durationStr := flags.String("d", "10m", "")
+	reason := flags.String("r", "", "")
+	flags.Parse(args)
+
+	if !client.Area().RandomPunishEnabled() {
+		client.SendServerMessage("Random punishment is disabled in this area.")
+		return
+	}
+
+	duration, err := str2duration.ParseDuration(*durationStr)
+	if err != nil {
+		client.SendServerMessage("Invalid duration format. Use format like: 10m, 1h, 30s")
+		return
+	}
+	maxDuration := 24 * time.Hour
+	if duration > maxDuration {
+		duration = maxDuration
+		client.SendServerMessage("Duration capped at 24 hours.")
+	}
+
+	// Collect clients in the same area (CharID == -1 means no character selected / spectator).
+	var targets []*Client
+	clients.ForEach(func(c *Client) {
+		if c.Area() == client.Area() && c.CharID() != -1 {
+			targets = append(targets, c)
+		}
+	})
+
+	if len(targets) == 0 {
+		client.SendServerMessage("No players in this area to punish.")
+		return
+	}
+
+	msg := "You have been hit by /randompunishall"
+	if duration > 0 {
+		msg += fmt.Sprintf(" for %v", duration)
+	}
+	if *reason != "" {
+		msg += " – reason: " + *reason
+	}
+
+	var report string
+	for _, c := range targets {
+		pType := randompunishPool[rand.Intn(len(randompunishPool))]
+		c.AddPunishment(pType, duration, *reason)
+		var expires int64
+		if duration > 0 {
+			expires = time.Now().UTC().Add(duration).Unix()
+		}
+		if err := db.UpsertTextPunishment(c.Ipid(), int(pType), expires, *reason); err != nil {
+			logger.LogErrorf("Failed to persist randompunishall punishment for %v: %v", c.Ipid(), err)
+		}
+		c.SendServerMessage(fmt.Sprintf("%v (%v)", msg, pType.String()))
+		report += fmt.Sprintf("%v(%v), ", c.Uid(), pType.String())
+	}
+
+	report = strings.TrimSuffix(report, ", ")
+	sendAreaServerMessage(client.Area(), fmt.Sprintf("🎲 %v has unleashed random chaos on the area!", client.OOCName()))
+	client.SendServerMessage(fmt.Sprintf("Applied random punishments to %v clients.", len(targets)))
+	addToBuffer(client, "CMD", fmt.Sprintf("Applied randompunishall: %v.", report), false)
+}
+
+// cmdToggleRandomPunish enables or disables /randompunishall for the caller's area.
+// Requires CM or MUTE permission.
+func cmdToggleRandomPunish(client *Client, args []string, usage string) {
+	a := client.Area()
+	newState := !a.RandomPunishEnabled()
+	a.SetRandomPunishEnabled(newState)
+	if newState {
+		sendAreaServerMessage(a, fmt.Sprintf("%v has enabled random punishment for this area.", client.OOCName()))
+	} else {
+		sendAreaServerMessage(a, fmt.Sprintf("%v has disabled random punishment for this area.", client.OOCName()))
+	}
+	addToBuffer(client, "CMD", fmt.Sprintf("Toggled random punishment to %v.", newState), false)
+}

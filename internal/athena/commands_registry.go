@@ -1631,6 +1631,22 @@ func initCommands() {
 			reqPerms: permissions.PermissionField["MUTE"],
 			category: "punishment",
 		},
+		"randompunishall": {
+			handler:  cmdRandomPunishAll,
+			minArgs:  0,
+			usage:    "Usage: /randompunishall [-d duration] [-r reason]",
+			desc:     "Applies a random punishment to every player currently in the area.",
+			reqPerms: permissions.PermissionField["MUTE"],
+			category: "punishment",
+		},
+		"togglerandompunish": {
+			handler:  cmdToggleRandomPunish,
+			minArgs:  0,
+			usage:    "Usage: /togglerandompunish",
+			desc:     "Toggles whether /randompunishall can be used in this area.",
+			reqPerms: permissions.PermissionField["CM"],
+			category: "punishment",
+		},
 		"tournament": {
 			handler:  cmdTournament,
 			minArgs:  1,
