@@ -62,6 +62,16 @@ var encodedServerName string
 // A nil channel means the pool is disabled (unbounded behaviour).
 var connPool chan struct{}
 
+// Precomputed rate-limit window durations.  These are derived from config at
+// startup and never change; reading a time.Duration is cheaper than multiplying
+// an int (or float64) by time.Second on every single incoming packet.
+var (
+	rateLimitWindowDur       time.Duration
+	oocRateLimitWindowDur    time.Duration
+	rawPktRateLimitWindowDur time.Duration
+	connRateLimitWindowDur   time.Duration
+)
+
 var (
 	config                                 *settings.Config
 	characters, music, backgrounds, parrot []string
@@ -439,6 +449,12 @@ func NewServer(conf *settings.Config) (*Server, error) {
 	// and command handlers continue to work without modification.
 	config = s.config
 	encodedServerName = encode(s.config.Name) // cache once; config.Name never changes at runtime
+	// Precompute rate-limit windows once so the hot packet-check paths only
+	// perform a load instead of a multiply on every incoming packet.
+	rateLimitWindowDur = time.Duration(config.RateLimitWindow) * time.Second
+	oocRateLimitWindowDur = time.Duration(config.OOCRateLimitWindow) * time.Second
+	rawPktRateLimitWindowDur = time.Duration(float64(time.Second) * config.RawPacketRateLimitWindow)
+	connRateLimitWindowDur = time.Duration(config.ConnRateLimitWindow) * time.Second
 	characters = s.characters
 	charactersByName = make(map[string]int, len(s.characters))
 	for i, name := range s.characters {
@@ -779,6 +795,12 @@ func writeToAllClients(header string, contents ...string) {
 	})
 }
 
+// logBufPool provides reusable *strings.Builder instances for addToBuffer,
+// avoiding a builder allocation on every logged message (every IC, OOC, etc.).
+var logBufPool = sync.Pool{
+	New: func() any { b := new(strings.Builder); b.Grow(256); return b },
+}
+
 // addToBuffer writes to an area buffer according to a client's action.
 // All client fields are read in one logSnapshot call (one mutex acquisition)
 // rather than via individual getters, which would each acquire and release the
@@ -786,16 +808,46 @@ func writeToAllClients(header string, contents ...string) {
 func addToBuffer(client *Client, action string, message string, audit bool) {
 	now := time.Now().UTC().Format("15:04:05")
 	snap := client.logSnapshot()
-	s := fmt.Sprintf("%v | %v | %v | %v | %v | %v",
-		now, action, snap.charName, snap.ipid, snap.oocName, message)
+
+	b := logBufPool.Get().(*strings.Builder)
+	b.Reset()
+	b.WriteString(now)
+	b.WriteString(" | ")
+	b.WriteString(action)
+	b.WriteString(" | ")
+	b.WriteString(snap.charName)
+	b.WriteString(" | ")
+	b.WriteString(snap.ipid)
+	b.WriteString(" | ")
+	b.WriteString(snap.oocName)
+	b.WriteString(" | ")
+	b.WriteString(message)
+	s := b.String()
 	snap.area.UpdateBuffer(s)
 
 	// Write to area-specific log file if area logging is enabled.
 	if logger.EnableAreaLogging {
-		logEntry := fmt.Sprintf("[%v] | %v | %v | %v | %v | %v | %v | %v",
-			now, action, snap.charName, snap.ipid, snap.hdid, snap.showname, snap.oocName, message)
-		logger.WriteAreaLog(snap.area.Name(), logEntry)
+		b.Reset()
+		b.WriteByte('[')
+		b.WriteString(now)
+		b.WriteString("] | ")
+		b.WriteString(action)
+		b.WriteString(" | ")
+		b.WriteString(snap.charName)
+		b.WriteString(" | ")
+		b.WriteString(snap.ipid)
+		b.WriteString(" | ")
+		b.WriteString(snap.hdid)
+		b.WriteString(" | ")
+		b.WriteString(snap.showname)
+		b.WriteString(" | ")
+		b.WriteString(snap.oocName)
+		b.WriteString(" | ")
+		b.WriteString(message)
+		logger.WriteAreaLog(snap.area.Name(), b.String())
 	}
+
+	logBufPool.Put(b)
 
 	if audit {
 		logger.WriteAudit(s)
@@ -1014,7 +1066,10 @@ func checkConnRateLimit(ipid string) (rejected, autoban bool) {
 	defer connTracker.mu.Unlock()
 
 	now := time.Now()
-	window := time.Duration(config.ConnRateLimitWindow) * time.Second
+	window := connRateLimitWindowDur
+	if window == 0 {
+		window = time.Duration(config.ConnRateLimitWindow) * time.Second
+	}
 	cutoff := now.Add(-window)
 
 	// Prune timestamps outside the current window (zero-allocation pivot trim;

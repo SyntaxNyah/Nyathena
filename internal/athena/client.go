@@ -1902,7 +1902,10 @@ func (client *Client) CheckRateLimit() bool {
 	defer client.mu.Unlock()
 
 	now := time.Now()
-	window := time.Duration(config.RateLimitWindow) * time.Second
+	window := rateLimitWindowDur
+	if window == 0 {
+		window = time.Duration(config.RateLimitWindow) * time.Second
+	}
 
 	// Remove timestamps outside the current window (sliding window)
 	cutoff := now.Add(-window)
@@ -1947,7 +1950,10 @@ func (client *Client) CheckOOCRateLimit() bool {
 	defer client.mu.Unlock()
 
 	now := time.Now()
-	window := time.Duration(config.OOCRateLimitWindow) * time.Second
+	window := oocRateLimitWindowDur
+	if window == 0 {
+		window = time.Duration(config.OOCRateLimitWindow) * time.Second
+	}
 
 	cutoff := now.Add(-window)
 
@@ -1991,7 +1997,10 @@ func (client *Client) CheckRawPacketRateLimit() bool {
 	defer client.mu.Unlock()
 
 	now := time.Now()
-	window := time.Duration(float64(time.Second) * config.RawPacketRateLimitWindow)
+	window := rawPktRateLimitWindowDur
+	if window == 0 {
+		window = time.Duration(float64(time.Second) * config.RawPacketRateLimitWindow)
+	}
 
 	// Reset the counter when the window has expired or on the very first packet
 	// (rawPktWindowStart is zero-valued for new clients).

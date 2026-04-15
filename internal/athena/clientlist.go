@@ -18,6 +18,12 @@ package athena
 
 import "sync"
 
+// forEachPool provides reusable []*Client snapshots for ForEach, eliminating
+// one heap allocation per broadcast on the hot IC/OOC/ARUP path.
+var forEachPool = sync.Pool{
+	New: func() any { return make([]*Client, 0, 128) },
+}
+
 type ClientList struct {
 	list       map[*Client]struct{}
 	uidIndex   map[int]*Client
@@ -61,13 +67,13 @@ func (cl *ClientList) RemoveClient(c *Client) {
 }
 
 // ForEach calls fn for every client in the list.
-// It builds a slice snapshot under the read lock and releases the lock before
-// invoking fn, so callers may safely call any client method (including writes)
-// without holding cl.mu.  Using a slice instead of a map reduces allocation
-// overhead on the hot broadcast path.
+// It reuses a pooled []*Client snapshot to avoid a heap allocation on every
+// call.  The read lock is held only while building the snapshot so callers may
+// safely call any client method (including writes) without holding cl.mu.
 func (cl *ClientList) ForEach(fn func(*Client)) {
 	cl.mu.RLock()
-	snap := make([]*Client, 0, len(cl.list))
+	snap := forEachPool.Get().([]*Client)
+	snap = snap[:0]
 	for c := range cl.list {
 		snap = append(snap, c)
 	}
@@ -75,6 +81,12 @@ func (cl *ClientList) ForEach(fn func(*Client)) {
 	for _, c := range snap {
 		fn(c)
 	}
+	// Zero the pointer slots before returning to pool to allow the GC to
+	// collect clients that disconnect while the slice header lives in the pool.
+	for i := range snap {
+		snap[i] = nil
+	}
+	forEachPool.Put(snap[:0])
 }
 
 // GetClientByUID returns a client by their UID, or nil if not found.
