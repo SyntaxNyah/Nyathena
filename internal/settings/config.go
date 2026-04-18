@@ -92,6 +92,8 @@ type ServerConfig struct {
 	BotBanPlaytimeThreshold    int    `toml:"botban_playtime_threshold"`
 	IPHubAPIKey                string `toml:"iphub_api_key"`
 	EnableCasino               bool     `toml:"enable_casino"`
+	EnableAccounts             bool     `toml:"enable_accounts"`
+	AccountPromptOnJoin        bool     `toml:"account_prompt_on_join"`
 	RegisterCaptcha            bool     `toml:"register_captcha"`
 	EnableCommunityVote        bool     `toml:"enable_community_vote"`
 	VoteThreshold              int      `toml:"vote_threshold"`
@@ -196,6 +198,8 @@ func DefaultConfig() *Config {
 			RandomSongCooldown:         10,
 			BotBanPlaytimeThreshold:    120,
 			EnableCasino:               false,
+			EnableAccounts:             true,
+			AccountPromptOnJoin:        false,
 			RegisterCaptcha:            true,
 			EnableCommunityVote:        false,
 			VoteThreshold:              3,

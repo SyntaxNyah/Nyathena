@@ -26,13 +26,14 @@ import (
 )
 
 type Command struct {
-	handler   func(client *Client, args []string, usage string)
-	minArgs   int
-	usage     string
-	desc      string
-	reqPerms  uint64
-	casinoCmd bool   // when true, command is hidden/disabled if EnableCasino is false
-	category  string // help category (e.g. "general", "casino", "punishment")
+	handler    func(client *Client, args []string, usage string)
+	minArgs    int
+	usage      string
+	desc       string
+	reqPerms   uint64
+	casinoCmd  bool   // when true, command is hidden/disabled if EnableCasino is false
+	accountCmd bool   // when true, command requires the account system (works without EnableCasino so long as EnableAccounts is true)
+	category   string // help category (e.g. "general", "casino", "punishment")
 }
 
 var Commands map[string]Command
@@ -1905,31 +1906,31 @@ func initCommands() {
 			category: "admin",
 		},
 		"register": {
-			handler:   cmdRegister,
-			minArgs:   2,
-			usage:     "Usage: /register <username> <password>",
-			desc:      "Start creating a free player account (a captcha confirmation is required). Tracks chips, playtime, and leaderboard standings.",
-			reqPerms:  permissions.PermissionField["NONE"],
-			casinoCmd: true,
-			category:  "account",
+			handler:    cmdRegister,
+			minArgs:    2,
+			usage:      "Usage: /register <username> <password>",
+			desc:       "Start creating a free player account (a captcha confirmation is required). Tracks playtime, wardrobe favourites, active tag, and (if the casino is enabled) chip balance.",
+			reqPerms:   permissions.PermissionField["NONE"],
+			accountCmd: true,
+			category:   "account",
 		},
 		"captcha": {
-			handler:   cmdCaptcha,
-			minArgs:   1,
-			usage:     "Usage: /captcha <token>",
-			desc:      "Complete a pending /register by entering the captcha token you were given.",
-			reqPerms:  permissions.PermissionField["NONE"],
-			casinoCmd: true,
-			category:  "account",
+			handler:    cmdCaptcha,
+			minArgs:    1,
+			usage:      "Usage: /captcha <token>",
+			desc:       "Complete a pending /register by entering the captcha token you were given.",
+			reqPerms:   permissions.PermissionField["NONE"],
+			accountCmd: true,
+			category:   "account",
 		},
 		"account": {
-			handler:   cmdAccount,
-			minArgs:   0,
-			usage:     "Usage: /account",
-			desc:      "View your account profile: username, chip balance, and playtime.",
-			reqPerms:  permissions.PermissionField["NONE"],
-			casinoCmd: true,
-			category:  "account",
+			handler:    cmdAccount,
+			minArgs:    0,
+			usage:      "Usage: /account",
+			desc:       "View your account profile: username, playtime, and (if the casino is enabled) chip balance.",
+			reqPerms:   permissions.PermissionField["NONE"],
+			accountCmd: true,
+			category:   "account",
 		},
 		"playtime": {
 			handler:  cmdPlaytimeTop,
@@ -2012,40 +2013,40 @@ func initCommands() {
 			category:  "jobs",
 		},
 		"shop": {
-			handler:   cmdShop,
-			minArgs:   0,
-			usage:     "Usage: /shop | /shop <category> | /shop buy <item_id> | /shop items | /shop passes | /shop passive",
-			desc:      "Browse the Nyathena Shop: 115+ cosmetic tags, job passes, and passive income upgrades. Categories: gambling attorney anime gamer girly meme prestige.",
-			reqPerms:  permissions.PermissionField["NONE"],
-			casinoCmd: true,
-			category:  "chips",
+			handler:    cmdShop,
+			minArgs:    0,
+			usage:      "Usage: /shop | /shop <category> | /shop buy <item_id> | /shop items | /shop passes | /shop passive",
+			desc:       "Browse the Nyathena Shop: 115+ cosmetic tags, job passes, and passive income upgrades. When the casino is disabled, tags are free to equip via /settag. Categories: gambling attorney anime gamer girly meme prestige.",
+			reqPerms:   permissions.PermissionField["NONE"],
+			accountCmd: true,
+			category:   "chips",
 		},
 		"settag": {
-			handler:   cmdSetTag,
-			minArgs:   1,
-			usage:     "Usage: /settag <tag_id> | /settag none",
-			desc:      "Equip or swap a purchased cosmetic tag. Your active tag appears next to your name in /gas and /players.",
-			reqPerms:  permissions.PermissionField["NONE"],
-			casinoCmd: true,
-			category:  "chips",
+			handler:    cmdSetTag,
+			minArgs:    1,
+			usage:      "Usage: /settag <tag_id> | /settag none",
+			desc:       "Equip or swap a cosmetic tag. Your active tag appears next to your name in /gas and /players. When the casino is disabled, any tag id is free to equip.",
+			reqPerms:   permissions.PermissionField["NONE"],
+			accountCmd: true,
+			category:   "chips",
 		},
 		"favourite": {
-			handler:   cmdFavourite,
-			minArgs:   1,
-			usage:     "Usage: /favourite <char name>",
-			desc:      "Toggle a character in your wardrobe favourites. Add or remove with the same command.",
-			reqPerms:  permissions.PermissionField["NONE"],
-			casinoCmd: true,
-			category:  "account",
+			handler:    cmdFavourite,
+			minArgs:    1,
+			usage:      "Usage: /favourite <char name>",
+			desc:       "Toggle a character in your wardrobe favourites. Add or remove with the same command.",
+			reqPerms:   permissions.PermissionField["NONE"],
+			accountCmd: true,
+			category:   "account",
 		},
 		"wardrobe": {
-			handler:   cmdWardrobe,
-			minArgs:   0,
-			usage:     "Usage: /wardrobe | /wardrobe <char name>",
-			desc:      "View your saved favourite characters, or swap to one instantly.",
-			reqPerms:  permissions.PermissionField["NONE"],
-			casinoCmd: true,
-			category:  "account",
+			handler:    cmdWardrobe,
+			minArgs:    0,
+			usage:      "Usage: /wardrobe | /wardrobe <char name>",
+			desc:       "View your saved favourite characters, or swap to one instantly.",
+			reqPerms:   permissions.PermissionField["NONE"],
+			accountCmd: true,
+			category:   "account",
 		},
 		// ── Mafia / Werewolf social deduction minigame ──────────────────────
 		"mafia": {
@@ -2111,6 +2112,9 @@ func clientCanUseCommand(client *Client, cmd Command) bool {
 // ParseCommand calls the appropriate function for a given command.
 func ParseCommand(client *Client, command string, args []string) {
 	casinoEnabled := config != nil && config.EnableCasino
+	// Account commands are available when either the casino (which uses accounts)
+	// or the standalone account system is enabled.
+	accountsEnabled := config != nil && (config.EnableCasino || config.EnableAccounts)
 
 	if command == "help" {
 		// /help <category|command> — drill down into a category or show command usage
@@ -2126,6 +2130,9 @@ func ParseCommand(client *Client, command string, args []string) {
 							continue
 						}
 						if cmd.casinoCmd && !casinoEnabled {
+							continue
+						}
+						if cmd.accountCmd && !accountsEnabled {
 							continue
 						}
 						if clientCanUseCommand(client, cmd) {
@@ -2145,7 +2152,7 @@ func ParseCommand(client *Client, command string, args []string) {
 
 			// Not a category — try to look up as a specific command
 			cmd, exists := Commands[cmdName]
-			if exists && !(cmd.casinoCmd && !casinoEnabled) {
+			if exists && !(cmd.casinoCmd && !casinoEnabled) && !(cmd.accountCmd && !accountsEnabled) {
 				if clientCanUseCommand(client, cmd) {
 					client.SendServerMessage(cmd.usage)
 				} else {
@@ -2164,10 +2171,10 @@ func ParseCommand(client *Client, command string, args []string) {
 		var header string
 		if client.Authenticated() {
 			header = fmt.Sprintf("Logged in as: %v\n\n", client.ModName())
-			if casinoEnabled {
+			if accountsEnabled {
 				header += "👗 Your Wardrobe: /favourite <char> to save | /wardrobe to view | /wardrobe <char> to swap\n\n"
 			}
-		} else if casinoEnabled {
+		} else if accountsEnabled {
 			header = "💡 New here? /register <username> <password> — free account, no extra permissions.\n" +
 				"   Already have one? /login <username> <password>\n\n"
 		}
@@ -2190,6 +2197,9 @@ func ParseCommand(client *Client, command string, args []string) {
 					continue
 				}
 				if cmd.casinoCmd && !casinoEnabled {
+					continue
+				}
+				if cmd.accountCmd && !accountsEnabled {
 					continue
 				}
 				if clientCanUseCommand(client, cmd) {
@@ -2216,6 +2226,10 @@ func ParseCommand(client *Client, command string, args []string) {
 	// Block casino/account commands when the feature is disabled server-wide.
 	if cmd.casinoCmd && !casinoEnabled {
 		client.SendServerMessage("The casino and player account system is not enabled on this server.")
+		return
+	}
+	if cmd.accountCmd && !accountsEnabled {
+		client.SendServerMessage("The player account system is not enabled on this server.")
 		return
 	}
 	if clientCanUseCommand(client, cmd) {

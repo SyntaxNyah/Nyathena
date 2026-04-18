@@ -48,6 +48,39 @@ var tstNavRegex = regexp.MustCompile(`[<>]([[:digit:]]+)?`)
 // maxShownameLength is the maximum number of characters allowed in a showname.
 const maxShownameLength = 30
 
+// accountWelcomeMsg is the on-join welcome message shown to unauthenticated players
+// when the casino is disabled but the optional account system is enabled and
+// `account_prompt_on_join` is true. It advertises the *non-gambling* half of the
+// account system: free account creation, wardrobe, default cosmetic tag, and
+// playtime tracking. It also documents every tag category available in /shop and
+// how to equip a tag with /settag — because with the casino off, tags are free.
+//
+// Defined as a compile-time constant so there is zero runtime allocation per join.
+const accountWelcomeMsg = "👤 Welcome! This server offers an optional free player account.\n\n" +
+	"📋 What your account is for (gambling is disabled on this server):\n" +
+	"  • 👗 Wardrobe — save favourite characters and swap between them instantly.\n" +
+	"  • 🏷️ Default tag — pick any cosmetic tag from the catalog and wear it next to your name.\n" +
+	"  • ⏱️ Playtime tracking — hours persist across sessions and feed /playtime top.\n\n" +
+	"🔑 Account commands:\n" +
+	"  • /register <username> <password>  — create a free account (username 3–20, password 6+)\n" +
+	"  • /login <username> <password>     — sign in on reconnect\n" +
+	"  • /account                         — view your profile\n" +
+	"  • /wardrobe                        — list favourite characters\n" +
+	"  • /favourite <char>                — add/remove a character from the wardrobe\n" +
+	"  • /playtime top                    — see the playtime leaderboard\n\n" +
+	"🏷️ Default tags — every tag in /shop is FREE to equip while the casino is off:\n" +
+	"  • 🎰 gambling   — 30 tags (Gambler, Lucky, High Roller, Whale, Godlike, Infinite…)\n" +
+	"  • ⚖️ attorney   — 15 tags (Objection!, Take That!, Hold It!, Prosecutor, Magatama…)\n" +
+	"  • 🌸 anime      — 15 tags (Weeb, Senpai, Kawaii, Waifu Haver, Protagonist…)\n" +
+	"  • 🎮 gamer      — 15 tags (Noob, Tryhard, Speedrunner, PvP God, Gaming Chair…)\n" +
+	"  • 🌷 girly      — 12 tags (Princess, Fairy, Queen, Sparkle, Divine Feminine…)\n" +
+	"  • 😂 meme       — 18 tags (Bruh, NPC, Sus, Based, Gigachad, Meme Lord…)\n" +
+	"  • 👑 prestige   — 10 tags (Newcomer, Veteran, Grandmaster, Overlord, Absolute Unit…)\n" +
+	"  Browse a category:  /shop <category>   (e.g. /shop attorney)\n" +
+	"  Equip a tag:        /settag <tag_id>   (e.g. /settag tag_objection)\n" +
+	"  Remove your tag:    /settag none\n\n" +
+	"💡 Accounts are entirely optional. Skip /register if you just want to play."
+
 // casinoWelcomeMsg is the on-join welcome message shown to unauthenticated players when the
 // casino is enabled. Defined as a compile-time constant so there is zero runtime allocation
 // on every player join.
@@ -210,6 +243,9 @@ func pktReqDone(client *Client, _ *packet.Packet) {
 	client.restorePunishments()
 
 	// Casino on-join setup: seed chip balance and prompt unregistered players.
+	// When the casino is off but the account system is enabled, an optional
+	// account prompt documenting wardrobe / default tags / playtime can be shown
+	// on join (opt-in via `account_prompt_on_join`).
 	if config.EnableCasino {
 		ipid := client.Ipid()
 		go func() {
@@ -220,6 +256,8 @@ func pktReqDone(client *Client, _ *packet.Packet) {
 		if !client.Authenticated() {
 			client.SendServerMessage(casinoWelcomeMsg)
 		}
+	} else if config.EnableAccounts && config.AccountPromptOnJoin && !client.Authenticated() {
+		client.SendServerMessage(accountWelcomeMsg)
 	}
 
 	logger.LogInfof("Client (IPID:%v UID:%v) joined the server", client.Ipid(), client.Uid())

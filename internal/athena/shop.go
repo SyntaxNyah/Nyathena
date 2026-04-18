@@ -474,12 +474,11 @@ func getPlayerHourlyBonus(ipid string) int64 {
 //	/shop <category>       — browse items in a category
 //	/shop buy <id>         — purchase an item
 //	/shop items            — list your owned items
+//
+// When the casino is disabled but the account system is enabled, the shop becomes
+// a read-only tag catalog — prices and passes are still listed for reference, but
+// /shop buy is blocked and any tag id can be equipped for free with /settag.
 func cmdShop(client *Client, args []string, _ string) {
-	if !config.EnableCasino {
-		client.SendServerMessage("The casino (and shop) is not enabled on this server.")
-		return
-	}
-
 	if len(args) == 0 {
 		printShopOverview(client)
 		return
@@ -501,6 +500,13 @@ func cmdShop(client *Client, args []string, _ string) {
 	case "passive":
 		printShopPassive(client)
 	case "buy":
+		if !config.EnableCasino {
+			client.SendServerMessage(
+				"The chip economy is disabled on this server, so /shop buy is off.\n" +
+					"Good news: every tag in /shop can be equipped for free with /settag <tag_id>.\n" +
+					"Browse tag categories with /shop gambling | attorney | anime | gamer | girly | meme | prestige.")
+			return
+		}
 		if len(args) < 2 {
 			client.SendServerMessage("Usage: /shop buy <item_id>  — use /shop to see category names.")
 			return
@@ -523,7 +529,7 @@ func cmdShop(client *Client, args []string, _ string) {
 }
 
 func printShopOverview(client *Client) {
-	bal, _ := db.GetChipBalance(client.Ipid())
+	casinoOn := config.EnableCasino
 	activeTag := db.GetActiveTag(client.Ipid())
 	activeDisplay := "(none)"
 	if t := formatTagDisplay(activeTag); t != "" {
@@ -538,27 +544,47 @@ func printShopOverview(client *Client) {
 	}
 
 	var sb strings.Builder
-	sb.WriteString(fmt.Sprintf("\n🛒 Nyathena Shop — Balance: %d chips | Active tag: %s\n", bal, activeDisplay))
-	sb.WriteString("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n")
-	sb.WriteString("Buy permanent cosmetic tags and grinding upgrades with chips!\n")
-	sb.WriteString("All purchases are PERMANENT and linked to your account.\n\n")
+	if casinoOn {
+		bal, _ := db.GetChipBalance(client.Ipid())
+		sb.WriteString(fmt.Sprintf("\n🛒 Nyathena Shop — Balance: %d chips | Active tag: %s\n", bal, activeDisplay))
+		sb.WriteString("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n")
+		sb.WriteString("Buy permanent cosmetic tags and grinding upgrades with chips!\n")
+		sb.WriteString("All purchases are PERMANENT and linked to your account.\n\n")
+	} else {
+		sb.WriteString(fmt.Sprintf("\n🛒 Nyathena Shop — Active tag: %s\n", activeDisplay))
+		sb.WriteString("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n")
+		sb.WriteString("The chip economy is off — every tag below is FREE to equip.\n")
+		sb.WriteString("Pick any tag id and run /settag <tag_id> to make it yours.\n\n")
+	}
 
 	sb.WriteString("📂 Tag Categories (use /shop <category> to browse):\n")
 	for _, cat := range shopCategories {
 		count := shopCategoryTagCount[cat.key]
-		owned := countOwnedInCategoryFromSet(ownedSet, cat.key)
-		sb.WriteString(fmt.Sprintf("  %s %-12s  — %d tags  (owned: %d)  → /shop %s\n",
-			cat.emoji, cat.displayName, count, owned, cat.key))
+		if casinoOn {
+			owned := countOwnedInCategoryFromSet(ownedSet, cat.key)
+			sb.WriteString(fmt.Sprintf("  %s %-12s  — %d tags  (owned: %d)  → /shop %s\n",
+				cat.emoji, cat.displayName, count, owned, cat.key))
+		} else {
+			sb.WriteString(fmt.Sprintf("  %s %-12s  — %d tags  → /shop %s\n",
+				cat.emoji, cat.displayName, count, cat.key))
+		}
 	}
 
-	sb.WriteString("\n💼 Upgrades:\n")
-	sb.WriteString("  /shop passes   — job cooldown & reward passes\n")
-	sb.WriteString("  /shop passive  — passive income upgrades (more chips/hour)\n")
+	if casinoOn {
+		sb.WriteString("\n💼 Upgrades:\n")
+		sb.WriteString("  /shop passes   — job cooldown & reward passes\n")
+		sb.WriteString("  /shop passive  — passive income upgrades (more chips/hour)\n")
 
-	sb.WriteString("\n🛒 Commands:\n")
-	sb.WriteString("  /shop buy <item_id>   — purchase an item by ID\n")
-	sb.WriteString("  /shop items           — list your owned items\n")
-	sb.WriteString("  /settag <id>|none     — equip or remove your active tag\n")
+		sb.WriteString("\n🛒 Commands:\n")
+		sb.WriteString("  /shop buy <item_id>   — purchase an item by ID\n")
+		sb.WriteString("  /shop items           — list your owned items\n")
+		sb.WriteString("  /settag <id>|none     — equip or remove your active tag\n")
+	} else {
+		sb.WriteString("\n🛒 Commands:\n")
+		sb.WriteString("  /settag <tag_id>      — equip any tag from any category (free while the casino is off)\n")
+		sb.WriteString("  /settag none          — remove your active tag\n")
+		sb.WriteString("  /shop <category>      — browse tags and get their ids\n")
+	}
 	client.SendServerMessage(sb.String())
 }
 
@@ -796,12 +822,12 @@ func shopListOwned(client *Client) {
 
 // cmdSetTag handles /settag <tag_id> or /settag none.
 // Swaps the player's active cosmetic tag.
+//
+// When the casino is enabled, tags must be purchased in /shop before they can
+// be equipped. When the casino is disabled but the account system is enabled,
+// ownership checks are waived and any tag id can be equipped for free — the
+// server-wide chip economy is off so there is nothing to "buy".
 func cmdSetTag(client *Client, args []string, _ string) {
-	if !config.EnableCasino {
-		client.SendServerMessage("The casino (and shop) is not enabled on this server.")
-		return
-	}
-
 	tagID := args[0]
 
 	if strings.EqualFold(tagID, "none") || tagID == "" {
@@ -815,14 +841,14 @@ func cmdSetTag(client *Client, args []string, _ string) {
 
 	it, ok := shopItemByID(tagID)
 	if !ok {
-		client.SendServerMessage(fmt.Sprintf("Unknown tag '%v'. Use /shop items to see your owned tags.", tagID))
+		client.SendServerMessage(fmt.Sprintf("Unknown tag '%v'. Use /shop <category> to browse available tag ids.", tagID))
 		return
 	}
 	if it.kind != shopKindTag {
 		client.SendServerMessage(fmt.Sprintf("'%v' is not a tag — it's a pass. Tags are the cosmetic items shown in /gas.", it.name))
 		return
 	}
-	if !db.HasShopItem(client.Ipid(), tagID) {
+	if config.EnableCasino && !db.HasShopItem(client.Ipid(), tagID) {
 		client.SendServerMessage(fmt.Sprintf("You don't own [%v]. Purchase it first with: /shop buy %v", it.name, tagID))
 		return
 	}

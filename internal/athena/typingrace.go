@@ -103,10 +103,19 @@ func typingRaceStart(client *Client) {
 	typingRace.participants = make(map[int]struct{})
 	typingRace.mu.Unlock()
 
-	sendGlobalServerMessage(fmt.Sprintf(
-		"⌨️ TYPING RACE! Type /typingrace join in the next %.0f seconds to enter. First to type the phrase wins %d chips!",
-		typingRaceOptInDuration.Seconds(), typingRaceReward,
-	))
+	var announce string
+	if config != nil && config.EnableCasino {
+		announce = fmt.Sprintf(
+			"⌨️ TYPING RACE! Type /typingrace join in the next %.0f seconds to enter. First to type the phrase wins %d chips!",
+			typingRaceOptInDuration.Seconds(), typingRaceReward,
+		)
+	} else {
+		announce = fmt.Sprintf(
+			"⌨️ TYPING RACE! Type /typingrace join in the next %.0f seconds to enter. First to type the phrase wins bragging rights!",
+			typingRaceOptInDuration.Seconds(),
+		)
+	}
+	sendGlobalServerMessage(announce)
 	go typingRaceOptInTimer()
 }
 
@@ -246,15 +255,23 @@ func typingRaceOnIC(client *Client, msgText string) {
 	}
 	wps := float64(wordCount) / elapsed.Seconds()
 
-	newBal, chipErr := db.AddChips(client.Ipid(), typingRaceReward)
-	if chipErr != nil {
-		logger.LogErrorf("typingrace: AddChips failed: %v", chipErr)
+	// Chip rewards are only awarded when the casino/chip economy is enabled.
+	// When gambling is disabled, the race still runs but nothing is paid out.
+	if config != nil && config.EnableCasino {
+		newBal, chipErr := db.AddChips(client.Ipid(), typingRaceReward)
+		if chipErr != nil {
+			logger.LogErrorf("typingrace: AddChips failed: %v", chipErr)
+		}
+		sendGlobalServerMessage(fmt.Sprintf(
+			"⌨️ 🏆 %v won the typing race in %.2fs (%.1f WPS / %.0f WPM)! +%d chips (balance: %d)",
+			client.OOCName(), elapsed.Seconds(), wps, wpm, typingRaceReward, newBal,
+		))
+	} else {
+		sendGlobalServerMessage(fmt.Sprintf(
+			"⌨️ 🏆 %v won the typing race in %.2fs (%.1f WPS / %.0f WPM)!",
+			client.OOCName(), elapsed.Seconds(), wps, wpm,
+		))
 	}
-
-	sendGlobalServerMessage(fmt.Sprintf(
-		"⌨️ 🏆 %v won the typing race in %.2fs (%.1f WPS / %.0f WPM)! +%d chips (balance: %d)",
-		client.OOCName(), elapsed.Seconds(), wps, wpm, typingRaceReward, newBal,
-	))
 }
 
 // normaliseTypingPhrase lowercases, collapses whitespace, and strips punctuation
