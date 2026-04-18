@@ -362,6 +362,7 @@ func (client *Client) SendPacket(header string, contents ...string) {
 	b.WriteString("#%")
 
 	client.mu.Lock()
+	client.conn.SetWriteDeadline(time.Now().Add(5 * time.Second)) //nolint:errcheck
 	if logger.EnableNetworkLogging {
 		// Logging paths need a string copy; keep them off the common fast path.
 		msg := b.String()
@@ -370,6 +371,7 @@ func (client *Client) SendPacket(header string, contents ...string) {
 	} else {
 		b.WriteTo(client.conn) //nolint:errcheck
 	}
+	client.conn.SetWriteDeadline(time.Time{}) //nolint:errcheck
 	client.mu.Unlock()
 
 	packetBufPool.Put(b)
