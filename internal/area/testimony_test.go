@@ -57,3 +57,53 @@ func TestTestimony(t *testing.T) {
 		t.Errorf("unexpected value for CurrentTstIndex(), got %d, want %d", a.CurrentTstIndex(), 1)
 	}
 }
+
+// TestTestimonyRemoveLast verifies that removing the current (last) statement
+// clamps the index so subsequent navigation/access does not panic.
+func TestTestimonyRemoveLast(t *testing.T) {
+	a := NewArea(AreaData{}, 50, 0, EviAny)
+
+	a.TstAppend("title")
+	a.TstAppend("a")
+	a.TstAppend("b")
+	a.TstAppend("c")
+
+	a.TstJump(3)
+	if a.CurrentTstIndex() != 3 {
+		t.Fatalf("expected index 3, got %d", a.CurrentTstIndex())
+	}
+
+	if err := a.TstRemove(); err != nil {
+		t.Fatalf("TstRemove returned error: %v", err)
+	}
+	if a.TstLen() != 3 {
+		t.Fatalf("expected len 3, got %d", a.TstLen())
+	}
+	if a.CurrentTstIndex() >= a.TstLen() {
+		t.Fatalf("index %d out of range for len %d", a.CurrentTstIndex(), a.TstLen())
+	}
+
+	// Navigation after deletion must not panic.
+	a.TstAdvance()
+	_ = a.CurrentTstStatement()
+	a.TstRewind()
+	_ = a.CurrentTstStatement()
+}
+
+// TestTestimonyJumpClamp verifies TstJump clamps out-of-range indices.
+func TestTestimonyJumpClamp(t *testing.T) {
+	a := NewArea(AreaData{}, 50, 0, EviAny)
+	a.TstAppend("title")
+	a.TstAppend("a")
+
+	a.TstJump(99)
+	if a.CurrentTstIndex() >= a.TstLen() {
+		t.Fatalf("index %d out of range for len %d", a.CurrentTstIndex(), a.TstLen())
+	}
+	_ = a.CurrentTstStatement()
+
+	a.TstJump(-5)
+	if a.CurrentTstIndex() < 0 {
+		t.Fatalf("index %d should not be negative", a.CurrentTstIndex())
+	}
+}

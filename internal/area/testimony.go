@@ -39,6 +39,12 @@ func (a *Area) SetTstState(s TRState) {
 func (a *Area) CurrentTstStatement() string {
 	a.mu.Lock()
 	defer a.mu.Unlock()
+	if len(a.tr.Testimony) == 0 {
+		return ""
+	}
+	if a.tr.Index < 0 || a.tr.Index >= len(a.tr.Testimony) {
+		a.tr.Index = len(a.tr.Testimony) - 1
+	}
 	return a.tr.Testimony[a.tr.Index]
 }
 
@@ -53,6 +59,9 @@ func (a *Area) CurrentTstIndex() int {
 func (a *Area) TstInsert(s string) error {
 	a.mu.Lock()
 	defer a.mu.Unlock()
+	if a.tr.Index < 0 || a.tr.Index >= len(a.tr.Testimony) {
+		return fmt.Errorf("index out of range")
+	}
 	if a.tr.Index != 0 {
 		x := strings.Split(s, "#")
 		x[14] = "1"
@@ -71,7 +80,13 @@ func (a *Area) TstRemove() error {
 	if len(a.tr.Testimony) < 2 {
 		return fmt.Errorf("empty testimony")
 	}
+	if a.tr.Index < 0 || a.tr.Index >= len(a.tr.Testimony) {
+		return fmt.Errorf("index out of range")
+	}
 	a.tr.Testimony = append(a.tr.Testimony[:a.tr.Index], a.tr.Testimony[a.tr.Index+1:]...)
+	if a.tr.Index >= len(a.tr.Testimony) {
+		a.tr.Index = len(a.tr.Testimony) - 1
+	}
 	return nil
 }
 
@@ -79,6 +94,9 @@ func (a *Area) TstRemove() error {
 func (a *Area) TstUpdate(s string) error {
 	a.mu.Lock()
 	defer a.mu.Unlock()
+	if a.tr.Index < 0 || a.tr.Index >= len(a.tr.Testimony) {
+		return fmt.Errorf("index out of range")
+	}
 	if a.tr.Index != 0 {
 		x := strings.Split(s, "#")
 		x[14] = "1"
@@ -92,8 +110,16 @@ func (a *Area) TstUpdate(s string) error {
 func (a *Area) TstAdvance() {
 	a.mu.Lock()
 	defer a.mu.Unlock()
-	if a.tr.Index == len(a.tr.Testimony)-1 {
-		a.tr.Index = 1
+	if len(a.tr.Testimony) == 0 {
+		a.tr.Index = 0
+		return
+	}
+	if a.tr.Index >= len(a.tr.Testimony)-1 {
+		if len(a.tr.Testimony) > 1 {
+			a.tr.Index = 1
+		} else {
+			a.tr.Index = 0
+		}
 	} else {
 		a.tr.Index++
 	}
@@ -103,7 +129,11 @@ func (a *Area) TstAdvance() {
 func (a *Area) TstRewind() {
 	a.mu.Lock()
 	defer a.mu.Unlock()
-	if a.tr.Index <= 1 {
+	if len(a.tr.Testimony) == 0 {
+		a.tr.Index = 0
+		return
+	}
+	if a.tr.Index <= 1 || a.tr.Index >= len(a.tr.Testimony) {
 		a.tr.Index = len(a.tr.Testimony) - 1
 	} else {
 		a.tr.Index--
@@ -141,5 +171,11 @@ func (a *Area) TstLen() int {
 func (a *Area) TstJump(i int) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
+	if i < 0 {
+		i = 0
+	}
+	if i >= len(a.tr.Testimony) && len(a.tr.Testimony) > 0 {
+		i = len(a.tr.Testimony) - 1
+	}
 	a.tr.Index = i
 }
