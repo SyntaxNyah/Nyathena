@@ -270,7 +270,7 @@ func (client *Client) HandleClient() {
 	}
 
 	if config.MCLimit != 0 && clients.CountByIPID(client.Ipid()) >= config.MCLimit {
-		client.SendPacket("BD", "You have reached the server's multiclient limit.")
+		client.SendPacket("BD", "Too many connections from your IP. Please disconnect your other clients. If you have no other clients open, wait 1-2 minutes and try again.")
 		client.conn.Close()
 		return
 	}
