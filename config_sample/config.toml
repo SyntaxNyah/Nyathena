@@ -385,6 +385,28 @@ iphub_api_key = ""
 # Default: false
 enable_casino = false
 
+# Enable the lightweight player account system even when the casino is disabled.
+# When true, players can still /register and use non-gambling account features:
+#   • 👗 Wardrobe (/favourite, /wardrobe) — save and swap between favourite characters.
+#   • 🏷️ Default cosmetic tags (/settag) — equip any tag from the /shop catalog for free
+#     while the casino is off (chip costs are waived because the chip economy is disabled).
+#   • ⏱️ Playtime tracking (/playtime) — accumulated hours persist across sessions.
+# When enable_casino is true this setting has no effect (the casino always uses accounts).
+# When false, account commands are disabled along with the casino.
+# Default: true
+enable_accounts = true
+
+# When the casino is disabled but accounts are enabled, show a one-time welcome
+# prompt on every join that explains how to create an optional account and how to
+# use the account features (wardrobe, default tags, playtime tracking). The prompt
+# also documents every tag category available via /shop and how to equip a tag
+# with /settag.
+# Only authenticated players skip the prompt — so returning players who /login
+# don't see it again for the same session.
+# Has no effect when enable_casino = true (the existing casino welcome is used instead).
+# Default: false
+account_prompt_on_join = false
+
 # Require players to complete a random captcha when registering a new account.
 # When true, /register issues a one-time token that the player must echo back
 # with /captcha <token> before the account is created. This prevents automated

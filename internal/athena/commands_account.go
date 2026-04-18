@@ -45,7 +45,9 @@ func generateCaptcha() (string, error) {
 }
 
 // onRegistered completes account creation after the DB row is already written:
-// auto-logs the client in, seeds chip balance, and sends the success message.
+// auto-logs the client in, seeds chip balance (casino only), and sends the
+// success message. The message is tailored to whichever feature set is live —
+// full casino vs. accounts-only wardrobe / tag / playtime mode.
 func onRegistered(client *Client, username string) {
 	client.SetAuthenticated(true)
 	client.SetModName(username)
@@ -53,17 +55,27 @@ func onRegistered(client *Client, username string) {
 		if err := db.EnsureChipBalance(client.Ipid()); err != nil {
 			logger.LogErrorf("Failed to seed chip balance on register for %v: %v", username, err)
 		}
+		client.SendServerMessage(fmt.Sprintf(
+			"✅ Account '%v' created and logged in!\n\n"+
+				"📋 What your account tracks:\n"+
+				"  • 💰 Nyathena Chips (casino balance)\n"+
+				"  • ⏱ Playtime on this server\n"+
+				"  • 🏆 Casino leaderboard standings\n\n"+
+				"Use /account to view your profile.\n"+
+				"Use /chips to check your balance.\n"+
+				"Your account is linked to your connection — use /login <username> <password> to sign in on reconnect.",
+			username))
+	} else {
+		client.SendServerMessage(fmt.Sprintf(
+			"✅ Account '%v' created and logged in!\n\n"+
+				"📋 What your account tracks (gambling is off on this server):\n"+
+				"  • 👗 Wardrobe — save favourite characters with /favourite <char>\n"+
+				"  • 🏷️ Default tag — any tag in /shop is free to equip with /settag <id>\n"+
+				"  • ⏱ Playtime — accumulates across sessions, see /playtime top\n\n"+
+				"Use /account to view your profile.\n"+
+				"Your account is linked to your connection — use /login <username> <password> to sign in on reconnect.",
+			username))
 	}
-	client.SendServerMessage(fmt.Sprintf(
-		"✅ Account '%v' created and logged in!\n\n"+
-			"📋 What your account tracks:\n"+
-			"  • 💰 Nyathena Chips (casino balance)\n"+
-			"  • ⏱ Playtime on this server\n"+
-			"  • 🏆 Casino leaderboard standings\n\n"+
-			"Use /account to view your profile.\n"+
-			"Use /chips to check your balance.\n"+
-			"Your account is linked to your connection — use /login <username> <password> to sign in on reconnect.",
-		username))
 	addToBuffer(client, "CMD", fmt.Sprintf("Registered player account %v.", username), false)
 }
 
@@ -209,14 +221,25 @@ func cmdAccount(client *Client, _ []string, _ string) {
 				"Your account '%v' is not currently active. Use /login %v <password> to sign in.", u, u))
 			return
 		}
-		client.SendServerMessage(
-			"You don't have an account yet.\n\n" +
-				"💡 Accounts are free and let you track:\n" +
-				"  • 💰 Nyathena Chips (casino currency)\n" +
-				"  • ⏱ Playtime on this server\n" +
-				"  • 🏆 Casino leaderboard standings\n\n" +
-				"Create one now with: /register <username> <password>\n" +
-				"(Username: 3–20 chars, letters/numbers/underscore; Password: 6+ chars)")
+		if config.EnableCasino {
+			client.SendServerMessage(
+				"You don't have an account yet.\n\n" +
+					"💡 Accounts are free and let you track:\n" +
+					"  • 💰 Nyathena Chips (casino currency)\n" +
+					"  • ⏱ Playtime on this server\n" +
+					"  • 🏆 Casino leaderboard standings\n\n" +
+					"Create one now with: /register <username> <password>\n" +
+					"(Username: 3–20 chars, letters/numbers/underscore; Password: 6+ chars)")
+		} else {
+			client.SendServerMessage(
+				"You don't have an account yet.\n\n" +
+					"💡 Accounts are free and let you track (gambling is off here):\n" +
+					"  • 👗 Wardrobe favourites — /favourite <char>\n" +
+					"  • 🏷️ Default cosmetic tag — /settag <tag_id> (every tag in /shop is free)\n" +
+					"  • ⏱ Playtime on this server — /playtime top\n\n" +
+					"Create one now with: /register <username> <password>\n" +
+					"(Username: 3–20 chars, letters/numbers/underscore; Password: 6+ chars)")
+		}
 		return
 	}
 
@@ -230,11 +253,24 @@ func cmdAccount(client *Client, _ []string, _ string) {
 		playtimeSec += int64(time.Since(connAt).Seconds())
 	}
 
-	client.SendServerMessage(fmt.Sprintf(
-		"\n👤 Account: %v\n"+
-			"💰 Chips: %d\n"+
-			"⏱ Playtime: %v",
-		username, chips, formatPlaytime(playtimeSec)))
+	if config.EnableCasino {
+		client.SendServerMessage(fmt.Sprintf(
+			"\n👤 Account: %v\n"+
+				"💰 Chips: %d\n"+
+				"⏱ Playtime: %v",
+			username, chips, formatPlaytime(playtimeSec)))
+	} else {
+		activeTag := db.GetActiveTag(client.Ipid())
+		tagDisplay := "(none)"
+		if t := formatTagDisplay(activeTag); t != "" {
+			tagDisplay = t
+		}
+		client.SendServerMessage(fmt.Sprintf(
+			"\n👤 Account: %v\n"+
+				"🏷️ Active tag: %v\n"+
+				"⏱ Playtime: %v",
+			username, tagDisplay, formatPlaytime(playtimeSec)))
+	}
 }
 
 // formatPlaytime converts seconds into a human-readable "Xh Ym" / "Ym" string.
