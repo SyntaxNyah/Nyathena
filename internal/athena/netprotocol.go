@@ -49,8 +49,8 @@ var tstNavRegex = regexp.MustCompile(`[<>]([[:digit:]]+)?`)
 const maxShownameLength = 30
 
 // accountWelcomeMsg is the on-join welcome message shown to unauthenticated players
-// when the casino is disabled but the optional account system is enabled and
-// `account_prompt_on_join` is true. It advertises the *non-gambling* half of the
+// when the casino is disabled but the optional account system is enabled
+// (`enable_accounts = true`). It advertises the *non-gambling* half of the
 // account system: free account creation, wardrobe, default cosmetic tag, and
 // playtime tracking. It also documents every tag category available in /shop and
 // how to equip a tag with /settag — because with the casino off, tags are free.
@@ -243,9 +243,9 @@ func pktReqDone(client *Client, _ *packet.Packet) {
 	client.restorePunishments()
 
 	// Casino on-join setup: seed chip balance and prompt unregistered players.
-	// When the casino is off but the account system is enabled, an optional
-	// account prompt documenting wardrobe / default tags / playtime can be shown
-	// on join (opt-in via `account_prompt_on_join`).
+	// When the casino is off but the account system is enabled, the account
+	// welcome message (wardrobe / default tags / playtime tracking) is shown
+	// to unauthenticated joiners.
 	if config.EnableCasino {
 		ipid := client.Ipid()
 		go func() {
@@ -256,7 +256,7 @@ func pktReqDone(client *Client, _ *packet.Packet) {
 		if !client.Authenticated() {
 			client.SendServerMessage(casinoWelcomeMsg)
 		}
-	} else if config.EnableAccounts && config.AccountPromptOnJoin && !client.Authenticated() {
+	} else if config.EnableAccounts && !client.Authenticated() {
 		client.SendServerMessage(accountWelcomeMsg)
 	}
 
