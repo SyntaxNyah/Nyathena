@@ -27,6 +27,17 @@ import (
 	"github.com/MangosArentLiterature/Athena/internal/webhook"
 )
 
+// logBytePool hands out reusable byte slices for the log() framing path so
+// each call does not allocate a fresh "<time>: <LEVEL>: <msg>\n" string.
+// The slices are Put back after each log line. Starting capacity is sized
+// for a typical line; append will grow it automatically for long messages.
+var logBytePool = sync.Pool{
+	New: func() any {
+		b := make([]byte, 0, 160)
+		return &b
+	},
+}
+
 type LogLevel int
 
 const (
@@ -90,23 +101,43 @@ type areaLogState struct {
 	filePath string
 }
 
-// log writes a message to standard output and/or the log file if the level matches the server's set log level.
+// log writes a message to standard output and/or the log file if the level
+// matches the server's set log level.
+//
+// Framing is built by appending into a pooled []byte to avoid the three
+// allocations that the old fmt.Sprintf call produced per log line. The exact
+// output format is preserved byte-for-byte: "<time.StampMilli>: LEVEL: s\n".
 func log(level LogLevel, s string) {
 	if level < CurrentLevel {
 		return
 	}
-	msg := fmt.Sprintf("%v: %v: %v\n", time.Now().UTC().Format(time.StampMilli), levelToString[level], s)
+	bp := logBytePool.Get().(*[]byte)
+	buf := (*bp)[:0]
+	buf = time.Now().UTC().AppendFormat(buf, time.StampMilli)
+	buf = append(buf, ": "...)
+	buf = append(buf, levelToString[level]...)
+	buf = append(buf, ": "...)
+	buf = append(buf, s...)
+	buf = append(buf, '\n')
+
 	if LogStdOut {
 		outputLock.Lock()
-		fmt.Print(msg)
+		os.Stdout.Write(buf)
 		outputLock.Unlock()
 	}
 	if LogFile {
-		WriteLog(msg)
+		// WriteLog takes a string; turning the byte slice back into a
+		// string here is one unavoidable allocation, but it replaces
+		// three allocations in the old path and keeps WriteLog's
+		// interface stable for area-log callers.
+		WriteLog(string(buf))
 	}
 	if tap := TUITap; tap != nil {
-		tap(msg)
+		tap(string(buf))
 	}
+
+	*bp = buf
+	logBytePool.Put(bp)
 }
 
 // LogInfo prints an info message to stdout. Arguments are handled in the manner of fmt.Print.
