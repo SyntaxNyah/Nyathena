@@ -2469,6 +2469,111 @@ func applyQuote(text string) string {
 	return truncateText(strings.Join(words, " "))
 }
 
+// areaRandomPunishments is the curated pool of STATELESS punishment types
+// that the "punishment_area" feature picks from on every IC message. Each
+// entry must be safe to call repeatedly without any PunishmentState —
+// i.e. no torment (state cycling), no lovebomb (target UID), no
+// third-person (needs showname context). Translator is handled separately
+// in applyAreaRandomPunishment because it requires config plumbing.
+var areaRandomPunishments = []PunishmentType{
+	PunishmentBackward,
+	PunishmentStutterstep,
+	PunishmentElongate,
+	PunishmentUppercase,
+	PunishmentLowercase,
+	PunishmentRobotic,
+	PunishmentAlternating,
+	PunishmentFancy,
+	PunishmentUwu,
+	PunishmentPirate,
+	PunishmentShakespearean,
+	PunishmentCaveman,
+	PunishmentCensor,
+	PunishmentConfused,
+	PunishmentParanoid,
+	PunishmentDrunk,
+	PunishmentHiccup,
+	PunishmentWhistle,
+	PunishmentMumble,
+	PunishmentSpaghetti,
+	PunishmentRng,
+	PunishmentEssay,
+	PunishmentAutospell,
+	PunishmentSubtitles,
+	PunishmentSpotlight,
+	PunishmentMonkey,
+	PunishmentSnake,
+	PunishmentDog,
+	PunishmentCat,
+	PunishmentBird,
+	PunishmentCow,
+	PunishmentFrog,
+	PunishmentDuck,
+	PunishmentHorse,
+	PunishmentLion,
+	PunishmentZoo,
+	PunishmentBunny,
+	PunishmentTsundere,
+	PunishmentYandere,
+	PunishmentKuudere,
+	PunishmentDandere,
+	PunishmentDeredere,
+	PunishmentHimedere,
+	PunishmentKamidere,
+	PunishmentUndere,
+	PunishmentBakadere,
+	PunishmentMayadere,
+	PunishmentEmoticon,
+	PunishmentDegrade,
+	PunishmentTourettes,
+	PunishmentSlang,
+	PunishmentThesaurusOverload,
+	PunishmentValleyGirl,
+	PunishmentBabytalk,
+	PunishmentUnreliableNarrator,
+	PunishmentUncannyValley,
+	Punishment51,
+	PunishmentPhilosopher,
+	PunishmentPoet,
+	PunishmentUpsidedown,
+	PunishmentSarcasm,
+	PunishmentAcademic,
+	PunishmentRecipe,
+	PunishmentQuote,
+	PunishmentTimewarp,
+	PunishmentMorse,
+	PunishmentRickroll,
+	PunishmentVowelhell,
+	PunishmentChef,
+	PunishmentKaren,
+	PunishmentPassiveAggressive,
+	PunishmentNervous,
+	PunishmentDreamSequence,
+}
+
+// pickAreaRandomPunishment returns a random punishment type from the pool.
+// Exported as a var so the punishment-area tests can stub it if needed.
+var pickAreaRandomPunishment = func() PunishmentType {
+	return areaRandomPunishments[rand.Intn(len(areaRandomPunishments))]
+}
+
+// applyAreaRandomPunishmentText applies ONE random stateless punishment to
+// text and returns the result. Translator is opt-in via includeTranslator —
+// callers check translatorEnabled() before passing true.
+//
+// This is the text-only helper. The full IC-path hook (applyAreaRandomPunishment)
+// also tweaks display name fields for emoji/uncanny — see netprotocol.go.
+// Returned second value is the picked type, for logging/debug.
+func applyAreaRandomPunishmentText(text string, includeTranslator bool) (string, PunishmentType) {
+	// When translator is live, give it a real chance to be picked so the
+	// area feels unpredictable rather than just "same list of filters".
+	if includeTranslator && rand.Intn(len(areaRandomPunishments)+1) == 0 {
+		return applyTranslator(text, "random"), PunishmentTranslator
+	}
+	pType := pickAreaRandomPunishment()
+	return ApplyPunishmentToText(text, pType), pType
+}
+
 // applyTimewarp shuffles word order so time feels out of joint.
 func applyTimewarp(text string) string {
 	words := strings.Fields(text)

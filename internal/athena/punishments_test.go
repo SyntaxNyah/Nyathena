@@ -1322,6 +1322,66 @@ func TestParsePunishmentTypeNewNames(t *testing.T) {
 	}
 }
 
+// ─── Punishment-area helper ────────────────────────────────────────────────
+
+// TestAreaRandomPunishmentsPoolSafe verifies that every punishment type in the
+// curated random-area pool is one of the stateless transforms — no torment,
+// lovebomb, or third-person entries should sneak in, since those require
+// per-client state the area feature intentionally does NOT provide.
+func TestAreaRandomPunishmentsPoolSafe(t *testing.T) {
+	banned := map[PunishmentType]bool{
+		PunishmentTorment:     true,
+		PunishmentLovebomb:    true,
+		PunishmentThirdPerson: true,
+		// Translator is handled separately in applyAreaRandomPunishmentText.
+		PunishmentTranslator: true,
+	}
+	for _, p := range areaRandomPunishments {
+		if banned[p] {
+			t.Errorf("areaRandomPunishments contains stateful type %v — must be excluded", p)
+		}
+	}
+	if len(areaRandomPunishments) == 0 {
+		t.Errorf("areaRandomPunishments must contain at least one type")
+	}
+}
+
+// TestApplyAreaRandomPunishmentTextDoesNotPanic verifies the helper returns
+// something sensible for typical inputs and never panics regardless of which
+// random punishment is picked.
+func TestApplyAreaRandomPunishmentTextDoesNotPanic(t *testing.T) {
+	// Run a bunch of iterations to cover many random picks.
+	inputs := []string{"", "a", "hello world", "this is a longer example sentence for coverage"}
+	for i := 0; i < 200; i++ {
+		in := inputs[i%len(inputs)]
+		// includeTranslator = false avoids calling out to the network.
+		got, pType := applyAreaRandomPunishmentText(in, false)
+		if pType == PunishmentTorment || pType == PunishmentLovebomb ||
+			pType == PunishmentThirdPerson || pType == PunishmentTranslator {
+			t.Errorf("applyAreaRandomPunishmentText picked stateful/unsafe type %v", pType)
+		}
+		// The helper is allowed to produce empty output only if the transform
+		// genuinely reduces it to empty (e.g. morse on empty), but must not
+		// crash. We just require a string result.
+		_ = got
+	}
+}
+
+// TestPickAreaRandomPunishmentInPool ensures the picker only returns types
+// that are actually in the pool — catches accidental index bugs.
+func TestPickAreaRandomPunishmentInPool(t *testing.T) {
+	pool := make(map[PunishmentType]bool, len(areaRandomPunishments))
+	for _, p := range areaRandomPunishments {
+		pool[p] = true
+	}
+	for i := 0; i < 100; i++ {
+		got := pickAreaRandomPunishment()
+		if !pool[got] {
+			t.Errorf("pickAreaRandomPunishment returned %v, not in pool", got)
+		}
+	}
+}
+
 // ─── Mirror-area helper ────────────────────────────────────────────────────
 
 func TestReverseRunes(t *testing.T) {

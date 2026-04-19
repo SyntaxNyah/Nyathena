@@ -111,6 +111,7 @@ type Area struct {
 	casinoJackpotPool    int64
 	randomPunishEnabled  bool
 	mirror               bool
+	punishmentArea       bool
 }
 
 type AreaData struct {
@@ -130,6 +131,7 @@ type AreaData struct {
 	Casino_max_tables int    `toml:"casino_max_tables"`
 	Casino_jackpot    bool   `toml:"casino_slots_jackpot"`
 	Mirror            bool   `toml:"mirror"`
+	Punishment_area   bool   `toml:"punishment_area"`
 }
 
 type defaults struct {
@@ -148,6 +150,7 @@ type defaults struct {
 	casino_max_tables int
 	casino_jackpot    bool
 	mirror            bool
+	punishment_area   bool
 }
 
 // NewArea returns a new area.
@@ -170,6 +173,7 @@ func NewArea(data AreaData, charlen int, bufsize int, evi_mode EvidenceMode) *Ar
 			casino_max_tables: data.Casino_max_tables,
 			casino_jackpot:    data.Casino_jackpot,
 			mirror:            data.Mirror,
+			punishment_area:   data.Punishment_area,
 		},
 		taken:           make([]bool, charlen),
 		defhp:           10,
@@ -188,6 +192,7 @@ func NewArea(data AreaData, charlen int, bufsize int, evi_mode EvidenceMode) *Ar
 		casinoJackpot:        data.Casino_jackpot,
 		randomPunishEnabled:  true,
 		mirror:               data.Mirror,
+		punishmentArea:       data.Punishment_area,
 	}
 }
 
@@ -1064,4 +1069,21 @@ func (a *Area) SetMirror(v bool) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	a.mirror = v
+}
+
+// PunishmentArea reports whether this area applies a random, one-shot
+// punishment effect to every IC message. The effect is chosen per-message,
+// never persisted, and clears the moment the speaker leaves the area.
+// Configured via `punishment_area = true` in the area's TOML entry.
+func (a *Area) PunishmentArea() bool {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return a.punishmentArea
+}
+
+// SetPunishmentArea toggles random-per-message punishment mode at runtime.
+func (a *Area) SetPunishmentArea(v bool) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	a.punishmentArea = v
 }

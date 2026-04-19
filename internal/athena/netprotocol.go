@@ -813,6 +813,17 @@ func pktIC(client *Client, p *packet.Packet) {
 		return
 	}
 
+	// Punishment area: if this area has punishment_area=true, pick a random
+	// stateless punishment per IC message and apply it on top of whatever
+	// per-client punishments already ran. Nothing is persisted — the effect
+	// evaporates the moment the speaker leaves the area. Translator is
+	// included in the random pool only if it's fully configured server-wide.
+	if client.Area().PunishmentArea() && args[4] != "" {
+		decoded := decode(args[4])
+		mutated, _ := applyAreaRandomPunishmentText(decoded, translatorEnabled())
+		args[4] = encode(mutated)
+	}
+
 	// Mirror area: if this area has mirror=true in its TOML config, reverse the
 	// IC message text server-side right before broadcasting. This runs AFTER
 	// every punishment transform so the reversal is the last word on the text.

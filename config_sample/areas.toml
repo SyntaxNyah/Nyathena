@@ -35,6 +35,14 @@ lock_music = false
 # server-side. Staff can also toggle this at runtime. Default false (off).
 # mirror = false
 
+# Punishment area: when true, every IC message sent in this area has a random,
+# one-shot punishment effect applied to it (uwu, pirate, morse, dreamsequence,
+# monkey sounds, etc.). Nothing is persisted — the effect clears the instant
+# the speaker leaves the area. If the translator punishment is configured
+# server-wide (enable_translator_punishment + translator_api_key in config.toml),
+# it is also included in the random pool. Staff can toggle at runtime.
+# punishment_area = false
+
 [[Area]]
 name = "Courtroom"
 background = "gs4"
