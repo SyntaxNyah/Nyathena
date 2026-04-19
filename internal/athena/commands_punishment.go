@@ -1398,14 +1398,27 @@ func cmdTranslator(client *Client, args []string, usage string) {
 // cmdUntranslator removes the translator punishment from user(s).
 //
 //	/untranslator curse <uid1>,<uid2>,...
+//	/untranslator curse global
 //
-// The "curse" subcommand word is required to mirror /translator curse.
+// The "curse" subcommand word is required to mirror /translator curse.  The
+// "global" target sweeps every client on the server currently affected by the
+// translator punishment — useful for one-shot cleanup after mass-cursing.
 func cmdUntranslator(client *Client, args []string, usage string) {
 	if len(args) < 2 || !strings.EqualFold(args[0], "curse") {
 		client.SendServerMessage("Not enough arguments:\n" + usage)
 		return
 	}
-	toUnpunish := getUidList(strings.Split(args[1], ","))
+	var toUnpunish []*Client
+	isGlobal := strings.EqualFold(args[1], "global")
+	if isGlobal {
+		clients.ForEach(func(c *Client) {
+			if c.HasPunishment(PunishmentTranslator) {
+				toUnpunish = append(toUnpunish, c)
+			}
+		})
+	} else {
+		toUnpunish = getUidList(strings.Split(args[1], ","))
+	}
 	var count int
 	var report string
 	for _, c := range toUnpunish {
@@ -1421,6 +1434,11 @@ func cmdUntranslator(client *Client, args []string, usage string) {
 		report += fmt.Sprintf("%v, ", c.Uid())
 	}
 	report = strings.TrimSuffix(report, ", ")
+	if isGlobal {
+		client.SendServerMessage(fmt.Sprintf("Removed translator punishment from %v clients (global sweep).", count))
+		addToBuffer(client, "CMD", fmt.Sprintf("Removed translator (global) from %v.", report), false)
+		return
+	}
 	client.SendServerMessage(fmt.Sprintf("Removed translator punishment from %v clients.", count))
 	addToBuffer(client, "CMD", fmt.Sprintf("Removed translator from %v.", report), false)
 }
