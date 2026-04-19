@@ -540,6 +540,16 @@ newspaper_sections = []
 # Default: 0 (disabled)
 max_connection_goroutines = 0
 
+# ─── Operator Terminal Dashboard ────────────────────────────────────────────
+
+# Start the read-only terminal dashboard (player count, area occupancy, recent
+# log tail) at launch. Equivalent to passing the -tui CLI flag. When on, the
+# stdin CLI is disabled and stdout log output is suppressed while the dashboard
+# owns the screen -- log entries still go to the log file and show up in the
+# dashboard's own log pane. Press Ctrl-C to stop the server as usual.
+# Default: false
+enable_tui = false
+
 [Logging]
 # Sets the number of actions (IC chat messages, OOC chat messages, judge actions, etc.) each area should store.
 # When a user calls a mod, this buffer will be flushed to a report file for review.

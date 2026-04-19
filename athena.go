@@ -94,8 +94,12 @@ func main() {
 	// stdin CLI entirely. Operators who want both can run the TUI in one
 	// terminal pane and a second server instance for interactive tasks, or
 	// just launch without -tui.
+	// Either the -tui CLI flag OR enable_tui=true in config.toml turns it on;
+	// the flag is a one-off override, the config entry is the persistent
+	// default.
+	tuiEnabled := *tuiFlag || config.EnableTUI
 	tuiStop := make(chan struct{})
-	if *tuiFlag {
+	if tuiEnabled {
 		go athena.StartTUI(tuiStop)
 	} else if !*cliFlag {
 		go athena.ListenInput()
