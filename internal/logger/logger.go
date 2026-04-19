@@ -55,6 +55,13 @@ var (
 	EnableNetworkLogging bool
 	areaLogLocks         sync.Map // Map of area names to their respective locks
 
+	// TUITap is an optional hook invoked with every formatted log line. The
+	// TUI installs its own callback so the dashboard can render a recent-log
+	// pane without the logger writing to stdout directly. nil by default, so
+	// there is zero overhead when the TUI is not in use. Never holds a lock
+	// during the call, so callers must serialize their own state.
+	TUITap func(string)
+
 	// Persistent file handles – kept open between writes to avoid
 	// the overhead of os.OpenFile + Close on every log message.
 	serverLogMu       sync.Mutex
@@ -96,6 +103,9 @@ func log(level LogLevel, s string) {
 	}
 	if LogFile {
 		WriteLog(msg)
+	}
+	if tap := TUITap; tap != nil {
+		tap(msg)
 	}
 }
 

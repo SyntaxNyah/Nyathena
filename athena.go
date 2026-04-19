@@ -33,6 +33,7 @@ import (
 var (
 	configFlag = flag.String("c", "config", "path to config directory")
 	cliFlag    = flag.Bool("nocli", false, "disables listening for commands on stdin")
+	tuiFlag    = flag.Bool("tui", false, "enables a read-only terminal dashboard; implies -nocli and suppresses stdout logging while active")
 )
 
 func main() {
@@ -89,7 +90,14 @@ func main() {
 			go athena.ListenWSS()
 		}
 	}
-	if !*cliFlag {
+	// The TUI owns stdout and is read-only, so when it's enabled we skip the
+	// stdin CLI entirely. Operators who want both can run the TUI in one
+	// terminal pane and a second server instance for interactive tasks, or
+	// just launch without -tui.
+	tuiStop := make(chan struct{})
+	if *tuiFlag {
+		go athena.StartTUI(tuiStop)
+	} else if !*cliFlag {
 		go athena.ListenInput()
 	}
 
@@ -118,6 +126,7 @@ func main() {
 	case <-athena.RestartRequest:
 		restart = true
 	}
+	close(tuiStop)
 	athena.CleanupServer()
 	if restart {
 		logger.LogInfo("Restarting server...")
