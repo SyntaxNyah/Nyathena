@@ -32,79 +32,77 @@ import (
 	"github.com/MangosArentLiterature/Athena/internal/logger"
 )
 
-// translatorLanguages maps friendly language names (and aliases) to ISO-639-1
-// codes understood by MyMemory / LibreTranslate style APIs.  Keys are
-// lower-cased; callers should lower-case input before lookup.
-// Raw two-letter ISO codes are also accepted directly, bypassing this map.
+// translator targets DeepL's REST API.  The free tier
+// (https://api-free.deepl.com/v2/translate, 500 000 chars/month) fits the
+// "lenient free key" brief; pro users can point translator_api_url at
+// https://api.deepl.com/v2/translate without code changes.
+//
+// API shape (summarised from DeepL docs):
+//   POST  <endpoint>
+//   Authorization: DeepL-Auth-Key <key>
+//   Content-Type:  application/x-www-form-urlencoded
+//   Body:  text=<word>&text=<word>&target_lang=<UPPERCASE>&source_lang=<UPPERCASE>
+//   Reply: {"translations":[{"detected_source_language":"EN","text":"..."}]}
+// Multiple `text` parameters may be sent in one request and are translated in
+// the same order they arrive; we exploit this to batch random-mode per-word
+// translations into one request per target language.
+
+// translatorLanguages maps friendly English language names (and aliases) to
+// DeepL target codes (UPPERCASE, ISO-639-1, with regional variants like
+// EN-US / PT-BR supported directly).  Keys are lower-cased; callers should
+// lower-case input before lookup.  Raw DeepL codes are also accepted and
+// uppercased by resolveLanguage.
 var translatorLanguages = map[string]string{
-	"english":    "en",
-	"french":     "fr",
-	"francais":   "fr",
-	"spanish":    "es",
-	"espanol":    "es",
-	"german":     "de",
-	"deutsch":    "de",
-	"italian":    "it",
-	"portuguese": "pt",
-	"japanese":   "ja",
-	"korean":     "ko",
-	"chinese":    "zh-CN",
-	"mandarin":   "zh-CN",
-	"russian":    "ru",
-	"arabic":     "ar",
-	"hindi":      "hi",
-	"dutch":      "nl",
-	"polish":     "pl",
-	"turkish":    "tr",
-	"swedish":    "sv",
-	"norwegian":  "no",
-	"danish":     "da",
-	"finnish":    "fi",
-	"greek":      "el",
-	"hebrew":     "he",
-	"thai":       "th",
-	"vietnamese": "vi",
-	"indonesian": "id",
-	"malay":      "ms",
-	"czech":      "cs",
-	"hungarian":  "hu",
-	"romanian":   "ro",
-	"ukrainian":  "uk",
-	"bulgarian":  "bg",
-	"croatian":   "hr",
-	"serbian":    "sr",
-	"slovak":     "sk",
-	"slovenian":  "sl",
-	"latin":      "la",
-	"welsh":      "cy",
-	"irish":      "ga",
-	"latvian":    "lv",
-	"lithuanian": "lt",
-	"estonian":   "et",
-	"persian":    "fa",
-	"farsi":      "fa",
-	"urdu":       "ur",
-	"bengali":    "bn",
-	"tamil":      "ta",
-	"swahili":    "sw",
-	"afrikaans":  "af",
-	"albanian":   "sq",
-	"catalan":    "ca",
-	"filipino":   "tl",
-	"tagalog":    "tl",
-	"icelandic":  "is",
-	"macedonian": "mk",
-	"mongolian":  "mn",
-	"esperanto":  "eo",
+	// DeepL-supported families only.
+	"arabic":     "AR",
+	"bulgarian":  "BG",
+	"chinese":    "ZH",
+	"mandarin":   "ZH",
+	"czech":      "CS",
+	"danish":     "DA",
+	"dutch":      "NL",
+	"english":    "EN-US",
+	"british":    "EN-GB",
+	"american":   "EN-US",
+	"estonian":   "ET",
+	"finnish":    "FI",
+	"french":     "FR",
+	"francais":   "FR",
+	"german":     "DE",
+	"deutsch":    "DE",
+	"greek":      "EL",
+	"hebrew":     "HE",
+	"hungarian":  "HU",
+	"indonesian": "ID",
+	"italian":   "IT",
+	"japanese":   "JA",
+	"korean":     "KO",
+	"latvian":    "LV",
+	"lithuanian": "LT",
+	"norwegian":  "NB",
+	"polish":     "PL",
+	"portuguese": "PT-PT",
+	"brazilian":  "PT-BR",
+	"romanian":   "RO",
+	"russian":    "RU",
+	"slovak":     "SK",
+	"slovenian":  "SL",
+	"spanish":    "ES",
+	"espanol":    "ES",
+	"swedish":    "SV",
+	"thai":       "TH",
+	"turkish":    "TR",
+	"ukrainian":  "UK",
+	"vietnamese": "VI",
 }
 
 // translatorRandomPool is the set of language codes picked from when the
-// target language is "random".  Curated for variety without being so large
-// that the per-word API hit becomes unbounded.
+// target language is "random".  Curated for variety using only DeepL-
+// supported codes so the free tier never rejects a request as unsupported.
 var translatorRandomPool = []string{
-	"fr", "es", "de", "it", "pt", "ja", "ko", "zh-CN", "ru", "ar",
-	"hi", "nl", "pl", "tr", "sv", "el", "he", "th", "vi", "id",
-	"cs", "hu", "ro", "uk", "bg", "la", "fi", "no", "da", "eo",
+	"FR", "ES", "DE", "IT", "PT-BR", "JA", "KO", "ZH", "RU", "AR",
+	"NL", "PL", "TR", "SV", "EL", "HE", "TH", "VI", "ID", "CS",
+	"HU", "RO", "UK", "BG", "FI", "NB", "DA", "SK", "SL", "LV",
 }
 
 // Latency budgets.  Every translator call honours a hard deadline so the
@@ -114,7 +112,7 @@ var translatorRandomPool = []string{
 const (
 	translatorPerReqTimeout = 1500 * time.Millisecond // single API request
 	translatorOverallBudget = 2500 * time.Millisecond // whole applyTranslator call
-	translatorRandomMaxPar  = 6                       // concurrent random-mode workers
+	translatorRandomMaxPar  = 6                       // concurrent batch workers
 	translatorRandomMaxWord = 24                      // words translated in random mode
 )
 
@@ -129,9 +127,9 @@ var translatorCache = struct {
 }{m: make(map[string]string)}
 
 // translatorHTTPClient is shared across all translator lookups so TCP
-// connections to the translation endpoint are reused (HTTP keep-alive).
-// The Client.Timeout is a belt-and-braces cap on top of the per-request
-// context deadline — either one firing aborts the request.
+// connections to the DeepL endpoint are reused (HTTP keep-alive).  The
+// Client.Timeout is a belt-and-braces cap on top of the per-request context
+// deadline — either one firing aborts the request.
 var translatorHTTPClient = &http.Client{
 	Timeout: translatorPerReqTimeout,
 	Transport: &http.Transport{
@@ -188,9 +186,9 @@ func translatorEnabled() bool {
 	return config != nil && config.EnableTranslator && config.TranslatorAPIKey != "" && config.TranslatorAPIURL != ""
 }
 
-// resolveLanguage converts a user-supplied language name/code to the ISO code
-// used by the translation API.  Returns the empty string when the input is
-// not recognised and not already a plausible 2–5 char code.
+// resolveLanguage converts a user-supplied language name/code to the DeepL
+// target code (UPPERCASE) used on the wire.  Returns the empty string when
+// the input is not recognised and not already a plausible code.
 func resolveLanguage(name string) string {
 	name = strings.ToLower(strings.TrimSpace(name))
 	if name == "" {
@@ -199,122 +197,141 @@ func resolveLanguage(name string) string {
 	if code, ok := translatorLanguages[name]; ok {
 		return code
 	}
-	// Accept raw codes like "fr", "zh-CN" (validated lightly by length).
-	if l := len(name); l >= 2 && l <= 6 {
-		return name
+	// Accept raw DeepL codes like "fr", "en-us", "zh-hans" and uppercase them.
+	if l := len(name); l >= 2 && l <= 7 {
+		return strings.ToUpper(name)
 	}
 	return ""
 }
 
-// sourceLang returns the configured source language or "en" as a sane default.
+// sourceLang returns the configured source language (UPPERCASE for DeepL) or
+// "EN" as a sane default.
 func sourceLang() string {
 	if config != nil && config.TranslatorSourceLang != "" {
-		return config.TranslatorSourceLang
+		return strings.ToUpper(config.TranslatorSourceLang)
 	}
-	return "en"
+	return "EN"
 }
 
-// myMemoryResponse mirrors the MyMemory JSON shape.  Only fields we use are
-// decoded; everything else is ignored.
-type myMemoryResponse struct {
-	ResponseData struct {
-		TranslatedText string `json:"translatedText"`
-	} `json:"responseData"`
-	ResponseStatus json.Number `json:"responseStatus"`
+// deepLResponse mirrors the DeepL JSON shape.  Only fields we use are decoded.
+type deepLResponse struct {
+	Translations []struct {
+		DetectedSourceLanguage string `json:"detected_source_language"`
+		Text                   string `json:"text"`
+	} `json:"translations"`
 }
 
-// queryTranslator calls the configured translation endpoint and returns the
-// translated string.  Assumes a MyMemory-compatible GET API:
-//
-//	<apiURL>?q=<text>&langpair=<src>|<tgt>&key=<apiKey>
-//
-// MyMemory is the reference implementation because its free tier accepts
-// anonymous and keyed requests on the same endpoint, matching the user's
-// "super free lenient API key" expectation.
-func queryTranslator(ctx context.Context, text, targetLang string) (string, error) {
+// queryTranslatorBatch POSTs up to len(texts) strings to DeepL in a single
+// request and returns their translations in the same order.  The texts slice
+// must not be empty.
+func queryTranslatorBatch(ctx context.Context, texts []string, targetLang string) ([]string, error) {
 	endpoint := config.TranslatorAPIURL
 	apiKey := config.TranslatorAPIKey
-	src := sourceLang()
 
-	params := url.Values{}
-	params.Set("q", text)
-	params.Set("langpair", src+"|"+targetLang)
-	if apiKey != "" {
-		params.Set("key", apiKey)
+	form := url.Values{}
+	for _, t := range texts {
+		form.Add("text", t)
+	}
+	form.Set("target_lang", strings.ToUpper(targetLang))
+	if src := sourceLang(); src != "" {
+		form.Set("source_lang", src)
 	}
 
-	sep := "?"
-	if strings.Contains(endpoint, "?") {
-		sep = "&"
-	}
-	reqURL := endpoint + sep + params.Encode()
-
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, reqURL, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, strings.NewReader(form.Encode()))
 	if err != nil {
-		return "", err
+		return nil, err
 	}
+	req.Header.Set("Authorization", "DeepL-Auth-Key "+apiKey)
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	req.Header.Set("Accept", "application/json")
 
 	resp, err := translatorHTTPClient.Do(req)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("translator API returned status %d", resp.StatusCode)
+		return nil, fmt.Errorf("DeepL returned status %d", resp.StatusCode)
 	}
 
-	var result myMemoryResponse
-	// Cap response at 32 KiB — translated IC messages are tiny.
-	if err := json.NewDecoder(io.LimitReader(resp.Body, 32*1024)).Decode(&result); err != nil {
-		return "", err
+	var result deepLResponse
+	// Cap response at 64 KiB — translated IC messages are tiny but batches
+	// in random mode can carry up to ~24 short strings.
+	if err := json.NewDecoder(io.LimitReader(resp.Body, 64*1024)).Decode(&result); err != nil {
+		return nil, err
 	}
-	translated := strings.TrimSpace(result.ResponseData.TranslatedText)
-	if translated == "" {
-		return "", fmt.Errorf("translator API returned empty translation")
+	if len(result.Translations) != len(texts) {
+		return nil, fmt.Errorf("DeepL returned %d translations for %d texts", len(result.Translations), len(texts))
 	}
-	return translated, nil
+	out := make([]string, len(texts))
+	for i, tr := range result.Translations {
+		out[i] = strings.TrimSpace(tr.Text)
+		if out[i] == "" {
+			out[i] = texts[i] // keep the original rather than emitting a blank
+		}
+	}
+	return out, nil
 }
 
-// translateCached wraps queryTranslator with an in-memory cache.  Identical
-// (lang, text) pairs resolve instantly after the first hit.  The context's
-// deadline caps the total wait for a fresh lookup.
-func translateCached(ctx context.Context, text, targetLang string) (string, error) {
-	key := targetLang + "\x1f" + text
+// translateCachedBatch returns translations for each input text, consulting
+// the in-memory cache first and batching any cache misses into a single
+// upstream request.  On any API error (or breaker-open) missing entries
+// fall back to the original text so the IC message is never blank.
+func translateCachedBatch(ctx context.Context, texts []string, targetLang string) []string {
+	out := make([]string, len(texts))
+	var missIdx []int
+	var missText []string
 
 	translatorCache.mu.Lock()
-	if v, ok := translatorCache.m[key]; ok {
-		translatorCache.mu.Unlock()
-		return v, nil
+	for i, t := range texts {
+		key := targetLang + "\x1f" + t
+		if v, ok := translatorCache.m[key]; ok {
+			out[i] = v
+		} else {
+			missIdx = append(missIdx, i)
+			missText = append(missText, t)
+		}
 	}
 	translatorCache.mu.Unlock()
 
-	// Short-circuit the network call when the breaker is open so the cursed
-	// player's IC pipeline never pays a round-trip to a dead endpoint.
-	if breakerOpen() {
-		return "", fmt.Errorf("translator circuit breaker open")
+	if len(missText) == 0 {
+		return out
 	}
 
-	translated, err := queryTranslator(ctx, text, targetLang)
+	// Fill remaining slots with the original text up front so any failure
+	// path below leaves the message intact.
+	for _, i := range missIdx {
+		out[i] = texts[i]
+	}
+
+	if breakerOpen() {
+		return out
+	}
+
+	translations, err := queryTranslatorBatch(ctx, missText, targetLang)
 	if err != nil {
 		recordTranslatorFailure()
-		return "", err
+		return out
 	}
 	recordTranslatorSuccess()
 
 	translatorCache.mu.Lock()
-	if len(translatorCache.m) >= translatorCacheMax {
-		// Simple random eviction — good enough for best-effort cache.
-		for k := range translatorCache.m {
-			delete(translatorCache.m, k)
-			break
+	for n, i := range missIdx {
+		tr := translations[n]
+		out[i] = tr
+		if len(translatorCache.m) >= translatorCacheMax {
+			// Simple random eviction — good enough for best-effort cache.
+			for k := range translatorCache.m {
+				delete(translatorCache.m, k)
+				break
+			}
 		}
+		translatorCache.m[targetLang+"\x1f"+texts[i]] = tr
 	}
-	translatorCache.m[key] = translated
 	translatorCache.mu.Unlock()
 
-	return translated, nil
+	return out
 }
 
 // applyTranslator translates the whole message into targetLang, or (when
@@ -342,18 +359,19 @@ func applyTranslator(text, targetLang string) string {
 	if code == "" {
 		return text
 	}
-	translated, err := translateCached(ctx, text, code)
-	if err != nil {
-		logger.LogWarningf("translator: %v", err)
+	translated := translateCachedBatch(ctx, []string{text}, code)
+	if translated[0] == "" {
+		logger.LogWarningf("translator: empty translation for lang %q", code)
 		return text
 	}
-	return translated
+	return translated[0]
 }
 
 // applyTranslatorRandom translates each whitespace-delimited word into an
-// independently-chosen random language, concurrently.  A bounded worker pool
-// fans out the per-word API calls under a shared deadline; any word whose
-// call errors or exceeds the deadline falls back to the original word so the
+// independently-chosen random language.  Words are grouped by their assigned
+// target language and each group is batched into a single DeepL POST, then
+// the batches are executed concurrently under a shared deadline.  Any word
+// whose call errors or exceeds the deadline keeps its original form so the
 // IC message is never blank or truncated.
 func applyTranslatorRandom(ctx context.Context, text string) string {
 	words := strings.Fields(text)
@@ -361,40 +379,52 @@ func applyTranslatorRandom(ctx context.Context, text string) string {
 		return text
 	}
 	capped := len(words) > translatorRandomMaxWord
-	work := make([]string, len(words))
-	copy(work, words)
+	out := make([]string, len(words))
+	copy(out, words)
 
-	translate := work
+	end := len(words)
 	if capped {
-		translate = work[:translatorRandomMaxWord]
+		end = translatorRandomMaxWord
+	}
+
+	// Group eligible words by their randomly chosen target language so each
+	// language's words can be fetched in a single batch request.
+	groups := make(map[string][]int, 8)
+	for i := 0; i < end; i++ {
+		lang := translatorRandomPool[rand.Intn(len(translatorRandomPool))]
+		groups[lang] = append(groups[lang], i)
 	}
 
 	sem := make(chan struct{}, translatorRandomMaxPar)
 	var wg sync.WaitGroup
+	var mu sync.Mutex // guards out[]
 
-	for i := range translate {
-		i := i
-		w := translate[i]
+	for lang, idxs := range groups {
+		lang := lang
+		idxs := idxs
 		wg.Add(1)
 		sem <- struct{}{}
 		go func() {
 			defer wg.Done()
 			defer func() { <-sem }()
-			// Respect the shared deadline: if it already fired, skip the call.
 			if ctx.Err() != nil {
 				return
 			}
-			lang := translatorRandomPool[rand.Intn(len(translatorRandomPool))]
-			translated, err := translateCached(ctx, w, lang)
-			if err != nil {
-				// Keep the original word on failure; don't log per-word at
-				// warn level or we'd spam the logs under breaker-open.
-				return
+			texts := make([]string, len(idxs))
+			for n, i := range idxs {
+				texts[n] = words[i]
 			}
-			translate[i] = translated
+			translated := translateCachedBatch(ctx, texts, lang)
+			mu.Lock()
+			for n, i := range idxs {
+				if translated[n] != "" {
+					out[i] = translated[n]
+				}
+			}
+			mu.Unlock()
 		}()
 	}
 	wg.Wait()
 
-	return strings.Join(work, " ")
+	return strings.Join(out, " ")
 }

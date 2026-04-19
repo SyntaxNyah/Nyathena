@@ -21,12 +21,12 @@ func TestResolveLanguage(t *testing.T) {
 		in   string
 		want string
 	}{
-		{"french", "fr"},
-		{"French", "fr"},
-		{"  Spanish  ", "es"},
-		{"japanese", "ja"},
-		{"fr", "fr"},      // raw 2-letter code accepted as-is
-		{"zh-CN", "zh-cn"}, // passthrough lowercases to the code we store
+		{"french", "FR"},
+		{"French", "FR"},
+		{"  Spanish  ", "ES"},
+		{"japanese", "JA"},
+		{"fr", "FR"},       // raw 2-letter code accepted and uppercased
+		{"zh-CN", "ZH-CN"}, // passthrough uppercases to DeepL wire format
 		{"", ""},
 		{"not-a-language-name-that-is-too-long", ""},
 	}
@@ -114,7 +114,9 @@ func TestApplyTranslatorSingleLang(t *testing.T) {
 		calls.Add(1)
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(`{"responseData":{"translatedText":"bonjour"}}`))
+		// DeepL response shape; translations[] length must match the number of
+		// `text=` params in the request (one here, for the single-string call).
+		w.Write([]byte(`{"translations":[{"detected_source_language":"EN","text":"bonjour"}]}`))
 	}))
 	defer ts.Close()
 
