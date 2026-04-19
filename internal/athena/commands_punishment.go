@@ -1288,7 +1288,7 @@ func cmdTranslator(client *Client, args []string, usage string) {
 		client.SendServerMessage(
 			"The translator punishment is disabled on this server.\n" +
 				"To enable: in config.toml under [Server], set enable_translator_punishment = true\n" +
-				"and translator_api_key = \"<your MyMemory API key>\", then restart the server.")
+				"and translator_api_key = \"<your DeepL API key>\", then restart the server.")
 		return
 	}
 	if config.TranslatorAPIKey == "" {
