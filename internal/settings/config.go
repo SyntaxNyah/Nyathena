@@ -91,6 +91,10 @@ type ServerConfig struct {
 	RandomSongCooldown         int    `toml:"random_song_cooldown"`
 	BotBanPlaytimeThreshold    int    `toml:"botban_playtime_threshold"`
 	IPHubAPIKey                string `toml:"iphub_api_key"`
+	EnableTranslator           bool   `toml:"enable_translator_punishment"`
+	TranslatorAPIURL           string `toml:"translator_api_url"`
+	TranslatorAPIKey           string `toml:"translator_api_key"`
+	TranslatorSourceLang       string `toml:"translator_source_lang"`
 	EnableCasino               bool     `toml:"enable_casino"`
 	EnableAccounts             bool     `toml:"enable_accounts"`
 	RegisterCaptcha            bool     `toml:"register_captcha"`
@@ -196,6 +200,10 @@ func DefaultConfig() *Config {
 			AutoModAction:              "ban",
 			RandomSongCooldown:         10,
 			BotBanPlaytimeThreshold:    120,
+			EnableTranslator:           false,
+			TranslatorAPIURL:           "https://api.mymemory.translated.net/get",
+			TranslatorAPIKey:           "",
+			TranslatorSourceLang:       "en",
 			EnableCasino:               false,
 			EnableAccounts:             true,
 			RegisterCaptcha:            true,

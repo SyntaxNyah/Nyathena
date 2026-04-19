@@ -496,6 +496,8 @@ func pktIC(client *Client, p *packet.Packet) {
 			} else if p.punishmentType == PunishmentThirdPerson {
 				displayName := clientDisplayName(client)
 				modifiedMsg = applyThirdPersonWithName(decodedMsg, displayName)
+			} else if p.punishmentType == PunishmentTranslator {
+				modifiedMsg = applyTranslator(decodedMsg, p.customData)
 			} else {
 				modifiedMsg = ApplyPunishmentToText(decodedMsg, p.punishmentType)
 			}

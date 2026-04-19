@@ -1616,6 +1616,22 @@ func initCommands() {
 			reqPerms: permissions.PermissionField["MUTE"],
 			category: "punishment",
 		},
+		"translator": {
+			handler:  cmdTranslator,
+			minArgs:  3,
+			usage:    "Usage: /translator curse [-d duration] [-r reason] <uid1>,<uid2>... <language>\nLanguage may be an English name (french, spanish, japanese), an ISO code (fr, es, ja), or 'random' to translate each word into a different language. Requires enable_translator_punishment = true and a translator_api_key in config.toml.",
+			desc:     "Translates the target's IC messages into another language. Moderator only.",
+			reqPerms: permissions.PermissionField["MUTE"],
+			category: "punishment",
+		},
+		"untranslator": {
+			handler:  cmdUntranslator,
+			minArgs:  2,
+			usage:    "Usage: /untranslator curse <uid1>,<uid2>...",
+			desc:     "Removes translator punishment from user(s). Moderator only.",
+			reqPerms: permissions.PermissionField["MUTE"],
+			category: "punishment",
+		},
 		"unpunish": {
 			handler:  cmdUnpunish,
 			minArgs:  1,
