@@ -165,7 +165,7 @@ func pktId(client *Client, _ *packet.Packet) {
 	if client.Uid() != -1 {
 		return
 	}
-	client.SendPacket("PN", strconv.Itoa(players.GetPlayerCount()), strconv.Itoa(config.MaxPlayers), encode(config.Desc))
+	client.SendPacket("PN", strconv.Itoa(players.GetPlayerCount()), strconv.Itoa(config.MaxPlayers), encode(GetServerDesc()))
 	client.SendPacket("FL", "noencryption", "yellowtext", "prezoom", "flipping", "customobjections",
 		"fastloading", "deskmod", "evidence", "cccc_ic_support", "arup", "casing_alerts",
 		"modcall_reason", "looping_sfx", "additive", "effects", "y_offset", "expanded_desk_mods", "auth_packet") // god this is cursed
@@ -237,8 +237,8 @@ func pktReqDone(client *Client, _ *packet.Packet) {
 	client.SendPacket("ID", strconv.Itoa(client.Uid()), "Athena", encode(version))
 	sendPlayerListToClient(client)
 	broadcastPlayerJoin(client)
-	if config.Motd != "" {
-		client.SendServerMessage(config.Motd)
+	if motd := GetMotd(); motd != "" {
+		client.SendServerMessage(motd)
 	}
 	client.restorePunishments()
 

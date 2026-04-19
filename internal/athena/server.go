@@ -479,6 +479,7 @@ func NewServer(conf *settings.Config) (*Server, error) {
 	initCommands()
 	initAutoMod(conf)
 	initCvote(conf)
+	initHotConfig(conf)
 	// Initialise the goroutine pool if a limit is configured.
 	if conf.MaxConnectionGoroutines > 0 {
 		connPool = make(chan struct{}, conf.MaxConnectionGoroutines)

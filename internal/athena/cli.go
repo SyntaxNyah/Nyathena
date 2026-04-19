@@ -32,7 +32,14 @@ func ListenInput() {
 		cmd := strings.Split(input.Text(), " ")
 		switch cmd[0] {
 		case "help":
-			logger.LogInfo("Recognized commands: help, mkusr, rmusr, players, getlog, say.")
+			logger.LogInfo("Recognized commands: help, mkusr, rmusr, players, getlog, say, reload.")
+		case "reload":
+			n, err := ReloadHotConfig()
+			if err != nil {
+				logger.LogErrorf("reload failed: %v", err)
+				break
+			}
+			logger.LogInfof("reload ok: %d whitelisted field(s) changed.", n)
 		case "mkusr":
 			if len(cmd) < 4 {
 				logger.LogInfo("Not enough arguments for command mkusr. Usage: mkusr <username> <password> <role>.")

@@ -92,6 +92,20 @@ func main() {
 	if !*cliFlag {
 		go athena.ListenInput()
 	}
+
+	// SIGHUP triggers a whitelist-only config reload (Motd / Desc). Never swaps
+	// anything that affects listeners, rate limits, area state, or cached
+	// packets; everything else still requires a full restart.
+	hup := make(chan os.Signal, 1)
+	signal.Notify(hup, syscall.SIGHUP)
+	go func() {
+		for range hup {
+			if _, err := athena.ReloadHotConfig(); err != nil {
+				logger.LogErrorf("SIGHUP reload failed: %v", err)
+			}
+		}
+	}()
+
 	stop := make(chan (os.Signal), 2)
 	signal.Notify(stop, os.Interrupt, syscall.SIGINT, syscall.SIGTERM)
 	restart := false
