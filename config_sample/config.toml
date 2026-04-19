@@ -406,12 +406,6 @@ translator_api_url = "https://api-free.deepl.com/v2/translate"
 # Default: "" (disabled).
 translator_api_key = ""
 
-# Source language code passed to the translation API (what the server assumes
-# incoming IC messages are written in).  DeepL expects an UPPERCASE code such
-# as EN, FR, DE; lowercase works too and is uppercased on the wire.
-# Default: "EN".
-translator_source_lang = "EN"
-
 # ─────────────────────────────────────────────────────────────────────────────
 # Casino & Player Account System
 # ─────────────────────────────────────────────────────────────────────────────

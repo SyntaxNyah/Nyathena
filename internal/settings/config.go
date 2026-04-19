@@ -94,7 +94,6 @@ type ServerConfig struct {
 	EnableTranslator           bool   `toml:"enable_translator_punishment"`
 	TranslatorAPIURL           string `toml:"translator_api_url"`
 	TranslatorAPIKey           string `toml:"translator_api_key"`
-	TranslatorSourceLang       string `toml:"translator_source_lang"`
 	EnableCasino               bool     `toml:"enable_casino"`
 	EnableAccounts             bool     `toml:"enable_accounts"`
 	RegisterCaptcha            bool     `toml:"register_captcha"`
@@ -203,7 +202,6 @@ func DefaultConfig() *Config {
 			EnableTranslator:           false,
 			TranslatorAPIURL:           "https://api-free.deepl.com/v2/translate",
 			TranslatorAPIKey:           "",
-			TranslatorSourceLang:       "EN",
 			EnableCasino:               false,
 			EnableAccounts:             true,
 			RegisterCaptcha:            true,
