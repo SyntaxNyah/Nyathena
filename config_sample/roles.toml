@@ -16,11 +16,23 @@
 # MUTE:         Grants permission to mute and parrot users.
 # LOG:          Grants permission to view area logs.
 # DJ:           Grants permission to set area entry descriptions with /areadesc.
+# SHADOW:       Marks the role as an anonymous moderator. Holders of this role
+#               appear as "Moderator" in every in-game and webhook surface
+#               (modcall buffer, /modchat, community-vote broadcasts, ban/kick
+#               webhooks, /baninfo, /modnote list, /getarea "Mod:" line) to
+#               any non-admin viewer. Admins (ADMIN permission) still see the
+#               real moderator username via /baninfo and /modnote, so shadow
+#               mods cannot act fully unattributed. Ban and modnote DB rows
+#               persist the real name with an opaque marker so that lookup
+#               can reveal it to admins.
 # ADMIN:        Grants all permissions.
 
 [[Role]]
 name = "moderator"
 permissions = ["CM", "KICK", "BAN", "BYPASS_LOCK", "MOD_EVI", "MODIFY_AREA", "MOVE_USERS", "MOD_SPEAK", "BAN_INFO", "MOD_CHAT", "MUTE", "LOG"]
+[[Role]]
+name = "shadow moderator"
+permissions = ["CM", "KICK", "BAN", "BYPASS_LOCK", "MOD_EVI", "MODIFY_AREA", "MOVE_USERS", "MOD_SPEAK", "BAN_INFO", "MOD_CHAT", "MUTE", "LOG", "SHADOW"]
 [[Role]]
 name = "admin"
 permissions = ["ADMIN"]

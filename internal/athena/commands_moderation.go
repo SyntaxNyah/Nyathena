@@ -85,7 +85,7 @@ func cmdBan(client *Client, args []string, usage string) {
 	seenIPIDs := make(map[string]struct{})
 	if len(*uids) > 0 {
 		for _, c := range getUidList(*uids) {
-			id, err := db.AddBan(c.Ipid(), c.Hdid(), banTime, until, reason, client.ModName())
+			id, err := db.AddBan(c.Ipid(), c.Hdid(), banTime, until, reason, client.StoredModName())
 			if err != nil {
 				continue
 			}
@@ -101,7 +101,7 @@ func cmdBan(client *Client, args []string, usage string) {
 			forgetIP(c.Ipid())
 			deleteAccountForIPID(c.Ipid())
 			count++
-			if err := webhook.PostBan(c.CurrentCharacter(), c.Showname(), c.OOCName(), c.Ipid(), c.Uid(), id, *duration, reason, client.ModName()); err != nil {
+			if err := webhook.PostBan(c.CurrentCharacter(), c.Showname(), c.OOCName(), c.Ipid(), c.Uid(), id, *duration, reason, client.DisplayModName()); err != nil {
 				logger.LogErrorf("while posting ban webhook: %v", err)
 			}
 		}
@@ -110,13 +110,13 @@ func cmdBan(client *Client, args []string, usage string) {
 			onlineClients := getClientsByIpid(ipid)
 			if len(onlineClients) == 0 {
 				// Offline ban – no HDID available.
-				id, err := db.AddBan(ipid, "", banTime, until, reason, client.ModName())
+				id, err := db.AddBan(ipid, "", banTime, until, reason, client.StoredModName())
 				if err != nil {
 					continue
 				}
 				forgetIP(ipid)
 				deleteAccountForIPID(ipid)
-				if err := webhook.PostBan("N/A", "N/A", "N/A", ipid, -1, id, *duration, reason, client.ModName()); err != nil {
+				if err := webhook.PostBan("N/A", "N/A", "N/A", ipid, -1, id, *duration, reason, client.DisplayModName()); err != nil {
 					logger.LogErrorf("while posting ban webhook: %v", err)
 				}
 			} else {
@@ -127,7 +127,7 @@ func cmdBan(client *Client, args []string, usage string) {
 					if _, done := banIDByHdid[c.Hdid()]; done {
 						continue
 					}
-					id, err := db.AddBan(c.Ipid(), c.Hdid(), banTime, until, reason, client.ModName())
+					id, err := db.AddBan(c.Ipid(), c.Hdid(), banTime, until, reason, client.StoredModName())
 					if err == nil {
 						banIDByHdid[c.Hdid()] = id
 					}
@@ -140,7 +140,7 @@ func cmdBan(client *Client, args []string, usage string) {
 				for _, c := range onlineClients {
 					if id, ok := banIDByHdid[c.Hdid()]; ok {
 						c.SendPacket("KB", fmt.Sprintf("%v\nUntil: %v\nID: %v", reason, untilS, id))
-						if err := webhook.PostBan(c.CurrentCharacter(), c.Showname(), c.OOCName(), ipid, c.Uid(), id, *duration, reason, client.ModName()); err != nil {
+						if err := webhook.PostBan(c.CurrentCharacter(), c.Showname(), c.OOCName(), ipid, c.Uid(), id, *duration, reason, client.DisplayModName()); err != nil {
 							logger.LogErrorf("while posting ban webhook: %v", err)
 						}
 					} else {
@@ -271,7 +271,7 @@ func cmdGetBan(client *Client, args []string, _ string) {
 			d = time.Unix(b.Duration, 0).UTC().Format("02 Jan 2006 15:04 MST")
 		}
 		fmt.Fprintf(&sb, "\nID: %v\nIPID: %v\nHDID: %v\nBanned on: %v\nUntil: %v\nReason: %v\nModerator: %v\n----------",
-			b.Id, b.Ipid, b.Hdid, time.Unix(b.Time, 0).UTC().Format("02 Jan 2006 15:04 MST"), d, b.Reason, b.Moderator)
+			b.Id, b.Ipid, b.Hdid, time.Unix(b.Time, 0).UTC().Format("02 Jan 2006 15:04 MST"), d, b.Reason, RenderStoredModName(b.Moderator, client.Perms()))
 	}
 	if *banid > 0 {
 		b, err := db.GetBan(db.BANID, *banid)
@@ -382,7 +382,7 @@ func cmdKick(client *Client, args []string, usage string) {
 		c.SendPacket("KK", reason)
 		c.conn.Close()
 		count++
-		if err := webhook.PostKick(c.CurrentCharacter(), c.Showname(), c.OOCName(), c.Ipid(), reason, client.ModName(), c.Uid()); err != nil {
+		if err := webhook.PostKick(c.CurrentCharacter(), c.Showname(), c.OOCName(), c.Ipid(), reason, client.DisplayModName(), c.Uid()); err != nil {
 			logger.LogErrorf("while posting kick webhook: %v", err)
 		}
 	}
@@ -432,7 +432,7 @@ func cmdLogout(client *Client, _ []string, _ string) {
 		client.SendServerMessage("You are not logged in.")
 		return
 	}
-	addToBuffer(client, "AUTH", fmt.Sprintf("Logged out as %v.", client.ModName()), true)
+	addToBuffer(client, "AUTH", fmt.Sprintf("Logged out as %v.", client.DisplayModName()), true)
 	if permissions.IsModerator(client.Perms()) {
 		client.RemoveAuth()
 	} else {
@@ -487,9 +487,16 @@ func cmdMod(client *Client, args []string, usage string) {
 
 func cmdModChat(client *Client, args []string, _ string) {
 	msg := strings.Join(args, " ")
+	senderIsShadow := permissions.IsShadow(client.Perms())
+	realSender := client.OOCName()
 	clients.ForEach(func(c *Client) {
 		if permissions.HasPermission(c.Perms(), permissions.PermissionField["MOD_CHAT"]) {
-			c.SendPacket("CT", fmt.Sprintf("[MODCHAT] %v", client.OOCName()), msg, "1")
+			// Shadow mods appear as "Moderator" to everyone except admins.
+			senderLabel := realSender
+			if senderIsShadow && !permissions.IsAdmin(c.Perms()) {
+				senderLabel = "Moderator"
+			}
+			c.SendPacket("CT", fmt.Sprintf("[MODCHAT] %v", senderLabel), msg, "1")
 		}
 	})
 }
@@ -662,7 +669,12 @@ func cmdPlayers(client *Client, args []string, _ string) {
 		fmt.Fprintf(b, "%s[%v] %v\n", prefix, c.Uid(), c.CurrentCharacter())
 		if hasBanInfo {
 			if permissions.IsModerator(c.Perms()) {
-				fmt.Fprintf(b, "Mod: %v\n", c.ModName())
+				// Hide shadow mods' real names from non-admin viewers.
+				shownMod := c.ModName()
+				if permissions.IsShadow(c.Perms()) && !isAdmin {
+					shownMod = "Moderator"
+				}
+				fmt.Fprintf(b, "Mod: %v\n", shownMod)
 			}
 			fmt.Fprintf(b, "IPID: %v\n", c.Ipid())
 		}
@@ -814,7 +826,7 @@ func cmdUnban(client *Client, args []string, _ string) {
 			} else {
 				durStr = time.Unix(b.Duration, 0).UTC().Format("02 Jan 2006 15:04 MST")
 			}
-			if err := webhook.PostUnban(id, b.Ipid, b.Reason, durStr, b.Moderator, client.ModName()); err != nil {
+			if err := webhook.PostUnban(id, b.Ipid, b.Reason, durStr, RenderStoredModName(b.Moderator, 0), client.DisplayModName()); err != nil {
 				logger.LogErrorf("while posting unban webhook: %v", err)
 			}
 		}
@@ -945,7 +957,7 @@ func cmdJail(client *Client, args []string, usage string) {
 		durationDisplay = "Permanent"
 	}
 	if err := webhook.PostJail(target.CurrentCharacter(), target.Showname(), target.OOCName(),
-		target.Ipid(), areaName, durationDisplay, *reason, client.OOCName(), uid); err != nil {
+		target.Ipid(), areaName, durationDisplay, *reason, client.DisplayModName(), uid); err != nil {
 		logger.LogErrorf("Failed to post jail webhook: %v", err)
 	}
 }
@@ -1487,7 +1499,7 @@ func cmdBotBan(client *Client, _ []string, _ string) {
 			return
 		}
 
-		id, err := db.AddBan(c.Ipid(), c.Hdid(), banTime, -1, "Botban: spectator with insufficient playtime.", client.ModName())
+		id, err := db.AddBan(c.Ipid(), c.Hdid(), banTime, -1, "Botban: spectator with insufficient playtime.", client.StoredModName())
 		if err != nil {
 			logger.LogErrorf("botban: failed to ban IPID %v: %v", c.Ipid(), err)
 			return
@@ -1509,7 +1521,7 @@ func cmdBotBan(client *Client, _ []string, _ string) {
 	client.SendServerMessage(fmt.Sprintf("Botban complete. Banned %v spectator(s).", count))
 	if count > 0 {
 		addToBuffer(client, "CMD", fmt.Sprintf("Botbanned %v spectator(s): %v", count, report), true)
-		if err := webhook.PostBotBan(count, report, client.ModName()); err != nil {
+		if err := webhook.PostBotBan(count, report, client.DisplayModName()); err != nil {
 			logger.LogErrorf("while posting botban webhook: %v", err)
 		}
 	}
@@ -1794,7 +1806,7 @@ func cmdModnote(client *Client, args []string, usage string) {
 		}
 		ipid := args[1]
 		note := strings.Join(args[2:], " ")
-		if err := db.AddModnote(ipid, note, client.ModName()); err != nil {
+		if err := db.AddModnote(ipid, note, client.StoredModName()); err != nil {
 			logger.LogErrorf("Failed to add modnote for IPID %v: %v", ipid, err)
 			client.SendServerMessage("Failed to add note.")
 			return
@@ -1822,7 +1834,7 @@ func cmdModnote(client *Client, args []string, usage string) {
 		fmt.Fprintf(&b, "Notes for IPID %v:\n", ipid)
 		for _, n := range notes {
 			ts := time.Unix(n.AddedAt, 0).UTC().Format("2006-01-02 15:04 UTC")
-			fmt.Fprintf(&b, "[%d] %v | by %v | %v\n", n.ID, ts, n.AddedBy, n.Note)
+			fmt.Fprintf(&b, "[%d] %v | by %v | %v\n", n.ID, ts, RenderStoredModName(n.AddedBy, client.Perms()), n.Note)
 		}
 		client.SendServerMessage(strings.TrimRight(b.String(), "\n"))
 

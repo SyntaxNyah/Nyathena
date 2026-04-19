@@ -40,6 +40,7 @@ var PermissionField = map[string]uint64{
 	"MUTE":        1 << 10,
 	"LOG":         1 << 11,
 	"DJ":          1 << 12,
+	"SHADOW":      1 << 13,
 	"ADMIN":       math.MaxUint64,
 }
 
@@ -64,4 +65,18 @@ func HasPermission(perm uint64, required uint64) bool {
 // Returns false for perm=0 (no permissions) or perm=CM (CM-only, not a server moderator).
 func IsModerator(perm uint64) bool {
 	return perm&^PermissionField["CM"] != 0
+}
+
+// IsAdmin returns true when the supplied permissions match the ADMIN sentinel
+// (every bit set).  Admins are exempt from the SHADOW anonymity treatment —
+// they can always see who did what via /baninfo and /modnote.
+func IsAdmin(perm uint64) bool {
+	return perm == PermissionField["ADMIN"]
+}
+
+// IsShadow returns true when the role carries the SHADOW bit and is NOT a
+// full admin.  Shadow moderators have the mod toolset but are labelled
+// anonymously in any in-game- or webhook-visible surface.
+func IsShadow(perm uint64) bool {
+	return perm&PermissionField["SHADOW"] != 0 && !IsAdmin(perm)
 }

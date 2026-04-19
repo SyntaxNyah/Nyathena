@@ -437,7 +437,8 @@ func cvoteAccept(client *Client, args []string) {
 	delete(communityVotes.active, targetUID)
 	communityVotes.mu.Unlock()
 
-	modName := client.ModName()
+	modName := client.DisplayModName()
+	storedModName := client.StoredModName()
 	communityReason := fmt.Sprintf("[Community Vote] %s (accepted by %s)", reason, modName)
 
 	target, targetErr := getClientByUid(targetUID)
@@ -505,7 +506,7 @@ func cvoteAccept(client *Client, args []string) {
 
 		if targetErr == nil {
 			// Target is online — ban and disconnect.
-			id, addErr := db.AddBan(target.Ipid(), target.Hdid(), banTime, until, communityReason, modName)
+			id, addErr := db.AddBan(target.Ipid(), target.Hdid(), banTime, until, communityReason, storedModName)
 			if addErr != nil {
 				logger.LogErrorf("Failed to add community vote ban for %v: %v", target.Ipid(), addErr)
 				client.SendServerMessage("Failed to record ban in the database.")
@@ -522,7 +523,7 @@ func cvoteAccept(client *Client, args []string) {
 			}
 		} else if targetIPID != "" {
 			// Target disconnected — ban by IPID only.
-			id, banErr := db.AddBan(targetIPID, "", banTime, until, communityReason, modName)
+			id, banErr := db.AddBan(targetIPID, "", banTime, until, communityReason, storedModName)
 			if banErr != nil {
 				logger.LogErrorf("Failed to record community vote ban for IPID %v: %v", targetIPID, banErr)
 			} else {
@@ -633,7 +634,7 @@ func cvoteReject(client *Client, args []string) {
 	delete(communityVotes.active, targetUID)
 	communityVotes.mu.Unlock()
 
-	modName := client.ModName()
+	modName := client.DisplayModName()
 	addToBuffer(client, "MOD",
 		fmt.Sprintf("Community vote %s REJECTED for UID %d (%s)", action, targetUID, targetName),
 		true)
@@ -683,7 +684,7 @@ func cvoteCancel(client *Client, args []string) {
 	delete(communityVotes.active, targetUID)
 	communityVotes.mu.Unlock()
 
-	modName := client.ModName()
+	modName := client.DisplayModName()
 	addToBuffer(client, "MOD",
 		fmt.Sprintf("Community vote %s CANCELLED for UID %d (%s)", action, targetUID, targetName),
 		true)
