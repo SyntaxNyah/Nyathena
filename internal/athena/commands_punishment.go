@@ -528,6 +528,24 @@ func parsePunishmentType(s string) PunishmentType {
 		return PunishmentQuote
 	case "translator":
 		return PunishmentTranslator
+	case "timewarp":
+		return PunishmentTimewarp
+	case "morse":
+		return PunishmentMorse
+	case "rickroll":
+		return PunishmentRickroll
+	case "vowelhell":
+		return PunishmentVowelhell
+	case "chef":
+		return PunishmentChef
+	case "karen":
+		return PunishmentKaren
+	case "passiveaggressive":
+		return PunishmentPassiveAggressive
+	case "nervous":
+		return PunishmentNervous
+	case "dreamsequence":
+		return PunishmentDreamSequence
 	default:
 		return PunishmentNone
 	}
@@ -1527,4 +1545,41 @@ func cmdToggleRandomPunish(client *Client, args []string, usage string) {
 		sendAreaServerMessage(a, fmt.Sprintf("%v has disabled random punishment for this area.", client.OOCName()))
 	}
 	addToBuffer(client, "CMD", fmt.Sprintf("Toggled random punishment to %v.", newState), false)
+}
+
+// Handlers for the additional novelty punishments.
+func cmdTimewarp(client *Client, args []string, usage string) {
+	cmdPunishment(client, args, usage, PunishmentTimewarp)
+}
+
+func cmdMorse(client *Client, args []string, usage string) {
+	cmdPunishment(client, args, usage, PunishmentMorse)
+}
+
+func cmdRickroll(client *Client, args []string, usage string) {
+	cmdPunishment(client, args, usage, PunishmentRickroll)
+}
+
+func cmdVowelhell(client *Client, args []string, usage string) {
+	cmdPunishment(client, args, usage, PunishmentVowelhell)
+}
+
+func cmdChef(client *Client, args []string, usage string) {
+	cmdPunishment(client, args, usage, PunishmentChef)
+}
+
+func cmdKaren(client *Client, args []string, usage string) {
+	cmdPunishment(client, args, usage, PunishmentKaren)
+}
+
+func cmdPassiveAggressive(client *Client, args []string, usage string) {
+	cmdPunishment(client, args, usage, PunishmentPassiveAggressive)
+}
+
+func cmdNervous(client *Client, args []string, usage string) {
+	cmdPunishment(client, args, usage, PunishmentNervous)
+}
+
+func cmdDreamSequence(client *Client, args []string, usage string) {
+	cmdPunishment(client, args, usage, PunishmentDreamSequence)
 }

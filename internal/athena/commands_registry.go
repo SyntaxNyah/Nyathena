@@ -38,6 +38,47 @@ type Command struct {
 
 var Commands map[string]Command
 
+// RegisterCommand installs an additional command into the global registry
+// after initCommands has already run. It is intended for feature files that
+// want to keep their command definition alongside their handler instead of
+// editing the monolithic map literal in this file. Panics on duplicate
+// registration so the problem is visible at startup rather than at runtime
+// when a user first tries the shadowed command.
+//
+// Must be called AFTER initCommands; typically from a follow-on init hook
+// in server.go. Not safe for concurrent use -- the registry is considered
+// read-only once the server begins accepting connections.
+func RegisterCommand(name string, cmd Command) {
+	if Commands == nil {
+		panic("RegisterCommand called before initCommands")
+	}
+	if _, exists := Commands[name]; exists {
+		panic("RegisterCommand: duplicate command name " + name)
+	}
+	Commands[name] = cmd
+}
+
+// validateCommands walks the registry after initCommands and panics if any
+// entry is missing required fields. Catches accidental paste errors like a
+// blank usage string or a nil handler at server startup rather than when a
+// player first types the broken command.
+func validateCommands() {
+	for name, cmd := range Commands {
+		if cmd.handler == nil {
+			panic("command " + name + " has nil handler")
+		}
+		if cmd.usage == "" {
+			panic("command " + name + " has empty usage")
+		}
+		if cmd.desc == "" {
+			panic("command " + name + " has empty desc")
+		}
+		if cmd.category == "" {
+			panic("command " + name + " has empty category")
+		}
+	}
+}
+
 func initCommands() {
 	Commands = map[string]Command{
 		"about": {
@@ -2118,6 +2159,87 @@ func initCommands() {
 			reqPerms:  permissions.PermissionField["NONE"],
 			casinoCmd: true,
 			category:  "casino",
+		},
+		// ── Novelty punishments (additions) ──────────────────────────────────
+		"timewarp": {
+			handler:  cmdTimewarp,
+			minArgs:  1,
+			usage:    "Usage: /timewarp [-d duration] [-r reason] <uid1>,<uid2>...",
+			desc:     "Shuffles the word order of the target's IC messages.",
+			reqPerms: permissions.PermissionField["MUTE"],
+			category: "punishment",
+		},
+		"morse": {
+			handler:  cmdMorse,
+			minArgs:  1,
+			usage:    "Usage: /morse [-d duration] [-r reason] <uid1>,<uid2>...",
+			desc:     "Converts the target's IC messages to Morse code dots and dashes.",
+			reqPerms: permissions.PermissionField["MUTE"],
+			category: "punishment",
+		},
+		"rickroll": {
+			handler:  cmdRickroll,
+			minArgs:  1,
+			usage:    "Usage: /rickroll [-d duration] [-r reason] <uid1>,<uid2>...",
+			desc:     "Replaces the target's IC messages with meme-styled lyric-adjacent stand-in lines.",
+			reqPerms: permissions.PermissionField["MUTE"],
+			category: "punishment",
+		},
+		"vowelhell": {
+			handler:  cmdVowelhell,
+			minArgs:  1,
+			usage:    "Usage: /vowelhell [-d duration] [-r reason] <uid1>,<uid2>...",
+			desc:     "Replaces every consonant in the target's messages with a random vowel.",
+			reqPerms: permissions.PermissionField["MUTE"],
+			category: "punishment",
+		},
+		"chef": {
+			handler:  cmdChef,
+			minArgs:  1,
+			usage:    "Usage: /chef [-d duration] [-r reason] <uid1>,<uid2>...",
+			desc:     "Swedish-Chef filter — bork bork bork!",
+			reqPerms: permissions.PermissionField["MUTE"],
+			category: "punishment",
+		},
+		"karen": {
+			handler:  cmdKaren,
+			minArgs:  1,
+			usage:    "Usage: /karen [-d duration] [-r reason] <uid1>,<uid2>...",
+			desc:     "Wraps each message in escalating entitled complaints and manager demands.",
+			reqPerms: permissions.PermissionField["MUTE"],
+			category: "punishment",
+		},
+		"passiveaggressive": {
+			handler:  cmdPassiveAggressive,
+			minArgs:  1,
+			usage:    "Usage: /passiveaggressive [-d duration] [-r reason] <uid1>,<uid2>...",
+			desc:     "Adds chilly, performatively-polite framings and sign-offs. It's fine. Really.",
+			reqPerms: permissions.PermissionField["MUTE"],
+			category: "punishment",
+		},
+		"nervous": {
+			handler:  cmdNervous,
+			minArgs:  1,
+			usage:    "Usage: /nervous [-d duration] [-r reason] <uid1>,<uid2>...",
+			desc:     "Sprinkles stuttering, um/uh fillers, and jittery trailing apologies.",
+			reqPerms: permissions.PermissionField["MUTE"],
+			category: "punishment",
+		},
+		"dreamsequence": {
+			handler:  cmdDreamSequence,
+			minArgs:  1,
+			usage:    "Usage: /dreamsequence [-d duration] [-r reason] <uid1>,<uid2>...",
+			desc:     "Rewrites IC messages as surreal, dreamlike fragments.",
+			reqPerms: permissions.PermissionField["MUTE"],
+			category: "punishment",
+		},
+		"profile": {
+			handler:  cmdProfile,
+			minArgs:  0,
+			usage:    "Usage: /profile [uid]",
+			desc:     "Shows a profile card (playtime, chips, favourites, active tag) for yourself or another online player.",
+			reqPerms: permissions.PermissionField["NONE"],
+			category: "general",
 		},
 	}
 }

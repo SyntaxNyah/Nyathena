@@ -33,6 +33,7 @@ import (
 var (
 	configFlag = flag.String("c", "config", "path to config directory")
 	cliFlag    = flag.Bool("nocli", false, "disables listening for commands on stdin")
+	tuiFlag    = flag.Bool("tui", false, "enables a read-only terminal dashboard; implies -nocli and suppresses stdout logging while active")
 )
 
 func main() {
@@ -89,9 +90,34 @@ func main() {
 			go athena.ListenWSS()
 		}
 	}
-	if !*cliFlag {
+	// The TUI owns stdout and is read-only, so when it's enabled we skip the
+	// stdin CLI entirely. Operators who want both can run the TUI in one
+	// terminal pane and a second server instance for interactive tasks, or
+	// just launch without -tui.
+	// Either the -tui CLI flag OR enable_tui=true in config.toml turns it on;
+	// the flag is a one-off override, the config entry is the persistent
+	// default.
+	tuiEnabled := *tuiFlag || config.EnableTUI
+	tuiStop := make(chan struct{})
+	if tuiEnabled {
+		go athena.StartTUI(tuiStop)
+	} else if !*cliFlag {
 		go athena.ListenInput()
 	}
+
+	// SIGHUP triggers a whitelist-only config reload (Motd / Desc). Never swaps
+	// anything that affects listeners, rate limits, area state, or cached
+	// packets; everything else still requires a full restart.
+	hup := make(chan os.Signal, 1)
+	signal.Notify(hup, syscall.SIGHUP)
+	go func() {
+		for range hup {
+			if _, err := athena.ReloadHotConfig(); err != nil {
+				logger.LogErrorf("SIGHUP reload failed: %v", err)
+			}
+		}
+	}()
+
 	stop := make(chan (os.Signal), 2)
 	signal.Notify(stop, os.Interrupt, syscall.SIGINT, syscall.SIGTERM)
 	restart := false
@@ -104,6 +130,7 @@ func main() {
 	case <-athena.RestartRequest:
 		restart = true
 	}
+	close(tuiStop)
 	athena.CleanupServer()
 	if restart {
 		logger.LogInfo("Restarting server...")

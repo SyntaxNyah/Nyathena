@@ -122,6 +122,12 @@ type ServerConfig struct {
 	// 0 disables the threshold (only the hard max_players cap applies).
 	// Mods can change this at runtime with /setplayerlimit.
 	PlayerLockdownThreshold int `toml:"player_lockdown_threshold"`
+
+	// EnableTUI, when true, starts the read-only terminal dashboard at server
+	// launch -- the same effect as passing the -tui CLI flag. The flag still
+	// wins if it is explicitly set; this entry is for operators who want the
+	// dashboard to be the default without remembering the flag.
+	EnableTUI bool `toml:"enable_tui"`
 }
 
 type LogConfig struct {

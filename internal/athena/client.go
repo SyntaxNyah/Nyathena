@@ -155,6 +155,16 @@ const (
 	PunishmentQuote
 	// Translator Punishment — translates IC messages via an external API.
 	PunishmentTranslator
+	// Chaos / novelty punishments (additions).
+	PunishmentTimewarp          // shuffles word order
+	PunishmentMorse             // converts text to Morse code
+	PunishmentRickroll          // replaces message with a Rick Astley lyric line
+	PunishmentVowelhell         // replaces consonants with random vowels
+	PunishmentChef              // Swedish-Chef filter
+	PunishmentKaren             // entitled "let me speak to your manager" escalation
+	PunishmentPassiveAggressive // passive-aggressive filler tacked onto messages
+	PunishmentNervous           // nervous stuttering + filler (um, uh, ah...)
+	PunishmentDreamSequence     // progressively surreal / dreamlike rewrites
 )
 
 type PunishmentState struct {
@@ -2004,6 +2014,24 @@ func (p PunishmentType) String() string {
 		return "quote"
 	case PunishmentTranslator:
 		return "translator"
+	case PunishmentTimewarp:
+		return "timewarp"
+	case PunishmentMorse:
+		return "morse"
+	case PunishmentRickroll:
+		return "rickroll"
+	case PunishmentVowelhell:
+		return "vowelhell"
+	case PunishmentChef:
+		return "chef"
+	case PunishmentKaren:
+		return "karen"
+	case PunishmentPassiveAggressive:
+		return "passiveaggressive"
+	case PunishmentNervous:
+		return "nervous"
+	case PunishmentDreamSequence:
+		return "dreamsequence"
 	default:
 		return "none"
 	}

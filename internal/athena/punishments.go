@@ -1485,6 +1485,24 @@ func ApplyPunishmentToText(text string, pType PunishmentType) string {
 		return applyRecipe(text)
 	case PunishmentQuote:
 		return applyQuote(text)
+	case PunishmentTimewarp:
+		return applyTimewarp(text)
+	case PunishmentMorse:
+		return applyMorse(text)
+	case PunishmentRickroll:
+		return applyRickroll(text)
+	case PunishmentVowelhell:
+		return applyVowelhell(text)
+	case PunishmentChef:
+		return applyChef(text)
+	case PunishmentKaren:
+		return applyKaren(text)
+	case PunishmentPassiveAggressive:
+		return applyPassiveAggressive(text)
+	case PunishmentNervous:
+		return applyNervous(text)
+	case PunishmentDreamSequence:
+		return applyDreamSequence(text)
 	default:
 		return text
 	}
@@ -2449,4 +2467,456 @@ func applyQuote(text string) string {
 		}
 	}
 	return truncateText(strings.Join(words, " "))
+}
+
+// areaRandomPunishments is the curated pool of STATELESS punishment types
+// that the "punishment_area" feature picks from on every IC message. Each
+// entry must be safe to call repeatedly without any PunishmentState —
+// i.e. no torment (state cycling), no lovebomb (target UID), no
+// third-person (needs showname context). Translator is handled separately
+// in applyAreaRandomPunishment because it requires config plumbing.
+var areaRandomPunishments = []PunishmentType{
+	PunishmentBackward,
+	PunishmentStutterstep,
+	PunishmentElongate,
+	PunishmentUppercase,
+	PunishmentLowercase,
+	PunishmentRobotic,
+	PunishmentAlternating,
+	PunishmentFancy,
+	PunishmentUwu,
+	PunishmentPirate,
+	PunishmentShakespearean,
+	PunishmentCaveman,
+	PunishmentCensor,
+	PunishmentConfused,
+	PunishmentParanoid,
+	PunishmentDrunk,
+	PunishmentHiccup,
+	PunishmentWhistle,
+	PunishmentMumble,
+	PunishmentSpaghetti,
+	PunishmentRng,
+	PunishmentEssay,
+	PunishmentAutospell,
+	PunishmentSubtitles,
+	PunishmentSpotlight,
+	PunishmentMonkey,
+	PunishmentSnake,
+	PunishmentDog,
+	PunishmentCat,
+	PunishmentBird,
+	PunishmentCow,
+	PunishmentFrog,
+	PunishmentDuck,
+	PunishmentHorse,
+	PunishmentLion,
+	PunishmentZoo,
+	PunishmentBunny,
+	PunishmentTsundere,
+	PunishmentYandere,
+	PunishmentKuudere,
+	PunishmentDandere,
+	PunishmentDeredere,
+	PunishmentHimedere,
+	PunishmentKamidere,
+	PunishmentUndere,
+	PunishmentBakadere,
+	PunishmentMayadere,
+	PunishmentEmoticon,
+	PunishmentDegrade,
+	PunishmentTourettes,
+	PunishmentSlang,
+	PunishmentThesaurusOverload,
+	PunishmentValleyGirl,
+	PunishmentBabytalk,
+	PunishmentUnreliableNarrator,
+	PunishmentUncannyValley,
+	Punishment51,
+	PunishmentPhilosopher,
+	PunishmentPoet,
+	PunishmentUpsidedown,
+	PunishmentSarcasm,
+	PunishmentAcademic,
+	PunishmentRecipe,
+	PunishmentQuote,
+	PunishmentTimewarp,
+	PunishmentMorse,
+	PunishmentRickroll,
+	PunishmentVowelhell,
+	PunishmentChef,
+	PunishmentKaren,
+	PunishmentPassiveAggressive,
+	PunishmentNervous,
+	PunishmentDreamSequence,
+}
+
+// pickAreaRandomPunishment returns a random punishment type from the pool.
+// Exported as a var so the punishment-area tests can stub it if needed.
+var pickAreaRandomPunishment = func() PunishmentType {
+	return areaRandomPunishments[rand.Intn(len(areaRandomPunishments))]
+}
+
+// applyAreaRandomPunishmentText applies ONE random stateless punishment to
+// text and returns the result. Translator is opt-in via includeTranslator —
+// callers check translatorEnabled() before passing true.
+//
+// This is the text-only helper. The full IC-path hook (applyAreaRandomPunishment)
+// also tweaks display name fields for emoji/uncanny — see netprotocol.go.
+// Returned second value is the picked type, for logging/debug.
+func applyAreaRandomPunishmentText(text string, includeTranslator bool) (string, PunishmentType) {
+	// When translator is live, give it a real chance to be picked so the
+	// area feels unpredictable rather than just "same list of filters".
+	if includeTranslator && rand.Intn(len(areaRandomPunishments)+1) == 0 {
+		return applyTranslator(text, "random"), PunishmentTranslator
+	}
+	pType := pickAreaRandomPunishment()
+	return ApplyPunishmentToText(text, pType), pType
+}
+
+// applyTimewarp shuffles word order so time feels out of joint.
+func applyTimewarp(text string) string {
+	words := strings.Fields(text)
+	if len(words) < 2 {
+		return text
+	}
+	rand.Shuffle(len(words), func(i, j int) { words[i], words[j] = words[j], words[i] })
+	return truncateText(strings.Join(words, " "))
+}
+
+// morseTable maps ASCII letters and digits to International Morse Code.
+var morseTable = map[rune]string{
+	'a': ".-", 'b': "-...", 'c': "-.-.", 'd': "-..", 'e': ".", 'f': "..-.",
+	'g': "--.", 'h': "....", 'i': "..", 'j': ".---", 'k': "-.-", 'l': ".-..",
+	'm': "--", 'n': "-.", 'o': "---", 'p': ".--.", 'q': "--.-", 'r': ".-.",
+	's': "...", 't': "-", 'u': "..-", 'v': "...-", 'w': ".--", 'x': "-..-",
+	'y': "-.--", 'z': "--..",
+	'0': "-----", '1': ".----", '2': "..---", '3': "...--", '4': "....-",
+	'5': ".....", '6': "-....", '7': "--...", '8': "---..", '9': "----.",
+}
+
+// rickrollLines are safe, generic meme stand-ins — a wink at the song without
+// quoting copyrighted lyrics verbatim.
+var rickrollLines = []string{
+	"we're no strangers to this courtroom, are we?",
+	"you know the rules, and so do i...",
+	"a full commitment is what i'm thinkin' of",
+	"never gonna give this case up",
+	"never gonna let this witness down",
+	"never gonna run around and desert the jury",
+	"never gonna say goodbye to the defense",
+	"never gonna tell a lie and hurt objection",
+	"i just wanna tell you how the verdict's feeling",
+	"gotta make you understand the evidence",
+}
+
+// applyRickroll replaces the message with a meme-styled placeholder line.
+// Lyrics-adjacent only — no copyrighted content is reproduced.
+func applyRickroll(_ string) string {
+	return rickrollLines[rand.Intn(len(rickrollLines))]
+}
+
+// karenPrefixes are opening escalations prepended to the original message.
+var karenPrefixes = []string{
+	"Excuse me, ",
+	"Um, hello?? ",
+	"Okay, I'm going to need you to listen very carefully. ",
+	"This is ABSOLUTELY unacceptable. ",
+	"I can't believe I even have to say this, but ",
+	"I don't THINK so. ",
+	"Do you even know who I am? ",
+	"As a paying customer of this courtroom, ",
+	"I was BORN in 1978, I have rights. ",
+	"I did my own research. ",
+}
+
+// karenSuffixes are the entitled escalations appended afterwards.
+var karenSuffixes = []string{
+	" I want to speak to your manager.",
+	" I am calling corporate.",
+	" My husband is a lawyer, by the way.",
+	" This is going on Yelp.",
+	" I will be reviewing the CCTV.",
+	" I want names. I want badge numbers.",
+	" Refund. Compensation. Immediately.",
+	" You just lost a five-star customer.",
+	" I've been coming here for TWENTY YEARS.",
+	" I will not be gaslit by a first-year clerk.",
+}
+
+// applyKaren wraps the message in escalating entitlement. Picks a random
+// opener and a random closer so it varies every IC message.
+func applyKaren(text string) string {
+	prefix := karenPrefixes[rand.Intn(len(karenPrefixes))]
+	suffix := karenSuffixes[rand.Intn(len(karenSuffixes))]
+	// About 1 in 5 messages go full-tantrum with two suffixes.
+	if rand.Float32() < 0.2 {
+		suffix += " " + karenSuffixes[rand.Intn(len(karenSuffixes))]
+	}
+	return truncateText(prefix + text + suffix)
+}
+
+// passiveAggressiveOpeners prepend a cold, performatively-polite framing.
+var passiveAggressiveOpeners = []string{
+	"Per my last message, ",
+	"As I said before, ",
+	"Just to reiterate, ",
+	"Not to be rude, but ",
+	"With all due respect, ",
+	"No offense, but ",
+	"I guess I'll just say it: ",
+	"Well, if you must know, ",
+	"It's fine. Really. ",
+	"Okay sure, whatever, ",
+}
+
+// passiveAggressiveClosers tack a deeply-not-fine sign-off onto the end.
+var passiveAggressiveClosers = []string{
+	" ...fine.",
+	" ...whatever.",
+	" ...I guess.",
+	" ...if that's what you want.",
+	" ...no worries, I'll just handle it myself.",
+	" ...must be nice.",
+	" ...cool cool cool.",
+	" ...sure, that's totally fair.",
+	" ...anyway.",
+	" ...k.",
+	" :)",
+	" :)))",
+}
+
+// applyPassiveAggressive wraps a message with chilly politeness framings and
+// emoticon smileys that absolutely do not mean the sender is happy.
+func applyPassiveAggressive(text string) string {
+	opener := passiveAggressiveOpeners[rand.Intn(len(passiveAggressiveOpeners))]
+	closer := passiveAggressiveClosers[rand.Intn(len(passiveAggressiveClosers))]
+	// 30% of the time, add a second closer to amp up the chill.
+	if rand.Float32() < 0.3 {
+		closer += passiveAggressiveClosers[rand.Intn(len(passiveAggressiveClosers))]
+	}
+	return truncateText(opener + text + closer)
+}
+
+// nervousFillers are little "uh / um / ah" tokens inserted between words.
+var nervousFillers = []string{
+	"um,", "uh,", "ah,", "er,", "uhh,", "umm,", "hmm,", "w-wait,", "s-so,", "i-i mean,",
+	"sorry,", "s-sorry,", "n-no wait,", "that is to say,", "oh gosh,", "oh no,",
+}
+
+// nervousTails are jittery sentence endings occasionally appended.
+var nervousTails = []string{
+	" ...right?", " ...i think?", " ...i-if that's okay?", " ...sorry!",
+	" ...oh god.", " ...please don't be mad.", " ...i'll shut up now.",
+}
+
+// stutterFirst inserts a stutter on the first consonant of a word.
+func stutterFirst(word string) string {
+	if len(word) == 0 {
+		return word
+	}
+	runes := []rune(word)
+	if !unicode.IsLetter(runes[0]) {
+		return word
+	}
+	return string(runes[0]) + "-" + word
+}
+
+// applyNervous sprinkles fillers, stutters, and jittery tails so the speaker
+// sounds one courtroom sneeze away from passing out.
+func applyNervous(text string) string {
+	words := strings.Fields(text)
+	if len(words) == 0 {
+		return "u-um..."
+	}
+	var out []string
+	for i, w := range words {
+		// 25% chance to insert a filler token before this word.
+		if rand.Float32() < 0.25 {
+			out = append(out, nervousFillers[rand.Intn(len(nervousFillers))])
+		}
+		// 35% chance to stutter the word itself.
+		if rand.Float32() < 0.35 {
+			out = append(out, stutterFirst(w))
+		} else {
+			out = append(out, w)
+		}
+		// Small chance to trail off mid-sentence.
+		if i == len(words)/2 && rand.Float32() < 0.2 {
+			out = append(out, "...")
+		}
+	}
+	result := strings.Join(out, " ")
+	if rand.Float32() < 0.6 {
+		result += nervousTails[rand.Intn(len(nervousTails))]
+	}
+	return truncateText(result)
+}
+
+// dreamAdjectives, dreamNouns, and dreamVerbs feed the dream-rewrite function
+// below. None of these contain anything more sinister than melting clocks.
+var dreamAdjectives = []string{
+	"floating", "shimmering", "dissolving", "whispering", "glowing", "endless",
+	"impossible", "golden", "velvet", "rippling", "forgotten", "half-remembered",
+}
+var dreamNouns = []string{
+	"the staircase", "a door that was never there", "my old teacher", "a courtroom made of water",
+	"the moon", "a cat with my voice", "the version of me at seven years old",
+	"a hallway that keeps going", "the choir", "someone I haven't met yet",
+}
+var dreamVerbs = []string{
+	"is humming a lullaby",
+	"is tearing up the evidence",
+	"is on fire but laughing",
+	"won't stop staring at me",
+	"is begging me to wake up",
+	"is holding my hand",
+	"is turning into a bird",
+	"is asking a question I can't hear",
+}
+
+// applyDreamSequence rewrites the message as a dreamlike gloss. Intensity
+// ramps up based on message length — longer messages get more surreal.
+func applyDreamSequence(text string) string {
+	adj := dreamAdjectives[rand.Intn(len(dreamAdjectives))]
+	noun := dreamNouns[rand.Intn(len(dreamNouns))]
+	verb := dreamVerbs[rand.Intn(len(dreamVerbs))]
+
+	// Short messages become pure dreamlogic. Longer messages keep a trace of
+	// the original text, filtered through softly shimmering framing.
+	if utf8.RuneCountInString(text) < 24 {
+		return truncateText(fmt.Sprintf("...and then %s %s %s...", adj, noun, verb))
+	}
+	// Keep about half the words, wrapped in dreamy framing.
+	words := strings.Fields(text)
+	keep := len(words) / 2
+	if keep < 3 {
+		keep = len(words)
+	}
+	remembered := strings.Join(words[:keep], " ")
+	return truncateText(fmt.Sprintf("i dreamt that %s... but %s %s %s.",
+		remembered, adj, noun, verb))
+}
+
+// chefReplacements is the classic "Swedish Chef" word-level substitution set.
+var chefReplacements = map[string]string{
+	"the":   "zee",
+	"The":   "Zee",
+	"this":  "thees",
+	"This":  "Thees",
+	"that":  "thet",
+	"with":  "veet",
+	"very":  "fery",
+	"are":   "iire",
+	"for":   "fur",
+	"our":   "oor",
+	"ing":   "eeng",
+	"and":   "und",
+	"have":  "hefe",
+	"is":    "ees",
+	"to":    "tu",
+	"of":    "uf",
+	"on":    "un",
+	"at":    "et",
+	"a":     "e",
+	"I":     "I",
+	"my":    "mee",
+	"you":   "yoo",
+	"your":  "yoor",
+	"don't": "doon't",
+	"hello": "hullo",
+}
+
+// applyChef runs the Swedish-Chef filter: letter swaps + a trailing
+// "bork bork bork!" for good measure.
+func applyChef(text string) string {
+	words := strings.Fields(text)
+	for i, w := range words {
+		if r, ok := chefReplacements[strings.ToLower(w)]; ok {
+			// Preserve the first-letter capitalisation of the original.
+			if len(w) > 0 && unicode.IsUpper([]rune(w)[0]) && len(r) > 0 {
+				rr := []rune(r)
+				rr[0] = unicode.ToUpper(rr[0])
+				r = string(rr)
+			}
+			words[i] = r
+			continue
+		}
+		// Letter-level vowel tweaks: o -> oo, e -> ee (softly).
+		var b strings.Builder
+		for _, c := range w {
+			switch c {
+			case 'o':
+				b.WriteString("oo")
+			case 'O':
+				b.WriteString("Oo")
+			case 'w':
+				b.WriteRune('v')
+			case 'W':
+				b.WriteRune('V')
+			default:
+				b.WriteRune(c)
+			}
+		}
+		words[i] = b.String()
+	}
+	result := strings.Join(words, " ") + " bork bork bork!"
+	return truncateText(result)
+}
+
+// applyVowelhell replaces every consonant with a random vowel, keeping
+// word/line structure intact so the result still looks like "text".
+func applyVowelhell(text string) string {
+	vowels := []rune{'a', 'e', 'i', 'o', 'u'}
+	var b strings.Builder
+	b.Grow(len(text))
+	for _, r := range text {
+		switch {
+		case unicode.IsLetter(r):
+			isVowel := strings.ContainsRune("aeiouAEIOU", r)
+			if isVowel {
+				b.WriteRune(r)
+			} else {
+				v := vowels[rand.Intn(len(vowels))]
+				if unicode.IsUpper(r) {
+					v = unicode.ToUpper(v)
+				}
+				b.WriteRune(v)
+			}
+		default:
+			b.WriteRune(r)
+		}
+	}
+	return truncateText(b.String())
+}
+
+// applyMorse converts text to Morse code. Letters are separated by spaces,
+// words by " / ". Unknown characters are dropped.
+func applyMorse(text string) string {
+	var b strings.Builder
+	b.Grow(len(text) * 4)
+	firstWord := true
+	for _, word := range strings.Fields(strings.ToLower(text)) {
+		if !firstWord {
+			b.WriteString(" / ")
+		}
+		firstWord = false
+		firstLetter := true
+		for _, r := range word {
+			code, ok := morseTable[r]
+			if !ok {
+				continue
+			}
+			if !firstLetter {
+				b.WriteByte(' ')
+			}
+			firstLetter = false
+			b.WriteString(code)
+		}
+	}
+	out := b.String()
+	if out == "" {
+		return "..."
+	}
+	return truncateText(out)
 }

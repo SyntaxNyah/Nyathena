@@ -477,8 +477,10 @@ func NewServer(conf *settings.Config) (*Server, error) {
 	smPacket = buildSMPacket(s.areaNames, s.music)
 
 	initCommands()
+	validateCommands()
 	initAutoMod(conf)
 	initCvote(conf)
+	initHotConfig(conf)
 	// Initialise the goroutine pool if a limit is configured.
 	if conf.MaxConnectionGoroutines > 0 {
 		connPool = make(chan struct{}, conf.MaxConnectionGoroutines)

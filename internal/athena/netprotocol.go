@@ -165,7 +165,7 @@ func pktId(client *Client, _ *packet.Packet) {
 	if client.Uid() != -1 {
 		return
 	}
-	client.SendPacket("PN", strconv.Itoa(players.GetPlayerCount()), strconv.Itoa(config.MaxPlayers), encode(config.Desc))
+	client.SendPacket("PN", strconv.Itoa(players.GetPlayerCount()), strconv.Itoa(config.MaxPlayers), encode(GetServerDesc()))
 	client.SendPacket("FL", "noencryption", "yellowtext", "prezoom", "flipping", "customobjections",
 		"fastloading", "deskmod", "evidence", "cccc_ic_support", "arup", "casing_alerts",
 		"modcall_reason", "looping_sfx", "additive", "effects", "y_offset", "expanded_desk_mods", "auth_packet") // god this is cursed
@@ -237,8 +237,8 @@ func pktReqDone(client *Client, _ *packet.Packet) {
 	client.SendPacket("ID", strconv.Itoa(client.Uid()), "Athena", encode(version))
 	sendPlayerListToClient(client)
 	broadcastPlayerJoin(client)
-	if config.Motd != "" {
-		client.SendServerMessage(config.Motd)
+	if motd := GetMotd(); motd != "" {
+		client.SendServerMessage(motd)
 	}
 	client.restorePunishments()
 
@@ -813,8 +813,40 @@ func pktIC(client *Client, p *packet.Packet) {
 		return
 	}
 
+	// Punishment area: if this area has punishment_area=true, pick a random
+	// stateless punishment per IC message and apply it on top of whatever
+	// per-client punishments already ran. Nothing is persisted — the effect
+	// evaporates the moment the speaker leaves the area. Translator is
+	// included in the random pool only if it's fully configured server-wide.
+	if client.Area().PunishmentArea() && args[4] != "" {
+		decoded := decode(args[4])
+		mutated, _ := applyAreaRandomPunishmentText(decoded, translatorEnabled())
+		args[4] = encode(mutated)
+	}
+
+	// Mirror area: if this area has mirror=true in its TOML config, reverse the
+	// IC message text server-side right before broadcasting. This runs AFTER
+	// every punishment transform so the reversal is the last word on the text.
+	// The packet wire-format fields are otherwise untouched, so clients can
+	// connect and render the message normally — they just see it backwards.
+	if client.Area().MirrorArea() && args[4] != "" {
+		mirrored := reverseRunes(decode(args[4]))
+		args[4] = encode(mirrored)
+	}
+
 	writeToAreaFrom(client.Ipid(), permissions.IsModerator(client.Perms()), client.Area(), "MS", args...)
 	addToBuffer(client, "IC", "\""+args[4]+"\"", false)
+}
+
+// reverseRunes returns s with its runes (not bytes) reversed. Used by the
+// mirror-area feature so multi-byte UTF-8 characters (accents, emoji, etc.)
+// survive the flip intact.
+func reverseRunes(s string) string {
+	runes := []rune(s)
+	for i, j := 0, len(runes)-1; i < j; i, j = i+1, j-1 {
+		runes[i], runes[j] = runes[j], runes[i]
+	}
+	return string(runes)
 }
 
 // Handles MC#%
