@@ -57,7 +57,7 @@ const maxShownameLength = 30
 //
 // Defined as a compile-time constant so there is zero runtime allocation per join.
 const accountWelcomeMsg = "👤 Welcome! This server offers an optional free player account.\n\n" +
-	"📋 What your account is for (gambling is disabled on this server):\n" +
+	"📋 What your account is for:\n" +
 	"  • 👗 Wardrobe — save favourite characters and swap between them instantly.\n" +
 	"  • 🏷️ Default tag — pick any cosmetic tag from the catalog and wear it next to your name.\n" +
 	"  • ⏱️ Playtime tracking — hours persist across sessions and feed /playtime top.\n\n" +
@@ -68,7 +68,7 @@ const accountWelcomeMsg = "👤 Welcome! This server offers an optional free pla
 	"  • /wardrobe                        — list favourite characters\n" +
 	"  • /favourite <char>                — add/remove a character from the wardrobe\n" +
 	"  • /playtime top                    — see the playtime leaderboard\n\n" +
-	"🏷️ Default tags — every tag in /shop is FREE to equip while the casino is off:\n" +
+	"🏷️ Default tags — every tag in /shop is FREE to equip:\n" +
 	"  • 🎰 gambling   — 30 tags (Gambler, Lucky, High Roller, Whale, Godlike, Infinite…)\n" +
 	"  • ⚖️ attorney   — 15 tags (Objection!, Take That!, Hold It!, Prosecutor, Magatama…)\n" +
 	"  • 🌸 anime      — 15 tags (Weeb, Senpai, Kawaii, Waifu Haver, Protagonist…)\n" +
