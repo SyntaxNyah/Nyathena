@@ -204,15 +204,6 @@ func resolveLanguage(name string) string {
 	return ""
 }
 
-// sourceLang returns the configured source language (UPPERCASE for DeepL) or
-// "EN" as a sane default.
-func sourceLang() string {
-	if config != nil && config.TranslatorSourceLang != "" {
-		return strings.ToUpper(config.TranslatorSourceLang)
-	}
-	return "EN"
-}
-
 // deepLResponse mirrors the DeepL JSON shape.  Only fields we use are decoded.
 type deepLResponse struct {
 	Translations []struct {
@@ -233,9 +224,10 @@ func queryTranslatorBatch(ctx context.Context, texts []string, targetLang string
 		form.Add("text", t)
 	}
 	form.Set("target_lang", strings.ToUpper(targetLang))
-	if src := sourceLang(); src != "" {
-		form.Set("source_lang", src)
-	}
+	// Omit source_lang: DeepL auto-detects the input language.  Forcing a
+	// source (e.g. EN) caused the curse to no-op whenever a cursed player
+	// typed in a non-matching language (Spanish, Russian, etc.) — DeepL
+	// would return the input unchanged, bypassing the punishment.
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, strings.NewReader(form.Encode()))
 	if err != nil {
