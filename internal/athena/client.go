@@ -174,6 +174,11 @@ type ClientPairInfo struct {
 	wanted_id int
 }
 
+// emergencyBypassWindow is how long a moderator has to confirm an emergency
+// entry into a locked area by attempting to join it again after receiving the
+// warning message.
+const emergencyBypassWindow = 30 * time.Second
+
 type Client struct {
 	pair                ClientPairInfo
 	mu                  sync.Mutex
@@ -217,6 +222,8 @@ type Client struct {
 	forcedIniswapIDStr  string       // Pre-computed strconv.Itoa(charID) matching forcedIniswapChar ("" = none)
 	connectedAt         time.Time    // Time the client joined the server (uid assigned); zero if not yet joined
 	jailAreaID          int          // Area index where this client is jailed; -1 = no specific jail area
+	emergencyBypassArea *area.Area   // Locked area the client most recently tried to enter as a mod; nil = no pending bypass
+	emergencyBypassAt   time.Time    // Time of the first locked-area attempt; used with emergencyBypassArea to confirm an emergency override
 	hidden              bool         // Whether the client is hidden from the player list and area counts
 	charStuckUntil      time.Time    // Time when the character-stuck restriction expires; zero = not stuck
 	charStuckCharID     int          // Character ID the client is locked to; -1 = not stuck
@@ -923,7 +930,34 @@ func (client *Client) ChangeArea(a *area.Area) bool {
 	if a.Lock() == area.LockLocked &&
 		!a.HasInvited(client.Uid()) &&
 		!permissions.HasPermission(client.Perms(), permissions.PermissionField["BYPASS_LOCK"]) {
-		return false
+		// Moderators without BYPASS_LOCK can force entry for emergencies on a
+		// second attempt within the window — the first attempt warns them.
+		if permissions.IsModerator(client.Perms()) {
+			client.mu.Lock()
+			pendingArea := client.emergencyBypassArea
+			pendingAt := client.emergencyBypassAt
+			client.mu.Unlock()
+			if pendingArea == a && time.Since(pendingAt) <= emergencyBypassWindow {
+				client.mu.Lock()
+				client.emergencyBypassArea = nil
+				client.emergencyBypassAt = time.Time{}
+				client.mu.Unlock()
+				logger.LogInfof("Moderator %v (UID:%v IPID:%v) used emergency bypass to enter locked area %v",
+					client.ModName(), client.Uid(), client.Ipid(), a.Name())
+				addToBuffer(client, "MOD", fmt.Sprintf("Used emergency bypass to enter locked area %v.", a.Name()), true)
+			} else {
+				client.mu.Lock()
+				client.emergencyBypassArea = a
+				client.emergencyBypassAt = time.Now()
+				client.mu.Unlock()
+				client.SendServerMessage(fmt.Sprintf(
+					"🔒 %v is locked. If this is an emergency, try again within %d seconds to force entry.",
+					a.Name(), int(emergencyBypassWindow.Seconds())))
+				return false
+			}
+		} else {
+			return false
+		}
 	}
 	if client.Area() != nil {
 		addToBuffer(client, "AREA", "Left area.", false)
