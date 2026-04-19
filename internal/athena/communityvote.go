@@ -215,12 +215,6 @@ func cvoteStart(client *Client, args []string) {
 		return
 	}
 
-	// Prevent voting against moderators.
-	if target.Authenticated() && permissions.IsModerator(target.Perms()) {
-		client.SendServerMessage("You cannot vote against a moderator.")
-		return
-	}
-
 	reason := "No reason given"
 	if len(args) > 2 {
 		reason = strings.Join(args[2:], " ")
