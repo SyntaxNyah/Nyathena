@@ -858,7 +858,11 @@ func pktAM(client *Client, p *packet.Packet) {
 		for _, a := range areas {
 			if a.Name() == decodedSong {
 				if !client.ChangeArea(a) {
-					client.SendServerMessage("You are not invited to that area.")
+					// Mods already received an OOC message from ChangeArea (lock
+					// warning or jail notice); only non-mods need this generic reply.
+					if !permissions.IsModerator(client.Perms()) {
+						client.SendServerMessage("You are not invited to that area.")
+					}
 					return
 				}
 				client.SendServerMessage(fmt.Sprintf("Moved to %v.", a.Name()))
