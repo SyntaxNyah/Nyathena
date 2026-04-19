@@ -1285,11 +1285,16 @@ func cmdUnquote(client *Client, args []string, usage string) {
 // keyword "random" for per-word random translation.
 func cmdTranslator(client *Client, args []string, usage string) {
 	if !config.EnableTranslator {
-		client.SendServerMessage("The translator punishment is disabled on this server. Set enable_translator_punishment = true in config.toml to enable it.")
+		client.SendServerMessage(
+			"The translator punishment is disabled on this server.\n" +
+				"To enable: in config.toml under [Server], set enable_translator_punishment = true\n" +
+				"and translator_api_key = \"<your MyMemory API key>\", then restart the server.")
 		return
 	}
 	if config.TranslatorAPIKey == "" {
-		client.SendServerMessage("The translator punishment is enabled but no API key is configured. Set translator_api_key in config.toml before using this command.")
+		client.SendServerMessage(
+			"The translator punishment is enabled but no API key is configured.\n" +
+				"Set translator_api_key in config.toml under [Server] and restart the server.")
 		return
 	}
 
@@ -1309,7 +1314,12 @@ func cmdTranslator(client *Client, args []string, usage string) {
 
 	code := resolveLanguage(language)
 	if !strings.EqualFold(language, "random") && code == "" {
-		client.SendServerMessage(fmt.Sprintf("Unknown language: %v. Try English names (french, spanish, japanese) or ISO codes (fr, es, ja), or 'random'.", language))
+		client.SendServerMessage(fmt.Sprintf(
+			"Unknown language: %v.\n"+
+				"  • English names — french, spanish, japanese, german, russian, arabic, ...\n"+
+				"  • ISO codes     — fr, es, ja, de, ru, ar, zh-CN, ...\n"+
+				"  • Keyword       — random  (each word translated into a different language)\n"+
+				"Example: /translator curse 7 random", language))
 		return
 	}
 

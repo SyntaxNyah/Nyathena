@@ -1617,18 +1617,36 @@ func initCommands() {
 			category: "punishment",
 		},
 		"translator": {
-			handler:  cmdTranslator,
-			minArgs:  3,
-			usage:    "Usage: /translator curse [-d duration] [-r reason] <uid1>,<uid2>... <language>\nLanguage may be an English name (french, spanish, japanese), an ISO code (fr, es, ja), or 'random' to translate each word into a different language. Requires enable_translator_punishment = true and a translator_api_key in config.toml.",
-			desc:     "Translates the target's IC messages into another language. Moderator only.",
+			handler: cmdTranslator,
+			minArgs: 3,
+			usage: "Usage: /translator curse [-d duration] [-r reason] <uid1>,<uid2>... <language>\n" +
+				"  <language> may be:\n" +
+				"    • an English name  — french, spanish, japanese, german, russian, arabic, etc.\n" +
+				"    • an ISO code      — fr, es, ja, de, ru, ar, zh-CN, etc.\n" +
+				"    • the keyword      — random  (each word is translated into a different language)\n" +
+				"\n" +
+				"Examples:\n" +
+				"  /translator curse 7 french                     — target 7 now speaks French.\n" +
+				"  /translator curse 7 random                     — each word of target 7's IC\n" +
+				"                                                   messages becomes a random language.\n" +
+				"  /translator curse -d 30m -r Spam 7,9 japanese  — target 7 and 9 speak Japanese\n" +
+				"                                                   for 30 minutes with a reason.\n" +
+				"\n" +
+				"Remove with: /untranslator curse <uid>\n" +
+				"Requires enable_translator_punishment = true and translator_api_key set in config.toml.",
+			desc:     "Translates a target's IC messages into another language (supports 'random' per-word mode). Moderator only.",
 			reqPerms: permissions.PermissionField["MUTE"],
 			category: "punishment",
 		},
 		"untranslator": {
-			handler:  cmdUntranslator,
-			minArgs:  2,
-			usage:    "Usage: /untranslator curse <uid1>,<uid2>...",
-			desc:     "Removes translator punishment from user(s). Moderator only.",
+			handler: cmdUntranslator,
+			minArgs: 2,
+			usage: "Usage: /untranslator curse <uid1>,<uid2>...\n" +
+				"Removes the translator punishment applied via /translator curse.\n" +
+				"\n" +
+				"Example:\n" +
+				"  /untranslator curse 7       — clears the translator curse from target 7.",
+			desc:     "Removes the translator punishment from user(s). Moderator only.",
 			reqPerms: permissions.PermissionField["MUTE"],
 			category: "punishment",
 		},

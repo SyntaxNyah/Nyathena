@@ -17,6 +17,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>. */
 package athena
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -25,6 +26,7 @@ import (
 	"net/url"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/MangosArentLiterature/Athena/internal/logger"
@@ -105,6 +107,17 @@ var translatorRandomPool = []string{
 	"cs", "hu", "ro", "uk", "bg", "la", "fi", "no", "da", "eo",
 }
 
+// Latency budgets.  Every translator call honours a hard deadline so the
+// cursed player's IC pipeline is never stalled for longer than this by the
+// upstream API.  On timeout the original text is used — the message is never
+// swallowed.
+const (
+	translatorPerReqTimeout = 1500 * time.Millisecond // single API request
+	translatorOverallBudget = 2500 * time.Millisecond // whole applyTranslator call
+	translatorRandomMaxPar  = 6                       // concurrent random-mode workers
+	translatorRandomMaxWord = 24                      // words translated in random mode
+)
+
 // translatorCache is a bounded in-memory cache keyed on "<targetLang>\x1f<text>".
 // It absorbs repeated IC messages (players often spam the same line) so a
 // single translation is reused until the server restarts.
@@ -117,13 +130,55 @@ var translatorCache = struct {
 
 // translatorHTTPClient is shared across all translator lookups so TCP
 // connections to the translation endpoint are reused (HTTP keep-alive).
+// The Client.Timeout is a belt-and-braces cap on top of the per-request
+// context deadline — either one firing aborts the request.
 var translatorHTTPClient = &http.Client{
-	Timeout: 3 * time.Second,
+	Timeout: translatorPerReqTimeout,
 	Transport: &http.Transport{
-		MaxIdleConns:       4,
+		MaxIdleConns:       8,
 		IdleConnTimeout:    90 * time.Second,
 		DisableCompression: true,
 	},
+}
+
+// Simple circuit breaker: when the upstream API fails repeatedly we stop
+// hitting it for a cooldown window.  Without this, every cursed IC message
+// would pay the full timeout round-trip while the API is unreachable.
+const (
+	translatorFailThreshold = 4                // consecutive failures before opening
+	translatorOpenDuration  = 60 * time.Second // how long the breaker stays open
+)
+
+var (
+	translatorFailStreak atomic.Int32
+	translatorOpenUntil  atomic.Int64 // UnixNano; 0 = closed
+)
+
+// breakerOpen reports whether the circuit breaker is currently open, meaning
+// callers must skip the API and fall back to the original text.
+func breakerOpen() bool {
+	until := translatorOpenUntil.Load()
+	if until == 0 {
+		return false
+	}
+	if time.Now().UnixNano() >= until {
+		// Half-open: clear the breaker and let the next call try again.
+		translatorOpenUntil.Store(0)
+		translatorFailStreak.Store(0)
+		return false
+	}
+	return true
+}
+
+func recordTranslatorSuccess() {
+	translatorFailStreak.Store(0)
+}
+
+func recordTranslatorFailure() {
+	streak := translatorFailStreak.Add(1)
+	if streak >= translatorFailThreshold {
+		translatorOpenUntil.Store(time.Now().Add(translatorOpenDuration).UnixNano())
+	}
 }
 
 // translatorEnabled reports whether the /translator punishment is both
@@ -176,7 +231,7 @@ type myMemoryResponse struct {
 // MyMemory is the reference implementation because its free tier accepts
 // anonymous and keyed requests on the same endpoint, matching the user's
 // "super free lenient API key" expectation.
-func queryTranslator(text, targetLang string) (string, error) {
+func queryTranslator(ctx context.Context, text, targetLang string) (string, error) {
 	endpoint := config.TranslatorAPIURL
 	apiKey := config.TranslatorAPIKey
 	src := sourceLang()
@@ -194,7 +249,7 @@ func queryTranslator(text, targetLang string) (string, error) {
 	}
 	reqURL := endpoint + sep + params.Encode()
 
-	req, err := http.NewRequest(http.MethodGet, reqURL, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, reqURL, nil)
 	if err != nil {
 		return "", err
 	}
@@ -223,8 +278,9 @@ func queryTranslator(text, targetLang string) (string, error) {
 }
 
 // translateCached wraps queryTranslator with an in-memory cache.  Identical
-// (lang, text) pairs resolve instantly after the first hit.
-func translateCached(text, targetLang string) (string, error) {
+// (lang, text) pairs resolve instantly after the first hit.  The context's
+// deadline caps the total wait for a fresh lookup.
+func translateCached(ctx context.Context, text, targetLang string) (string, error) {
 	key := targetLang + "\x1f" + text
 
 	translatorCache.mu.Lock()
@@ -234,15 +290,22 @@ func translateCached(text, targetLang string) (string, error) {
 	}
 	translatorCache.mu.Unlock()
 
-	translated, err := queryTranslator(text, targetLang)
-	if err != nil {
-		return "", err
+	// Short-circuit the network call when the breaker is open so the cursed
+	// player's IC pipeline never pays a round-trip to a dead endpoint.
+	if breakerOpen() {
+		return "", fmt.Errorf("translator circuit breaker open")
 	}
 
+	translated, err := queryTranslator(ctx, text, targetLang)
+	if err != nil {
+		recordTranslatorFailure()
+		return "", err
+	}
+	recordTranslatorSuccess()
+
 	translatorCache.mu.Lock()
-	// Simple size cap: drop a random entry when full rather than implementing
-	// LRU tracking.  Cache is purely best-effort.
 	if len(translatorCache.m) >= translatorCacheMax {
+		// Simple random eviction — good enough for best-effort cache.
 		for k := range translatorCache.m {
 			delete(translatorCache.m, k)
 			break
@@ -257,7 +320,8 @@ func translateCached(text, targetLang string) (string, error) {
 // applyTranslator translates the whole message into targetLang, or (when
 // targetLang is "random") translates each word into an independently-chosen
 // random language.  Falls back to the original text on any error so a flaky
-// API never swallows a player's message.
+// API never swallows a player's message, and enforces a hard overall deadline
+// so the IC pipeline is never stalled for longer than translatorOverallBudget.
 func applyTranslator(text, targetLang string) string {
 	if !translatorEnabled() {
 		return text
@@ -266,16 +330,19 @@ func applyTranslator(text, targetLang string) string {
 		return text
 	}
 
+	ctx, cancel := context.WithTimeout(context.Background(), translatorOverallBudget)
+	defer cancel()
+
 	lang := strings.ToLower(strings.TrimSpace(targetLang))
 	if lang == "random" {
-		return applyTranslatorRandom(text)
+		return applyTranslatorRandom(ctx, text)
 	}
 
 	code := resolveLanguage(lang)
 	if code == "" {
 		return text
 	}
-	translated, err := translateCached(text, code)
+	translated, err := translateCached(ctx, text, code)
 	if err != nil {
 		logger.LogWarningf("translator: %v", err)
 		return text
@@ -284,33 +351,50 @@ func applyTranslator(text, targetLang string) string {
 }
 
 // applyTranslatorRandom translates each whitespace-delimited word into an
-// independently-chosen random language.  Cap at 24 words to avoid
-// runaway API fan-out on pathological inputs (ellipsis-heavy monologues, etc.).
-func applyTranslatorRandom(text string) string {
-	const maxWords = 24
+// independently-chosen random language, concurrently.  A bounded worker pool
+// fans out the per-word API calls under a shared deadline; any word whose
+// call errors or exceeds the deadline falls back to the original word so the
+// IC message is never blank or truncated.
+func applyTranslatorRandom(ctx context.Context, text string) string {
 	words := strings.Fields(text)
 	if len(words) == 0 {
 		return text
 	}
-	capped := len(words) > maxWords
-	work := words
+	capped := len(words) > translatorRandomMaxWord
+	work := make([]string, len(words))
+	copy(work, words)
+
+	translate := work
 	if capped {
-		work = words[:maxWords]
+		translate = work[:translatorRandomMaxWord]
 	}
 
-	for i, w := range work {
-		lang := translatorRandomPool[rand.Intn(len(translatorRandomPool))]
-		translated, err := translateCached(w, lang)
-		if err != nil {
-			logger.LogWarningf("translator (random, word %q): %v", w, err)
-			continue
-		}
-		work[i] = translated
-	}
+	sem := make(chan struct{}, translatorRandomMaxPar)
+	var wg sync.WaitGroup
 
-	if capped {
-		// Re-attach the untouched tail so long messages aren't truncated.
-		return strings.Join(append(work, words[maxWords:]...), " ")
+	for i := range translate {
+		i := i
+		w := translate[i]
+		wg.Add(1)
+		sem <- struct{}{}
+		go func() {
+			defer wg.Done()
+			defer func() { <-sem }()
+			// Respect the shared deadline: if it already fired, skip the call.
+			if ctx.Err() != nil {
+				return
+			}
+			lang := translatorRandomPool[rand.Intn(len(translatorRandomPool))]
+			translated, err := translateCached(ctx, w, lang)
+			if err != nil {
+				// Keep the original word on failure; don't log per-word at
+				// warn level or we'd spam the logs under breaker-open.
+				return
+			}
+			translate[i] = translated
+		}()
 	}
+	wg.Wait()
+
 	return strings.Join(work, " ")
 }
