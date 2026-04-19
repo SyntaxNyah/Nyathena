@@ -1724,6 +1724,11 @@ func cmdIgnore(client *Client, args []string, usage string) {
 		return
 	}
 
+	if target.Authenticated() && permissions.IsModerator(target.Perms()) {
+		client.SendServerMessage("You cannot ignore a moderator or administrator.")
+		return
+	}
+
 	targetIPID := target.Ipid()
 	if client.IgnoresIPID(targetIPID) {
 		client.SendServerMessage("You are already permanently ignoring that user.")
