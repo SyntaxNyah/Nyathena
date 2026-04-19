@@ -1638,7 +1638,7 @@ func initCommands() {
 				"  /translator curse global random                — every other player's words\n" +
 				"                                                   become random languages.\n" +
 				"\n" +
-				"Remove with: /untranslator curse <uid>\n" +
+				"Remove with: /untranslator curse <uid>  (or: /untranslator curse global)\n" +
 				"Requires enable_translator_punishment = true and translator_api_key set in config.toml.",
 			desc:     "Translates a target's IC messages into another language (supports 'random' per-word mode). Moderator only.",
 			reqPerms: permissions.PermissionField["MUTE"],
@@ -1647,12 +1647,16 @@ func initCommands() {
 		"untranslator": {
 			handler: cmdUntranslator,
 			minArgs: 2,
-			usage: "Usage: /untranslator curse <uid1>,<uid2>...\n" +
+			usage: "Usage: /untranslator curse <uid1>,<uid2>...|global\n" +
 				"Removes the translator punishment applied via /translator curse.\n" +
+				"  <target>  may be a comma-separated UID list, OR the keyword:\n" +
+				"    • global      — every client on the server currently affected.\n" +
 				"\n" +
-				"Example:\n" +
-				"  /untranslator curse 7       — clears the translator curse from target 7.",
-			desc:     "Removes the translator punishment from user(s). Moderator only.",
+				"Examples:\n" +
+				"  /untranslator curse 7       — clears the translator curse from target 7.\n" +
+				"  /untranslator curse global  — clears the translator curse from every\n" +
+				"                                affected client on the server.",
+			desc:     "Removes the translator punishment from user(s), or every affected client with 'global'. Moderator only.",
 			reqPerms: permissions.PermissionField["MUTE"],
 			category: "punishment",
 		},
