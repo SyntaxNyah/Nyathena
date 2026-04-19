@@ -526,6 +526,8 @@ func parsePunishmentType(s string) PunishmentType {
 		return PunishmentRecipe
 	case "quote":
 		return PunishmentQuote
+	case "translator":
+		return PunishmentTranslator
 	default:
 		return PunishmentNone
 	}
@@ -1271,6 +1273,120 @@ func cmdUnquote(client *Client, args []string, usage string) {
 	report = strings.TrimSuffix(report, ", ")
 	client.SendServerMessage(fmt.Sprintf("Removed quote punishment from %v clients.", count))
 	addToBuffer(client, "CMD", fmt.Sprintf("Removed quote from %v.", report), false)
+}
+
+// cmdTranslator applies the translator punishment.  Usage:
+//
+//	/translator curse [-d duration] [-r reason] <uid1>,<uid2>,... <language>
+//
+// The literal subcommand word "curse" is required to match the documented
+// surface (matches the /translator curse ID language ergonomics).  Language
+// may be an English name ("french"), an ISO code ("fr"), or the special
+// keyword "random" for per-word random translation.
+func cmdTranslator(client *Client, args []string, usage string) {
+	if !config.EnableTranslator {
+		client.SendServerMessage("The translator punishment is disabled on this server. Set enable_translator_punishment = true in config.toml to enable it.")
+		return
+	}
+	if config.TranslatorAPIKey == "" {
+		client.SendServerMessage("The translator punishment is enabled but no API key is configured. Set translator_api_key in config.toml before using this command.")
+		return
+	}
+
+	flags := flag.NewFlagSet("", 0)
+	flags.SetOutput(io.Discard)
+	reason := flags.String("r", "", "")
+	durationStr := flags.String("d", "10m", "")
+	flags.Parse(args)
+
+	positional := flags.Args()
+	if len(positional) < 3 || !strings.EqualFold(positional[0], "curse") {
+		client.SendServerMessage("Not enough arguments:\n" + usage)
+		return
+	}
+	uidArg := positional[1]
+	language := positional[2]
+
+	code := resolveLanguage(language)
+	if !strings.EqualFold(language, "random") && code == "" {
+		client.SendServerMessage(fmt.Sprintf("Unknown language: %v. Try English names (french, spanish, japanese) or ISO codes (fr, es, ja), or 'random'.", language))
+		return
+	}
+
+	duration, err := str2duration.ParseDuration(*durationStr)
+	if err != nil {
+		client.SendServerMessage("Invalid duration format. Use format like: 10m, 1h, 30s")
+		return
+	}
+	maxDuration := 24 * time.Hour
+	if duration > maxDuration {
+		duration = maxDuration
+		client.SendServerMessage("Duration capped at 24 hours.")
+	}
+
+	customData := strings.ToLower(language)
+	toPunish := getUidList(strings.Split(uidArg, ","))
+	var count int
+	var report string
+
+	msg := fmt.Sprintf("You have been cursed by the translator — your messages will be translated to '%v'", language)
+	if duration > 0 {
+		msg += fmt.Sprintf(" for %v", duration)
+	}
+	if *reason != "" {
+		msg += " for reason: " + *reason
+	}
+
+	for _, c := range toPunish {
+		c.AddPunishmentWithData(PunishmentTranslator, duration, *reason, customData)
+		var expires int64
+		if duration > 0 {
+			expires = time.Now().UTC().Add(duration).Unix()
+		}
+		// Pack customData into the reason column with a 0x1F separator so the
+		// target language survives a server restart via restorePunishments.
+		stored := customData + "\x1f" + *reason
+		if err := db.UpsertTextPunishment(c.Ipid(), int(PunishmentTranslator), expires, stored); err != nil {
+			logger.LogErrorf("Failed to persist translator punishment for %v: %v", c.Ipid(), err)
+		}
+		c.SendServerMessage(msg)
+		count++
+		report += fmt.Sprintf("%v, ", c.Uid())
+	}
+
+	report = strings.TrimSuffix(report, ", ")
+	client.SendServerMessage(fmt.Sprintf("Applied translator (%v) punishment to %v clients.", language, count))
+	addToBuffer(client, "CMD", fmt.Sprintf("Applied translator (%v) punishment to %v.", language, report), false)
+}
+
+// cmdUntranslator removes the translator punishment from user(s).
+//
+//	/untranslator curse <uid1>,<uid2>,...
+//
+// The "curse" subcommand word is required to mirror /translator curse.
+func cmdUntranslator(client *Client, args []string, usage string) {
+	if len(args) < 2 || !strings.EqualFold(args[0], "curse") {
+		client.SendServerMessage("Not enough arguments:\n" + usage)
+		return
+	}
+	toUnpunish := getUidList(strings.Split(args[1], ","))
+	var count int
+	var report string
+	for _, c := range toUnpunish {
+		if !c.HasPunishment(PunishmentTranslator) {
+			continue
+		}
+		c.RemovePunishment(PunishmentTranslator)
+		if err := db.DeleteTextPunishment(c.Ipid(), int(PunishmentTranslator)); err != nil {
+			logger.LogErrorf("Failed to remove translator punishment for %v: %v", c.Ipid(), err)
+		}
+		c.SendServerMessage("Translator punishment has been removed.")
+		count++
+		report += fmt.Sprintf("%v, ", c.Uid())
+	}
+	report = strings.TrimSuffix(report, ", ")
+	client.SendServerMessage(fmt.Sprintf("Removed translator punishment from %v clients.", count))
+	addToBuffer(client, "CMD", fmt.Sprintf("Removed translator from %v.", report), false)
 }
 
 // randompunishPool is the set of punishments available to /randompunishall.

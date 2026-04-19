@@ -366,6 +366,45 @@ botban_playtime_threshold = 120
 iphub_api_key = ""
 
 # ─────────────────────────────────────────────────────────────────────────────
+# Translator Punishment
+# ─────────────────────────────────────────────────────────────────────────────
+# The /translator curse <uid> <language> punishment translates a target's IC
+# messages into another language via an external translation API.  A second
+# form, /translator curse <uid> random, translates each word of every message
+# into an independently-chosen random language.  Use /untranslator curse <uid>
+# to remove the punishment.
+#
+# This feature is OFF by default and requires two steps to enable:
+#   1. Set enable_translator_punishment = true below.
+#   2. Configure translator_api_key with a valid key for your chosen provider.
+# If either step is missing, the /translator command is refused at the call
+# site with a helpful message and no network requests are ever made.
+#
+# The default endpoint points at MyMemory (https://mymemory.translated.net),
+# whose free tier accepts up to 50 000 words/day with a free API key — the
+# "super lenient" option that originally motivated this feature.  Any API that
+# accepts a GET request with the MyMemory query shape will also work:
+#     <translator_api_url>?q=<text>&langpair=<src>|<tgt>&key=<apiKey>
+# Default: false.
+enable_translator_punishment = false
+
+# URL of the translation API endpoint.  MyMemory is the reference default.
+# Default: "https://api.mymemory.translated.net/get".
+translator_api_url = "https://api.mymemory.translated.net/get"
+
+# API key for the translation provider.  REQUIRED even when the upstream
+# service technically accepts anonymous requests — the server will refuse to
+# run /translator commands while this is blank, matching the "enable it THEN
+# put the api key in the config" policy.
+# Default: "" (disabled).
+translator_api_key = ""
+
+# Source language code passed to the translation API (what the server assumes
+# incoming IC messages are written in).  Use an ISO-639-1 code.
+# Default: "en".
+translator_source_lang = "en"
+
+# ─────────────────────────────────────────────────────────────────────────────
 # Casino & Player Account System
 # ─────────────────────────────────────────────────────────────────────────────
 # Set to true to enable the Nyathena casino mini-games (blackjack, poker, slots,

@@ -153,6 +153,8 @@ const (
 	PunishmentRecipe
 	// Quote Punishment
 	PunishmentQuote
+	// Translator Punishment — translates IC messages via an external API.
+	PunishmentTranslator
 )
 
 type PunishmentState struct {
@@ -163,7 +165,8 @@ type PunishmentState struct {
 	msgDelay       time.Duration
 	msgCount       int
 	lastEffect     int
-	targetUID      int // For PunishmentLovebomb: UID of the lovebomb target (-1 = random area target)
+	targetUID      int    // For PunishmentLovebomb: UID of the lovebomb target (-1 = random area target)
+	customData     string // For PunishmentTranslator: target language name or "random"
 }
 
 type ClientPairInfo struct {
@@ -851,7 +854,17 @@ func (client *Client) restorePunishments() {
 			if p.Expires != 0 {
 				remaining = time.Until(expiresAt)
 			}
-			client.AddPunishment(pType, remaining, p.Reason)
+			// Text-punishment reasons may embed per-instance metadata (e.g. the
+			// translator target language) separated from the user-visible reason
+			// by an ASCII Unit Separator (0x1F). Decode that here so the custom
+			// data survives restarts.
+			if idx := strings.IndexByte(p.Reason, 0x1F); idx >= 0 {
+				customData := p.Reason[:idx]
+				realReason := p.Reason[idx+1:]
+				client.AddPunishmentWithData(pType, remaining, realReason, customData)
+			} else {
+				client.AddPunishment(pType, remaining, p.Reason)
+			}
 		}
 	}
 	client.SendServerMessage("Your active punishments have been restored.")
@@ -1571,6 +1584,34 @@ func (client *Client) AddPunishment(pType PunishmentType, duration time.Duration
 	})
 }
 
+// AddPunishmentWithData adds a punishment that carries arbitrary per-instance
+// metadata (customData), e.g. the target language for PunishmentTranslator.
+// Same same-type-deduplication as AddPunishment.
+func (client *Client) AddPunishmentWithData(pType PunishmentType, duration time.Duration, reason, customData string) {
+	client.mu.Lock()
+	defer client.mu.Unlock()
+
+	for i := len(client.punishments) - 1; i >= 0; i-- {
+		if client.punishments[i].punishmentType == pType {
+			client.punishments = append(client.punishments[:i], client.punishments[i+1:]...)
+			break
+		}
+	}
+
+	expiresAt := time.Time{}
+	if duration > 0 {
+		expiresAt = time.Now().UTC().Add(duration)
+	}
+
+	client.punishments = append(client.punishments, PunishmentState{
+		punishmentType: pType,
+		expiresAt:      expiresAt,
+		reason:         reason,
+		targetUID:      -1,
+		customData:     customData,
+	})
+}
+
 // RemovePunishment removes a punishment type from the client.
 func (client *Client) RemovePunishment(pType PunishmentType) {
 	client.mu.Lock()
@@ -1920,6 +1961,8 @@ func (p PunishmentType) String() string {
 		return "recipe"
 	case PunishmentQuote:
 		return "quote"
+	case PunishmentTranslator:
+		return "translator"
 	default:
 		return "none"
 	}
