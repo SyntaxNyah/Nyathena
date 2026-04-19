@@ -31,7 +31,7 @@
 name = "moderator"
 permissions = ["CM", "KICK", "BAN", "BYPASS_LOCK", "MOD_EVI", "MODIFY_AREA", "MOVE_USERS", "MOD_SPEAK", "BAN_INFO", "MOD_CHAT", "MUTE", "LOG"]
 [[Role]]
-name = "shadow moderator"
+name = "shadowmod"
 permissions = ["CM", "KICK", "BAN", "BYPASS_LOCK", "MOD_EVI", "MODIFY_AREA", "MOVE_USERS", "MOD_SPEAK", "BAN_INFO", "MOD_CHAT", "MUTE", "LOG", "SHADOW"]
 [[Role]]
 name = "admin"
