@@ -102,7 +102,7 @@ func resetTranslatorState() {
 	translatorOpenUntil.Store(0)
 }
 
-// TestApplyTranslatorSingleLang spins up a fake MyMemory-style server and
+// TestApplyTranslatorSingleLang spins up a fake DeepL-style server and
 // verifies single-language translation flows end-to-end via applyTranslator.
 func TestApplyTranslatorSingleLang(t *testing.T) {
 	saved := config
