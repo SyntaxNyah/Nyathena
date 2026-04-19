@@ -1309,7 +1309,7 @@ func cmdTranslator(client *Client, args []string, usage string) {
 		client.SendServerMessage("Not enough arguments:\n" + usage)
 		return
 	}
-	uidArg := positional[1]
+	targetArg := positional[1]
 	language := positional[2]
 
 	code := resolveLanguage(language)
@@ -1319,7 +1319,8 @@ func cmdTranslator(client *Client, args []string, usage string) {
 				"  • English names — french, spanish, japanese, german, russian, arabic, ...\n"+
 				"  • ISO codes     — fr, es, ja, de, ru, ar, zh-CN, ...\n"+
 				"  • Keyword       — random  (each word translated into a different language)\n"+
-				"Example: /translator curse 7 random", language))
+				"Example: /translator curse 7 random\n"+
+				"         /translator curse global random", language))
 		return
 	}
 
@@ -1334,8 +1335,29 @@ func cmdTranslator(client *Client, args []string, usage string) {
 		client.SendServerMessage("Duration capped at 24 hours.")
 	}
 
+	// Resolve targets: either an explicit UID list or "global" — every client
+	// in the invoking mod's current area except the mod themselves.  "global"
+	// is scoped to the mod's AREA, not the whole server, matching other
+	// area-scoped punishments and keeping blast radius contained.
+	var toPunish []*Client
+	isGlobal := strings.EqualFold(targetArg, "global")
+	if isGlobal {
+		myArea := client.Area()
+		myUid := client.Uid()
+		clients.ForEach(func(c *Client) {
+			if c.Area() == myArea && c.Uid() != -1 && c.Uid() != myUid {
+				toPunish = append(toPunish, c)
+			}
+		})
+		if len(toPunish) == 0 {
+			client.SendServerMessage("No other players are in this area to curse.")
+			return
+		}
+	} else {
+		toPunish = getUidList(strings.Split(targetArg, ","))
+	}
+
 	customData := strings.ToLower(language)
-	toPunish := getUidList(strings.Split(uidArg, ","))
 	var count int
 	var report string
 
@@ -1365,7 +1387,11 @@ func cmdTranslator(client *Client, args []string, usage string) {
 	}
 
 	report = strings.TrimSuffix(report, ", ")
-	client.SendServerMessage(fmt.Sprintf("Applied translator (%v) punishment to %v clients.", language, count))
+	scope := "clients"
+	if isGlobal {
+		scope = fmt.Sprintf("clients in area %q", client.Area().Name())
+	}
+	client.SendServerMessage(fmt.Sprintf("Applied translator (%v) punishment to %v %v.", language, count, scope))
 	addToBuffer(client, "CMD", fmt.Sprintf("Applied translator (%v) punishment to %v.", language, report), false)
 }
 

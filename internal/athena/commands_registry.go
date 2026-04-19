@@ -1619,7 +1619,9 @@ func initCommands() {
 		"translator": {
 			handler: cmdTranslator,
 			minArgs: 3,
-			usage: "Usage: /translator curse [-d duration] [-r reason] <uid1>,<uid2>... <language>\n" +
+			usage: "Usage: /translator curse [-d duration] [-r reason] <uid1>,<uid2>...|global <language>\n" +
+				"  <target>   may be a comma-separated UID list, OR the keyword:\n" +
+				"    • global        — every other player in YOUR current area (you are exempt).\n" +
 				"  <language> may be:\n" +
 				"    • an English name  — french, spanish, japanese, german, russian, arabic, etc.\n" +
 				"    • an ISO code      — fr, es, ja, de, ru, ar, zh-CN, etc.\n" +
@@ -1631,6 +1633,10 @@ func initCommands() {
 				"                                                   messages becomes a random language.\n" +
 				"  /translator curse -d 30m -r Spam 7,9 japanese  — target 7 and 9 speak Japanese\n" +
 				"                                                   for 30 minutes with a reason.\n" +
+				"  /translator curse global french                — every other player in your\n" +
+				"                                                   area now speaks French.\n" +
+				"  /translator curse global random                — every other player's words\n" +
+				"                                                   become random languages.\n" +
 				"\n" +
 				"Remove with: /untranslator curse <uid>\n" +
 				"Requires enable_translator_punishment = true and translator_api_key set in config.toml.",

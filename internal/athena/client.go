@@ -702,6 +702,47 @@ func (client *Client) ModName() string {
 	return client.mod_name
 }
 
+// shadowMarker is the byte-prefix (Unit Separator) used to tag a stored
+// moderator name as belonging to a shadow mod.  The stored form is
+// "\x1f" + real-name so /baninfo and /modnote can reveal the real name to
+// admins and render "Moderator" to everyone else.
+const shadowMarker = "\x1f"
+
+// DisplayModName is the name this client should appear as in any in-game or
+// outbound surface (webhook, community-vote broadcast, /modchat, etc.):
+// "Moderator" for shadow mods, their real mod username otherwise.
+func (client *Client) DisplayModName() string {
+	if permissions.IsShadow(client.Perms()) {
+		return "Moderator"
+	}
+	return client.ModName()
+}
+
+// StoredModName is the name to persist into the bans/modnotes tables for an
+// action performed by this client.  For shadow mods the real name is kept
+// but tagged with shadowMarker so admin lookups can still see who acted.
+func (client *Client) StoredModName() string {
+	if permissions.IsShadow(client.Perms()) {
+		return shadowMarker + client.ModName()
+	}
+	return client.ModName()
+}
+
+// RenderStoredModName decodes a value previously written by StoredModName and
+// returns the name to display to a viewer with the given permissions.  Admins
+// see the real name of shadow mods; everyone else sees "Moderator".  Values
+// without the shadow marker are returned unchanged regardless of viewer.
+func RenderStoredModName(stored string, viewerPerms uint64) string {
+	if !strings.HasPrefix(stored, shadowMarker) {
+		return stored
+	}
+	real := strings.TrimPrefix(stored, shadowMarker)
+	if permissions.IsAdmin(viewerPerms) {
+		return real
+	}
+	return "Moderator"
+}
+
 // SetModName sets the client's moderator username.
 func (client *Client) SetModName(name string) {
 	client.mu.Lock()
