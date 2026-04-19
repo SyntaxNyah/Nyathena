@@ -380,29 +380,37 @@ iphub_api_key = ""
 # If either step is missing, the /translator command is refused at the call
 # site with a helpful message and no network requests are ever made.
 #
-# The default endpoint points at MyMemory (https://mymemory.translated.net),
-# whose free tier accepts up to 50 000 words/day with a free API key — the
-# "super lenient" option that originally motivated this feature.  Any API that
-# accepts a GET request with the MyMemory query shape will also work:
-#     <translator_api_url>?q=<text>&langpair=<src>|<tgt>&key=<apiKey>
+# The default endpoint points at DeepL's free tier
+# (https://api-free.deepl.com/v2/translate), which gives 500 000 characters of
+# translation per month for free after signing up at https://www.deepl.com and
+# creating an API key under Account → Authentication Key for DeepL API.  If
+# you upgrade to DeepL API Pro, change translator_api_url to
+# https://api.deepl.com/v2/translate — no other code changes required.
+#
+# Requests are sent as HTTP POST with an Authorization: DeepL-Auth-Key header,
+# so the API key is never included in the URL or query string.  Language codes
+# are DeepL's UPPERCASE ISO codes (EN-US, PT-BR, ZH, …); friendly names like
+# "french" or "japanese" are mapped automatically at the command site.
 # Default: false.
 enable_translator_punishment = false
 
-# URL of the translation API endpoint.  MyMemory is the reference default.
-# Default: "https://api.mymemory.translated.net/get".
-translator_api_url = "https://api.mymemory.translated.net/get"
+# URL of the translation API endpoint.  DeepL Free is the reference default;
+# set this to https://api.deepl.com/v2/translate if you have a DeepL Pro key.
+# Default: "https://api-free.deepl.com/v2/translate".
+translator_api_url = "https://api-free.deepl.com/v2/translate"
 
-# API key for the translation provider.  REQUIRED even when the upstream
-# service technically accepts anonymous requests — the server will refuse to
+# API key for the translation provider.  REQUIRED — the server will refuse to
 # run /translator commands while this is blank, matching the "enable it THEN
-# put the api key in the config" policy.
+# put the api key in the config" policy.  For DeepL, paste the full key
+# (including any ":fx" suffix on Free keys) exactly as shown in the dashboard.
 # Default: "" (disabled).
 translator_api_key = ""
 
 # Source language code passed to the translation API (what the server assumes
-# incoming IC messages are written in).  Use an ISO-639-1 code.
-# Default: "en".
-translator_source_lang = "en"
+# incoming IC messages are written in).  DeepL expects an UPPERCASE code such
+# as EN, FR, DE; lowercase works too and is uppercased on the wire.
+# Default: "EN".
+translator_source_lang = "EN"
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Casino & Player Account System
