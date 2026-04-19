@@ -350,3 +350,97 @@ func cmdPlaytimeTop(client *Client, args []string, usage string) {
 	}
 	client.SendServerMessage(sb.String())
 }
+
+// cmdProfile implements /profile [uid]. With no argument, shows the caller's
+// own profile card; with a UID, shows the profile card of the target online
+// player. Visible to everyone — the card aggregates data that is already
+// readable via /account, /playtime, /chips, /wardrobe.
+func cmdProfile(client *Client, args []string, _ string) {
+	target := client
+	if len(args) > 0 {
+		uid, err := strconv.Atoi(args[0])
+		if err != nil {
+			client.SendServerMessage("Invalid UID.")
+			return
+		}
+		t, err := getClientByUid(uid)
+		if err != nil {
+			client.SendServerMessage("Client does not exist.")
+			return
+		}
+		target = t
+	}
+
+	// Resolve the display name: showname -> character -> "(no character)".
+	displayName := clientDisplayName(target)
+	if strings.TrimSpace(displayName) == "" {
+		displayName = "(no character selected)"
+	}
+
+	// Look up any linked account username for this IPID. This works whether or
+	// not the target is currently authenticated, falling back to "(guest)".
+	username := "(guest)"
+	if u, err := db.GetUsernameByIPID(target.Ipid()); err == nil && u != "" {
+		username = u
+	}
+
+	// Chips + playtime: pulled from the account-stats table; session time is
+	// added on top for a live total, matching /account's behaviour.
+	chips, playtimeSec, err := db.GetAccountStats(target.Ipid())
+	if err != nil {
+		chips = 0
+		playtimeSec = 0
+	}
+	if connAt := target.ConnectedAt(); !connAt.IsZero() {
+		playtimeSec += int64(time.Since(connAt).Seconds())
+	}
+
+	// Favourite characters (wardrobe) — only meaningful if linked to an account.
+	var favs []string
+	if username != "(guest)" {
+		if f, err := db.GetFavourites(username); err == nil {
+			favs = f
+		}
+	}
+	favsDisplay := "(none)"
+	if len(favs) > 0 {
+		if len(favs) > 8 {
+			favsDisplay = strings.Join(favs[:8], ", ") + fmt.Sprintf(", … (+%d more)", len(favs)-8)
+		} else {
+			favsDisplay = strings.Join(favs, ", ")
+		}
+	}
+
+	// Active cosmetic tag (casino or non-casino modes both expose this).
+	activeTag := db.GetActiveTag(target.Ipid())
+	tagDisplay := "(none)"
+	if t := formatTagDisplay(activeTag); t != "" {
+		tagDisplay = t
+	}
+
+	// Active punishments count — don't leak details, just a count so players
+	// can tell at a glance if the target is currently cursed with something.
+	activePunishments := len(target.Punishments())
+
+	areaName := "(unknown)"
+	if a := target.Area(); a != nil {
+		areaName = a.Name()
+	}
+
+	var sb strings.Builder
+	sb.WriteString("\n👤 Profile\n")
+	sb.WriteString(fmt.Sprintf("  Name:        %v\n", displayName))
+	sb.WriteString(fmt.Sprintf("  UID:         %d\n", target.Uid()))
+	sb.WriteString(fmt.Sprintf("  Account:     %v\n", username))
+	sb.WriteString(fmt.Sprintf("  Area:        %v\n", areaName))
+	sb.WriteString(fmt.Sprintf("  Playtime:    %v\n", formatPlaytime(playtimeSec)))
+	if config != nil && config.EnableCasino {
+		sb.WriteString(fmt.Sprintf("  Chips:       %d\n", chips))
+	}
+	sb.WriteString(fmt.Sprintf("  Active tag:  %v\n", tagDisplay))
+	sb.WriteString(fmt.Sprintf("  Favourites:  %v\n", favsDisplay))
+	if activePunishments > 0 {
+		sb.WriteString(fmt.Sprintf("  Punishments: %d active\n", activePunishments))
+	}
+	client.SendServerMessage(sb.String())
+}

@@ -31,6 +31,10 @@ lock_bg = true
 # Sets whether non-CM users are prevented from playing music in this area.
 lock_music = false
 
+# Mirror mode: when true, every IC message broadcast in this area is reversed
+# server-side. Staff can also toggle this at runtime. Default false (off).
+# mirror = false
+
 [[Area]]
 name = "Courtroom"
 background = "gs4"

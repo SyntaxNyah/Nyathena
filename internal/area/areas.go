@@ -110,6 +110,7 @@ type Area struct {
 	casinoJackpot        bool
 	casinoJackpotPool    int64
 	randomPunishEnabled  bool
+	mirror               bool
 }
 
 type AreaData struct {
@@ -128,6 +129,7 @@ type AreaData struct {
 	Casino_max_bet    int    `toml:"casino_max_bet"`
 	Casino_max_tables int    `toml:"casino_max_tables"`
 	Casino_jackpot    bool   `toml:"casino_slots_jackpot"`
+	Mirror            bool   `toml:"mirror"`
 }
 
 type defaults struct {
@@ -145,6 +147,7 @@ type defaults struct {
 	casino_max_bet    int
 	casino_max_tables int
 	casino_jackpot    bool
+	mirror            bool
 }
 
 // NewArea returns a new area.
@@ -166,6 +169,7 @@ func NewArea(data AreaData, charlen int, bufsize int, evi_mode EvidenceMode) *Ar
 			casino_max_bet:    data.Casino_max_bet,
 			casino_max_tables: data.Casino_max_tables,
 			casino_jackpot:    data.Casino_jackpot,
+			mirror:            data.Mirror,
 		},
 		taken:           make([]bool, charlen),
 		defhp:           10,
@@ -183,6 +187,7 @@ func NewArea(data AreaData, charlen int, bufsize int, evi_mode EvidenceMode) *Ar
 		casinoMaxTables:      data.Casino_max_tables,
 		casinoJackpot:        data.Casino_jackpot,
 		randomPunishEnabled:  true,
+		mirror:               data.Mirror,
 	}
 }
 
@@ -1042,4 +1047,21 @@ func (a *Area) SetRandomPunishEnabled(v bool) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	a.randomPunishEnabled = v
+}
+
+// Mirror reports whether this area reverses every IC message server-side
+// before broadcasting it. Configured via the `mirror = true` TOML field on
+// the area definition.
+func (a *Area) Mirror() bool {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return a.mirror
+}
+
+// SetMirror toggles mirror mode at runtime. Useful for staff to flip the
+// effect on a per-area basis without restarting.
+func (a *Area) SetMirror(v bool) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	a.mirror = v
 }

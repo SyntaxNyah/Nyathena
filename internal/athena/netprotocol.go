@@ -813,8 +813,29 @@ func pktIC(client *Client, p *packet.Packet) {
 		return
 	}
 
+	// Mirror area: if this area has mirror=true in its TOML config, reverse the
+	// IC message text server-side right before broadcasting. This runs AFTER
+	// every punishment transform so the reversal is the last word on the text.
+	// The packet wire-format fields are otherwise untouched, so clients can
+	// connect and render the message normally — they just see it backwards.
+	if client.Area().Mirror() && args[4] != "" {
+		mirrored := reverseRunes(decode(args[4]))
+		args[4] = encode(mirrored)
+	}
+
 	writeToAreaFrom(client.Ipid(), permissions.IsModerator(client.Perms()), client.Area(), "MS", args...)
 	addToBuffer(client, "IC", "\""+args[4]+"\"", false)
+}
+
+// reverseRunes returns s with its runes (not bytes) reversed. Used by the
+// mirror-area feature so multi-byte UTF-8 characters (accents, emoji, etc.)
+// survive the flip intact.
+func reverseRunes(s string) string {
+	runes := []rune(s)
+	for i, j := 0, len(runes)-1; i < j; i, j = i+1, j-1 {
+		runes[i], runes[j] = runes[j], runes[i]
+	}
+	return string(runes)
 }
 
 // Handles MC#%

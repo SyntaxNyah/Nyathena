@@ -1151,3 +1151,192 @@ func TestApplyUncannyValleyViaDispatcher(t *testing.T) {
 	// Should not panic; result may or may not have a glitch tag depending on rand
 	_ = ApplyPunishmentToText("hello", PunishmentUncannyValley)
 }
+
+// ─── Novelty-punishment additions ──────────────────────────────────────────
+
+func TestApplyTimewarp(t *testing.T) {
+	// With a single word, nothing to shuffle — output must equal input.
+	if got := applyTimewarp("hello"); got != "hello" {
+		t.Errorf("applyTimewarp(single word): got %q, want %q", got, "hello")
+	}
+	// With many words, output contains the same set of words.
+	in := "the quick brown fox jumps over the lazy dog"
+	got := applyTimewarp(in)
+	wantWords := strings.Fields(in)
+	gotWords := strings.Fields(got)
+	if len(gotWords) != len(wantWords) {
+		t.Fatalf("applyTimewarp: expected %d words, got %d (%q)", len(wantWords), len(gotWords), got)
+	}
+	counts := map[string]int{}
+	for _, w := range gotWords {
+		counts[w]++
+	}
+	for _, w := range wantWords {
+		if counts[w] <= 0 {
+			t.Errorf("applyTimewarp: missing word %q in output %q", w, got)
+		}
+		counts[w]--
+	}
+}
+
+func TestApplyMorse(t *testing.T) {
+	// "sos" in Morse is "... --- ..."
+	got := applyMorse("SOS")
+	if got != "... --- ..." {
+		t.Errorf("applyMorse(\"SOS\"): got %q, want %q", got, "... --- ...")
+	}
+	// Words are separated by " / "
+	got = applyMorse("hi ok")
+	if !strings.Contains(got, " / ") {
+		t.Errorf("applyMorse: expected word separator ' / ' in %q", got)
+	}
+	// Empty / unmappable input returns "..."
+	if got := applyMorse(""); got != "..." {
+		t.Errorf("applyMorse(empty): got %q, want %q", got, "...")
+	}
+}
+
+func TestApplyRickroll(t *testing.T) {
+	// Output must always be one of the pre-defined meme lines.
+	got := applyRickroll("anything")
+	found := false
+	for _, line := range rickrollLines {
+		if got == line {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Errorf("applyRickroll: %q was not in rickrollLines table", got)
+	}
+}
+
+func TestApplyVowelhell(t *testing.T) {
+	// Every letter in the output should be a vowel (or preserved punctuation).
+	got := applyVowelhell("hello world!")
+	vowels := "aeiouAEIOU"
+	for _, r := range got {
+		if r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' {
+			if !strings.ContainsRune(vowels, r) {
+				t.Errorf("applyVowelhell: non-vowel letter %q in output %q", r, got)
+			}
+		}
+	}
+}
+
+func TestApplyChef(t *testing.T) {
+	got := applyChef("hello world")
+	if !strings.Contains(got, "bork bork bork!") {
+		t.Errorf("applyChef: expected 'bork bork bork!' suffix in %q", got)
+	}
+}
+
+func TestApplyKaren(t *testing.T) {
+	// The original text should still be inside the wrapped output somewhere.
+	got := applyKaren("this coffee is cold")
+	if !strings.Contains(got, "this coffee is cold") {
+		t.Errorf("applyKaren: expected original text preserved, got %q", got)
+	}
+}
+
+func TestApplyPassiveAggressive(t *testing.T) {
+	got := applyPassiveAggressive("sure")
+	if !strings.Contains(got, "sure") {
+		t.Errorf("applyPassiveAggressive: expected original text preserved, got %q", got)
+	}
+	// Must end with one of the known closer substrings or a smiley.
+	if !strings.ContainsAny(got, ".:)") {
+		t.Errorf("applyPassiveAggressive: expected a passive-aggressive closer, got %q", got)
+	}
+}
+
+func TestApplyNervous(t *testing.T) {
+	// Empty input returns a placeholder, not a panic.
+	if got := applyNervous(""); got == "" {
+		t.Errorf("applyNervous(empty): expected a non-empty placeholder")
+	}
+	// Non-empty input returns non-empty output.
+	if got := applyNervous("i am speaking in court today"); got == "" {
+		t.Errorf("applyNervous: expected non-empty output")
+	}
+}
+
+func TestApplyDreamSequence(t *testing.T) {
+	// Short inputs become pure dream-fragments.
+	short := applyDreamSequence("hi")
+	if !strings.Contains(short, "...") {
+		t.Errorf("applyDreamSequence(short): expected dreamlike ellipses, got %q", short)
+	}
+	// Long inputs retain some original text and add dreamlike framing.
+	long := applyDreamSequence("I think I saw something strange over by the window just a moment ago")
+	if !strings.Contains(long, "dream") {
+		t.Errorf("applyDreamSequence(long): expected dreamy framing, got %q", long)
+	}
+}
+
+// ─── PunishmentType.String() for the additions ────────────────────────────
+
+func TestNewPunishmentStrings(t *testing.T) {
+	cases := []struct {
+		pType PunishmentType
+		want  string
+	}{
+		{PunishmentTimewarp, "timewarp"},
+		{PunishmentMorse, "morse"},
+		{PunishmentRickroll, "rickroll"},
+		{PunishmentVowelhell, "vowelhell"},
+		{PunishmentChef, "chef"},
+		{PunishmentKaren, "karen"},
+		{PunishmentPassiveAggressive, "passiveaggressive"},
+		{PunishmentNervous, "nervous"},
+		{PunishmentDreamSequence, "dreamsequence"},
+	}
+	for _, tc := range cases {
+		if got := tc.pType.String(); got != tc.want {
+			t.Errorf("%d.String(): got %q, want %q", tc.pType, got, tc.want)
+		}
+	}
+}
+
+// TestParsePunishmentTypeNewNames ensures the new names are recognized by
+// /stack and /unpunish -t via the shared parse function.
+func TestParsePunishmentTypeNewNames(t *testing.T) {
+	cases := []struct {
+		name string
+		want PunishmentType
+	}{
+		{"timewarp", PunishmentTimewarp},
+		{"morse", PunishmentMorse},
+		{"rickroll", PunishmentRickroll},
+		{"vowelhell", PunishmentVowelhell},
+		{"chef", PunishmentChef},
+		{"karen", PunishmentKaren},
+		{"passiveaggressive", PunishmentPassiveAggressive},
+		{"nervous", PunishmentNervous},
+		{"dreamsequence", PunishmentDreamSequence},
+	}
+	for _, tc := range cases {
+		if got := parsePunishmentType(tc.name); got != tc.want {
+			t.Errorf("parsePunishmentType(%q): got %v, want %v", tc.name, got, tc.want)
+		}
+	}
+}
+
+// ─── Mirror-area helper ────────────────────────────────────────────────────
+
+func TestReverseRunes(t *testing.T) {
+	cases := []struct {
+		in, want string
+	}{
+		{"", ""},
+		{"a", "a"},
+		{"hello", "olleh"},
+		// Multi-byte runes must survive intact.
+		{"café", "éfac"},
+	}
+	for _, tc := range cases {
+		if got := reverseRunes(tc.in); got != tc.want {
+			t.Errorf("reverseRunes(%q): got %q, want %q", tc.in, got, tc.want)
+		}
+	}
+}
