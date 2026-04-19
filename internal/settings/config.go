@@ -62,7 +62,7 @@ type ServerConfig struct {
 	WebhookPingRoleID     string `toml:"webhook_ping_role_id"`
 	PunishmentWebhookURL  string `toml:"punishment_webhook_url"`
 	MaxDice               int    `toml:"max_dice"`
-	MaxSide               int    `toml:"max_sides"`
+	MaxSide               int    `toml:"max_side"`
 	Motd                  string `toml:"motd"`
 	MaxStatement          int    `toml:"max_testimony"`
 	RateLimit             int    `toml:"message_rate_limit"`
