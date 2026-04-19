@@ -38,6 +38,47 @@ type Command struct {
 
 var Commands map[string]Command
 
+// RegisterCommand installs an additional command into the global registry
+// after initCommands has already run. It is intended for feature files that
+// want to keep their command definition alongside their handler instead of
+// editing the monolithic map literal in this file. Panics on duplicate
+// registration so the problem is visible at startup rather than at runtime
+// when a user first tries the shadowed command.
+//
+// Must be called AFTER initCommands; typically from a follow-on init hook
+// in server.go. Not safe for concurrent use -- the registry is considered
+// read-only once the server begins accepting connections.
+func RegisterCommand(name string, cmd Command) {
+	if Commands == nil {
+		panic("RegisterCommand called before initCommands")
+	}
+	if _, exists := Commands[name]; exists {
+		panic("RegisterCommand: duplicate command name " + name)
+	}
+	Commands[name] = cmd
+}
+
+// validateCommands walks the registry after initCommands and panics if any
+// entry is missing required fields. Catches accidental paste errors like a
+// blank usage string or a nil handler at server startup rather than when a
+// player first types the broken command.
+func validateCommands() {
+	for name, cmd := range Commands {
+		if cmd.handler == nil {
+			panic("command " + name + " has nil handler")
+		}
+		if cmd.usage == "" {
+			panic("command " + name + " has empty usage")
+		}
+		if cmd.desc == "" {
+			panic("command " + name + " has empty desc")
+		}
+		if cmd.category == "" {
+			panic("command " + name + " has empty category")
+		}
+	}
+}
+
 func initCommands() {
 	Commands = map[string]Command{
 		"about": {

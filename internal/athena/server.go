@@ -477,6 +477,7 @@ func NewServer(conf *settings.Config) (*Server, error) {
 	smPacket = buildSMPacket(s.areaNames, s.music)
 
 	initCommands()
+	validateCommands()
 	initAutoMod(conf)
 	initCvote(conf)
 	initHotConfig(conf)
