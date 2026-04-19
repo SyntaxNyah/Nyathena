@@ -829,7 +829,7 @@ func pktIC(client *Client, p *packet.Packet) {
 	// every punishment transform so the reversal is the last word on the text.
 	// The packet wire-format fields are otherwise untouched, so clients can
 	// connect and render the message normally — they just see it backwards.
-	if client.Area().Mirror() && args[4] != "" {
+	if client.Area().MirrorArea() && args[4] != "" {
 		mirrored := reverseRunes(decode(args[4]))
 		args[4] = encode(mirrored)
 	}

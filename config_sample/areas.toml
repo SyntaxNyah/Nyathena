@@ -32,8 +32,9 @@ lock_bg = true
 lock_music = false
 
 # Mirror mode: when true, every IC message broadcast in this area is reversed
-# server-side. Staff can also toggle this at runtime. Default false (off).
-# mirror = false
+# server-side. The effect clears the instant the speaker leaves the area.
+# Staff can also toggle this at runtime. Default false (off).
+# mirror_area = false
 
 # Punishment area: when true, every IC message sent in this area has a random,
 # one-shot punishment effect applied to it (uwu, pirate, morse, dreamsequence,

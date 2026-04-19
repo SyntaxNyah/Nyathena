@@ -110,7 +110,7 @@ type Area struct {
 	casinoJackpot        bool
 	casinoJackpotPool    int64
 	randomPunishEnabled  bool
-	mirror               bool
+	mirrorArea           bool
 	punishmentArea       bool
 }
 
@@ -130,7 +130,7 @@ type AreaData struct {
 	Casino_max_bet    int    `toml:"casino_max_bet"`
 	Casino_max_tables int    `toml:"casino_max_tables"`
 	Casino_jackpot    bool   `toml:"casino_slots_jackpot"`
-	Mirror            bool   `toml:"mirror"`
+	Mirror_area       bool   `toml:"mirror_area"`
 	Punishment_area   bool   `toml:"punishment_area"`
 }
 
@@ -149,7 +149,7 @@ type defaults struct {
 	casino_max_bet    int
 	casino_max_tables int
 	casino_jackpot    bool
-	mirror            bool
+	mirror_area       bool
 	punishment_area   bool
 }
 
@@ -172,7 +172,7 @@ func NewArea(data AreaData, charlen int, bufsize int, evi_mode EvidenceMode) *Ar
 			casino_max_bet:    data.Casino_max_bet,
 			casino_max_tables: data.Casino_max_tables,
 			casino_jackpot:    data.Casino_jackpot,
-			mirror:            data.Mirror,
+			mirror_area:       data.Mirror_area,
 			punishment_area:   data.Punishment_area,
 		},
 		taken:           make([]bool, charlen),
@@ -191,7 +191,7 @@ func NewArea(data AreaData, charlen int, bufsize int, evi_mode EvidenceMode) *Ar
 		casinoMaxTables:      data.Casino_max_tables,
 		casinoJackpot:        data.Casino_jackpot,
 		randomPunishEnabled:  true,
-		mirror:               data.Mirror,
+		mirrorArea:           data.Mirror_area,
 		punishmentArea:       data.Punishment_area,
 	}
 }
@@ -1054,21 +1054,21 @@ func (a *Area) SetRandomPunishEnabled(v bool) {
 	a.randomPunishEnabled = v
 }
 
-// Mirror reports whether this area reverses every IC message server-side
-// before broadcasting it. Configured via the `mirror = true` TOML field on
-// the area definition.
-func (a *Area) Mirror() bool {
+// MirrorArea reports whether this area reverses every IC message server-side
+// before broadcasting it. Configured via the `mirror_area = true` TOML field
+// on the area definition.
+func (a *Area) MirrorArea() bool {
 	a.mu.Lock()
 	defer a.mu.Unlock()
-	return a.mirror
+	return a.mirrorArea
 }
 
-// SetMirror toggles mirror mode at runtime. Useful for staff to flip the
+// SetMirrorArea toggles mirror mode at runtime. Useful for staff to flip the
 // effect on a per-area basis without restarting.
-func (a *Area) SetMirror(v bool) {
+func (a *Area) SetMirrorArea(v bool) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
-	a.mirror = v
+	a.mirrorArea = v
 }
 
 // PunishmentArea reports whether this area applies a random, one-shot
