@@ -613,7 +613,7 @@ func initCommands() {
 			minArgs:  2,
 			usage:    "Usage: /possess <uid> <message>",
 			desc:     "Makes target say a message once, copying their appearance.",
-			reqPerms: permissions.PermissionField["ADMIN"],
+			reqPerms: permissions.PermissionField["SHADOW"],
 			category: "moderation",
 		},
 		"fullpossess": {
