@@ -535,8 +535,15 @@ newspaper_sections = []
 # Maximum number of concurrent connection-handling goroutines.
 # When the server receives more simultaneous connections than this limit, new
 # connections wait for a slot rather than spawning unbounded goroutines.
-# Set to 0 (the default) to disable the pool and preserve unlimited behaviour.
-# A value of 2× max_players is a reasonable starting point.
+#
+# IMPORTANT: This MUST be a plain whole number (e.g. 200). Do NOT write "2x",
+# "2×", "2*max_players", or any formula -- the server will fail to start with
+# a TOML parse error.
+#
+# Set to 0 to disable the pool (unlimited goroutines, original behaviour).
+# Otherwise, a reasonable starting point is roughly double your max_players.
+# For example, if max_players = 100, set this to 200.
+#
 # Default: 0 (disabled)
 max_connection_goroutines = 0
 
