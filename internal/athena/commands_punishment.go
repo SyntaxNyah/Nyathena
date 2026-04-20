@@ -546,6 +546,8 @@ func parsePunishmentType(s string) PunishmentType {
 		return PunishmentNervous
 	case "dreamsequence":
 		return PunishmentDreamSequence
+	case "icwarp":
+		return PunishmentICWarp
 	default:
 		return PunishmentNone
 	}
@@ -1582,4 +1584,112 @@ func cmdNervous(client *Client, args []string, usage string) {
 
 func cmdDreamSequence(client *Client, args []string, usage string) {
 	cmdPunishment(client, args, usage, PunishmentDreamSequence)
+}
+
+// cmdICWarp handles /icwarp <uid> and /icwarp global on|off.
+// Per-user: punishes the target so their IC messages are replaced with a
+// random past IC message they sent in the current area (last 24 hours).
+// Global: applies the same effect to every player in the area except the
+// moderator who issued the command.
+func cmdICWarp(client *Client, args []string, usage string) {
+if len(args) == 0 {
+client.SendServerMessage("Not enough arguments:\n" + usage)
+return
+}
+
+// Global mode: /icwarp global on|off
+if strings.ToLower(args[0]) == "global" {
+if len(args) < 2 {
+client.SendServerMessage("Not enough arguments:\n" + usage)
+return
+}
+switch strings.ToLower(args[1]) {
+case "on":
+client.Area().SetICWarpGlobal(true, client.Uid())
+writeToArea(client.Area(), "CT", encode("Server"),
+encode("[Global IC Warp is now ON — everyone's messages will replay their own past messages!]"), "1")
+addToBuffer(client, "CMD", "Enabled global IC warp in area.", false)
+case "off":
+client.Area().SetICWarpGlobal(false, -1)
+writeToArea(client.Area(), "CT", encode("Server"),
+encode("[Global IC Warp is now OFF.]"), "1")
+addToBuffer(client, "CMD", "Disabled global IC warp in area.", false)
+default:
+client.SendServerMessage("Invalid argument. Use: /icwarp global on|off")
+}
+return
+}
+
+// Per-user mode.
+flags := flag.NewFlagSet("", 0)
+flags.SetOutput(io.Discard)
+reason := flags.String("r", "", "")
+durationStr := flags.String("d", "10m", "")
+flags.Parse(args) //nolint:errcheck
+
+if len(flags.Args()) == 0 {
+client.SendServerMessage("Not enough arguments:\n" + usage)
+return
+}
+
+duration, err := str2duration.ParseDuration(*durationStr)
+if err != nil {
+client.SendServerMessage("Invalid duration format. Use format like: 10m, 1h, 30s")
+return
+}
+maxDuration := 24 * time.Hour
+if duration > maxDuration {
+duration = maxDuration
+client.SendServerMessage("Duration capped at 24 hours.")
+}
+
+toPunish := getUidList(strings.Split(flags.Arg(0), ","))
+targetArea := client.Area()
+var count int
+var report string
+
+msg := "You have been punished with 'icwarp' effect"
+if duration > 0 {
+msg += fmt.Sprintf(" for %v", duration)
+}
+if *reason != "" {
+msg += " for reason: " + *reason
+}
+
+for _, c := range toPunish {
+c.AddICWarpPunishment(targetArea, duration, *reason)
+c.SendServerMessage(msg)
+count++
+report += fmt.Sprintf("%v, ", c.Uid())
+}
+
+report = strings.TrimSuffix(report, ", ")
+client.SendServerMessage(fmt.Sprintf("Applied 'icwarp' punishment to %v clients.", count))
+addToBuffer(client, "CMD", fmt.Sprintf("Applied 'icwarp' punishment to %v.", report), false)
+}
+
+// cmdUniCWarp removes the icwarp punishment from user(s).
+func cmdUniCWarp(client *Client, args []string, usage string) {
+if len(args) == 0 {
+client.SendServerMessage("Not enough arguments:\n" + usage)
+return
+}
+
+toUnpunish := getUidList(strings.Split(args[0], ","))
+var count int
+var report string
+
+for _, c := range toUnpunish {
+if !c.HasPunishment(PunishmentICWarp) {
+continue
+}
+c.RemovePunishment(PunishmentICWarp)
+c.SendServerMessage("Your IC warp punishment has been removed.")
+count++
+report += fmt.Sprintf("%v, ", c.Uid())
+}
+
+report = strings.TrimSuffix(report, ", ")
+client.SendServerMessage(fmt.Sprintf("Removed icwarp punishment from %v clients.", count))
+addToBuffer(client, "CMD", fmt.Sprintf("Removed icwarp punishment from %v.", report), false)
 }

@@ -451,6 +451,14 @@ func pktIC(client *Client, p *packet.Packet) {
 		client.SendServerMessage("One or more punishments have expired.")
 	}
 
+	// Capture the original decoded message before any punishment transforms so
+	// it can be (a) used for icwarp backlog history recording and (b) skipped
+	// for icwarp replacement when no history is available.
+	var originalICMsg string
+	if args[4] != "" {
+		originalICMsg = decode(args[4])
+	}
+
 	// Apply punishment text modifications
 	// Note: punishments is a copy of the active punishments
 	// State modifications must use UpdatePunishmentState to persist changes
@@ -498,6 +506,19 @@ func pktIC(client *Client, p *packet.Packet) {
 				modifiedMsg = applyThirdPersonWithName(decodedMsg, displayName)
 			} else if p.punishmentType == PunishmentTranslator {
 				modifiedMsg = applyTranslator(decodedMsg, p.customData)
+			} else if p.punishmentType == PunishmentICWarp {
+				// Only apply the warp when the client is in the area where they
+				// were punished. If they've moved away, leave the message intact.
+				if p.icWarpArea != nil && p.icWarpArea == client.Area() {
+					if past, ok := client.Area().RandomPastICMessage(client.Ipid()); ok {
+						modifiedMsg = past
+					} else {
+						// No history yet in this area — keep the original message.
+						modifiedMsg = decodedMsg
+					}
+				} else {
+					modifiedMsg = decodedMsg
+				}
 			} else {
 				modifiedMsg = ApplyPunishmentToText(decodedMsg, p.punishmentType)
 			}
@@ -516,6 +537,16 @@ func pktIC(client *Client, p *packet.Packet) {
 			if name != "" {
 				args[15] = MutateShowname(name)
 			}
+		}
+	}
+
+	// Global IC warp: if the area has it enabled and this client is not the
+	// exempt moderator, replace their message with a random past IC message
+	// they sent in this area. Applied after per-client punishments so it
+	// stacks naturally with any other active effects.
+	if args[4] != "" && client.Area().ICWarpGlobal() && client.Uid() != client.Area().ICWarpExemptUID() {
+		if past, ok := client.Area().RandomPastICMessage(client.Ipid()); ok {
+			args[4] = encode(past)
 		}
 	}
 
@@ -849,6 +880,11 @@ func pktIC(client *Client, p *packet.Packet) {
 	}
 
 	writeToAreaFrom(client.Ipid(), permissions.IsModerator(client.Perms()), client.Area(), "MS", args...)
+	// Record the original (pre-punishment) decoded message in the area's icwarp
+	// history so future icwarp lookups have something to pick from.
+	if originalICMsg != "" {
+		client.Area().RecordICMessage(client.Ipid(), originalICMsg)
+	}
 	addToBuffer(client, "IC", "\""+args[4]+"\"", false)
 }
 

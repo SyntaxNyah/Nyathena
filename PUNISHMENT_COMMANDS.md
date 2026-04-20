@@ -434,9 +434,57 @@ A player can have multiple different punishment types active simultaneously. Tex
 - Text modifications stack in application order
 - Some combinations may be overwhelming - use `/unpunish` to reset
 
+## IC Warp Commands
+
+### `/icwarp [-d duration] [-r reason] <uid1>,<uid2>,...`
+Punishes the target player(s) so that every IC message they send is replaced
+with a **random past IC message** they themselves sent in the **same area**
+(looking back up to 24 hours of history for that IPID in that area).
+
+- The effect **only applies while the target is in the area where the punishment was applied**. Moving to a different area lets their messages through normally.
+- If the target has no message history yet in that area, their current message is passed through unchanged.
+- Standard `-d` and `-r` flags work as usual (default duration: 10 m, max: 24 h).
+
+**Examples:**
+```
+/icwarp 42                        # Apply to UID 42 for default 10 min
+/icwarp -d 1h -r "backlog chaos" 42,57
+```
+
+### `/icwarp global on`
+Enables global IC warp for the **current area**. Every player in the area
+**except the moderator who issued the command** will have their IC messages
+replaced with a random past message they sent in that area.
+
+> This only affects the area the command is used in — it does **not** spread to other areas.
+
+### `/icwarp global off`
+Disables the area-wide IC warp effect.
+
+**Example workflow:**
+```
+/icwarp global on     # Everyone in Lobby gets warp (you're exempt)
+# ... chaos ensues ...
+/icwarp global off    # Turn it off
+```
+
+### `/unicwarp <uid1>,<uid2>,...`
+Removes the **per-user** icwarp punishment from the specified player(s).
+
+```
+/unicwarp 42          # Remove icwarp from UID 42
+/unicwarp 42,57       # Remove from multiple UIDs
+```
+
+You can also use the general `/unpunish` command:
+```
+/unpunish -t icwarp 42
+```
+
 ## Notes
 
 - Punishments persist across area changes
 - Punishments are lost on disconnect
 - All punishment actions are logged in the server buffer
 - Expired punishments are automatically cleaned up when messages are sent
+- **icwarp** is area-specific: it only activates in the area where the punishment was applied, and does not persist across server restarts

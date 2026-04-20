@@ -1709,6 +1709,29 @@ func initCommands() {
 			reqPerms: permissions.PermissionField["MUTE"],
 			category: "punishment",
 		},
+		"icwarp": {
+			handler: cmdICWarp,
+			minArgs: 1,
+			usage: "Usage: /icwarp [-d duration] [-r reason] <uid1>,<uid2>...\n" +
+				"       /icwarp global on\n" +
+				"       /icwarp global off\n" +
+				"-d: Duration (default 10m, max 24h). -r: Reason for logs.\n" +
+				"Per-user: targeted player's IC messages are replaced with a random past message\n" +
+				"they sent in the current area (last 24 hours) while the punishment is active.\n" +
+				"Global on: applies the same backlog effect to everyone in the area except you.\n" +
+				"Global off: disables the area-wide effect.",
+			desc:     "Punishes player(s) so their IC messages are replaced with random past messages from the area. /icwarp global on/off affects everyone in the area except the moderator.",
+			reqPerms: permissions.PermissionField["MUTE"],
+			category: "punishment",
+		},
+		"unicwarp": {
+			handler:  cmdUniCWarp,
+			minArgs:  1,
+			usage:    "Usage: /unicwarp <uid1>,<uid2>...",
+			desc:     "Removes the icwarp punishment from the specified user(s).",
+			reqPerms: permissions.PermissionField["MUTE"],
+			category: "punishment",
+		},
 		"stack": {
 			handler:  cmdStack,
 			minArgs:  2,
