@@ -528,11 +528,17 @@ func pktIC(client *Client, p *packet.Packet) {
 	if flip := client.CheckAndToggleDanceFlip(); flip != "" {
 		args[12] = flip
 	}
+	// emote_mod: 4 crashes old clients, remap to PREANIM_ZOOM; only {0,1,2,5,6} are valid (matches Akashi).
 	emote_mod, err := strconv.Atoi(args[7])
 	if err != nil {
 		return
-	} else if emote_mod == 4 { // Value of 4 can crash the client.
+	}
+	if emote_mod == 4 {
+		emote_mod = 6
 		args[7] = "6"
+	}
+	if emote_mod != 0 && emote_mod != 1 && emote_mod != 2 && emote_mod != 5 && emote_mod != 6 {
+		return
 	}
 	objStr, _, _ := strings.Cut(args[10], "&")
 	objection, err := strconv.Atoi(objStr)
@@ -560,12 +566,17 @@ func pktIC(client *Client, p *packet.Packet) {
 	if args[28] == "" || client.CharID() != client.Area().LastSpeaker() {
 		args[28] = "0"
 	}
-	if (client.Area().NoInterrupt() && emote_mod != 0) || args[22] == "1" {
-		args[22] = "1"
-		if emote_mod == 1 || emote_mod == 2 {
+	// Area-level force_nointerrupt mirrors Akashi's forceImmediate: convert PREANIM variants to their non-preanim twin and force immediate=1 so the preanim plays alongside the text.
+	if client.Area().NoInterrupt() {
+		switch emote_mod {
+		case 1, 2:
+			emote_mod = 0
 			args[7] = "0"
-		} else if emote_mod == 6 {
+			args[22] = "1"
+		case 6:
+			emote_mod = 5
 			args[7] = "5"
+			args[22] = "1"
 		}
 	}
 
@@ -575,6 +586,11 @@ func pktIC(client *Client, p *packet.Packet) {
 	// Single lock to obtain the stuck character ID; -1 means not stuck.
 	// Used in both iniswap cases below to avoid redundant mutex acquisitions.
 	stuckCharID := client.charStuckID()
+
+	// desk_mod "chat" is a legacy alias for "1"; rewrite to match Akashi.
+	if args[0] == "chat" {
+		args[0] = "1"
+	}
 
 	switch {
 	case !sliceutil.ContainsString(validDeskMods, args[0]): // desk_mod
@@ -589,8 +605,6 @@ func pktIC(client *Client, p *packet.Packet) {
 		client.SendServerMessage("Your message exceeds the maximum message length!")
 		return
 	case args[4] == client.LastMsg():
-		return
-	case emote_mod < 0 || emote_mod > 6:
 		return
 	case !isPossessing && !hasForcedIniswap && args[8] != client.CharIDStr(): // char_id (skip check when possessing or forced iniswap)
 		return
