@@ -165,6 +165,8 @@ const (
 	PunishmentPassiveAggressive // passive-aggressive filler tacked onto messages
 	PunishmentNervous           // nervous stuttering + filler (um, uh, ah...)
 	PunishmentDreamSequence     // progressively surreal / dreamlike rewrites
+	// IC backlog punishment — area-specific
+	PunishmentICWarp // replaces messages with random past IC messages from the same area
 )
 
 type PunishmentState struct {
@@ -175,8 +177,9 @@ type PunishmentState struct {
 	msgDelay       time.Duration
 	msgCount       int
 	lastEffect     int
-	targetUID      int    // For PunishmentLovebomb: UID of the lovebomb target (-1 = random area target)
-	customData     string // For PunishmentTranslator: target language name or "random"
+	targetUID      int        // For PunishmentLovebomb: UID of the lovebomb target (-1 = random area target)
+	customData     string     // For PunishmentTranslator: target language name or "random"
+	icWarpArea     *area.Area // For PunishmentICWarp: the area where the warp applies; nil = inert
 }
 
 type ClientPairInfo struct {
@@ -1703,6 +1706,34 @@ func (client *Client) AddLovebombPunishment(targetUID int, duration time.Duratio
 	})
 }
 
+// AddICWarpPunishment adds an icwarp punishment tied to a specific area.
+// The warp only activates while the client is in that particular area.
+func (client *Client) AddICWarpPunishment(warpArea *area.Area, duration time.Duration, reason string) {
+	client.mu.Lock()
+	defer client.mu.Unlock()
+
+	// Same-type deduplication: replace any existing icwarp punishment.
+	for i := len(client.punishments) - 1; i >= 0; i-- {
+		if client.punishments[i].punishmentType == PunishmentICWarp {
+			client.punishments = append(client.punishments[:i], client.punishments[i+1:]...)
+			break
+		}
+	}
+
+	expiresAt := time.Time{}
+	if duration > 0 {
+		expiresAt = time.Now().UTC().Add(duration)
+	}
+
+	client.punishments = append(client.punishments, PunishmentState{
+		punishmentType: PunishmentICWarp,
+		expiresAt:      expiresAt,
+		reason:         reason,
+		targetUID:      -1,
+		icWarpArea:     warpArea,
+	})
+}
+
 // RemoveAllPunishments removes all punishments from the client.
 func (client *Client) RemoveAllPunishments() {
 	client.mu.Lock()
@@ -2032,6 +2063,8 @@ func (p PunishmentType) String() string {
 		return "nervous"
 	case PunishmentDreamSequence:
 		return "dreamsequence"
+	case PunishmentICWarp:
+		return "icwarp"
 	default:
 		return "none"
 	}

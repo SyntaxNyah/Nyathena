@@ -17,10 +17,18 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>. */
 package area
 
 import (
+	"math/rand"
 	"strings"
 	"sync"
 	"time"
 )
+
+// icMsg stores a single decoded IC message sent in an area, timestamped for
+// the 24-hour pruning window used by the icwarp punishment.
+type icMsg struct {
+	text string
+	at   time.Time
+}
 
 type EvidenceMode int
 type Status int
@@ -76,42 +84,45 @@ type CoinflipChallenge struct {
 }
 
 type Area struct {
-	data              AreaData
-	defaults          defaults
-	mu                sync.Mutex
-	taken             []bool
-	players           int
-	visiblePlayers    int
-	defhp             int
-	prohp             int
-	evidence          []string
-	buffer            []string
-	cms               map[int]struct{}
-	last_msg          int
-	evi_mode          EvidenceMode
-	status            Status
-	lock              Lock
-	invited           map[int]struct{}
-	doc               string
-	description       string
-	tr                TestimonyRecorder
-	activePoll        *Poll
-	lastPollTime      time.Time
-	pollVotes         map[int]int
-	playerVotes       map[int]int
-	activeCoinflip    *CoinflipChallenge
-	lastCoinflipTime  time.Time
-	spectateMode      bool
-	spectateInvited   map[int]struct{}
-	casinoEnabled        bool
-	casinoMinBet         int
-	casinoMaxBet         int
-	casinoMaxTables      int
-	casinoJackpot        bool
-	casinoJackpotPool    int64
-	randomPunishEnabled  bool
-	mirrorArea           bool
-	punishmentArea       bool
+	data                AreaData
+	defaults            defaults
+	mu                  sync.Mutex
+	taken               []bool
+	players             int
+	visiblePlayers      int
+	defhp               int
+	prohp               int
+	evidence            []string
+	buffer              []string
+	cms                 map[int]struct{}
+	last_msg            int
+	evi_mode            EvidenceMode
+	status              Status
+	lock                Lock
+	invited             map[int]struct{}
+	doc                 string
+	description         string
+	tr                  TestimonyRecorder
+	activePoll          *Poll
+	lastPollTime        time.Time
+	pollVotes           map[int]int
+	playerVotes         map[int]int
+	activeCoinflip      *CoinflipChallenge
+	lastCoinflipTime    time.Time
+	spectateMode        bool
+	spectateInvited     map[int]struct{}
+	casinoEnabled       bool
+	casinoMinBet        int
+	casinoMaxBet        int
+	casinoMaxTables     int
+	casinoJackpot       bool
+	casinoJackpotPool   int64
+	randomPunishEnabled bool
+	mirrorArea          bool
+	punishmentArea      bool
+	icWarpGlobal        bool               // whether global icwarp is enabled
+	icWarpExemptUID     int                // UID exempt from global icwarp (-1 = none)
+	icMessages          map[string][]icMsg // per-IPID IC message history for icwarp
 }
 
 type AreaData struct {
@@ -175,24 +186,25 @@ func NewArea(data AreaData, charlen int, bufsize int, evi_mode EvidenceMode) *Ar
 			mirror_area:       data.Mirror_area,
 			punishment_area:   data.Punishment_area,
 		},
-		taken:           make([]bool, charlen),
-		defhp:           10,
-		prohp:           10,
-		buffer:          make([]string, bufsize),
-		last_msg:        -1,
-		evi_mode:        evi_mode,
-		description:     data.Description,
-		cms:             make(map[int]struct{}),
-		invited:         make(map[int]struct{}),
-		spectateInvited: make(map[int]struct{}),
-		casinoEnabled:        data.Casino_enabled,
-		casinoMinBet:         data.Casino_min_bet,
-		casinoMaxBet:         data.Casino_max_bet,
-		casinoMaxTables:      data.Casino_max_tables,
-		casinoJackpot:        data.Casino_jackpot,
-		randomPunishEnabled:  true,
-		mirrorArea:           data.Mirror_area,
-		punishmentArea:       data.Punishment_area,
+		taken:               make([]bool, charlen),
+		defhp:               10,
+		prohp:               10,
+		buffer:              make([]string, bufsize),
+		last_msg:            -1,
+		evi_mode:            evi_mode,
+		description:         data.Description,
+		cms:                 make(map[int]struct{}),
+		invited:             make(map[int]struct{}),
+		spectateInvited:     make(map[int]struct{}),
+		casinoEnabled:       data.Casino_enabled,
+		casinoMinBet:        data.Casino_min_bet,
+		casinoMaxBet:        data.Casino_max_bet,
+		casinoMaxTables:     data.Casino_max_tables,
+		casinoJackpot:       data.Casino_jackpot,
+		randomPunishEnabled: true,
+		mirrorArea:          data.Mirror_area,
+		punishmentArea:      data.Punishment_area,
+		icWarpExemptUID:     -1,
 	}
 }
 
@@ -1086,4 +1098,79 @@ func (a *Area) SetPunishmentArea(v bool) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	a.punishmentArea = v
+}
+
+// RecordICMessage appends a decoded IC message for the given IPID to this
+// area's icwarp history. Messages older than 24 hours are pruned on each call.
+// At most 500 messages per IPID are kept to bound memory use.
+func (a *Area) RecordICMessage(ipid, text string) {
+	if text == "" {
+		return
+	}
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if a.icMessages == nil {
+		a.icMessages = make(map[string][]icMsg)
+	}
+	cutoff := time.Now().Add(-24 * time.Hour)
+	msgs := a.icMessages[ipid]
+	// Prune messages older than the 24-hour window.
+	start := 0
+	for start < len(msgs) && msgs[start].at.Before(cutoff) {
+		start++
+	}
+	msgs = msgs[start:]
+	msgs = append(msgs, icMsg{text: text, at: time.Now()})
+	// Hard-cap at 500 entries per IPID.
+	if len(msgs) > 500 {
+		msgs = msgs[len(msgs)-500:]
+	}
+	a.icMessages[ipid] = msgs
+}
+
+// RandomPastICMessage returns a random IC message sent by the given IPID in
+// the past 24 hours in this area. Returns ("", false) when no history exists.
+func (a *Area) RandomPastICMessage(ipid string) (string, bool) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if a.icMessages == nil {
+		return "", false
+	}
+	msgs := a.icMessages[ipid]
+	cutoff := time.Now().Add(-24 * time.Hour)
+	start := 0
+	for start < len(msgs) && msgs[start].at.Before(cutoff) {
+		start++
+	}
+	msgs = msgs[start:]
+	if len(msgs) == 0 {
+		return "", false
+	}
+	return msgs[rand.Intn(len(msgs))].text, true
+}
+
+// ICWarpGlobal reports whether global IC warp is currently enabled in this area.
+func (a *Area) ICWarpGlobal() bool {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return a.icWarpGlobal
+}
+
+// ICWarpExemptUID returns the UID of the player who is exempt from the global
+// IC warp effect (typically the moderator who toggled it on). Returns -1 when
+// no exemption is set.
+func (a *Area) ICWarpExemptUID() int {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return a.icWarpExemptUID
+}
+
+// SetICWarpGlobal enables or disables global IC warp for this area.
+// exemptUID is the UID of the moderator who will not be affected; pass -1
+// to clear any exemption (e.g. when disabling the effect).
+func (a *Area) SetICWarpGlobal(enabled bool, exemptUID int) {
+	a.mu.Lock()
+	a.icWarpGlobal = enabled
+	a.icWarpExemptUID = exemptUID
+	a.mu.Unlock()
 }
