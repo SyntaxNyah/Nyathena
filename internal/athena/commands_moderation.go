@@ -1350,7 +1350,7 @@ func cmdUntorment(client *Client, args []string, usage string) {
 //
 //	/lockdown           - toggle lockdown on/off
 //	/lockdown add <UID> - whitelist a connected player's IPID so they can join during lockdown
-//	/lockdown whitelist all - whitelist all IPIDs currently in the caller's area
+//	/lockdown whitelist all - whitelist all IPIDs currently connected to the server
 func cmdLockdown(client *Client, args []string, usage string) {
 	// Subcommand dispatch.
 	if len(args) >= 1 {
@@ -1383,10 +1383,9 @@ func cmdLockdown(client *Client, args []string, usage string) {
 				client.SendServerMessage("Not enough arguments:\n" + usage)
 				return
 			}
-			currentArea := client.Area()
 			count := 0
 			clients.ForEach(func(c *Client) {
-				if c.Area() == currentArea && c.Uid() != -1 {
+				if c.Uid() != -1 {
 					ipid := c.Ipid()
 					recordIPFirstSeen(ipid)
 					if err := db.MarkIPKnown(ipid); err != nil {
@@ -1395,8 +1394,8 @@ func cmdLockdown(client *Client, args []string, usage string) {
 					count++
 				}
 			})
-			client.SendServerMessage(fmt.Sprintf("Whitelisted %v IPID(s) from the current area for lockdown.", count))
-			addToBuffer(client, "CMD", fmt.Sprintf("Whitelisted %v IPID(s) in area for lockdown.", count), true)
+			client.SendServerMessage(fmt.Sprintf("Whitelisted %v IPID(s) from the server for lockdown.", count))
+			addToBuffer(client, "CMD", fmt.Sprintf("Whitelisted %v IPID(s) server-wide for lockdown.", count), true)
 			return
 		default:
 			client.SendServerMessage("Unknown subcommand:\n" + usage)
