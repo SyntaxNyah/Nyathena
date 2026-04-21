@@ -357,7 +357,7 @@ func initCommands() {
 			handler:  cmdLockdown,
 			minArgs:  0,
 			usage:    "Usage: /lockdown | /lockdown add <uid> | /lockdown whitelist all",
-			desc:     "Toggles server lockdown, or whitelists IPIDs. While active, only previously-known IPIDs can connect. Lockdown status is broadcast to mods only.",
+			desc:     "Toggles server lockdown, or whitelists IPIDs. While active, only previously-known IPIDs can connect. 'whitelist all' covers every area on the server. Lockdown status is broadcast to mods only.",
 			reqPerms: permissions.PermissionField["BAN"],
 			category: "moderation",
 		},
