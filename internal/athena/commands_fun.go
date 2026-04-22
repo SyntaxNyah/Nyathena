@@ -744,6 +744,44 @@ client.SendPacket("KK", msg)
 client.conn.Close()
 }
 
+// cmdMaso lets any user self-apply a random punishment for 10 minutes.
+// Calling it again while a maso punishment is active removes the old one and
+// applies a new (different) random punishment, resetting the timer.
+func cmdMaso(client *Client, _ []string, _ string) {
+	const masoDuration = 10 * time.Minute
+
+	client.mu.Lock()
+	prev := client.masoPunishment
+	client.mu.Unlock()
+
+	// Remove the previously maso-applied punishment (no-op if it already expired).
+	if prev != PunishmentNone {
+		client.RemovePunishment(prev)
+	}
+
+	// Pick a random punishment; if rerolling, ensure it differs from the previous one.
+	newType := areaRandomPunishments[rand.Intn(len(areaRandomPunishments))]
+	if prev != PunishmentNone && len(areaRandomPunishments) > 1 {
+		for newType == prev {
+			newType = areaRandomPunishments[rand.Intn(len(areaRandomPunishments))]
+		}
+	}
+
+	client.AddPunishment(newType, masoDuration, "maso")
+
+	client.mu.Lock()
+	client.masoPunishment = newType
+	client.mu.Unlock()
+
+	if prev != PunishmentNone {
+		client.SendServerMessage(fmt.Sprintf(
+			"Your maso punishment has been rerolled! New effect: '%v' (10 minutes).", newType.String()))
+	} else {
+		client.SendServerMessage(fmt.Sprintf(
+			"You've applied a random maso punishment to yourself: '%v' (10 minutes). Type /maso again to reroll.", newType.String()))
+	}
+}
+
 // Handles /suicide
 
 func cmdSuicide(client *Client, _ []string, _ string) {

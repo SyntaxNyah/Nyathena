@@ -737,6 +737,14 @@ func initCommands() {
 			reqPerms: permissions.PermissionField["NONE"],
 			category: "general",
 		},
+		"maso": {
+			handler:  cmdMaso,
+			minArgs:  0,
+			usage:    "Usage: /maso",
+			desc:     "Self-apply a random punishment for 10 minutes. Type again to reroll to a different punishment.",
+			reqPerms: permissions.PermissionField["NONE"],
+			category: "general",
+		},
 		"cvote": {
 			handler: cmdCvote,
 			minArgs: 0,
