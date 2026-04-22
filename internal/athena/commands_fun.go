@@ -746,7 +746,7 @@ client.conn.Close()
 
 // cmdMaso lets any user self-apply a random punishment for 10 minutes.
 // Calling it again while a maso punishment is active removes the old one and
-// applies a new random punishment (reset mechanic).
+// applies a new (different) random punishment, resetting the timer.
 func cmdMaso(client *Client, _ []string, _ string) {
 	const masoDuration = 10 * time.Minute
 
@@ -759,8 +759,13 @@ func cmdMaso(client *Client, _ []string, _ string) {
 		client.RemovePunishment(prev)
 	}
 
-	// Pick a new random punishment from the shared stateless pool.
+	// Pick a random punishment; if rerolling, ensure it differs from the previous one.
 	newType := areaRandomPunishments[rand.Intn(len(areaRandomPunishments))]
+	if prev != PunishmentNone && len(areaRandomPunishments) > 1 {
+		for newType == prev {
+			newType = areaRandomPunishments[rand.Intn(len(areaRandomPunishments))]
+		}
+	}
 
 	client.AddPunishment(newType, masoDuration, "maso")
 
