@@ -338,7 +338,7 @@ func cmdUnpunish(client *Client, args []string, usage string) {
 		myArea := client.Area()
 		var count int
 		clients.ForEach(func(c *Client) {
-			if c.Area() != myArea || c.Uid() == -1 {
+			if c.Area() != myArea {
 				return
 			}
 			c.RemoveAllPunishments()

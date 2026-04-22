@@ -167,8 +167,9 @@ func (b *Bot) handleHelp(s *discordgo.Session, i *discordgo.InteractionCreate) {
 				Inline: false,
 			},
 			{
-				Name:  "🎲 Fun (All Players)",
-				Value: "`/maso` — Self-apply a random punishment for 10 min (type again to reroll)",
+				Name:   "🎲 Fun (All Players)",
+				Value:  "`/maso` — Self-apply a random punishment for 10 min (type again to reroll)",
+				Inline: false,
 			},
 		},
 	}
