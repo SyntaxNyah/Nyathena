@@ -578,6 +578,16 @@ func AuthenticateUser(username string, password []byte) (bool, uint64) {
 	return true, p
 }
 
+// UpdatePassword replaces the stored bcrypt password hash for the given user.
+func UpdatePassword(username string, password []byte) error {
+	hashed, err := bcrypt.GenerateFromPassword(password, 12)
+	if err != nil {
+		return err
+	}
+	_, err = db.Exec("UPDATE USERS SET PASSWORD = ? WHERE USERNAME = ?", hashed, username)
+	return err
+}
+
 // ChangePermissions updated the permissions of a user in the database.
 func ChangePermissions(username string, permissions uint64) error {
 	_, err := db.Exec("UPDATE USERS SET PERMISSIONS = ? WHERE USERNAME = ?", strconv.FormatUint(permissions, 10), username)

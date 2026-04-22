@@ -689,6 +689,14 @@ func initCommands() {
 			reqPerms: permissions.PermissionField["ADMIN"],
 			category: "admin",
 		},
+		"resetpass": {
+			handler:  cmdResetPassword,
+			minArgs:  2,
+			usage:    "Usage: /resetpass <username> <new_password>",
+			desc:     "Resets the password for the given account.",
+			reqPerms: permissions.PermissionField["ADMIN"],
+			category: "admin",
+		},
 		"roll": {
 			handler:  cmdRoll,
 			minArgs:  1,

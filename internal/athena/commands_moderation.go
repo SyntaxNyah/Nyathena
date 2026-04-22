@@ -766,6 +766,28 @@ func cmdRemoveUser(client *Client, args []string, _ string) {
 	addToBuffer(client, "CMD", fmt.Sprintf("Removed user %v.", args[0]), true)
 }
 
+// Handles /resetpass
+
+func cmdResetPassword(client *Client, args []string, _ string) {
+	username := args[0]
+	newPassword := args[1]
+
+	if !db.UserExists(username) {
+		client.SendServerMessage("User does not exist.")
+		return
+	}
+
+	err := db.UpdatePassword(username, []byte(newPassword))
+	if err != nil {
+		client.SendServerMessage("Failed to reset password.")
+		logger.LogError(err.Error())
+		return
+	}
+
+	client.SendServerMessage(fmt.Sprintf("Password for user %v has been reset.", username))
+	addToBuffer(client, "CMD", fmt.Sprintf("Reset password for user %v.", username), true)
+}
+
 // Handles /roll
 
 func cmdChangeRole(client *Client, args []string, _ string) {
