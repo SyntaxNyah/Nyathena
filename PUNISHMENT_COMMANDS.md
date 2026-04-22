@@ -481,6 +481,21 @@ You can also use the general `/unpunish` command:
 /unpunish -t icwarp 42
 ```
 
+## Self-Punishment (User Commands)
+
+### `/maso`
+
+Any player (no moderator permissions required) can use `/maso` to self-apply a **random punishment** lasting **10 minutes**.
+
+- Picks randomly from the full pool of stateless punishment effects.
+- Typing `/maso` again while a punishment is active **rerolls** it to a different random punishment (resetting the 10-minute timer).
+- The punishment expires automatically after 10 minutes.
+
+```
+/maso        # Apply a random punishment to yourself for 10 minutes
+/maso        # (again) Reroll to a different random punishment
+```
+
 ## Notes
 
 - Punishments persist across area changes

@@ -252,6 +252,7 @@ type Client struct {
 	sessionChipsAwarded int64        // Chips already awarded mid-session (hourly ticker); subtracted at disconnect to avoid double-counting
 	ignoredIPIDs        sync.Map     // Set of IPIDs permanently ignored by this client. Key: IPID string, Value: struct{}. Lock-free reads.
 	lastPingNano        atomic.Int64 // Unix nanosecond timestamp of the last CH packet; 0 until seeded on join.
+	masoPunishment      PunishmentType // Active self-applied maso punishment type; PunishmentNone if inactive.
 }
 
 // NewClient returns a new client.
