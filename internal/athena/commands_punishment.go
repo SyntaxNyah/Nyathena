@@ -333,6 +333,29 @@ func cmdUnpunish(client *Client, args []string, usage string) {
 		return
 	}
 
+	// /unpunish all — clear all punishments from every client in the moderator's area.
+	if strings.EqualFold(flags.Arg(0), "all") {
+		myArea := client.Area()
+		var count int
+		clients.ForEach(func(c *Client) {
+			if c.Area() != myArea {
+				return
+			}
+			c.RemoveAllPunishments()
+			c.SetMuted(Unmuted)
+			c.SetUnmuteTime(time.Time{})
+			c.SetJailedUntil(time.Time{})
+			if err := db.DeleteAllPunishments(c.Ipid()); err != nil {
+				logger.LogErrorf("Failed to remove persistent punishments for %v: %v", c.Ipid(), err)
+			}
+			c.SendServerMessage("All punishments have been removed.")
+			count++
+		})
+		client.SendServerMessage(fmt.Sprintf("Removed all punishments from %v client(s) in this area.", count))
+		addToBuffer(client, "CMD", fmt.Sprintf("Removed all punishments from entire area (%v client(s)).", count), false)
+		return
+	}
+
 	toUnpunish := getUidList(strings.Split(flags.Arg(0), ","))
 	var count int
 	var report string

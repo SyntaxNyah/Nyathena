@@ -70,6 +70,7 @@ var commandHelp = map[string]struct {
 	"thirdperson":        {"/thirdperson [-d duration] [-r reason] <uid1>,<uid2>...", "Forces IC messages into third-person narration using the player's display name, with automatic mood tags (e.g. 'HELLO??' → 'Phoenix demands an explanation [feral][confused]').", "Moderator", "/thirdperson 5 -d 1h -r \"Narration arc\"", []string{"unreliablenarrator", "spotlight", "unpunish"}},
 	"unreliablenarrator": {"/unreliablenarrator [-d duration] [-r reason] <uid1>,<uid2>...", "Makes IC messages sound suspiciously unreliable with hedges, contradictions, and self-doubting commentary (e.g. 'I didn't do it' → 'I allegedly didn't do it (or so I recall.)').", "Moderator", "/unreliablenarrator 5 -d 20m -r \"Stop gaslighting the courtroom\"", []string{"thirdperson", "paranoid", "unpunish"}},
 	"uncannyvalley":      {"/uncannyvalley [-d duration] [-r reason] <uid1>,<uid2>...", "Adds glitchy system notes to IC messages and subtly mutates the player's display name each message (e.g. name: 'Phoenix' → 'Phœnix_', message appended with '[checksum mismatch]').", "Moderator", "/uncannyvalley 5 -d 45m -r \"Become slightly incorrect\"", []string{"unreliablenarrator", "emoji", "unpunish"}},
+	"maso":               {"/maso", "Self-apply a random punishment for 10 minutes. Type /maso again while active to reroll to a different random punishment.", "None (any player)", "/maso", []string{"unpunish", "roulette"}},
 }
 
 // handleHelp handles the /help command.
@@ -163,6 +164,11 @@ func (b *Bot) handleHelp(s *discordgo.Session, i *discordgo.InteractionCreate) {
 			{
 				Name:   "⚙️ Server Control",
 				Value:  "`/restart` — Restart the server",
+				Inline: false,
+			},
+			{
+				Name:   "🎲 Fun (All Players)",
+				Value:  "`/maso` — Self-apply a random punishment for 10 min (type again to reroll)",
 				Inline: false,
 			},
 		},
