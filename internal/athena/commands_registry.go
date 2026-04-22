@@ -1712,8 +1712,8 @@ func initCommands() {
 		"unpunish": {
 			handler:  cmdUnpunish,
 			minArgs:  1,
-			usage:    "Usage: /unpunish [-t punishment_type] <uid1>,<uid2>...\n-t: Specific punishment type to remove (omit to remove all).",
-			desc:     "Removes punishment(s) from user(s).",
+			usage:    "Usage: /unpunish all\n       /unpunish [-t punishment_type] <uid1>,<uid2>...\nall: Remove all punishments from every client in your current area.\n-t: Specific punishment type to remove (omit to remove all).",
+			desc:     "Removes punishment(s) from user(s), or all punishments from the entire area with 'all'.",
 			reqPerms: permissions.PermissionField["MUTE"],
 			category: "punishment",
 		},
