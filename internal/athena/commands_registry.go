@@ -129,6 +129,14 @@ func initCommands() {
 			reqPerms: permissions.PermissionField["NONE"],
 			category: "area",
 		},
+		"arealog": {
+			handler:  cmdAreaLog,
+			minArgs:  1,
+			usage:    "Usage: /arealog <enable|disable>",
+			desc:     "Admin: Enables or disables area log silencing. While disabled, messages are not written to the area log file and modcall notifications are not forwarded to moderators or the Discord webhook.",
+			reqPerms: permissions.PermissionField["ADMIN"],
+			category: "admin",
+		},
 		"ban": {
 			handler:  cmdBan,
 			minArgs:  3,

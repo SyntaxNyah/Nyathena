@@ -1132,3 +1132,20 @@ func cmdAreaDesc(client *Client, args []string, _ string) {
 		addToBuffer(client, "CMD", fmt.Sprintf("Set area description: %v", newDesc), false)
 	}
 }
+
+// Handles /arealog
+
+func cmdAreaLog(client *Client, args []string, _ string) {
+	switch args[0] {
+	case "disable":
+		client.Area().SetLogSilenced(true)
+		client.SendServerMessage("Area logging disabled. Messages in this area will not be written to the area log file, and modcall notifications will not be forwarded to moderators.")
+		addToBuffer(client, "CMD", "Disabled area logging (log silencing active).", false)
+	case "enable":
+		client.Area().SetLogSilenced(false)
+		client.SendServerMessage("Area logging enabled. Normal logging and modcall forwarding resumed.")
+		addToBuffer(client, "CMD", "Enabled area logging (log silencing cleared).", false)
+	default:
+		client.SendServerMessage("Usage: /arealog <enable|disable>")
+	}
+}
