@@ -123,6 +123,7 @@ type Area struct {
 	icWarpGlobal        bool               // whether global icwarp is enabled
 	icWarpExemptUID     int                // UID exempt from global icwarp (-1 = none)
 	icMessages          map[string][]icMsg // per-IPID IC message history for icwarp
+	logSilenced         bool               // whether area-log writing and modcall forwarding are suppressed
 }
 
 type AreaData struct {
@@ -1172,5 +1173,22 @@ func (a *Area) SetICWarpGlobal(enabled bool, exemptUID int) {
 	a.mu.Lock()
 	a.icWarpGlobal = enabled
 	a.icWarpExemptUID = exemptUID
+	a.mu.Unlock()
+}
+
+// LogSilenced reports whether area-log file writing and modcall forwarding are
+// suppressed for this area (set via /area log disable).
+func (a *Area) LogSilenced() bool {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return a.logSilenced
+}
+
+// SetLogSilenced enables or disables log silencing for this area.
+// When true, messages are not written to the area log file and modcall
+// notifications are not forwarded to moderators or the Discord webhook.
+func (a *Area) SetLogSilenced(v bool) {
+	a.mu.Lock()
+	a.logSilenced = v
 	a.mu.Unlock()
 }

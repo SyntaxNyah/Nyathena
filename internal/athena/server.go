@@ -827,8 +827,8 @@ func addToBuffer(client *Client, action string, message string, audit bool) {
 	s := b.String()
 	snap.area.UpdateBuffer(s)
 
-	// Write to area-specific log file if area logging is enabled.
-	if logger.EnableAreaLogging {
+	// Write to area-specific log file if area logging is enabled and not silenced.
+	if logger.EnableAreaLogging && !snap.area.LogSilenced() {
 		b.Reset()
 		b.WriteByte('[')
 		b.WriteString(now)
