@@ -1138,9 +1138,10 @@ func cmdAreaDesc(client *Client, args []string, _ string) {
 func cmdAreaLog(client *Client, args []string, _ string) {
 	switch args[0] {
 	case "disable":
+		// Log the disable event before activating silencing so the buffer captures it.
+		addToBuffer(client, "CMD", "Disabled area logging (log silencing active).", false)
 		client.Area().SetLogSilenced(true)
 		client.SendServerMessage("Area logging disabled. Messages in this area will not be written to the area log file, and modcall notifications will not be forwarded to moderators.")
-		addToBuffer(client, "CMD", "Disabled area logging (log silencing active).", false)
 	case "enable":
 		client.Area().SetLogSilenced(false)
 		client.SendServerMessage("Area logging enabled. Normal logging and modcall forwarding resumed.")

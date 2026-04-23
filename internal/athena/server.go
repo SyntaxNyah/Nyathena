@@ -825,7 +825,12 @@ func addToBuffer(client *Client, action string, message string, audit bool) {
 	b.WriteString(" | ")
 	b.WriteString(message)
 	s := b.String()
-	snap.area.UpdateBuffer(s)
+	// Only add to the in-memory buffer when log silencing is not active, so that
+	// messages sent during a silence window are never included in modcall reports
+	// or webhook posts.
+	if !snap.area.LogSilenced() {
+		snap.area.UpdateBuffer(s)
+	}
 
 	// Write to area-specific log file if area logging is enabled and not silenced.
 	if logger.EnableAreaLogging && !snap.area.LogSilenced() {
