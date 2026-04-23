@@ -322,7 +322,7 @@ func cmdGlobal(client *Client, args []string, _ string) {
 		client.SendServerMessage(fmt.Sprintf("New users must wait %d %s before using OOC chat.", remaining, unit))
 		return
 	}
-	writeToAll("CT", fmt.Sprintf("[GLOBAL] %v", client.OOCName()), strings.Join(args, " "), "1")
+	writeToAll("CT", fmt.Sprintf("[GLOBAL] [UID %d] %v", client.Uid(), client.OOCName()), strings.Join(args, " "), "1")
 }
 
 // Handles /hide
