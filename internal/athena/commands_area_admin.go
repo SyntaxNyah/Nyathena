@@ -1142,9 +1142,9 @@ func cmdAreaLog(client *Client, args []string, _ string) {
 		client.SendServerMessage("Area logging disabled. Messages in this area will not be written to the area log file, and modcall notifications will not be forwarded to moderators.")
 		addToBuffer(client, "CMD", "Disabled area logging (log silencing active).", false)
 	case "enable":
+		addToBuffer(client, "CMD", "Enabled area logging (log silencing cleared).", false)
 		client.Area().SetLogSilenced(false)
 		client.SendServerMessage("Area logging enabled. Normal logging and modcall forwarding resumed.")
-		addToBuffer(client, "CMD", "Enabled area logging (log silencing cleared).", false)
 	default:
 		client.SendServerMessage("Usage: /arealog <enable|disable>")
 	}
