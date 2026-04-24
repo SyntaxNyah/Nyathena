@@ -560,7 +560,7 @@ func cmdLog(client *Client, args []string, _ string) {
 // Handles /login
 
 func cmdMotd(client *Client, _ []string, _ string) {
-	client.SendServerMessage(GetMotd())
+	client.SendMotd(GetMotd())
 }
 
 // Handles /move

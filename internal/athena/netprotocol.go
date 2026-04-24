@@ -243,7 +243,7 @@ func pktReqDone(client *Client, _ *packet.Packet) {
 	sendPlayerListToClient(client)
 	broadcastPlayerJoin(client)
 	if motd := GetMotd(); motd != "" {
-		client.SendServerMessage(motd)
+		client.SendMotd(motd)
 	}
 	client.restorePunishments()
 

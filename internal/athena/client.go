@@ -521,6 +521,16 @@ func (client *Client) SendServerMessage(message string) {
 	client.SendPacket("CT", encodedServerName, encode(message), "1")
 }
 
+// SendMotd sends the MOTD to the client. It splits on newlines so that each
+// line arrives as its own OOC packet, avoiding embedded newlines in a single
+// AO2 packet which some clients may not parse correctly.
+func (client *Client) SendMotd(motd string) {
+	motd = strings.TrimRight(motd, "\r\n")
+	for _, line := range strings.Split(strings.ReplaceAll(motd, "\r\n", "\n"), "\n") {
+		client.SendServerMessage(line)
+	}
+}
+
 // KickForRateLimit kicks the client for exceeding the message (IC/OOC/music) rate limit.
 // Message-based rate limits always result in a kick, not a ban. Only raw packet flooding
 // (handled separately) results in an automatic ban.

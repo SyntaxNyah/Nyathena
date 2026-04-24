@@ -110,6 +110,15 @@ description = "A brand new server!"
 
 # Sets the server's message of the day (MoTD)
 # This is sent to every player when they first join the server, or with /motd.
+# Use \n for line breaks, or triple-quoted strings for a multiline block:
+#
+# motd = "Rule 1\nRule 2\nRule 3"
+#
+# motd = """
+# Welcome to my server!
+# Rule 1: Be nice.
+# Rule 2: Have fun.
+# """
 motd = "Welcome to my server!"
 
 # The maximum amount of players who can join the server at once.
