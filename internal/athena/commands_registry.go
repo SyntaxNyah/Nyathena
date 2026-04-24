@@ -521,7 +521,7 @@ func initCommands() {
 			desc:     "Mutes an IPID from voice chat.  Any live clients are ejected.",
 			reqPerms: permissions.PermissionField["MUTE"],
 			voiceCmd: true,
-			category: "moderation",
+			category: "voice",
 		},
 		"vunmute": {
 			handler:  cmdVunmute,
@@ -530,7 +530,7 @@ func initCommands() {
 			desc:     "Lifts a voice mute.",
 			reqPerms: permissions.PermissionField["MUTE"],
 			voiceCmd: true,
-			category: "moderation",
+			category: "voice",
 		},
 		"vban": {
 			handler:  cmdVban,
@@ -539,7 +539,7 @@ func initCommands() {
 			desc:     "Bans an IPID from voice chat.  Any live clients are ejected.",
 			reqPerms: permissions.PermissionField["BAN"],
 			voiceCmd: true,
-			category: "moderation",
+			category: "voice",
 		},
 		"vunban": {
 			handler:  cmdVunban,
@@ -548,7 +548,7 @@ func initCommands() {
 			desc:     "Lifts a voice ban.",
 			reqPerms: permissions.PermissionField["BAN"],
 			voiceCmd: true,
-			category: "moderation",
+			category: "voice",
 		},
 		"vkick": {
 			handler:  cmdVkick,
@@ -557,7 +557,7 @@ func initCommands() {
 			desc:     "Ejects one or more clients from voice chat without persistent punishment.",
 			reqPerms: permissions.PermissionField["MUTE"],
 			voiceCmd: true,
-			category: "moderation",
+			category: "voice",
 		},
 		"vlist": {
 			handler:  cmdVlist,
@@ -566,7 +566,7 @@ func initCommands() {
 			desc:     "Lists voice participants in the current area.",
 			reqPerms: permissions.PermissionField["NONE"],
 			voiceCmd: true,
-			category: "general",
+			category: "voice",
 		},
 		"vbans": {
 			handler:  cmdVbans,
@@ -575,7 +575,7 @@ func initCommands() {
 			desc:     "Lists active voice mutes and voice bans.",
 			reqPerms: permissions.PermissionField["BAN"],
 			voiceCmd: true,
-			category: "moderation",
+			category: "voice",
 		},
 		"voicearea": {
 			handler:  cmdVoiceArea,
@@ -584,7 +584,7 @@ func initCommands() {
 			desc:     "Toggles voice chat for the current area.  Ejects participants when turned off.",
 			reqPerms: permissions.PermissionField["MODIFY_AREA"],
 			voiceCmd: true,
-			category: "area",
+			category: "voice",
 		},
 		"narrator": {
 			handler:  cmdNarrator,
@@ -2392,6 +2392,7 @@ var helpCategoryList = []helpCategory{
 	{"jobs", "💼", "Jobs", "Earn chips without gambling — cooldown-based jobs."},
 	{"account", "👤", "Account", "Register, login, wardrobe, and profile."},
 	{"moderation", "🔨", "Moderation", "Mute, kick, ban, jail, and other staff tools."},
+	{"voice", "🎙️", "Voice Chat", "Voice-chat moderation and per-area controls.  Requires a WebAO client with WebRTC support."},
 	{"punishment", "🎭", "Punishments", "Text-effect and behaviour punishments for players."},
 	{"admin", "⚙️", "Admin", "Server configuration, user management, runtime tweaks."},
 }
