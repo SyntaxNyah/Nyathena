@@ -273,6 +273,14 @@ func initCommands() {
 			reqPerms: permissions.PermissionField["BAN_INFO"],
 			category: "moderation",
 		},
+		"ga": {
+			handler:  cmdPlayers,
+			minArgs:  0,
+			usage:    "Usage: /ga",
+			desc:     "Shows players in the current area (shortcut for /players).",
+			reqPerms: permissions.PermissionField["NONE"],
+			category: "general",
+		},
 		"gas": {
 			handler:  func(client *Client, _ []string, _ string) { cmdPlayers(client, []string{"-a"}, "") },
 			minArgs:  0,
