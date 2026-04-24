@@ -115,15 +115,12 @@ description = "A brand new server!"
 motd = """
 Welcome to [Server Name]!
 
-Server Rules:
 1. Be respectful to all players and staff.
 2. No harassment, hate speech, or discrimination of any kind.
 3. No NSFW content outside of designated areas.
 4. No spamming IC or OOC chat.
-5. Staff decisions are final — if you have a concern, take it to a senior mod.
-
-If you are experiencing issues, please contact a staff member.
-Join our Discord: https://discord.gg/example
+5. Staff decisions are final.
+6. Have fun!
 """
 
 # The maximum amount of players who can join the server at once.
