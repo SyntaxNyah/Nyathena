@@ -2402,7 +2402,7 @@ var helpCategoryList = []helpCategory{
 func clientCanUseCommand(client *Client, cmd Command) bool {
 	return permissions.HasPermission(client.Perms(), cmd.reqPerms) ||
 		(cmd.reqPerms == permissions.PermissionField["CM"] && client.Area().HasCM(client.Uid())) ||
-		(cmd.reqPerms == permissions.PermissionField["DJ"] && client.Area().HasCM(client.Uid()))
+		(cmd.reqPerms == permissions.PermissionField["DJ"] && client.HasCMPermission())
 }
 
 // ParseCommand calls the appropriate function for a given command.
