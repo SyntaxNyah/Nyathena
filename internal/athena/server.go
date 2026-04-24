@@ -392,7 +392,7 @@ func NewServer(conf *settings.Config) (*Server, error) {
 			logger.LogWarningf("Area %v has an invalid or undefined background, defaulting to 'default'.", a.Name)
 			a.Bg = "default"
 		}
-		s.areas = append(s.areas, area.NewArea(a, len(s.characters), conf.BufSize, evi_mode))
+		s.areas = append(s.areas, area.NewAreaWithVoiceDefault(a, len(s.characters), conf.BufSize, evi_mode, conf.DefaultAreaVoiceAllowed))
 	}
 	s.areaNames = areaNameBuilder.String()
 

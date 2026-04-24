@@ -124,6 +124,7 @@ type Area struct {
 	icWarpExemptUID     int                // UID exempt from global icwarp (-1 = none)
 	icMessages          map[string][]icMsg // per-IPID IC message history for icwarp
 	logSilenced         bool               // whether area-log writing and modcall forwarding are suppressed
+	voiceAllowed        bool               // runtime toggle: whether voice chat is permitted in this area
 }
 
 type AreaData struct {
@@ -144,6 +145,11 @@ type AreaData struct {
 	Casino_jackpot    bool   `toml:"casino_slots_jackpot"`
 	Mirror_area       bool   `toml:"mirror_area"`
 	Punishment_area   bool   `toml:"punishment_area"`
+	// Voice_allowed is tri-state: nil means "inherit the server default", an
+	// explicit true/false in areas.toml overrides it.  This lets operators
+	// keep voice off by default for a quiet RP area even when the server has
+	// voice globally enabled.
+	Voice_allowed *bool `toml:"voice_allowed"`
 }
 
 type defaults struct {
@@ -165,8 +171,20 @@ type defaults struct {
 	punishment_area   bool
 }
 
-// NewArea returns a new area.
+// NewArea returns a new area.  Voice defaults to allowed; use
+// NewAreaWithVoiceDefault to override the default for operators who want
+// voice disabled unless explicitly enabled per-area.
 func NewArea(data AreaData, charlen int, bufsize int, evi_mode EvidenceMode) *Area {
+	return NewAreaWithVoiceDefault(data, charlen, bufsize, evi_mode, true)
+}
+
+// NewAreaWithVoiceDefault returns a new area, resolving voice_allowed against
+// the supplied server-level default when the TOML field is absent (nil).
+func NewAreaWithVoiceDefault(data AreaData, charlen int, bufsize int, evi_mode EvidenceMode, serverDefaultVoiceAllowed bool) *Area {
+	voiceAllowed := serverDefaultVoiceAllowed
+	if data.Voice_allowed != nil {
+		voiceAllowed = *data.Voice_allowed
+	}
 	return &Area{
 		data: data,
 		defaults: defaults{
@@ -206,6 +224,7 @@ func NewArea(data AreaData, charlen int, bufsize int, evi_mode EvidenceMode) *Ar
 		mirrorArea:          data.Mirror_area,
 		punishmentArea:      data.Punishment_area,
 		icWarpExemptUID:     -1,
+		voiceAllowed:        voiceAllowed,
 	}
 }
 
@@ -641,6 +660,24 @@ func (a *Area) Reset() {
 	a.playerVotes = nil
 	a.spectateMode = false
 	a.spectateInvited = make(map[int]struct{})
+	a.mu.Unlock()
+}
+
+// VoiceAllowed returns whether voice chat is currently permitted in this area.
+// Separate from the server-level enable_voice toggle: even when voice is
+// globally enabled, an area can opt out.
+func (a *Area) VoiceAllowed() bool {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return a.voiceAllowed
+}
+
+// SetVoiceAllowed updates the runtime voice permission for this area.  Callers
+// are responsible for ejecting any currently-joined voice peers when toggling
+// this to false.
+func (a *Area) SetVoiceAllowed(b bool) {
+	a.mu.Lock()
+	a.voiceAllowed = b
 	a.mu.Unlock()
 }
 

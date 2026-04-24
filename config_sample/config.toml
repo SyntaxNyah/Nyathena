@@ -640,3 +640,25 @@ stun_servers = [ "stun:stun.l.google.com:19302" ]
 turn_servers = []
 turn_username = ""
 turn_credential = ""
+
+# Default voice-allowed setting for areas that don't set `voice_allowed`
+# explicitly in areas.toml.  When true (default), every area permits voice
+# once enable_voice is on; set to false to make voice opt-in per area.
+# Moderators can hot-toggle any area at runtime with /voicearea on|off.
+default_area_voice_allowed = true
+
+# Per-UID rate limit on VC_JOIN packets.  Blunts join/leave spam.  Set
+# join_rate_limit = 0 to disable.
+join_rate_limit = 3
+join_rate_limit_window = 10
+
+# Per-UID rate limit on VC_SIG packets (SDP/ICE relay).  Signalling is
+# naturally bursty during connection setup, so the default is generous.
+# Set sig_rate_limit = 0 to disable.
+sig_rate_limit = 200
+sig_rate_limit_window = 10
+
+# Grace period, in seconds, before a newly-seen IPID may join voice chat.
+# Mirrors new_ipid_ooc_cooldown but scoped to voice.  Blunts drive-by
+# voice trolls on freshly-assigned IPs.  Set to 0 to disable.
+new_ipid_voice_cooldown = 30
