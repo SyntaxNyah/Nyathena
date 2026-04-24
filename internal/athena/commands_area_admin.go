@@ -685,7 +685,7 @@ func cmdNoIntPres(client *Client, args []string, _ string) {
 // Handles /play
 
 func cmdPlay(client *Client, args []string, _ string) {
-	if !client.CanChangeMusic() {
+	if !permissions.HasPermission(client.Perms(), permissions.PermissionField["DJ"]) && !client.CanChangeMusic() {
 		client.SendServerMessage("You are not allowed to change the music in this area.")
 		return
 	}

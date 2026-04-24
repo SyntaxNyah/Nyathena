@@ -34,5 +34,8 @@ permissions = ["CM", "KICK", "BAN", "BYPASS_LOCK", "MOD_EVI", "MODIFY_AREA", "MO
 name = "shadowmod"
 permissions = ["CM", "KICK", "BAN", "BYPASS_LOCK", "MOD_EVI", "MODIFY_AREA", "MOVE_USERS", "MOD_SPEAK", "BAN_INFO", "MOD_CHAT", "MUTE", "LOG", "SHADOW"]
 [[Role]]
+name = "dj"
+permissions = ["DJ"]
+[[Role]]
 name = "admin"
 permissions = ["ADMIN"]

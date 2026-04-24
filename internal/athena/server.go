@@ -959,7 +959,7 @@ func sendLockArup() {
 // getRole returns the role with the corresponding name, or an error if the role does not exist.
 func getRole(name string) (permissions.Role, error) {
 	for _, role := range roles {
-		if role.Name == name {
+		if strings.EqualFold(role.Name, name) {
 			return role, nil
 		}
 	}
