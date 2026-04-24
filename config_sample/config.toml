@@ -110,16 +110,21 @@ description = "A brand new server!"
 
 # Sets the server's message of the day (MoTD)
 # This is sent to every player when they first join the server, or with /motd.
-# Use \n for line breaks, or triple-quoted strings for a multiline block:
-#
-# motd = "Rule 1\nRule 2\nRule 3"
-#
-# motd = """
-# Welcome to my server!
-# Rule 1: Be nice.
-# Rule 2: Have fun.
-# """
-motd = "Welcome to my server!"
+# Use triple-quoted strings (""") for a multiline MOTD — literal newlines are
+# preserved and displayed as line breaks in the OOC log.
+motd = """
+Welcome to [Server Name]!
+
+Server Rules:
+1. Be respectful to all players and staff.
+2. No harassment, hate speech, or discrimination of any kind.
+3. No NSFW content outside of designated areas.
+4. No spamming IC or OOC chat.
+5. Staff decisions are final — if you have a concern, take it to a senior mod.
+
+If you are experiencing issues, please contact a staff member.
+Join our Discord: https://discord.gg/example
+"""
 
 # The maximum amount of players who can join the server at once.
 max_players = 100

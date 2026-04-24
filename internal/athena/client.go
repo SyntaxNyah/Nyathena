@@ -521,14 +521,11 @@ func (client *Client) SendServerMessage(message string) {
 	client.SendPacket("CT", encodedServerName, encode(message), "1")
 }
 
-// SendMotd sends the MOTD to the client. It splits on newlines so that each
-// line arrives as its own OOC packet, avoiding embedded newlines in a single
-// AO2 packet which some clients may not parse correctly.
+// SendMotd sends the MOTD to the client as a single OOC message. Embedded
+// newlines are preserved so the client renders the full block as one cohesive
+// entry rather than repeating the server name on every line.
 func (client *Client) SendMotd(motd string) {
-	motd = strings.TrimRight(motd, "\r\n")
-	for _, line := range strings.Split(strings.ReplaceAll(motd, "\r\n", "\n"), "\n") {
-		client.SendServerMessage(line)
-	}
+	client.SendServerMessage(strings.TrimRight(motd, "\r\n"))
 }
 
 // KickForRateLimit kicks the client for exceeding the message (IC/OOC/music) rate limit.
