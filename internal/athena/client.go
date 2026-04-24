@@ -521,6 +521,13 @@ func (client *Client) SendServerMessage(message string) {
 	client.SendPacket("CT", encodedServerName, encode(message), "1")
 }
 
+// SendMotd sends the MOTD to the client as a single OOC message. Embedded
+// newlines are preserved so the client renders the full block as one cohesive
+// entry rather than repeating the server name on every line.
+func (client *Client) SendMotd(motd string) {
+	client.SendServerMessage(strings.TrimRight(motd, "\r\n"))
+}
+
 // KickForRateLimit kicks the client for exceeding the message (IC/OOC/music) rate limit.
 // Message-based rate limits always result in a kick, not a ban. Only raw packet flooding
 // (handled separately) results in an automatic ban.

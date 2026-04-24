@@ -110,7 +110,22 @@ description = "A brand new server!"
 
 # Sets the server's message of the day (MoTD)
 # This is sent to every player when they first join the server, or with /motd.
-motd = "Welcome to my server!"
+# Use triple-quoted strings (""") for a multiline MOTD — literal newlines are
+# preserved and displayed as line breaks in the OOC log.
+motd = """
+Welcome to [Server Name]!
+
+1. Be respectful to all players and staff.
+2. No harassment, hate speech, or discrimination of any kind.
+3. No NSFW content outside of designated areas.
+4. No spamming IC or OOC chat.
+5. Staff decisions are final.
+6. Have fun!
+
+=== Links ===
+Discord: https://discord.gg/example
+Website: https://example.com
+"""
 
 # The maximum amount of players who can join the server at once.
 max_players = 100
