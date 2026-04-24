@@ -538,3 +538,33 @@ guild_id = ""
 # Right-click the role in Server Settings > Roles and select "Copy Role ID".
 # Leave blank to allow all users to run commands (not recommended).
 mod_role_id = ""
+
+[Voice]
+
+# Opt-in WebRTC voice-chat signalling.  When enabled, clients that support
+# voice (e.g. a patched webAO) can negotiate peer-to-peer audio calls with
+# others in the same area.  The server only relays SDP offers/answers and
+# ICE candidates — no audio ever passes through the server.
+# Disabled by default.  Set to true to allow voice clients to connect.
+enable_voice = false
+
+# Force push-to-talk on the client.  When true, clients are instructed to
+# transmit audio only while the user holds the PTT key.  When false, clients
+# may enable open-mic mode.
+ptt_only = true
+
+# Maximum number of simultaneous voice peers allowed in a single area.
+# Mesh topology scales O(n^2); 6–8 is a practical cap for typical hardware.
+max_peers_per_area = 6
+
+# STUN servers used by clients to discover their public IP for NAT traversal.
+# The default Google STUN server works for most users; add your own for
+# redundancy or privacy.
+stun_servers = [ "stun:stun.l.google.com:19302" ]
+
+# Optional TURN relay servers for clients behind symmetric NAT who cannot
+# reach each other peer-to-peer.  Leave empty unless you operate your own
+# TURN service (e.g. coturn) or have credentials for a hosted one.
+turn_servers = []
+turn_username = ""
+turn_credential = ""
