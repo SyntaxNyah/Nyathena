@@ -29,10 +29,10 @@
 
 [[Role]]
 name = "moderator"
-permissions = ["CM", "KICK", "BAN", "BYPASS_LOCK", "MOD_EVI", "MODIFY_AREA", "MOVE_USERS", "MOD_SPEAK", "BAN_INFO", "MOD_CHAT", "MUTE", "LOG"]
+permissions = ["CM", "KICK", "BAN", "BYPASS_LOCK", "MOD_EVI", "MODIFY_AREA", "MOVE_USERS", "MOD_SPEAK", "BAN_INFO", "MOD_CHAT", "MUTE", "LOG", "DJ"]
 [[Role]]
 name = "shadowmod"
-permissions = ["CM", "KICK", "BAN", "BYPASS_LOCK", "MOD_EVI", "MODIFY_AREA", "MOVE_USERS", "MOD_SPEAK", "BAN_INFO", "MOD_CHAT", "MUTE", "LOG", "SHADOW"]
+permissions = ["CM", "KICK", "BAN", "BYPASS_LOCK", "MOD_EVI", "MODIFY_AREA", "MOVE_USERS", "MOD_SPEAK", "BAN_INFO", "MOD_CHAT", "MUTE", "LOG", "SHADOW", "DJ"]
 [[Role]]
 name = "dj"
 permissions = ["DJ"]

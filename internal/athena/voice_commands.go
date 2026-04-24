@@ -187,6 +187,13 @@ func cmdVkick(client *Client, args []string, usage string) {
 	addToBuffer(client, "CMD", fmt.Sprintf("Voice-kicked %d client(s)", kicked), false)
 }
 
+// voiceClientRequirementHint is shown to mods/users who may wonder why the
+// voice room looks empty or silent.  Vanilla AO2 desktop clients do not speak
+// WebRTC — only WebAO builds that include the VC_* handlers can join voice.
+const voiceClientRequirementHint = "ℹ️ Voice chat requires a WebAO client built with WebRTC support. " +
+	"The classic AO2 desktop client cannot join voice — those players will appear connected for chat but " +
+	"will not be able to speak or hear in voice rooms."
+
 // cmdVlist reports everyone currently in the voice room for the caller's
 // current area.  Public command — all users may invoke it.
 func cmdVlist(client *Client, _ []string, _ string) {
@@ -196,7 +203,7 @@ func cmdVlist(client *Client, _ []string, _ string) {
 	}
 	peers := currentVoicePeers(a)
 	if len(peers) == 0 {
-		client.SendServerMessage("No voice participants in this area.")
+		client.SendServerMessage("No voice participants in this area.\n\n" + voiceClientRequirementHint)
 		return
 	}
 	var b strings.Builder
@@ -271,7 +278,7 @@ func cmdVoiceArea(client *Client, args []string, usage string) {
 	switch strings.ToLower(args[0]) {
 	case "on", "true", "1", "yes":
 		a.SetVoiceAllowed(true)
-		client.SendServerMessage("Voice chat enabled in this area.")
+		client.SendServerMessage("Voice chat enabled in this area.\n\n" + voiceClientRequirementHint)
 		writeToArea(a, "CT", "[SERVER]", "Voice chat has been enabled in this area.", "1")
 		addToBuffer(client, "CMD", "Enabled voice chat in area.", false)
 	case "off", "false", "0", "no":
