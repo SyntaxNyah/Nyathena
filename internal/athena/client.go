@@ -483,6 +483,7 @@ func (client *Client) clientCleanup() {
 			}
 		})
 
+		leaveVoiceForClient(client)
 		if client.Area().PlayerCount() <= 1 {
 			client.Area().Reset()
 			sendLockArup()
@@ -1029,6 +1030,7 @@ func (client *Client) ChangeArea(a *area.Area) bool {
 	}
 	if client.Area() != nil {
 		addToBuffer(client, "AREA", "Left area.", false)
+		leaveVoiceForClient(client)
 		if client.Area().PlayerCount() <= 1 {
 			client.Area().Reset()
 			sendLockArup()

@@ -36,6 +36,7 @@ type Config struct {
 	LogConfig     `toml:"Logging"`
 	MSConfig      `toml:"MasterServer"`
 	DiscordConfig `toml:"Discord"`
+	VoiceConfig   `toml:"Voice"`
 }
 
 type ServerConfig struct {
@@ -150,6 +151,19 @@ type DiscordConfig struct {
 	ModRoleID string `toml:"mod_role_id"`
 }
 
+// VoiceConfig controls the optional WebRTC voice-chat relay.
+// The server never touches media payloads — it only forwards SDP/ICE
+// signalling between peers in the same area.  Disabled by default.
+type VoiceConfig struct {
+	EnableVoice     bool     `toml:"enable_voice"`
+	PTTOnly         bool     `toml:"ptt_only"`
+	MaxPeersPerArea int      `toml:"max_peers_per_area"`
+	STUNServers     []string `toml:"stun_servers"`
+	TURNServers     []string `toml:"turn_servers"`
+	TURNUsername    string   `toml:"turn_username"`
+	TURNCredential  string   `toml:"turn_credential"`
+}
+
 // Returns a default configuration.
 func defaultConfig() *Config {
 	return DefaultConfig()
@@ -233,6 +247,15 @@ func DefaultConfig() *Config {
 			BotToken:  "",
 			GuildID:   "",
 			ModRoleID: "",
+		},
+		VoiceConfig{
+			EnableVoice:     false,
+			PTTOnly:         true,
+			MaxPeersPerArea: 6,
+			STUNServers:     []string{"stun:stun.l.google.com:19302"},
+			TURNServers:     []string{},
+			TURNUsername:    "",
+			TURNCredential:  "",
 		},
 	}
 }

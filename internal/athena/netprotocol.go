@@ -139,6 +139,10 @@ var PacketMap = map[string]pktMapValue{
 	"ZZ":      {0, true, pktModcall},
 	"SETCASE": {7, true, pktSetCase},
 	"CASEA":   {6, true, pktCaseAnn},
+	"VC_JOIN":  {0, true, pktVCJoin},
+	"VC_LEAVE": {0, true, pktVCLeave},
+	"VC_SIG":   {2, true, pktVCSig},
+	"VC_SPEAK": {1, true, pktVCSpeak},
 }
 
 // Handles HI#%
@@ -173,6 +177,7 @@ func pktId(client *Client, _ *packet.Packet) {
 	if config.AssetURL != "" {
 		client.SendPacket("ASS", config.AssetURL)
 	}
+	sendVoiceCaps(client)
 }
 
 // Handles askchaa#%
