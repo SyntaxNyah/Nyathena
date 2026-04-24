@@ -44,6 +44,13 @@ lock_music = false
 # it is also included in the random pool. Staff can toggle at runtime.
 # punishment_area = false
 
+# Per-area voice-chat permission.  Omit this line to inherit the server-level
+# [Voice] default_area_voice_allowed setting.  Uncomment and set explicitly
+# (true/false) to override for quiet RP rooms, courtrooms, etc.
+# Moderators can also flip this at runtime with /voicearea on|off, which
+# ejects current voice participants when switched off.
+# voice_allowed = true
+
 [[Area]]
 name = "Courtroom"
 background = "gs4"

@@ -33,6 +33,7 @@ type Command struct {
 	reqPerms   uint64
 	casinoCmd  bool   // when true, command is hidden/disabled if EnableCasino is false
 	accountCmd bool   // when true, command requires the account system (works without EnableCasino so long as EnableAccounts is true)
+	voiceCmd   bool   // when true, command is hidden/disabled if EnableVoice is false
 	category   string // help category (e.g. "general", "casino", "punishment")
 }
 
@@ -512,6 +513,78 @@ func initCommands() {
 			desc:     "Mutes users(s) from IC, OOC, changing music, and/or judge controls.",
 			reqPerms: permissions.PermissionField["MUTE"],
 			category: "moderation",
+		},
+		"vmute": {
+			handler:  cmdVmute,
+			minArgs:  1,
+			usage:    "Usage: /vmute [-d seconds] [-r reason] <ipid1>,<ipid2>...",
+			desc:     "Mutes an IPID from voice chat.  Any live clients are ejected.",
+			reqPerms: permissions.PermissionField["MUTE"],
+			voiceCmd: true,
+			category: "voice",
+		},
+		"vunmute": {
+			handler:  cmdVunmute,
+			minArgs:  1,
+			usage:    "Usage: /vunmute <ipid1>,<ipid2>...",
+			desc:     "Lifts a voice mute.",
+			reqPerms: permissions.PermissionField["MUTE"],
+			voiceCmd: true,
+			category: "voice",
+		},
+		"vban": {
+			handler:  cmdVban,
+			minArgs:  1,
+			usage:    "Usage: /vban [-d seconds] [-r reason] <ipid1>,<ipid2>...",
+			desc:     "Bans an IPID from voice chat.  Any live clients are ejected.",
+			reqPerms: permissions.PermissionField["BAN"],
+			voiceCmd: true,
+			category: "voice",
+		},
+		"vunban": {
+			handler:  cmdVunban,
+			minArgs:  1,
+			usage:    "Usage: /vunban <ipid1>,<ipid2>...",
+			desc:     "Lifts a voice ban.",
+			reqPerms: permissions.PermissionField["BAN"],
+			voiceCmd: true,
+			category: "voice",
+		},
+		"vkick": {
+			handler:  cmdVkick,
+			minArgs:  1,
+			usage:    "Usage: /vkick <uid1>,<uid2>...  |  /vkick -i <ipid1>,<ipid2>...",
+			desc:     "Ejects one or more clients from voice chat without persistent punishment.",
+			reqPerms: permissions.PermissionField["MUTE"],
+			voiceCmd: true,
+			category: "voice",
+		},
+		"vlist": {
+			handler:  cmdVlist,
+			minArgs:  0,
+			usage:    "Usage: /vlist",
+			desc:     "Lists voice participants in the current area.",
+			reqPerms: permissions.PermissionField["NONE"],
+			voiceCmd: true,
+			category: "voice",
+		},
+		"vbans": {
+			handler:  cmdVbans,
+			minArgs:  0,
+			usage:    "Usage: /vbans",
+			desc:     "Lists active voice mutes and voice bans.",
+			reqPerms: permissions.PermissionField["BAN"],
+			voiceCmd: true,
+			category: "voice",
+		},
+		"voicearea": {
+			handler:  cmdVoiceArea,
+			minArgs:  0,
+			usage:    "Usage: /voicearea on|off",
+			desc:     "Toggles voice chat for the current area.  Ejects participants when turned off.",
+			reqPerms: permissions.PermissionField["MODIFY_AREA"],
+			voiceCmd: true,
+			category: "voice",
 		},
 		"narrator": {
 			handler:  cmdNarrator,
@@ -2319,6 +2392,7 @@ var helpCategoryList = []helpCategory{
 	{"jobs", "💼", "Jobs", "Earn chips without gambling — cooldown-based jobs."},
 	{"account", "👤", "Account", "Register, login, wardrobe, and profile."},
 	{"moderation", "🔨", "Moderation", "Mute, kick, ban, jail, and other staff tools."},
+	{"voice", "🎙️", "Voice Chat", "Voice-chat moderation and per-area controls.  Requires a WebAO client with WebRTC support."},
 	{"punishment", "🎭", "Punishments", "Text-effect and behaviour punishments for players."},
 	{"admin", "⚙️", "Admin", "Server configuration, user management, runtime tweaks."},
 }
@@ -2337,6 +2411,7 @@ func ParseCommand(client *Client, command string, args []string) {
 	// Account commands are available when either the casino (which uses accounts)
 	// or the standalone account system is enabled.
 	accountsEnabled := config != nil && (config.EnableCasino || config.EnableAccounts)
+	voiceEnabledNow := config != nil && config.EnableVoice
 
 	if command == "help" {
 		// /help <category|command> — drill down into a category or show command usage
@@ -2357,6 +2432,9 @@ func ParseCommand(client *Client, command string, args []string) {
 						if cmd.accountCmd && !accountsEnabled {
 							continue
 						}
+						if cmd.voiceCmd && !voiceEnabledNow {
+							continue
+						}
 						if clientCanUseCommand(client, cmd) {
 							lines = append(lines, fmt.Sprintf("  /%v — %v", name, cmd.desc))
 						}
@@ -2374,7 +2452,7 @@ func ParseCommand(client *Client, command string, args []string) {
 
 			// Not a category — try to look up as a specific command
 			cmd, exists := Commands[cmdName]
-			if exists && !(cmd.casinoCmd && !casinoEnabled) && !(cmd.accountCmd && !accountsEnabled) {
+			if exists && !(cmd.casinoCmd && !casinoEnabled) && !(cmd.accountCmd && !accountsEnabled) && !(cmd.voiceCmd && !voiceEnabledNow) {
 				if clientCanUseCommand(client, cmd) {
 					client.SendServerMessage(cmd.usage)
 				} else {
@@ -2424,6 +2502,9 @@ func ParseCommand(client *Client, command string, args []string) {
 				if cmd.accountCmd && !accountsEnabled {
 					continue
 				}
+				if cmd.voiceCmd && !voiceEnabledNow {
+					continue
+				}
 				if clientCanUseCommand(client, cmd) {
 					hasAny = true
 					break
@@ -2452,6 +2533,10 @@ func ParseCommand(client *Client, command string, args []string) {
 	}
 	if cmd.accountCmd && !accountsEnabled {
 		client.SendServerMessage("The player account system is not enabled on this server.")
+		return
+	}
+	if cmd.voiceCmd && !voiceEnabledNow {
+		client.SendServerMessage("Voice chat is not enabled on this server.  Set enable_voice = true in [Voice] to use voice commands.")
 		return
 	}
 	if clientCanUseCommand(client, cmd) {

@@ -35,6 +35,7 @@ package athena
 
 import (
 	"encoding/json"
+	"fmt"
 	"strconv"
 	"strings"
 	"sync"
@@ -245,6 +246,40 @@ func pktVCJoin(client *Client, _ *packet.Packet) {
 	if a == nil {
 		return
 	}
+	if !a.VoiceAllowed() {
+		client.SendServerMessage("Voice chat is not permitted in this area.")
+		return
+	}
+	if banned, remaining, reason := IsVoiceBanned(client.Ipid()); banned {
+		msg := "You are banned from voice chat."
+		if remaining > 0 {
+			msg += fmt.Sprintf(" (%ds remaining)", remaining)
+		}
+		if reason != "" {
+			msg += " Reason: " + reason
+		}
+		client.SendServerMessage(msg)
+		return
+	}
+	if muted, remaining, reason := IsVoiceMuted(client.Ipid()); muted {
+		msg := "You are muted from voice chat."
+		if remaining > 0 {
+			msg += fmt.Sprintf(" (%ds remaining)", remaining)
+		}
+		if reason != "" {
+			msg += " Reason: " + reason
+		}
+		client.SendServerMessage(msg)
+		return
+	}
+	if wait := touchVoiceFirstSeen(client.Ipid()); wait > 0 {
+		client.SendServerMessage(fmt.Sprintf("New users must wait %ds before using voice chat.", wait))
+		return
+	}
+	if ok, retry := allowVoiceJoin(client.Uid()); !ok {
+		client.SendServerMessage(fmt.Sprintf("Voice join rate limit: try again in %ds.", retry))
+		return
+	}
 	uid := client.Uid()
 	if inVoiceRoom(a, uid) {
 		return
@@ -291,6 +326,11 @@ func pktVCSig(client *Client, p *packet.Packet) {
 	}
 	fromUID := client.Uid()
 	if !inVoiceRoom(a, fromUID) {
+		return
+	}
+	if ok, _ := allowVoiceSig(fromUID); !ok {
+		// Silently drop — signalling bursts are noisy and a message per drop
+		// would spam the sender.  A misbehaving client will see failed ICE.
 		return
 	}
 	toUID, err := strconv.Atoi(strings.TrimSpace(p.Body[0]))
