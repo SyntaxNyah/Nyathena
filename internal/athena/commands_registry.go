@@ -534,7 +534,7 @@ func initCommands() {
 			minArgs:  1,
 			usage:    "Usage: /play <song>",
 			desc:     "Plays a song.",
-			reqPerms: permissions.PermissionField["CM"],
+			reqPerms: permissions.PermissionField["DJ"],
 			category: "area",
 		},
 		"players": {
@@ -2319,7 +2319,8 @@ var helpCategoryList = []helpCategory{
 // factoring in the special CM check.
 func clientCanUseCommand(client *Client, cmd Command) bool {
 	return permissions.HasPermission(client.Perms(), cmd.reqPerms) ||
-		(cmd.reqPerms == permissions.PermissionField["CM"] && client.Area().HasCM(client.Uid()))
+		(cmd.reqPerms == permissions.PermissionField["CM"] && client.Area().HasCM(client.Uid())) ||
+		(cmd.reqPerms == permissions.PermissionField["DJ"] && client.Area().HasCM(client.Uid()))
 }
 
 // ParseCommand calls the appropriate function for a given command.
