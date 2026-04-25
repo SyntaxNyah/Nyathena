@@ -263,6 +263,25 @@ Enabled with `enable_casino = true`. Requires player accounts (`/register`).
 
 See `CASINO_COMMANDS.md` for the full reference.
 
+### Custom Tags (Admin)
+
+Admins can mint cosmetic tags at runtime without rebuilding the server. Custom tags share the same equip system as the built-in shop tags (`/settag`, `[Name]` shown in `/gas` and `/players`) but have their own DB table (`CUSTOM_TAGS`) and are only ownable via admin grant — they never appear in `/shop` and never cost chips.
+
+| Command | Permission | Purpose |
+|---------|------------|---------|
+| `/createtag <id> <display name>` | `ADMIN` | Create a new custom tag. Id must be 2–32 lowercase letters/digits/underscores; display name (≤30 chars, no `[` or `]`) is what shows in brackets. Rejects ids that collide with built-in shop tags. |
+| `/deletetag <id>` | `ADMIN` | Delete a custom tag and clean up every grant + active equip referencing it. Built-in tag ids are protected. |
+| `/grantcustomtag <username> <tag_id>` | `ADMIN` | Grant any tag (built-in or custom) to a registered player account. Looks up the account's IPID by username — the player must have logged in at least once so the IPID is linked. Idempotent. |
+| `/revokecustomtag <username> <tag_id>` | `ADMIN` | Revoke a previously granted tag from an account; clears it from their active equip if equipped. |
+| `/listcustomtags` | none | List every custom tag with its id, name, creator, and creation date. Visible to all players. |
+
+**Workflow:**
+```
+admin> /createtag founder ⭐ Founder
+admin> /grantcustomtag alice founder
+alice> /settag founder       → alice now wears [⭐ Founder]
+```
+
 ### Per-Area Logging
 
 Daily-rotating log files per area under `logs/<AreaName>/<AreaName-YYYY-MM-DD.txt>`.
