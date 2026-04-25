@@ -744,8 +744,8 @@ func cmdPM(client *Client, args []string, _ string) {
 	toPM := getUidList(strings.Split(args[0], ","))
 	var recipientNames []string
 	for _, c := range toPM {
-		c.SendPacket("CT", fmt.Sprintf("[PM] %v", client.OOCName()), msg, "1")
-		recipientNames = append(recipientNames, c.OOCName())
+		c.SendPacket("CT", fmt.Sprintf("[PM] [UID %d] %v", client.Uid(), client.OOCName()), msg, "1")
+		recipientNames = append(recipientNames, fmt.Sprintf("[%d] %v", c.Uid(), c.OOCName()))
 	}
 	// Echo the message back to the sender so they can see what they sent.
 	if len(recipientNames) > 0 {
