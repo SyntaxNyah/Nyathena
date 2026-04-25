@@ -107,7 +107,11 @@ func cmdRegister(client *Client, args []string, _ string) {
 	username, password := args[0], args[1]
 
 	if !validUsernameRe.MatchString(username) {
-		client.SendServerMessage("Username must be 3–20 characters and may only contain letters, numbers, and underscores.")
+		client.SendServerMessage(fmt.Sprintf(
+			"❌ '%v' isn't a valid username.\n"+
+				"Usernames must be 3–20 characters and may only contain letters (A–Z, a–z), numbers (0–9), and underscores (_).\n"+
+				"Examples that work: ena_m00ny, alice42, my_alt",
+			username))
 		return
 	}
 	if len(password) < 6 {
@@ -115,7 +119,18 @@ func cmdRegister(client *Client, args []string, _ string) {
 		return
 	}
 	if db.UserExists(username) {
-		client.SendServerMessage("That username is already taken. Please choose another.")
+		// Distinguish "name claimed by a moderator account" from "name claimed
+		// by another player" so users picking a name like "ena_m00ny" aren't
+		// left wondering why a fresh-looking name is unavailable.
+		if db.IsModUser(username) {
+			client.SendServerMessage(fmt.Sprintf(
+				"That username ('%v') is reserved by a staff account on this server. Please pick a different name for your player account.",
+				username))
+		} else {
+			client.SendServerMessage(fmt.Sprintf(
+				"That username ('%v') is already registered by another player. Please choose a different one.",
+				username))
+		}
 		return
 	}
 
@@ -170,8 +185,11 @@ func cmdCaptcha(client *Client, args []string, _ string) {
 		return
 	}
 
+	// Hex tokens are case-insensitive by definition; trimming surrounding
+	// whitespace handles AO2 clients that auto-add a trailing space when copying.
+	supplied := strings.ToLower(strings.TrimSpace(args[0]))
 	// Constant-time comparison prevents timing-based token guessing.
-	if subtle.ConstantTimeCompare([]byte(args[0]), []byte(expectedToken)) != 1 {
+	if subtle.ConstantTimeCompare([]byte(supplied), []byte(expectedToken)) != 1 {
 		client.SetPendingReg("", "", nil)
 		client.SendServerMessage("❌ Incorrect captcha token. Please use /register <username> <password> again to get a new token.")
 		return

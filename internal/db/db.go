@@ -135,7 +135,7 @@ const MaxChipBalance = 10_000_000
 
 // Database version.
 // This should be incremented whenever changes are made to the DB that require existing databases to upgrade.
-const ver = 15
+const ver = 16
 
 // MaxFavourites is the maximum number of favourite characters a player can save.
 const MaxFavourites = 100
@@ -308,6 +308,15 @@ func Open() error {
 		NOTE      TEXT    NOT NULL,
 		ADDED_BY  TEXT    NOT NULL DEFAULT '',
 		ADDED_AT  INTEGER NOT NULL DEFAULT 0
+	)`)
+	if err != nil {
+		return err
+	}
+	_, err = db.Exec(`CREATE TABLE IF NOT EXISTS CUSTOM_TAGS(
+		ID         TEXT    PRIMARY KEY,
+		NAME       TEXT    NOT NULL,
+		CREATED_BY TEXT    NOT NULL DEFAULT '',
+		CREATED_AT INTEGER NOT NULL DEFAULT 0
 	)`)
 	if err != nil {
 		return err
@@ -524,18 +533,60 @@ func upgradeDB(v int) error {
 		if _, err := db.Exec("PRAGMA user_version = 15"); err != nil {
 			return err
 		}
+		fallthrough
+	case 15:
+		// Create CUSTOM_TAGS table so admins can mint cosmetic tags at runtime
+		// without rebuilding the server. Custom tag IDs share the same namespace
+		// as built-in shop tag IDs and get granted via SHOP_PURCHASES.
+		if _, err := db.Exec(`CREATE TABLE IF NOT EXISTS CUSTOM_TAGS(
+			ID         TEXT    PRIMARY KEY,
+			NAME       TEXT    NOT NULL,
+			CREATED_BY TEXT    NOT NULL DEFAULT '',
+			CREATED_AT INTEGER NOT NULL DEFAULT 0
+		)`); err != nil {
+			return err
+		}
+		if _, err := db.Exec("PRAGMA user_version = 16"); err != nil {
+			return err
+		}
 	}
 	return nil
 }
 
 // UserExists returns whether a user exists within the server's database.
 func UserExists(username string) bool {
-	result := db.QueryRow("SELECT USERNAME FROM USERS WHERE USERNAME = ?", username)
-	if result.Scan() == sql.ErrNoRows {
+	if db == nil {
 		return false
-	} else {
-		return true
 	}
+	var count int
+	if err := db.QueryRow(
+		"SELECT COUNT(*) FROM USERS WHERE USERNAME = ?",
+		username,
+	).Scan(&count); err != nil {
+		return false
+	}
+	return count > 0
+}
+
+// IsModUser returns true when the given username exists in USERS with
+// non-zero permissions — i.e. it is a moderator/admin account created via
+// /mkusr rather than a player account from /register. Used by /register to
+// give a clearer error when a player picks a username already taken by a
+// staff account.
+func IsModUser(username string) bool {
+	if db == nil {
+		return false
+	}
+	var perms string
+	err := db.QueryRow("SELECT PERMISSIONS FROM USERS WHERE USERNAME = ?", username).Scan(&perms)
+	if err != nil {
+		return false
+	}
+	p, err := strconv.ParseUint(perms, 10, 64)
+	if err != nil {
+		return false
+	}
+	return p != 0
 }
 
 // CreateUser adds a new user to the server's database.
@@ -1696,6 +1747,152 @@ return ""
 var tagID string
 db.QueryRow("SELECT TAG_ID FROM PLAYER_ACTIVE_TAG WHERE IPID = ?", ipid).Scan(&tagID) //nolint:errcheck
 return tagID
+}
+
+// CustomTag describes one row in CUSTOM_TAGS.
+type CustomTag struct {
+	ID        string
+	Name      string
+	CreatedBy string
+	CreatedAt int64
+}
+
+// CreateCustomTag inserts a new admin-defined tag. Returns an error if the ID
+// is already present in CUSTOM_TAGS — callers should also reject IDs that
+// collide with built-in shop tags before invoking this.
+func CreateCustomTag(id, name, createdBy string) error {
+	if db == nil {
+		return fmt.Errorf("database not open")
+	}
+	_, err := db.Exec(
+		"INSERT INTO CUSTOM_TAGS(ID, NAME, CREATED_BY, CREATED_AT) VALUES(?, ?, ?, ?)",
+		id, name, createdBy, time.Now().Unix(),
+	)
+	return err
+}
+
+// DeleteCustomTag removes a custom tag definition and any references to it:
+// purchase rows in SHOP_PURCHASES and any active equip pointers that are
+// pointing at this id are cleared. Returns an error if the tag does not exist.
+func DeleteCustomTag(id string) error {
+	if db == nil {
+		return fmt.Errorf("database not open")
+	}
+	tx, err := db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback() //nolint:errcheck
+	res, err := tx.Exec("DELETE FROM CUSTOM_TAGS WHERE ID = ?", id)
+	if err != nil {
+		return err
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return fmt.Errorf("no custom tag with id %q", id)
+	}
+	if _, err := tx.Exec("DELETE FROM SHOP_PURCHASES WHERE ITEM_ID = ?", id); err != nil {
+		return err
+	}
+	if _, err := tx.Exec("UPDATE PLAYER_ACTIVE_TAG SET TAG_ID = '' WHERE TAG_ID = ?", id); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
+// GetCustomTag returns the (name, true) for a custom tag id, or ("", false)
+// when the id does not refer to a custom tag. Used by the shop layer to
+// resolve display names for ids not present in the built-in catalog.
+func GetCustomTag(id string) (string, bool) {
+	if db == nil {
+		return "", false
+	}
+	var name string
+	err := db.QueryRow("SELECT NAME FROM CUSTOM_TAGS WHERE ID = ?", id).Scan(&name)
+	if err != nil {
+		return "", false
+	}
+	return name, true
+}
+
+// ListCustomTags returns every custom tag ordered by creation time (oldest first).
+func ListCustomTags() ([]CustomTag, error) {
+	if db == nil {
+		return nil, nil
+	}
+	rows, err := db.Query("SELECT ID, NAME, CREATED_BY, CREATED_AT FROM CUSTOM_TAGS ORDER BY CREATED_AT ASC, ID ASC")
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []CustomTag
+	for rows.Next() {
+		var t CustomTag
+		if err := rows.Scan(&t.ID, &t.Name, &t.CreatedBy, &t.CreatedAt); err != nil {
+			return out, err
+		}
+		out = append(out, t)
+	}
+	return out, rows.Err()
+}
+
+// GrantShopItem records that ipid owns itemID without spending any chips.
+// Used by admin grants (e.g. /grantcustomtag); idempotent — returns nil if the
+// player already owns the item.
+func GrantShopItem(ipid, itemID string) error {
+	if db == nil {
+		return fmt.Errorf("database not open")
+	}
+	_, err := db.Exec(
+		"INSERT OR IGNORE INTO SHOP_PURCHASES(IPID, ITEM_ID) VALUES(?, ?)",
+		ipid, itemID,
+	)
+	return err
+}
+
+// RevokeShopItem removes ownership of itemID from ipid and clears the item as
+// the active tag if it was equipped. Returns an error if the player did not
+// own the item.
+func RevokeShopItem(ipid, itemID string) error {
+	if db == nil {
+		return fmt.Errorf("database not open")
+	}
+	tx, err := db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback() //nolint:errcheck
+	res, err := tx.Exec("DELETE FROM SHOP_PURCHASES WHERE IPID = ? AND ITEM_ID = ?", ipid, itemID)
+	if err != nil {
+		return err
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return fmt.Errorf("player does not own that item")
+	}
+	if _, err := tx.Exec(
+		"UPDATE PLAYER_ACTIVE_TAG SET TAG_ID = '' WHERE IPID = ? AND TAG_ID = ?",
+		ipid, itemID,
+	); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
+// GetIPIDByUsername returns the IPID linked to a player account, or "" if the
+// account does not exist or has no IPID linked yet. Counterpart to
+// GetUsernameByIPID.
+func GetIPIDByUsername(username string) (string, error) {
+	if db == nil {
+		return "", nil
+	}
+	var ipid string
+	err := db.QueryRow("SELECT IPID FROM USERS WHERE USERNAME = ?", username).Scan(&ipid)
+	if err == sql.ErrNoRows {
+		return "", nil
+	}
+	if err != nil {
+		return "", err
+	}
+	return ipid, nil
 }
 
 // AddFavourite adds a character to the player's wardrobe favourites.
