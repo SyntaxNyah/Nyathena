@@ -411,6 +411,20 @@ func cmdLogin(client *Client, args []string, _ string) {
 		if hide, err := db.GetGambleHide(args[0]); err == nil {
 			client.SetGambleHide(hide)
 		}
+		// Restore the account's active cosmetic tag so it shows without re-equipping.
+		if tag := db.GetAccountActiveTag(args[0]); tag != "" {
+			db.SetActiveTag(client.Ipid(), tag) //nolint:errcheck
+		}
+		// Playtime-based auto-trust: if the account has accumulated at least one
+		// hour of play, silently add the current IPID to the lockdown whitelist
+		// and clear any new-IPID OOC cooldown.  This lets regulars whose IP
+		// changed reconnect seamlessly without moderator intervention.
+		if playtime, err := db.GetPlaytime(client.Ipid()); err == nil && playtime >= 3600 {
+			ipFirstSeenTracker.mu.Lock()
+			ipFirstSeenTracker.times[client.Ipid()] = time.Unix(0, 0)
+			ipFirstSeenTracker.mu.Unlock()
+			db.MarkIPKnown(client.Ipid()) //nolint:errcheck
+		}
 		if permissions.IsModerator(perms) {
 			client.SendServerMessage("Logged in as moderator.")
 		} else {

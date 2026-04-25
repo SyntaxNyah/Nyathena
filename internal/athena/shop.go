@@ -744,6 +744,9 @@ func shopBuy(client *Client, itemID string) {
 	switch it.kind {
 	case shopKindTag:
 		_ = db.SetActiveTag(client.Ipid(), it.id)
+		if client.Authenticated() {
+			db.SetAccountActiveTag(client.ModName(), it.id) //nolint:errcheck
+		}
 		client.SendServerMessage(fmt.Sprintf(
 			"✅ Purchased [%v] tag for %d chips! It is now your active tag.\n"+
 				"Use /settag <id> to switch tags, or /settag none to remove it.\n"+
@@ -852,6 +855,9 @@ func cmdSetTag(client *Client, args []string, _ string) {
 			client.SendServerMessage("Failed to clear tag: " + err.Error())
 			return
 		}
+		if client.Authenticated() {
+			db.SetAccountActiveTag(client.ModName(), "") //nolint:errcheck
+		}
 		client.SendServerMessage("🏷️ Your active tag has been removed.")
 		return
 	}
@@ -871,6 +877,9 @@ func cmdSetTag(client *Client, args []string, _ string) {
 			client.SendServerMessage("Failed to set tag: " + err.Error())
 			return
 		}
+		if client.Authenticated() {
+			db.SetAccountActiveTag(client.ModName(), tagID) //nolint:errcheck
+		}
 		client.SendServerMessage(fmt.Sprintf("🏷️ Active tag set to [%v]. It will now appear next to your name in /gas.", it.name))
 		return
 	}
@@ -885,6 +894,9 @@ func cmdSetTag(client *Client, args []string, _ string) {
 		if err := db.SetActiveTag(client.Ipid(), tagID); err != nil {
 			client.SendServerMessage("Failed to set tag: " + err.Error())
 			return
+		}
+		if client.Authenticated() {
+			db.SetAccountActiveTag(client.ModName(), tagID) //nolint:errcheck
 		}
 		client.SendServerMessage(fmt.Sprintf("🏷️ Active tag set to [%v]. It will now appear next to your name in /gas.", name))
 		return
