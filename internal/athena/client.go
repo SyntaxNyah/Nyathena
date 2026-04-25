@@ -167,6 +167,8 @@ const (
 	PunishmentDreamSequence     // progressively surreal / dreamlike rewrites
 	// IC backlog punishment — area-specific
 	PunishmentICWarp // replaces messages with random past IC messages from the same area
+	// Romantic humiliation punishment — replaces every IC line with a cheesy pickup line.
+	PunishmentPickup
 )
 
 type PunishmentState struct {
@@ -2075,6 +2077,8 @@ func (p PunishmentType) String() string {
 		return "dreamsequence"
 	case PunishmentICWarp:
 		return "icwarp"
+	case PunishmentPickup:
+		return "pickup"
 	default:
 		return "none"
 	}

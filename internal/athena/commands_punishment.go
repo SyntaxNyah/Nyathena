@@ -571,6 +571,8 @@ func parsePunishmentType(s string) PunishmentType {
 		return PunishmentDreamSequence
 	case "icwarp":
 		return PunishmentICWarp
+	case "pickup":
+		return PunishmentPickup
 	default:
 		return PunishmentNone
 	}
@@ -1583,6 +1585,10 @@ func cmdMorse(client *Client, args []string, usage string) {
 
 func cmdRickroll(client *Client, args []string, usage string) {
 	cmdPunishment(client, args, usage, PunishmentRickroll)
+}
+
+func cmdPickup(client *Client, args []string, usage string) {
+	cmdPunishment(client, args, usage, PunishmentPickup)
 }
 
 func cmdVowelhell(client *Client, args []string, usage string) {

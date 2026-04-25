@@ -1211,6 +1211,29 @@ func TestApplyRickroll(t *testing.T) {
 	}
 }
 
+func TestApplyPickup(t *testing.T) {
+	if len(pickupLines) < 50 {
+		t.Fatalf("pickupLines must contain at least 50 entries, got %d", len(pickupLines))
+	}
+	got := applyPickup("hello world")
+	for _, line := range pickupLines {
+		if got == line {
+			return
+		}
+	}
+	t.Errorf("applyPickup: %q was not in pickupLines table", got)
+}
+
+func TestApplyPunishmentToTextPickup(t *testing.T) {
+	got := ApplyPunishmentToText("any input", PunishmentPickup)
+	for _, line := range pickupLines {
+		if got == line {
+			return
+		}
+	}
+	t.Errorf("ApplyPunishmentToText(PunishmentPickup): %q was not in pickupLines table", got)
+}
+
 func TestApplyVowelhell(t *testing.T) {
 	// Every letter in the output should be a vowel (or preserved punctuation).
 	got := applyVowelhell("hello world!")

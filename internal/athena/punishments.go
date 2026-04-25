@@ -1503,6 +1503,8 @@ func ApplyPunishmentToText(text string, pType PunishmentType) string {
 		return applyNervous(text)
 	case PunishmentDreamSequence:
 		return applyDreamSequence(text)
+	case PunishmentPickup:
+		return applyPickup(text)
 	default:
 		return text
 	}
@@ -2614,6 +2616,95 @@ var rickrollLines = []string{
 // Lyrics-adjacent only — no copyrighted content is reproduced.
 func applyRickroll(_ string) string {
 	return rickrollLines[rand.Intn(len(rickrollLines))]
+}
+
+// pickupLines is a deliberately enormous catalogue of the cheesiest, most
+// dead-on-arrival pickup lines in existence. Each IC message from a punished
+// player is replaced with one of these at random; the wider the range and
+// worse the energy, the funnier the public humiliation.
+var pickupLines = []string{
+	// Classic dad-tier groaners
+	"Are you a parking ticket? Because you've got 'fine' written all over you.",
+	"Did it hurt when you fell from heaven? Because you landed face-first.",
+	"Are you French? Because Eiffel for you.",
+	"Is your name Google? Because you have everything I've been searching for.",
+	"If you were a vegetable, you'd be a cute-cumber.",
+	"Are you a magnet? Because I'm attracted to you and slightly concerned about my pacemaker.",
+	"Do you have a Band-Aid? I just scraped my knee falling for you.",
+	"If beauty were time, you'd be eternity. Sadly, I'm on a 30-second cooldown.",
+	"Are you Wi-Fi? Because I'm feeling a connection — and also throttled.",
+	"Was your dad a baker? Because you've got nice buns.",
+	// Courtroom / AO2 themed
+	"Objection — your honor, my heart is hearsay.",
+	"You must be exhibit A, because you're the only evidence I need.",
+	"If loving you is a crime, sustain me.",
+	"Your honor, I plead guilty — to falling for you.",
+	"I'd cross-examine you all night long, counsel.",
+	"You're the prosecution and I'm the defense, and somehow we're both in love.",
+	"Did the bailiff arrest you? Because you stole my heart.",
+	"Are you a witness statement? Because I want to read you over and over.",
+	"My client and I would like to enter a joint motion: dinner, Friday.",
+	"Strike that from the record — but don't strike me from your heart.",
+	// Science / nerd
+	"Are you made of copper and tellurium? Because you're Cu-Te.",
+	"You must be a 90-degree angle, because you're looking right.",
+	"Are you a carbon sample? Because I want to date you.",
+	"If you were a triangle, you'd be acute one.",
+	"My love for you is like dividing by zero — undefined and probably a crash.",
+	"You must be the speed of light, because time stops when I look at you.",
+	"Are you the square root of -1? Because you can't be real.",
+	"I'd never split from you — we're more stable than uranium-238.",
+	"Are you a neutrino? Because you've passed right through my heart undetected.",
+	"You're so hot, you'd violate the second law of thermodynamics.",
+	// Food
+	"If you were a fruit, you'd be a fine-apple.",
+	"Are you a raisin? Because you're raisin' my standards.",
+	"Do you like raisins? How do you feel about a date?",
+	"Are you a microwave burrito? Because you've got me hot in the middle and confused on the outside.",
+	"You must be a stack of pancakes, because I'm syrup-sly into you.",
+	"Are you a vending machine? Because I'd put everything I had into you and still walk away with nothing.",
+	"If you were a pizza topping, you'd be supreme.",
+	"Are you cilantro? Because half the room hates you and I find you incredible.",
+	// Surreal / cursed / self-defeating
+	"Are you a loading screen? Because I've been staring at you for way too long.",
+	"You must be a CAPTCHA, because I keep failing you.",
+	"Are you a 404 error? Because I can't find you in my dating life.",
+	"You're like a software update — inconvenient, mandatory, and somehow improving my life.",
+	"Are you a tax form? Because you make me sweat and I don't fully understand you.",
+	"If you were a shopping cart, I'd never return you.",
+	"You must be a dropped call, because I can't stop thinking about reconnecting.",
+	"Are you a spreadsheet? Because I want to fill you with values.",
+	"You're like a Roomba — going in circles but somehow making my life better.",
+	"Are you my browser history? Because I'd never let anyone else see you.",
+	// Disastrously bad / aggressively cheesy
+	"Hey, did you sit in a pile of sugar? Because you've got a pretty sweet... never mind.",
+	"Are you a beaver? Because daaaaaam.",
+	"If you were a chicken, you'd be impeccable.",
+	"Hey baby, are you a thesaurus? Because you give meaning to my life. Synonym: also you.",
+	"You must be tired, because you've been running through my CPU all day.",
+	"Are you a fire alarm? Because you're loud, hot, and I don't know how to turn you off.",
+	"Roses are red, violets are blue, I'm bad at poetry, marry me too.",
+	"I'm not a photographer, but I can picture us getting blocked.",
+	"Are you a parking lot? Because I'd circle you for forty minutes and still not figure you out.",
+	"If kisses were snowflakes, I'd send you a mild drizzle and a vague apology.",
+	// Ominous / unhinged
+	"Are you a haunted lighthouse? Because something in me is drawn to you and probably shouldn't be.",
+	"You must be a long Wikipedia article, because I've gone three hours deep and forgotten my original question.",
+	"Are you the void? Because I keep yelling into you and getting nothing back.",
+	"If you were a horror movie, I'd watch you alone, in the dark, against medical advice.",
+	"You're like a museum exhibit — I'm not allowed to touch you and a guard is watching me.",
+	"Are you an unread terms-of-service? Because I'm about to agree to anything you say.",
+	"You must be an automated phone menu, because I keep pressing buttons hoping to reach a human.",
+	"If you were a season, you'd be an unseasonably warm February — confusing and unsustainable.",
+	"Are you a smoke detector at 3 AM? Because something in me is going off and I can't ignore it.",
+	"You're the exact pickup line I'd be embarrassed to be caught using on you.",
+}
+
+// applyPickup replaces the message with a random cheesy pickup line.
+// The original text is intentionally discarded — the punishment IS the
+// substitution. Each delivery is a fresh, public, deeply preventable disaster.
+func applyPickup(_ string) string {
+	return pickupLines[rand.Intn(len(pickupLines))]
 }
 
 // karenPrefixes are opening escalations prepended to the original message.

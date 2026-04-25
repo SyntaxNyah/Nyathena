@@ -2353,6 +2353,14 @@ func initCommands() {
 			reqPerms: permissions.PermissionField["MUTE"],
 			category: "punishment",
 		},
+		"pickup": {
+			handler:  cmdPickup,
+			minArgs:  1,
+			usage:    "Usage: /pickup [-d duration] [-r reason] <uid1>,<uid2>...",
+			desc:     "Replaces every IC message the target sends with a catastrophically cheesy pickup line.",
+			reqPerms: permissions.PermissionField["MUTE"],
+			category: "punishment",
+		},
 		"vowelhell": {
 			handler:  cmdVowelhell,
 			minArgs:  1,
