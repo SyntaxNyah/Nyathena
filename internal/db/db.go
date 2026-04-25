@@ -209,7 +209,7 @@ func Open() error {
 	if err != nil {
 		return err
 	}
-	_, err = db.Exec("CREATE TABLE IF NOT EXISTS USERS(USERNAME TEXT PRIMARY KEY, PASSWORD TEXT, PERMISSIONS TEXT, IPID TEXT NOT NULL DEFAULT '', GAMBLE_HIDE INTEGER NOT NULL DEFAULT 0)")
+	_, err = db.Exec("CREATE TABLE IF NOT EXISTS USERS(USERNAME TEXT PRIMARY KEY, PASSWORD TEXT, PERMISSIONS TEXT, IPID TEXT NOT NULL DEFAULT '', GAMBLE_HIDE INTEGER NOT NULL DEFAULT 0, ACTIVE_TAG TEXT NOT NULL DEFAULT '')")
 	if err != nil {
 		return err
 	}
@@ -549,6 +549,21 @@ func upgradeDB(v int) error {
 		if _, err := db.Exec("PRAGMA user_version = 16"); err != nil {
 			return err
 		}
+		fallthrough
+	case 16:
+		// Add ACTIVE_TAG column to USERS so the equipped tag persists across sessions
+		// and IPID changes.  Brand-new databases get the column from the CREATE TABLE
+		// statement in Open(); this migration handles existing databases.
+		var usersExists int
+		db.QueryRow("SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='USERS'").Scan(&usersExists) //nolint:errcheck
+		if usersExists > 0 {
+			if _, err := db.Exec("ALTER TABLE USERS ADD COLUMN ACTIVE_TAG TEXT NOT NULL DEFAULT ''"); err != nil {
+				return err
+			}
+		}
+		if _, err := db.Exec("PRAGMA user_version = 17"); err != nil {
+			return err
+		}
 	}
 	return nil
 }
@@ -795,6 +810,21 @@ func LinkIPIDToUser(username, ipid string) error {
 		// Invalidate cached values for both IPIDs so subsequent reads hit the DB.
 		chipCacheInvalidate(ipid)
 		chipCacheInvalidate(oldIPID)
+	}
+
+	// Migrate the active cosmetic tag from the old IPID to the new IPID so the
+	// player's equipped tag is not lost when their IP address changes.
+	var oldTag string
+	db.QueryRow("SELECT COALESCE(TAG_ID, '') FROM PLAYER_ACTIVE_TAG WHERE IPID = ?", oldIPID).Scan(&oldTag) //nolint:errcheck
+	if oldTag != "" {
+		if _, err := db.Exec(`
+			INSERT INTO PLAYER_ACTIVE_TAG(IPID, TAG_ID) VALUES(?, ?)
+			ON CONFLICT(IPID) DO UPDATE SET TAG_ID = excluded.TAG_ID`, ipid, oldTag); err != nil {
+			return err
+		}
+		if _, err := db.Exec("UPDATE PLAYER_ACTIVE_TAG SET TAG_ID = '' WHERE IPID = ?", oldIPID); err != nil {
+			return err
+		}
 	}
 
 	return nil
@@ -1747,6 +1777,28 @@ return ""
 var tagID string
 db.QueryRow("SELECT TAG_ID FROM PLAYER_ACTIVE_TAG WHERE IPID = ?", ipid).Scan(&tagID) //nolint:errcheck
 return tagID
+}
+
+// SetAccountActiveTag stores the active tag on the user's account so it survives
+// IPID changes and is restored automatically on every future login.
+// Pass an empty string to clear the stored tag.
+func SetAccountActiveTag(username, tagID string) error {
+	if db == nil {
+		return nil
+	}
+	_, err := db.Exec("UPDATE USERS SET ACTIVE_TAG = ? WHERE USERNAME = ?", tagID, username)
+	return err
+}
+
+// GetAccountActiveTag returns the active tag stored on the user's account, or ""
+// if no tag has been saved.
+func GetAccountActiveTag(username string) string {
+	if db == nil {
+		return ""
+	}
+	var tagID string
+	db.QueryRow("SELECT COALESCE(ACTIVE_TAG, '') FROM USERS WHERE USERNAME = ?", username).Scan(&tagID) //nolint:errcheck
+	return tagID
 }
 
 // CustomTag describes one row in CUSTOM_TAGS.

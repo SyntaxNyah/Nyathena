@@ -411,6 +411,10 @@ func cmdLogin(client *Client, args []string, _ string) {
 		if hide, err := db.GetGambleHide(args[0]); err == nil {
 			client.SetGambleHide(hide)
 		}
+		// Restore the account's active cosmetic tag so it shows without re-equipping.
+		if tag := db.GetAccountActiveTag(args[0]); tag != "" {
+			db.SetActiveTag(client.Ipid(), tag) //nolint:errcheck
+		}
 		if permissions.IsModerator(perms) {
 			client.SendServerMessage("Logged in as moderator.")
 		} else {
