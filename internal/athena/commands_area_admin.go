@@ -682,6 +682,23 @@ func cmdNoIntPres(client *Client, args []string, _ string) {
 	addToBuffer(client, "CMD", fmt.Sprintf("Set non-interrupting preanims to %v.", args[0]), false)
 }
 
+// isAllowedCDN reports whether rawURL's host matches a whitelisted CDN entry.
+// An entry like "discordapp.com" matches itself and any subdomain (e.g. cdn.discordapp.com).
+// If the cdns list is empty (file missing or blank), all URLs are denied.
+func isAllowedCDN(rawURL string) bool {
+	parsed, err := url.Parse(rawURL)
+	if err != nil {
+		return false
+	}
+	host := strings.ToLower(parsed.Hostname())
+	for _, cdn := range cdns {
+		if host == cdn || strings.HasSuffix(host, "."+cdn) {
+			return true
+		}
+	}
+	return false
+}
+
 // Handles /play
 
 func cmdPlay(client *Client, args []string, _ string) {
@@ -696,6 +713,10 @@ func cmdPlay(client *Client, args []string, _ string) {
 		s, err = url.QueryUnescape(s) // Unescape any URL encoding
 		if err != nil {
 			client.SendServerMessage("Error parsing URL.")
+			return
+		}
+		if !isAllowedCDN(s) {
+			client.SendServerMessage("That URL is not from a whitelisted CDN. Add the domain to cdns.txt to allow it.")
 			return
 		}
 	}
