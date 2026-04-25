@@ -1019,6 +1019,19 @@ func pktOOC(client *Client, p *packet.Packet) {
 		return
 	}
 
+	// Commands are dispatched before OOC-name validation so that /login and
+	// other commands are always reachable regardless of new-IPID OOC cooldowns,
+	// username validity, or duplicate-name collisions.  Returning players whose
+	// IP changed must be able to /login without waiting out any cooldown timer.
+	if strings.HasPrefix(p.Body[1], "/") {
+		decoded := decode(p.Body[1])
+		match := commandRegex.FindString(decoded)
+		command := strings.ToLower(strings.TrimPrefix(match, "/"))
+		args := strings.Split(decoded, " ")[1:]
+		ParseCommand(client, command, args)
+		return
+	}
+
 	username := decode(strings.TrimSpace(p.Body[0]))
 	if username == "" || username == config.Name || len(username) > 30 || strings.ContainsAny(username, "[]") {
 		client.SendServerMessage("Invalid username.")
@@ -1041,17 +1054,6 @@ func pktOOC(client *Client, p *packet.Packet) {
 	}
 	client.SetOocName(username)
 
-	if strings.HasPrefix(p.Body[1], "/") {
-		if client.Uid() != -1 {
-			writeToAll("PU", strconv.Itoa(client.Uid()), "0", username)
-		}
-		decoded := decode(p.Body[1])
-		match := commandRegex.FindString(decoded)
-		command := strings.ToLower(strings.TrimPrefix(match, "/"))
-		args := strings.Split(decoded, " ")[1:]
-		ParseCommand(client, command, args)
-		return
-	}
 	if client.IsJailed() {
 		client.SendServerMessage("You are jailed and cannot speak in OOC.")
 		return
