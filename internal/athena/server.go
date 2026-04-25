@@ -74,7 +74,7 @@ var (
 
 var (
 	config                                 *settings.Config
-	characters, music, backgrounds, parrot []string
+	characters, music, backgrounds, parrot, cdns []string
 	charactersByName                       map[string]int // O(1) lookup: lowercase name → character ID
 	areas                                  []*area.Area
 	areaNames                              string
@@ -200,6 +200,7 @@ type Server struct {
 	music                  []string
 	backgrounds            []string
 	parrot                 []string
+	cdns                   []string
 	areas                  []*area.Area
 	areaNames              string
 	bgListStr              string
@@ -348,6 +349,7 @@ func NewServer(conf *settings.Config) (*Server, error) {
 	} else if len(s.parrot) == 0 {
 		return nil, fmt.Errorf("empty parrot list")
 	}
+	s.cdns = settings.LoadCDNs()
 	_, err = str2duration.ParseDuration(conf.BanLen)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse default_ban_duration: %v", err.Error())
@@ -463,6 +465,7 @@ func NewServer(conf *settings.Config) (*Server, error) {
 	music = s.music
 	backgrounds = s.backgrounds
 	parrot = s.parrot
+	cdns = s.cdns
 	areas = s.areas
 	areaNames = s.areaNames
 	bgListStr = s.bgListStr

@@ -314,6 +314,27 @@ func LoadMusic() ([]string, error) {
 	return musicList, nil
 }
 
+// LoadCDNs reads the CDN whitelist from cdns.txt.
+// Returns an empty slice (no error) if the file does not exist.
+// Lines starting with # and blank lines are skipped.
+func LoadCDNs() []string {
+	f, err := os.Open(ConfigPath + "/cdns.txt")
+	if err != nil {
+		return nil
+	}
+	defer f.Close()
+	var list []string
+	in := bufio.NewScanner(f)
+	for in.Scan() {
+		line := strings.TrimSpace(in.Text())
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		list = append(list, strings.ToLower(line))
+	}
+	return list
+}
+
 // LoadFile reads a server file, returning it's contents.
 func LoadFile(file string) ([]string, error) {
 	var l []string

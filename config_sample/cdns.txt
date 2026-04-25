@@ -1,0 +1,11 @@
+# CDN whitelist for /play URL streaming
+# One domain per line. Subdomains are automatically matched.
+# Example: discordapp.com also allows cdn.discordapp.com
+# Lines starting with # are comments and are ignored.
+
+# Discord
+discordapp.com
+discordapp.net
+
+# Catbox
+catbox.moe
