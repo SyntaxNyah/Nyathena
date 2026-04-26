@@ -705,14 +705,17 @@ func (client *Client) SetPerms(perms uint64) {
 	client.mu.Unlock()
 }
 
-// Authenticated returns whether the client is logged in as a moderator.
+// Authenticated returns whether the client is logged in to any account
+// (moderator, DJ, or plain player). Use permissions.IsModerator(client.Perms())
+// to check specifically for server-moderator access.
 func (client *Client) Authenticated() bool {
 	client.mu.Lock()
 	defer client.mu.Unlock()
 	return client.authenticated
 }
 
-// SetAuthenticated sets whether the client is logged in as a moderator.
+// SetAuthenticated marks the client as logged in to an account; this does not
+// imply moderator status. See Authenticated for details.
 func (client *Client) SetAuthenticated(auth bool) {
 	client.mu.Lock()
 	client.authenticated = auth

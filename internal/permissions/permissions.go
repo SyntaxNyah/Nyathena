@@ -61,10 +61,11 @@ func HasPermission(perm uint64, required uint64) bool {
 }
 
 // IsModerator returns true if the supplied permissions include any server moderation
-// permissions beyond the CM permission (i.e., the user has actual moderator-level access).
-// Returns false for perm=0 (no permissions) or perm=CM (CM-only, not a server moderator).
+// permissions beyond the CM and DJ permissions (i.e., the user has actual moderator-level
+// access). Returns false for perm=0 (no permissions), perm=CM (CM-only), perm=DJ (DJ-only),
+// or any combination of CM+DJ — none of which are server moderators.
 func IsModerator(perm uint64) bool {
-	return perm&^PermissionField["CM"] != 0
+	return perm&^(PermissionField["CM"]|PermissionField["DJ"]) != 0
 }
 
 // IsAdmin returns true when the supplied permissions match the ADMIN sentinel
