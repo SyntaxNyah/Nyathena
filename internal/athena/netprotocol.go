@@ -1054,6 +1054,13 @@ func pktOOC(client *Client, p *packet.Packet) {
 	}
 	client.SetOocName(username)
 
+	// Build display name with tag prefix; used in both PU and CT so the
+	// AO2 client can match them and show the UID alongside OOC messages.
+	displayUsername := username
+	if tag := formatTagDisplay(db.GetActiveTag(client.Ipid())); tag != "" {
+		displayUsername = tag + " " + username
+	}
+
 	if client.IsJailed() {
 		client.SendServerMessage("You are jailed and cannot speak in OOC.")
 		return
@@ -1074,7 +1081,7 @@ func pktOOC(client *Client, p *packet.Packet) {
 	// Only broadcast the OOC name update once all checks pass, to prevent amplification attacks
 	// where bots flood CT packets causing mass PU broadcasts to all connected clients.
 	if client.Uid() != -1 {
-		writeToAll("PU", strconv.Itoa(client.Uid()), "0", username)
+		writeToAll("PU", strconv.Itoa(client.Uid()), "0", displayUsername)
 	}
 	msg := p.Body[1]
 	// Reject duplicate OOC: if the last message sent in this area is identical, drop silently.
@@ -1090,10 +1097,10 @@ func pktOOC(client *Client, p *packet.Packet) {
 	}
 	// Torment: ghost or delay the OOC message without the client noticing.
 	if isIPIDTormented(client.Ipid()) {
-		handleTormentedOOC(client, encode(client.OOCName()), msg)
+		handleTormentedOOC(client, encode(displayUsername), msg)
 		return
 	}
-	writeToAreaFrom(client.Ipid(), permissions.IsModerator(client.Perms()), client.Area(), "CT", encode(client.OOCName()), msg, "0")
+	writeToAreaFrom(client.Ipid(), permissions.IsModerator(client.Perms()), client.Area(), "CT", encode(displayUsername), msg, "0")
 	addToBuffer(client, "OOC", "\""+msg+"\"", false)
 }
 
