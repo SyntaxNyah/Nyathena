@@ -1054,11 +1054,15 @@ func pktOOC(client *Client, p *packet.Packet) {
 	}
 	client.SetOocName(username)
 
-	// Build display name with tag prefix; used in both PU and CT so the
-	// AO2 client can match them and show the UID alongside OOC messages.
+	// Build OOC display name: [Tag] [UID] OOCName.
+	// UID is prepended server-side so it always appears in OOC chat
+	// without relying on client-side PU name-matching.
 	displayUsername := username
+	if client.Uid() != -1 {
+		displayUsername = "[" + strconv.Itoa(client.Uid()) + "] " + displayUsername
+	}
 	if tag := formatTagDisplay(db.GetActiveTag(client.Ipid())); tag != "" {
-		displayUsername = tag + " " + username
+		displayUsername = tag + " " + displayUsername
 	}
 
 	if client.IsJailed() {
@@ -1081,7 +1085,7 @@ func pktOOC(client *Client, p *packet.Packet) {
 	// Only broadcast the OOC name update once all checks pass, to prevent amplification attacks
 	// where bots flood CT packets causing mass PU broadcasts to all connected clients.
 	if client.Uid() != -1 {
-		writeToAll("PU", strconv.Itoa(client.Uid()), "0", displayUsername)
+		writeToAll("PU", strconv.Itoa(client.Uid()), "0", username)
 	}
 	msg := p.Body[1]
 	// Reject duplicate OOC: if the last message sent in this area is identical, drop silently.
