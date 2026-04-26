@@ -1507,6 +1507,8 @@ func ApplyPunishmentToText(text string, pType PunishmentType) string {
 		return applyPickup(text)
 	case PunishmentBrainrot:
 		return applyBrainrot(text)
+	case PunishmentGordonRamsay:
+		return applyGordonRamsay(text)
 	default:
 		return text
 	}
@@ -2553,6 +2555,7 @@ var areaRandomPunishments = []PunishmentType{
 	PunishmentPassiveAggressive,
 	PunishmentNervous,
 	PunishmentDreamSequence,
+	PunishmentGordonRamsay,
 }
 
 // pickAreaRandomPunishment returns a random punishment type from the pool.
@@ -3241,4 +3244,78 @@ func applyBrainrot(text string) string {
 		b.WriteString(suffix)
 		return truncateText(b.String())
 	}
+}
+
+// gordonRamsayQuotes is a roster of iconic Gordon Ramsay outbursts. Used by
+// applyGordonRamsay to overwrite each IC line — the original text is discarded.
+var gordonRamsayQuotes = []string{
+	"This lamb is so undercooked it's still following its mother around!",
+	"You donkey! What are you doing?!",
+	"This risotto is so raw it's still growing!",
+	"It's RAW! It's f***ing RAW!",
+	"Hello? Hello?! Is anyone in there?!",
+	"My gran could do better — and she's dead!",
+	"Where's the lamb sauce?! Where IS the lamb sauce?!",
+	"You absolute muppet, this is dreadful.",
+	"This salmon is so undercooked it's still swimming!",
+	"Get out. Get out of my kitchen!",
+	"Shut it down! Shut the kitchen DOWN!",
+	"This pasta is so overcooked it's gone back in time and become flour again.",
+	"You call this food? I wouldn't feed this to my dog.",
+	"Bland. Bland. BLAND. Wake up!",
+	"Oh my god, that is disgusting.",
+	"What is this? It's a wet, soggy mess!",
+	"This is a disaster. An absolute disaster.",
+	"Are you trying to poison the customers?",
+	"You've ruined it. You've completely ruined it.",
+	"This chicken is so dry, it's a fossil.",
+	"Bin it. Bin the lot of it. Now.",
+	"You're standing there like a stunned mullet, MOVE!",
+	"Stop. Just stop. Stop everything.",
+	"Tastes like the bottom of a birdcage.",
+	"What were you thinking? Were you even thinking?!",
+	"Come on, come on, come ON!",
+	"Look at me. Look at me — focus!",
+	"This is supposed to be a restaurant, not a hospital cafeteria.",
+	"You numpty, this is bone dry.",
+	"It's swimming in oil. SWIMMING.",
+	"That is the worst plate of food I have ever seen.",
+	"Wake up! WAKE UP!",
+	"You've got the brains of a banana.",
+	"Soggy bottom. Soggy bottom! It's a soggy bottom!",
+	"Stop pratting about and cook!",
+	"This kitchen is a joke. A bloody joke.",
+	"Tasteless. Boring. Lazy. Next!",
+	"Get the hairnet off your face — that's your eyebrows, you donkey.",
+	"You're shaking. Why are you shaking? It's a saucepan, not a snake.",
+	"My nan, with no teeth, could chew this faster.",
+	"This dessert is colder than my ex's heart.",
+	"You couldn't run a bath, let alone a kitchen.",
+	"Pathetic. Truly, magnificently pathetic.",
+	"It's so salty I just got high blood pressure looking at it.",
+	"This sauce broke. Like your career is about to.",
+	"Move with purpose! PURPOSE!",
+	"Listen to me, listen, listen — you're killing me.",
+	"This beef Wellington — what is going on inside it? An autopsy?",
+	"Where is the seasoning? Where is the LOVE?",
+	"Are you a chef or a hostage?",
+	"This plate looks like a crime scene.",
+	"You absolute disgrace of an apron.",
+	"Get a grip. Get a GRIP.",
+	"That's not seared, that's traumatised.",
+	"Service! SERVICE!",
+	"You've got one job. ONE.",
+	"This is a kitchen, not a kindergarten — though right now I can't tell.",
+	"It's overworked, it's overcooked, it's over.",
+	"Even the flies wouldn't touch this.",
+	"You're a chef? I'm a giraffe.",
+	"This is undercooked, that is overcooked, and you — you're just cooked.",
+	"Out. Out. OUT.",
+}
+
+// applyGordonRamsay replaces the IC text with a Gordon Ramsay tirade.
+// Picks a quote at random from gordonRamsayQuotes; the original text is
+// discarded (the punishment is meant to silence the speaker behind the meme).
+func applyGordonRamsay(_ string) string {
+	return truncateText(gordonRamsayQuotes[rand.Intn(len(gordonRamsayQuotes))])
 }

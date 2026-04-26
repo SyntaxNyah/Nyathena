@@ -120,6 +120,7 @@ type Area struct {
 	randomPunishEnabled bool
 	mirrorArea          bool
 	punishmentArea      bool
+	dokiArea            bool
 	icWarpGlobal        bool               // whether global icwarp is enabled
 	icWarpExemptUID     int                // UID exempt from global icwarp (-1 = none)
 	icMessages          map[string][]icMsg // per-IPID IC message history for icwarp
@@ -145,6 +146,7 @@ type AreaData struct {
 	Casino_jackpot    bool   `toml:"casino_slots_jackpot"`
 	Mirror_area       bool   `toml:"mirror_area"`
 	Punishment_area   bool   `toml:"punishment_area"`
+	Doki_area         bool   `toml:"doki_area"`
 	// Voice_allowed is tri-state: nil means "inherit the server default", an
 	// explicit true/false in areas.toml overrides it.  This lets operators
 	// keep voice off by default for a quiet RP area even when the server has
@@ -205,6 +207,7 @@ func NewAreaWithVoiceDefault(data AreaData, charlen int, bufsize int, evi_mode E
 			mirror_area:       data.Mirror_area,
 			punishment_area:   data.Punishment_area,
 		},
+		dokiArea:            data.Doki_area,
 		taken:               make([]bool, charlen),
 		defhp:               10,
 		prohp:               10,
@@ -1119,6 +1122,23 @@ func (a *Area) SetMirrorArea(v bool) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	a.mirrorArea = v
+}
+
+// DokiArea reports whether this area applies the Doki Doki Literature Club
+// chaos effect: random "J-just Haschen"-style takeovers, zalgo scrambles,
+// dark Haschen anagrams, and surprise background swaps. Configured via
+// `doki_area = true` on the area's TOML entry.
+func (a *Area) DokiArea() bool {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return a.dokiArea
+}
+
+// SetDokiArea toggles Doki mode at runtime.
+func (a *Area) SetDokiArea(v bool) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	a.dokiArea = v
 }
 
 // PunishmentArea reports whether this area applies a random, one-shot

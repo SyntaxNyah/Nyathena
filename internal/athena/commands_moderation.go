@@ -686,12 +686,18 @@ func cmdPlayers(client *Client, args []string, _ string) {
 		fmt.Fprintf(b, "%s[%v] %v\n", prefix, c.Uid(), c.CurrentCharacter())
 		if hasBanInfo {
 			if permissions.IsModerator(c.Perms()) {
-				// Hide shadow mods' real names from non-admin viewers.
-				shownMod := c.ModName()
-				if permissions.IsShadow(c.Perms()) && !isAdmin {
-					shownMod = "Moderator"
+				// Shadow mods: hide the entire "Mod:" line from non-admin viewers.
+				// Previously the line still printed as "Mod: Moderator", which
+				// let other moderators infer the target was staff. Now only
+				// admins see anything for a shadow mod; everyone else sees no
+				// mod line at all (the player looks like a regular user).
+				if permissions.IsShadow(c.Perms()) {
+					if isAdmin {
+						fmt.Fprintf(b, "Mod: %v (shadow)\n", c.ModName())
+					}
+				} else {
+					fmt.Fprintf(b, "Mod: %v\n", c.ModName())
 				}
-				fmt.Fprintf(b, "Mod: %v\n", shownMod)
 			}
 			fmt.Fprintf(b, "IPID: %v\n", c.Ipid())
 		}

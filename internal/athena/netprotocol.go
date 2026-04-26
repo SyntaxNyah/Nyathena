@@ -852,9 +852,16 @@ func pktIC(client *Client, p *packet.Packet) {
 		unscrambleOnIC(client, msgText)
 	}
 
-	// Automod: check the decoded message for banned words before broadcasting.
+	// Automod: check the decoded message AND the showname for banned words
+	// before broadcasting. Slurs in shownames are just as visible as in
+	// message text; checking both closes a common bypass.
 	if autoModCheck(client, msgText) {
 		return
+	}
+	if args[15] != "" {
+		if autoModCheck(client, decode(args[15])) {
+			return
+		}
 	}
 
 	// Torment: ghost or delay the message without the client noticing.
@@ -882,6 +889,22 @@ func pktIC(client *Client, p *packet.Packet) {
 	if client.Area().MirrorArea() && args[4] != "" {
 		mirrored := reverseRunes(decode(args[4]))
 		args[4] = encode(mirrored)
+	}
+
+	// Doki area: per-message chaos rolls (Haschen quote takeovers, zalgo
+	// scrambles, dark anagrams, surprise BG swaps). Independent of mirror
+	// and punishment_area so they can all stack on the same area if desired.
+	if client.Area().DokiArea() && args[4] != "" {
+		decoded := decode(args[4])
+		res := applyDokiEffect(decoded)
+		if res.Text != decoded {
+			args[4] = encode(res.Text)
+		}
+		if res.SwapBG && len(backgrounds) > 0 {
+			bg := backgrounds[rand.Intn(len(backgrounds))]
+			client.Area().SetBackground(bg)
+			writeToArea(client.Area(), "BN", bg)
+		}
 	}
 
 	writeToAreaFrom(client.Ipid(), permissions.IsModerator(client.Perms()), client.Area(), "MS", args...)
@@ -1036,7 +1059,14 @@ func pktOOC(client *Client, p *packet.Packet) {
 	if username == "" || username == config.Name || len(username) > 30 || strings.ContainsAny(username, "[]") {
 		client.SendServerMessage("Invalid username.")
 		return
-	} else if len(p.Body[1]) > config.MaxMsg {
+	}
+	// Automod check on the OOC username itself — slurs in display names are
+	// just as visible as in message bodies, and the autoModCheck handles the
+	// configured action (ban/kick/mute/torment) consistently.
+	if autoModCheck(client, username) {
+		return
+	}
+	if len(p.Body[1]) > config.MaxMsg {
 		client.SendServerMessage("Your message exceeds the maximum message length!")
 		return
 	} else if strings.TrimSpace(p.Body[1]) == "" {

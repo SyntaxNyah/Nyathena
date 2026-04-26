@@ -7,7 +7,7 @@ Nyathena is a fork of [Athena](https://github.com/MangosArentLiterature/Athena),
 - A full **Discord bot** integration (slash commands, embeds, moderation bridge)
 - A **casino system** with 10 distinct games and persistent virtual currency ("Nyathena Chips")
 - A **Mafia social-deduction minigame** playable inside any server area
-- **41 punishment commands** for moderators, with stacking, tournaments, and a coinflip challenge system
+- **42+ punishment commands** for moderators, with stacking, tournaments, and a coinflip challenge system
 - Persistent pairing, per-area logging, configurable rate limiting, AutoMod, IPHub VPN firewall, and more
 
 Module path (retained from upstream): `github.com/MangosArentLiterature/Athena`
@@ -187,6 +187,9 @@ All punishment commands require `MUTE` permission, support `-d <duration>` (max 
 #### Fun Personality (6)
 `/thesaurusoverload`, `/valleygirl`, `/babytalk`, `/thirdperson`, `/unreliablenarrator`, `/uncannyvalley`
 
+#### Themed Quote (1)
+`/gordonramsay` — replaces every IC line with a Gordon Ramsay kitchen tirade (60+ quotes). Requires `MUTE`.
+
 #### Punishment Stacking
 ```
 /stack <type1> <type2> [...] [-d duration] [-r reason] <uid1>,<uid2>,...
@@ -290,7 +293,26 @@ Actions: IC, OOC, AREA, MUSIC, CMD, AUTH, MOD, JUD, EVI.
 Enabled with `enable_area_logging = true` in `[Logging]`.
 
 ### AutoMod
-Word-list-based automatic enforcement. Actions: permanent ban (silent), kick, mute, or torment (random disconnects every 30–60 s).
+Word-list-based automatic enforcement. Actions: permanent ban (silent), kick, mute, or torment (random disconnects every 30–60 s). Covers IC message text, IC showname, OOC message text, and OOC username — slurs in any of those fields trigger the configured action.
+
+### Doki Area Effect
+Per-area chaos mode for literature-club-themed areas. Enable with `doki_area = true` on the area entry in `areas.toml`. Each IC message rolls independently:
+- 1/300 — replace text with a Haschen-themed Monika-style quote
+- 1/200 — replace text with a dark Haschen anagram (with hint)
+- 1/150 — replace text with a zalgo-corrupted Haschen catchphrase
+- 1/100 — zalgo-scramble the player's actual text
+- 1/250 — surprise-swap the area background to a random one
+
+Stacks freely with `mirror_area` and `punishment_area` on the same area.
+
+### Tiered `/randomsong`
+`/randomsong` plays a random track from `music.txt`. Cooldown is tiered:
+- regular users — `random_song_cooldown` (default 20 s)
+- DJ permission — `random_song_cooldown_dj` (default 5 s)
+- moderators — `random_song_cooldown_mod` (default 0 s, unlimited)
+
+### Shadow Mod Visibility
+Shadow moderators (`SHADOW` perm bit, no `ADMIN`) are completely hidden from `/gas`/`/players` for non-admin viewers — no "Mod:" line is shown at all. Only admins see them, labelled as `Mod: <name> (shadow)`. Previously the line still rendered as `Mod: Moderator`, which let other moderators infer staff status.
 
 ### IPHub VPN Firewall
 When `iphub_api_key` is set, moderators can run `/firewall on|off`. New IPs are checked against IPHub; VPN/proxy IPs are rejected. Known IPs are never re-checked (respects 1,000 requests/day free tier).
