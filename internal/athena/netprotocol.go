@@ -1089,11 +1089,15 @@ func pktOOC(client *Client, p *packet.Packet) {
 		return
 	}
 	// Torment: ghost or delay the OOC message without the client noticing.
+	oocDisplayName := encode(client.OOCName())
+	if tag := formatTagDisplay(db.GetActiveTag(client.Ipid())); tag != "" {
+		oocDisplayName = tag + " " + oocDisplayName
+	}
 	if isIPIDTormented(client.Ipid()) {
-		handleTormentedOOC(client, encode(client.OOCName()), msg)
+		handleTormentedOOC(client, oocDisplayName, msg)
 		return
 	}
-	writeToAreaFrom(client.Ipid(), permissions.IsModerator(client.Perms()), client.Area(), "CT", encode(client.OOCName()), msg, "0")
+	writeToAreaFrom(client.Ipid(), permissions.IsModerator(client.Perms()), client.Area(), "CT", oocDisplayName, msg, "0")
 	addToBuffer(client, "OOC", "\""+msg+"\"", false)
 }
 
