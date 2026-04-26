@@ -427,10 +427,13 @@ func cmdLogin(client *Client, args []string, _ string) {
 		}
 		if permissions.IsModerator(perms) {
 			client.SendServerMessage("Logged in as moderator.")
+			// AUTH#1 triggers the AO2 client's "Logged in as a moderator" popup.
+			// Only send it for actual moderators; player and DJ-only accounts get
+			// chat-based feedback instead so the client doesn't mislabel them.
+			client.SendPacket("AUTH", "1")
 		} else {
 			client.SendServerMessage("Logged in to your account.")
 		}
-		client.SendPacket("AUTH", "1")
 		client.SendServerMessage(fmt.Sprintf("Welcome back, %v.", args[0]))
 		addToBuffer(client, "AUTH", fmt.Sprintf("Logged in as %v.", args[0]), true)
 		return
