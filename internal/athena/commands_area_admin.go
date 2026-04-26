@@ -755,8 +755,19 @@ func cmdRandomSong(client *Client, _ []string, _ string) {
 		client.SendServerMessage("You are not allowed to change the music in this area.")
 		return
 	}
-	// Enforce configurable cooldown with a single atomic check-and-update.
-	if cd := config.RandomSongCooldown; cd > 0 {
+	// Tiered cooldown: mods bypass entirely, DJs get a short cooldown,
+	// everyone else gets the regular cooldown.
+	perms := client.Perms()
+	var cd int
+	switch {
+	case permissions.IsModerator(perms):
+		cd = config.RandomSongCooldownMod
+	case permissions.HasPermission(perms, permissions.PermissionField["DJ"]):
+		cd = config.RandomSongCooldownDJ
+	default:
+		cd = config.RandomSongCooldown
+	}
+	if cd > 0 {
 		cooldown := time.Duration(cd) * time.Second
 		if ok, remaining := client.CheckAndUpdateRandomSongCooldown(cooldown); !ok {
 			secs := int(remaining.Seconds()) + 1

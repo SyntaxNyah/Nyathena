@@ -44,6 +44,16 @@ lock_music = false
 # it is also included in the random pool. Staff can toggle at runtime.
 # punishment_area = false
 
+# Doki area: Doki Doki Literature Club style chaos. Each IC message rolls:
+#   1/300  — replace text with a Haschen-themed Monika-style quote
+#   1/200  — replace text with a dark Haschen anagram (with hint)
+#   1/150  — replace text with a zalgo-corrupted Haschen catchphrase
+#   1/100  — zalgo-scramble the player's actual text
+#   1/250  — surprise-swap the area background to a random one
+# Effects roll independently (multiple can land on the same message).
+# Stacks freely with mirror_area / punishment_area on the same area.
+# doki_area = false
+
 # Per-area voice-chat permission.  Omit this line to inherit the server-level
 # [Voice] default_area_voice_allowed setting.  Uncomment and set explicitly
 # (true/false) to override for quiet RP rooms, courtrooms, etc.

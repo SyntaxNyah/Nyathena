@@ -90,6 +90,8 @@ type ServerConfig struct {
 	AutoModWordlist            string `toml:"automod_wordlist"`
 	AutoModAction              string `toml:"automod_action"`
 	RandomSongCooldown         int    `toml:"random_song_cooldown"`
+	RandomSongCooldownDJ       int    `toml:"random_song_cooldown_dj"`
+	RandomSongCooldownMod      int    `toml:"random_song_cooldown_mod"`
 	BotBanPlaytimeThreshold    int    `toml:"botban_playtime_threshold"`
 	IPHubAPIKey                string `toml:"iphub_api_key"`
 	EnableTranslator           bool   `toml:"enable_translator_punishment"`
@@ -223,7 +225,9 @@ func DefaultConfig() *Config {
 			AutoModEnabled:             false,
 			AutoModWordlist:            "banned_words.txt",
 			AutoModAction:              "ban",
-			RandomSongCooldown:         10,
+			RandomSongCooldown:         20,
+			RandomSongCooldownDJ:       5,
+			RandomSongCooldownMod:      0,
 			BotBanPlaytimeThreshold:    120,
 			EnableTranslator:           false,
 			TranslatorAPIURL:           "https://api-free.deepl.com/v2/translate",

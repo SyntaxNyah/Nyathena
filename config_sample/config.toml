@@ -356,10 +356,14 @@ automod_wordlist = "banned_words.txt"
 #               Use /untorment <ipid> to remove an IPID from the torment list.
 automod_action = "ban"
 
-# /randomsong cooldown: Minimum number of seconds a CM must wait between uses of /randomsong.
-# Set to 0 to disable the cooldown (allow unlimited uses).
-# Default: 5 seconds.
-random_song_cooldown = 5
+# /randomsong cooldown: Tiered minimum seconds between uses of /randomsong.
+#   random_song_cooldown      — regular users (default 20)
+#   random_song_cooldown_dj   — clients with the DJ permission (default 5)
+#   random_song_cooldown_mod  — moderators (default 0; spam allowed)
+# Set any tier to 0 to disable that tier's cooldown.
+random_song_cooldown = 20
+random_song_cooldown_dj = 5
+random_song_cooldown_mod = 0
 
 # /botban playtime threshold: Minimum total playtime in seconds a spectator must have
 # accumulated (across all past sessions plus the current session) to be exempt from /botban.

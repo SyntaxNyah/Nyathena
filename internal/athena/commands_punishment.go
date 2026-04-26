@@ -575,6 +575,8 @@ func parsePunishmentType(s string) PunishmentType {
 		return PunishmentPickup
 	case "brainrot":
 		return PunishmentBrainrot
+	case "gordonramsay":
+		return PunishmentGordonRamsay
 	default:
 		return PunishmentNone
 	}
@@ -1615,6 +1617,10 @@ func cmdPassiveAggressive(client *Client, args []string, usage string) {
 
 func cmdNervous(client *Client, args []string, usage string) {
 	cmdPunishment(client, args, usage, PunishmentNervous)
+}
+
+func cmdGordonRamsay(client *Client, args []string, usage string) {
+	cmdPunishment(client, args, usage, PunishmentGordonRamsay)
 }
 
 func cmdDreamSequence(client *Client, args []string, usage string) {

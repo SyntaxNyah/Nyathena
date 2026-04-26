@@ -481,6 +481,25 @@ You can also use the general `/unpunish` command:
 /unpunish -t icwarp 42
 ```
 
+## Themed Quote Punishments
+
+### `/gordonramsay [-d duration] [-r reason] <uid1>,<uid2>,...`
+
+Replaces every IC line the target sends with a randomly-picked Gordon Ramsay
+kitchen tirade. The original message is discarded; the speaker is effectively
+swapped out for the chef. 60+ quotes in the pool.
+
+**Permission required:** `MUTE`
+
+```
+/gordonramsay 42                       # Permanent until removed
+/gordonramsay -d 10m 42                # 10-minute Ramsay takeover
+/gordonramsay -d 1h -r "sauce" 42,57
+```
+
+Remove with `/unpunish 42` or `/unpunish -t gordonramsay 42`. Stacks with
+`/stack` and is included in the random `/maso` and `punishment_area` pool.
+
 ## Self-Punishment (User Commands)
 
 ### `/maso`

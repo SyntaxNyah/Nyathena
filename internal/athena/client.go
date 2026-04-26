@@ -171,6 +171,8 @@ const (
 	PunishmentPickup
 	// Brainrot punishment — maximum internet / Italian brainrot corruption.
 	PunishmentBrainrot
+	// Gordon Ramsay punishment — replaces every IC line with an iconic Ramsay quote.
+	PunishmentGordonRamsay
 )
 
 type PunishmentState struct {
@@ -2103,6 +2105,8 @@ func (p PunishmentType) String() string {
 		return "pickup"
 	case PunishmentBrainrot:
 		return "brainrot"
+	case PunishmentGordonRamsay:
+		return "gordonramsay"
 	default:
 		return "none"
 	}
