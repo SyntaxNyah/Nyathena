@@ -169,6 +169,8 @@ const (
 	PunishmentICWarp // replaces messages with random past IC messages from the same area
 	// Romantic humiliation punishment — replaces every IC line with a cheesy pickup line.
 	PunishmentPickup
+	// Brainrot punishment — maximum internet / Italian brainrot corruption.
+	PunishmentBrainrot
 )
 
 type PunishmentState struct {
@@ -231,6 +233,7 @@ type Client struct {
 	lastBarDrinkTime    time.Time    // Tracks last /bar buy time for cooldown
 	lastRandomCharTime  time.Time    // Tracks last /randomchar time for cooldown
 	lastRandomBgTime    time.Time    // Tracks last /randombg time for cooldown
+	lastDJBgTime        time.Time    // Tracks last /bg time for DJ rate limit (1 min)
 	lastRandomSongTime  time.Time    // Tracks last /randomsong time for cooldown
 	forcePairUID        int          // UID of the client this client is force-paired with (-1 if none)
 	possessing          int          // UID of the client being possessed (-1 if not possessing anyone)
@@ -1589,6 +1592,22 @@ func (client *Client) CheckAndUpdateRandomBgCooldown(cooldown time.Duration) (bo
 	return true, 0
 }
 
+// CheckAndUpdateDJBgCooldown atomically checks whether the DJ /bg cooldown has elapsed
+// and, if so, records the current time as the new last-use timestamp.
+// It returns (true, 0) when the command is allowed, or (false, remaining) when the
+// client is still in cooldown.
+func (client *Client) CheckAndUpdateDJBgCooldown(cooldown time.Duration) (bool, time.Duration) {
+	client.mu.Lock()
+	defer client.mu.Unlock()
+	now := time.Now()
+	elapsed := now.Sub(client.lastDJBgTime)
+	if !client.lastDJBgTime.IsZero() && elapsed < cooldown {
+		return false, cooldown - elapsed
+	}
+	client.lastDJBgTime = now
+	return true, 0
+}
+
 // CheckAndUpdateRandomSongCooldown atomically checks whether the /randomsong cooldown
 // has elapsed and, if so, records the current time as the new last-use timestamp.
 // It returns (true, 0) when the command is allowed, or (false, remaining) when
@@ -2082,6 +2101,8 @@ func (p PunishmentType) String() string {
 		return "icwarp"
 	case PunishmentPickup:
 		return "pickup"
+	case PunishmentBrainrot:
+		return "brainrot"
 	default:
 		return "none"
 	}

@@ -99,9 +99,34 @@ func cmdAreaInfo(client *Client, _ []string, _ string) {
 // Handles /ban
 
 func cmdBg(client *Client, args []string, _ string) {
-	if client.Area().LockBG() && !permissions.HasPermission(client.Perms(), permissions.PermissionField["MODIFY_AREA"]) {
+	hasDJ := permissions.HasPermission(client.Perms(), permissions.PermissionField["DJ"])
+	isCM := client.HasCMPermission()
+	hasModifyArea := permissions.HasPermission(client.Perms(), permissions.PermissionField["MODIFY_AREA"])
+
+	// Must have at least DJ, area/server CM, or MODIFY_AREA permission.
+	if !hasDJ && !isCM && !hasModifyArea {
+		client.SendServerMessage("You do not have permission to use that command.")
+		return
+	}
+
+	// LockBG: MODIFY_AREA or CM can change freely; DJs are allowed but rate-limited.
+	if client.Area().LockBG() && !hasModifyArea && !isCM && !hasDJ {
 		client.SendServerMessage("You do not have permission to change the background in this area.")
 		return
+	}
+
+	// DJs operating without CM/MODIFY_AREA get a 1-minute rate limit.
+	if hasDJ && !isCM && !hasModifyArea {
+		const djCooldown = 60 * time.Second
+		if ok, remaining := client.CheckAndUpdateDJBgCooldown(djCooldown); !ok {
+			secs := int(remaining.Seconds()) + 1
+			unit := "seconds"
+			if secs == 1 {
+				unit = "second"
+			}
+			client.SendServerMessage(fmt.Sprintf("DJs can change the background once per minute. Please wait %d %s.", secs, unit))
+			return
+		}
 	}
 
 	arg := strings.Join(args, " ")
