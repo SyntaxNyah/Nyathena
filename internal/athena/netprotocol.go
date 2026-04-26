@@ -1081,7 +1081,7 @@ func pktOOC(client *Client, p *packet.Packet) {
 	// Only broadcast the OOC name update once all checks pass, to prevent amplification attacks
 	// where bots flood CT packets causing mass PU broadcasts to all connected clients.
 	if client.Uid() != -1 {
-		writeToAll("PU", strconv.Itoa(client.Uid()), "0", displayUsername)
+		writeToAll("PU", strconv.Itoa(client.Uid()), "0", username)
 	}
 	msg := p.Body[1]
 	// Reject duplicate OOC: if the last message sent in this area is identical, drop silently.
