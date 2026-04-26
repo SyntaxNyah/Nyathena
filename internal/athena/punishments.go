@@ -1505,6 +1505,8 @@ func ApplyPunishmentToText(text string, pType PunishmentType) string {
 		return applyDreamSequence(text)
 	case PunishmentPickup:
 		return applyPickup(text)
+	case PunishmentBrainrot:
+		return applyBrainrot(text)
 	default:
 		return text
 	}
@@ -3010,4 +3012,233 @@ func applyMorse(text string) string {
 		return "..."
 	}
 	return truncateText(out)
+}
+
+// ── Brainrot punishment ────────────────────────────────────────────────────
+
+// brainrotItalian are complete Italian-brainrot entity names that replace the
+// whole message (the "full-send" path).
+var brainrotItalian = []string{
+	"Bombardiro Crocodilo",
+	"Tralalero Tralala",
+	"Brr Brr Patapim",
+	"Burbaloni Luliloli",
+	"Tung Tung Tung Tung Sahur",
+	"Lirili Larila",
+	"Cappuccino Assassino",
+	"Frigo Camelo",
+	"Ballerina Cappuccina",
+	"Chimpanzini Bananini",
+	"Bobritto Bandito",
+	"La Vaca Saturno Saturnita",
+	"Trippi Troppi",
+	"Glorbo Fruttodrillo",
+	"Bombombini Gusini",
+	"Crocodillo Brrrr",
+	"Tridenti Rondini",
+	"Giraffini Tozzolini",
+	"Lirilì Larilà",
+	"Panzerotti Luigini",
+}
+
+// brainrotSkibidi are skibidi-universe phrases substituted as prefixes.
+var brainrotSkibidi = []string{
+	"skibidi toilet",
+	"skibidi sigma",
+	"skibidi rizz",
+	"skibidi ohio",
+	"skibidi gyatt",
+	"skibidi fanum tax",
+	"sigma skibidi",
+	"ohio skibidi",
+}
+
+// brainrotPrefixes are openers injected before the original text.
+var brainrotPrefixes = []string{
+	"SKIBIDI OHIO 💀",
+	"no cap fr fr",
+	"bro fell off 💀",
+	"W rizz detected",
+	"only in ohio:",
+	"sigma grindset:",
+	"real and based:",
+	"understood the assignment:",
+	"it's giving main character:",
+	"GYATT 🗣️",
+	"fanum tax incoming:",
+	"chronically online take:",
+	"delulu arc incoming:",
+	"NPC behavior detected:",
+	"ratio + L + bozo:",
+	"ate and left no crumbs:",
+	"not the brainrot 💀",
+	"POV: you live in ohio:",
+	"bro cooked fr:",
+	"that's bussin no cap:",
+}
+
+// brainrotSuffixes are closers tacked onto the original text.
+var brainrotSuffixes = []string{
+	"💀💀💀",
+	"no cap fr fr",
+	"bro really said that 💀",
+	"W rizz",
+	"skibidi",
+	"ohio moment",
+	"sigma moment",
+	"gyatt",
+	"based and redpilled",
+	"understood the assignment",
+	"it's giving",
+	"not the flop era 😭",
+	"fanum tax",
+	"real",
+	"periodt",
+	"slay bestie",
+	"ate",
+	"bussin fr",
+	"lowkey highkey tho",
+	"touch grass challenge: failed",
+	"main character behavior",
+	"Tralalero Tralala 🐬",
+	"Bombardiro Crocodilo 🐊",
+	"Tung Tung Tung 🥁",
+	"Brr Brr Patapim 🦆",
+	"Cappuccino Assassino ☕",
+	"Chimpanzini Bananini 🍌",
+	"Bobritto Bandito 🦫",
+}
+
+// brainrotInserts are mid-sentence injections.
+var brainrotInserts = []string{
+	"skibidi",
+	"fr fr",
+	"no cap",
+	"sigma",
+	"ohio",
+	"rizz",
+	"gyatt",
+	"based",
+	"bussin",
+	"slay",
+	"W",
+	"L",
+	"ratio",
+	"delulu",
+	"periodt",
+	"real",
+	"Bombardiro",
+	"Tralalero",
+	"Tung Tung",
+	"Brr Brr",
+	"Chimpanzini",
+	"Cappuccino Assassino",
+}
+
+// brainrotWordMap replaces common words with brainrot equivalents.
+var brainrotWordMap = map[string]string{
+	"i":        "sigma me",
+	"you":      "u (ratio)",
+	"he":       "that NPC",
+	"she":      "that NPC",
+	"they":     "those NPCs",
+	"we":       "the squad",
+	"is":       "be like",
+	"are":      "be like",
+	"was":      "lowkey was",
+	"think":    "fr think",
+	"know":     "deadass know",
+	"good":     "bussin",
+	"bad":      "an L",
+	"yes":      "W fr",
+	"no":       "ratio",
+	"cool":     "based",
+	"okay":     "skibidi okay",
+	"hello":    "skibidi hello",
+	"hi":       "ayo",
+	"bye":      "later npc",
+	"because":  "cuz no cap",
+	"but":      "but fr tho",
+	"and":      "and ohio",
+	"very":     "lowkey highkey",
+	"really":   "fr fr",
+	"actually": "deadass",
+	"maybe":    "delulu maybe",
+	"always":   "always no cap",
+	"never":    "never (ratio)",
+	"true":     "based and true",
+	"false":    "mid and capped",
+	"right":    "W",
+	"wrong":    "L bozo",
+	"great":    "goated fr",
+	"terrible": "mid af",
+}
+
+// applyBrainrot corrupts a message with maximum skibidi sigma Italian brainrot.
+// Three modes are chosen at random:
+//  1. Full replace — swap the whole message for an Italian brainrot entity name.
+//  2. Wrap — keep the original text but slam a brainrot prefix and suffix around it.
+//  3. Inject — scatter brainrot keywords between words AND word-map common terms.
+func applyBrainrot(text string) string {
+	r := rand.Float32()
+
+	switch {
+	case r < 0.25:
+		// Full Italian-brainrot replacement.
+		entity := brainrotItalian[rand.Intn(len(brainrotItalian))]
+		suffix := brainrotSuffixes[rand.Intn(len(brainrotSuffixes))]
+		return truncateText(entity + " " + suffix)
+
+	case r < 0.50:
+		// Skibidi entity + original text + suffix.
+		skib := brainrotSkibidi[rand.Intn(len(brainrotSkibidi))]
+		suffix := brainrotSuffixes[rand.Intn(len(brainrotSuffixes))]
+		return truncateText(strings.ToUpper(skib) + " " + text + " " + suffix)
+
+	case r < 0.75:
+		// Prefix + text + double suffix for maximum chaos.
+		prefix := brainrotPrefixes[rand.Intn(len(brainrotPrefixes))]
+		suffix1 := brainrotSuffixes[rand.Intn(len(brainrotSuffixes))]
+		suffix2 := brainrotSuffixes[rand.Intn(len(brainrotSuffixes))]
+		return truncateText(prefix + " " + text + " " + suffix1 + " " + suffix2)
+
+	default:
+		// Word-level injection: replace common words + randomly insert brainrot.
+		words := strings.Fields(strings.ToLower(text))
+		var b strings.Builder
+		b.Grow(len(text) * 2)
+		for i, w := range words {
+			if i > 0 {
+				b.WriteByte(' ')
+			}
+			// Strip trailing punctuation for lookup.
+			punct := byte(0)
+			base := w
+			if n := len(base); n > 0 {
+				c := base[n-1]
+				if c == '.' || c == ',' || c == '!' || c == '?' || c == ';' || c == ':' {
+					punct = c
+					base = base[:n-1]
+				}
+			}
+			if rep, ok := brainrotWordMap[base]; ok {
+				b.WriteString(rep)
+			} else {
+				b.WriteString(base)
+			}
+			if punct != 0 {
+				b.WriteByte(punct)
+			}
+			// ~30% chance to inject a random brainrot word after this token.
+			if rand.Float32() < 0.30 {
+				b.WriteByte(' ')
+				b.WriteString(brainrotInserts[rand.Intn(len(brainrotInserts))])
+			}
+		}
+		// Always cap with a suffix so it never just looks like a word-swap.
+		suffix := brainrotSuffixes[rand.Intn(len(brainrotSuffixes))]
+		b.WriteByte(' ')
+		b.WriteString(suffix)
+		return truncateText(b.String())
+	}
 }
