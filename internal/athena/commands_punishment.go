@@ -31,6 +31,23 @@ import (
 	"github.com/xhit/go-str2duration/v2"
 )
 
+// issuerTierFor returns the IssuerTier corresponding to the issuing client's
+// permission set. Admin > Shadow > Mod. Used so /unpunish can block a regular
+// moderator from self-removing a punishment that staff stacked on them.
+func issuerTierFor(client *Client) IssuerTier {
+	perms := client.Perms()
+	switch {
+	case permissions.IsAdmin(perms):
+		return IssuerAdmin
+	case permissions.IsShadow(perms):
+		return IssuerShadow
+	case permissions.IsModerator(perms):
+		return IssuerMod
+	default:
+		return IssuerSystem
+	}
+}
+
 func cmdPunishment(client *Client, args []string, usage string, pType PunishmentType) {
 	flags := flag.NewFlagSet("", 0)
 	flags.SetOutput(io.Discard)
@@ -57,6 +74,7 @@ func cmdPunishment(client *Client, args []string, usage string, pType Punishment
 		client.SendServerMessage(fmt.Sprintf("Duration capped at 24 hours."))
 	}
 
+	tier := issuerTierFor(client)
 	toPunish := getUidList(strings.Split(flags.Arg(0), ","))
 	var count int
 	var report string
@@ -70,12 +88,12 @@ func cmdPunishment(client *Client, args []string, usage string, pType Punishment
 	}
 
 	for _, c := range toPunish {
-		c.AddPunishment(pType, duration, *reason)
+		c.AddPunishmentBy(pType, duration, *reason, tier)
 		var expires int64
 		if duration > 0 {
 			expires = time.Now().UTC().Add(duration).Unix()
 		}
-		if err := db.UpsertTextPunishment(c.Ipid(), int(pType), expires, *reason); err != nil {
+		if err := db.UpsertTextPunishmentBy(c.Ipid(), int(pType), expires, *reason, int(tier)); err != nil {
 			logger.LogErrorf("Failed to persist text punishment for %v: %v", c.Ipid(), err)
 		}
 		c.SendServerMessage(msg)
@@ -321,7 +339,12 @@ func cmdEmoticon(client *Client, args []string, usage string) {
 	cmdPunishment(client, args, usage, PunishmentEmoticon)
 }
 
-// cmdUnpunish removes all or specific punishments from users
+// cmdUnpunish removes all or specific punishments from users.
+//
+// Self-removal protection: a moderator who is themselves carrying a punishment
+// applied by an admin or shadow mod cannot lift that punishment from themselves.
+// Admins and shadow mods are exempt from the protection (they can self-unpunish
+// because they outrank the issuer or are the issuer's peer).
 func cmdUnpunish(client *Client, args []string, usage string) {
 	flags := flag.NewFlagSet("", 0)
 	flags.SetOutput(io.Discard)
@@ -333,12 +356,25 @@ func cmdUnpunish(client *Client, args []string, usage string) {
 		return
 	}
 
+	// callerTier determines whether self-removal protection applies. Admins
+	// can always self-unpunish; shadow mods can lift other shadow/admin
+	// punishments off themselves; regular mods are blocked from removing
+	// shadow/admin-issued punishments off their own UID.
+	callerTier := issuerTierFor(client)
+	callerUID := client.Uid()
+
 	// /unpunish all — clear all punishments from every client in the moderator's area.
 	if strings.EqualFold(flags.Arg(0), "all") {
 		myArea := client.Area()
-		var count int
+		var count, skipped int
 		clients.ForEach(func(c *Client) {
 			if c.Area() != myArea {
+				return
+			}
+			// Self-removal protection: skip the caller if they're a regular mod
+			// and carry a shadow/admin-issued punishment.
+			if c.Uid() == callerUID && callerTier < IssuerShadow && c.HasProtectedPunishment() {
+				skipped++
 				return
 			}
 			c.RemoveAllPunishments()
@@ -351,7 +387,11 @@ func cmdUnpunish(client *Client, args []string, usage string) {
 			c.SendServerMessage("All punishments have been removed.")
 			count++
 		})
-		client.SendServerMessage(fmt.Sprintf("Removed all punishments from %v client(s) in this area.", count))
+		summary := fmt.Sprintf("Removed all punishments from %v client(s) in this area.", count)
+		if skipped > 0 {
+			summary += " Your own punishments were issued by an admin or shadow mod and cannot be self-removed."
+		}
+		client.SendServerMessage(summary)
 		addToBuffer(client, "CMD", fmt.Sprintf("Removed all punishments from entire area (%v client(s)).", count), false)
 		return
 	}
@@ -361,6 +401,25 @@ func cmdUnpunish(client *Client, args []string, usage string) {
 	var report string
 
 	for _, c := range toUnpunish {
+		// Self-removal protection runs once per target. Regular mods cannot
+		// strip a shadow/admin-issued punishment off themselves; admins and
+		// shadow mods bypass the gate.
+		isSelf := c.Uid() == callerUID
+		if isSelf && callerTier < IssuerShadow {
+			if *punishmentType == "" {
+				if c.HasProtectedPunishment() {
+					client.SendServerMessage("You cannot remove all of your own punishments — at least one was issued by an admin or shadow mod. Ask staff to lift it.")
+					continue
+				}
+			} else {
+				pType := parsePunishmentType(*punishmentType)
+				if pType != PunishmentNone && c.HasPunishment(pType) && c.PunishmentIssuerTier(pType) >= IssuerShadow {
+					client.SendServerMessage(fmt.Sprintf("Punishment '%v' was issued by an admin or shadow mod and cannot be self-removed.", pType.String()))
+					continue
+				}
+			}
+		}
+
 		if *punishmentType == "" {
 			// Remove all punishments (text, mute, and jail) from memory and DB.
 			c.RemoveAllPunishments()
@@ -650,10 +709,18 @@ func cmdStack(client *Client, args []string, usage string) {
 		msg += " for reason: " + *reason
 	}
 
+	tier := issuerTierFor(client)
 	for _, c := range toPunish {
 		// Apply each punishment
 		for _, pType := range punishmentTypes {
-			c.AddPunishment(pType, duration, *reason)
+			c.AddPunishmentBy(pType, duration, *reason, tier)
+			var expires int64
+			if duration > 0 {
+				expires = time.Now().UTC().Add(duration).Unix()
+			}
+			if err := db.UpsertTextPunishmentBy(c.Ipid(), int(pType), expires, *reason, int(tier)); err != nil {
+				logger.LogErrorf("Failed to persist stacked punishment for %v: %v", c.Ipid(), err)
+			}
 		}
 		c.SendServerMessage(msg)
 		count++
@@ -1543,15 +1610,16 @@ func cmdRandomPunishAll(client *Client, args []string, usage string) {
 		msg += " – reason: " + *reason
 	}
 
+	tier := issuerTierFor(client)
 	var report string
 	for _, c := range targets {
 		pType := randompunishPool[rand.Intn(len(randompunishPool))]
-		c.AddPunishment(pType, duration, *reason)
+		c.AddPunishmentBy(pType, duration, *reason, tier)
 		var expires int64
 		if duration > 0 {
 			expires = time.Now().UTC().Add(duration).Unix()
 		}
-		if err := db.UpsertTextPunishment(c.Ipid(), int(pType), expires, *reason); err != nil {
+		if err := db.UpsertTextPunishmentBy(c.Ipid(), int(pType), expires, *reason, int(tier)); err != nil {
 			logger.LogErrorf("Failed to persist randompunishall punishment for %v: %v", c.Ipid(), err)
 		}
 		c.SendServerMessage(fmt.Sprintf("%v (%v)", msg, pType.String()))

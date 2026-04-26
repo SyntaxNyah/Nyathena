@@ -153,11 +153,12 @@ const (
 
 // PersistentPunishment holds one row from the PUNISHMENTS table.
 type PersistentPunishment struct {
-	Kind    int
-	Subtype int   // 0 for mute/jail; PunishmentType for text punishments.
-	Value   int   // MuteState for mutes; 0 for others.
-	Expires int64 // Unix timestamp; 0 = no expiry (permanent).
-	Reason  string
+	Kind       int
+	Subtype    int   // 0 for mute/jail; PunishmentType for text punishments.
+	Value      int   // MuteState for mutes; 0 for others.
+	Expires    int64 // Unix timestamp; 0 = no expiry (permanent).
+	Reason     string
+	IssuerTier int // 0=system/legacy, 1=mod, 2=shadow, 3=admin
 }
 
 // ChipEntry holds one row from the CHIPS leaderboard query.
@@ -214,12 +215,13 @@ func Open() error {
 		return err
 	}
 	_, err = db.Exec(`CREATE TABLE IF NOT EXISTS PUNISHMENTS(
-		IPID    TEXT    NOT NULL,
-		KIND    INTEGER NOT NULL,
-		SUBTYPE INTEGER NOT NULL DEFAULT 0,
-		VALUE   INTEGER NOT NULL DEFAULT 0,
-		EXPIRES INTEGER NOT NULL DEFAULT 0,
-		REASON  TEXT    NOT NULL DEFAULT '',
+		IPID        TEXT    NOT NULL,
+		KIND        INTEGER NOT NULL,
+		SUBTYPE     INTEGER NOT NULL DEFAULT 0,
+		VALUE       INTEGER NOT NULL DEFAULT 0,
+		EXPIRES     INTEGER NOT NULL DEFAULT 0,
+		REASON      TEXT    NOT NULL DEFAULT '',
+		ISSUER_TIER INTEGER NOT NULL DEFAULT 0,
 		UNIQUE(IPID, KIND, SUBTYPE)
 	)`)
 	if err != nil {
@@ -562,6 +564,27 @@ func upgradeDB(v int) error {
 			}
 		}
 		if _, err := db.Exec("PRAGMA user_version = 17"); err != nil {
+			return err
+		}
+		fallthrough
+	case 17:
+		// Add ISSUER_TIER column to PUNISHMENTS so /unpunish self-removal can
+		// detect punishments that were issued by an admin or shadow mod and
+		// refuse to let the target moderator silently lift them. Existing rows
+		// default to 0 (system/legacy), which preserves the current behaviour
+		// of allowing self-removal for anything pre-migration.
+		//
+		// Fresh databases get the column from the CREATE TABLE statement in
+		// Open(); migrations run before those CREATEs, so guard with an
+		// existence check (matches the case-16 pattern for USERS.ACTIVE_TAG).
+		var punishmentsExists int
+		db.QueryRow("SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='PUNISHMENTS'").Scan(&punishmentsExists) //nolint:errcheck
+		if punishmentsExists > 0 {
+			if _, err := db.Exec("ALTER TABLE PUNISHMENTS ADD COLUMN ISSUER_TIER INTEGER NOT NULL DEFAULT 0"); err != nil {
+				return err
+			}
+		}
+		if _, err := db.Exec("PRAGMA user_version = 18"); err != nil {
 			return err
 		}
 	}
@@ -1005,10 +1028,20 @@ func DeleteJail(ipid string) error {
 
 // UpsertTextPunishment stores (or replaces) a text/behaviour punishment for an IPID.
 // pType is the PunishmentType integer. expires is a Unix timestamp (0 = permanent).
+// Issuer tier defaults to 0 (system/legacy); use UpsertTextPunishmentBy to record
+// the issuer's permission tier so /unpunish can enforce self-removal protection.
 func UpsertTextPunishment(ipid string, pType int, expires int64, reason string) error {
+	return UpsertTextPunishmentBy(ipid, pType, expires, reason, 0)
+}
+
+// UpsertTextPunishmentBy is the same as UpsertTextPunishment but records the
+// issuer's permission tier (0=system, 1=mod, 2=shadow, 3=admin). The tier is
+// later read by /unpunish to block moderators from silently lifting punishments
+// that were applied by a shadow mod or admin against them.
+func UpsertTextPunishmentBy(ipid string, pType int, expires int64, reason string, issuerTier int) error {
 	_, err := db.Exec(
-		"INSERT OR REPLACE INTO PUNISHMENTS(IPID, KIND, SUBTYPE, VALUE, EXPIRES, REASON) VALUES(?, ?, ?, 0, ?, ?)",
-		ipid, PunishKindText, pType, expires, reason)
+		"INSERT OR REPLACE INTO PUNISHMENTS(IPID, KIND, SUBTYPE, VALUE, EXPIRES, REASON, ISSUER_TIER) VALUES(?, ?, ?, 0, ?, ?, ?)",
+		ipid, PunishKindText, pType, expires, reason, issuerTier)
 	return err
 }
 
@@ -1046,7 +1079,7 @@ func DeleteAllPunishments(ipid string) error {
 func GetPunishments(ipid string) ([]PersistentPunishment, error) {
 	now := time.Now().Unix()
 	rows, err := db.Query(
-		"SELECT KIND, SUBTYPE, VALUE, EXPIRES, REASON FROM PUNISHMENTS WHERE IPID = ? AND (EXPIRES = 0 OR EXPIRES > ?)",
+		"SELECT KIND, SUBTYPE, VALUE, EXPIRES, REASON, ISSUER_TIER FROM PUNISHMENTS WHERE IPID = ? AND (EXPIRES = 0 OR EXPIRES > ?)",
 		ipid, now)
 	if err != nil {
 		return nil, err
@@ -1055,7 +1088,7 @@ func GetPunishments(ipid string) ([]PersistentPunishment, error) {
 	var punishments []PersistentPunishment
 	for rows.Next() {
 		var p PersistentPunishment
-		if err := rows.Scan(&p.Kind, &p.Subtype, &p.Value, &p.Expires, &p.Reason); err != nil {
+		if err := rows.Scan(&p.Kind, &p.Subtype, &p.Value, &p.Expires, &p.Reason, &p.IssuerTier); err != nil {
 			continue
 		}
 		punishments = append(punishments, p)

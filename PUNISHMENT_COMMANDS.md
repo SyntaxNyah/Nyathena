@@ -38,6 +38,24 @@ All punishment commands:
 /unpunish -t uppercase 45        # Remove only uppercase punishment
 ```
 
+### Self-Removal Protection
+
+A regular moderator **cannot** use `/unpunish` to lift a punishment that was
+applied to themselves by an admin or a shadow mod. The check covers both
+forms:
+
+- `/unpunish <own-uid>` — refused if any of the caller's punishments were
+  issued by a shadow/admin.
+- `/unpunish -t <type> <own-uid>` — refused if that specific punishment was
+  issued by a shadow/admin.
+- `/unpunish all` — runs against everyone in the area but silently skips the
+  caller's own protected punishments and reports a one-line notice.
+
+Admins and shadow mods are exempt from the gate (they outrank the issuer or
+are the issuer's peer). The protection persists across server restarts
+because the issuer tier is recorded in the `PUNISHMENTS` table
+(`ISSUER_TIER` column, added in DB migration 18).
+
 ## Text Modification Commands (14)
 
 ### `/whisper`

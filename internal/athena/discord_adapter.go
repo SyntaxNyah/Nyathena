@@ -322,12 +322,15 @@ func (a *ServerAdapter) ApplyPunishment(uid int, punishmentName string, duration
 	if pType == PunishmentNone {
 		return fmt.Errorf("unknown punishment: %s", punishmentName)
 	}
-	c.AddPunishment(pType, duration, "Applied by Discord moderator.")
+	// Discord-applied punishments come from a moderator with the configured
+	// mod_role_id. Tag as IssuerMod (lowest staff tier) — there's no shadow/admin
+	// distinction over the Discord bridge.
+	c.AddPunishmentBy(pType, duration, "Applied by Discord moderator.", IssuerMod)
 	var expires int64
 	if duration > 0 {
 		expires = time.Now().UTC().Add(duration).Unix()
 	}
-	if err := db.UpsertTextPunishment(c.Ipid(), int(pType), expires, "Applied by Discord moderator."); err != nil {
+	if err := db.UpsertTextPunishmentBy(c.Ipid(), int(pType), expires, "Applied by Discord moderator.", int(IssuerMod)); err != nil {
 		logger.LogErrorf("Failed to persist text punishment for %v: %v", c.Ipid(), err)
 	}
 	c.SendServerMessage(fmt.Sprintf("You have received the '%s' punishment.", punishmentName))
