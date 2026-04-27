@@ -175,6 +175,18 @@ const (
 	PunishmentGordonRamsay
 )
 
+// IssuerTier records the permission tier of the moderator who applied a
+// punishment. Used by /unpunish to block self-removal of staff-issued
+// punishments by a regular moderator targeting their own UID.
+type IssuerTier byte
+
+const (
+	IssuerSystem IssuerTier = iota // automod, /maso, hangman, etc. — no protection
+	IssuerMod                      // regular moderator with MUTE
+	IssuerShadow                   // SHADOW (no ADMIN) — protected from self-removal
+	IssuerAdmin                    // ADMIN — protected from self-removal
+)
+
 type PunishmentState struct {
 	punishmentType PunishmentType
 	expiresAt      time.Time
@@ -186,6 +198,7 @@ type PunishmentState struct {
 	targetUID      int        // For PunishmentLovebomb: UID of the lovebomb target (-1 = random area target)
 	customData     string     // For PunishmentTranslator: target language name or "random"
 	icWarpArea     *area.Area // For PunishmentICWarp: the area where the warp applies; nil = inert
+	issuerTier     IssuerTier // who issued this — protects shadow/admin punishments from self-removal
 }
 
 type ClientPairInfo struct {
@@ -927,6 +940,7 @@ func (client *Client) restorePunishments() {
 			if p.Expires != 0 {
 				remaining = time.Until(expiresAt)
 			}
+			tier := IssuerTier(p.IssuerTier)
 			// Text-punishment reasons may embed per-instance metadata (e.g. the
 			// translator target language) separated from the user-visible reason
 			// by an ASCII Unit Separator (0x1F). Decode that here so the custom
@@ -935,8 +949,10 @@ func (client *Client) restorePunishments() {
 				customData := p.Reason[:idx]
 				realReason := p.Reason[idx+1:]
 				client.AddPunishmentWithData(pType, remaining, realReason, customData)
+				// AddPunishmentWithData doesn't take a tier; stamp it after.
+				client.setPunishmentTier(pType, tier)
 			} else {
-				client.AddPunishment(pType, remaining, p.Reason)
+				client.AddPunishmentBy(pType, remaining, p.Reason, tier)
 			}
 		}
 	}
@@ -1643,8 +1659,16 @@ func (m MuteState) String() string {
 	return ""
 }
 
-// AddPunishment adds a punishment to the client.
+// AddPunishment adds a punishment to the client. The issuer tier defaults to
+// IssuerSystem; use AddPunishmentBy to record the issuing moderator's tier.
 func (client *Client) AddPunishment(pType PunishmentType, duration time.Duration, reason string) {
+	client.AddPunishmentBy(pType, duration, reason, IssuerSystem)
+}
+
+// AddPunishmentBy adds a punishment and records the tier of the issuer so that
+// /unpunish can block a moderator from silently lifting a punishment that an
+// admin or shadow mod applied to them.
+func (client *Client) AddPunishmentBy(pType PunishmentType, duration time.Duration, reason string, tier IssuerTier) {
 	client.mu.Lock()
 	defer client.mu.Unlock()
 
@@ -1671,7 +1695,49 @@ func (client *Client) AddPunishment(pType PunishmentType, duration time.Duration
 		msgCount:       0,
 		lastEffect:     0,
 		targetUID:      -1,
+		issuerTier:     tier,
 	})
+}
+
+// PunishmentIssuerTier returns the tier of the moderator who applied the given
+// punishment type to this client, or IssuerSystem if no such punishment exists.
+func (client *Client) PunishmentIssuerTier(pType PunishmentType) IssuerTier {
+	client.mu.Lock()
+	defer client.mu.Unlock()
+	for _, p := range client.punishments {
+		if p.punishmentType == pType {
+			return p.issuerTier
+		}
+	}
+	return IssuerSystem
+}
+
+// HasProtectedPunishment reports whether the client carries any punishment that
+// was applied by a shadow mod or admin (issuer tier ≥ IssuerShadow). Used by
+// /unpunish to decide whether to block a moderator's self-removal request.
+func (client *Client) HasProtectedPunishment() bool {
+	client.mu.Lock()
+	defer client.mu.Unlock()
+	for _, p := range client.punishments {
+		if p.issuerTier >= IssuerShadow {
+			return true
+		}
+	}
+	return false
+}
+
+// setPunishmentTier stamps the issuer tier on the most recent punishment of
+// the given type. Used by the DB-restore path where AddPunishmentWithData
+// can't carry the tier through its existing signature.
+func (client *Client) setPunishmentTier(pType PunishmentType, tier IssuerTier) {
+	client.mu.Lock()
+	defer client.mu.Unlock()
+	for i := len(client.punishments) - 1; i >= 0; i-- {
+		if client.punishments[i].punishmentType == pType {
+			client.punishments[i].issuerTier = tier
+			return
+		}
+	}
 }
 
 // AddPunishmentWithData adds a punishment that carries arbitrary per-instance

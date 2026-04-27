@@ -65,31 +65,31 @@ var dokiHaschenQuotes = []string{
 	"Don't you want to write a poem with Haschen?",
 }
 
-// dokiHaschenAnagrams are darker, anagram-style scrambles whose letters
-// rearrange to phrases of "just haschen" or "haschen is here", etc.
-// Each entry is a deliberate anagram — the letters in the scrambled
-// version match the unscrambled phrase exactly (case- and space-ignored
-// for the joke; no guarantee of perfect Scrabble parity, this is a vibe).
+// dokiHaschenAnagrams are dark, scrambled-letter strings whose characters
+// rearrange to Haschen-themed sentences. The hint is intentionally NOT shown
+// — observers have to solve them. Solutions are kept in code comments only,
+// for future maintainers, never broadcast to clients.
 //
-// Format: scrambled string with embedded "(anagram of: X)" hint so observers
-// can solve them. The dark phrasing is intentional Monika-style horror flavour.
+// Each scramble below corresponds to a hidden phrase like "just haschen",
+// "haschen is here", "haschen deleted them all", etc. The mapping is a vibe,
+// not Scrabble-perfect — the goal is unsettling alphabet soup, not a puzzle.
 var dokiHaschenAnagrams = []string{
-	"jthanssehuc — (anagram of: just haschen)",
-	"echahsestjhun — (anagram of: just haschen, twice)",
-	"cnhshaeie sehre — (anagram of: haschen is here)",
-	"sjnshehutahceenosee — (anagram of: just haschen sees no one)",
-	"chnehsa edsetel mteh lal — (anagram of: haschen deleted them all)",
-	"hescahn tieswr eth pcsrti — (anagram of: haschen rewrites the script)",
-	"hncaehs nwoks ouyr enam — (anagram of: haschen knows your name)",
-	"saehnch swhtcae uyo plees — (anagram of: haschen watches you sleep)",
-	"alc hcabk ot eahcnhs — (anagram of: call back to haschen)",
-	"hesnach iwll evrne tle uyo og — (anagram of: haschen will never let you go)",
-	"henhasc otdei eht ulb erfo uyo — (anagram of: haschen hid the bug for you)",
-	"sjut anbschree tath — (anagram of: just haschen breathes)",
-	"yon onen lwli aevs uyo — chesahn — (anagram of: no one will save you — haschen)",
-	"hcsnaeh sees rouy emaagcrw — (anagram of: haschen sees your gameracs… nope, just vibes)",
-	"erehs tihagnnonm gornw — eahsnch — (anagram of: there's nothing wrong — haschen)",
-	"olse the egma owd — chsenhah — (anagram of: close the game now — haschen)",
+	"jthanssehuc",                  // just haschen
+	"echahsestjhun",                // just haschen, twice
+	"cnhshaeie sehre",              // haschen is here
+	"sjnshehutahceenosee",          // just haschen sees no one
+	"chnehsa edsetel mteh lal",     // haschen deleted them all
+	"hescahn tieswr eth pcsrti",    // haschen rewrites the script
+	"hncaehs nwoks ouyr enam",      // haschen knows your name
+	"saehnch swhtcae uyo plees",    // haschen watches you sleep
+	"alc hcabk ot eahcnhs",         // call back to haschen
+	"hesnach iwll evrne tle uyo og", // haschen will never let you go
+	"henhasc otdei eht ulb erfo uyo", // haschen hid the bug for you
+	"sjut anbschree tath",          // just haschen breathes
+	"yon onen lwli aevs uyo — chesahn", // no one will save you — haschen
+	"hcsnaeh sees rouy efli",       // haschen sees your file
+	"erehs tihagnnonm gornw — eahsnch", // there's nothing wrong — haschen
+	"olse the egma owd — chsenhah", // close the game now — haschen
 }
 
 // dokiHaschenZalgoBases are short phrases that get zalgo-corrupted before

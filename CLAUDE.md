@@ -298,7 +298,7 @@ Word-list-based automatic enforcement. Actions: permanent ban (silent), kick, mu
 ### Doki Area Effect
 Per-area chaos mode for literature-club-themed areas. Enable with `doki_area = true` on the area entry in `areas.toml`. Each IC message rolls independently:
 - 1/300 — replace text with a Haschen-themed Monika-style quote
-- 1/200 — replace text with a dark Haschen anagram (with hint)
+- 1/200 — replace text with a dark Haschen anagram (unscrambles to a hidden Haschen-themed phrase)
 - 1/150 — replace text with a zalgo-corrupted Haschen catchphrase
 - 1/100 — zalgo-scramble the player's actual text
 - 1/250 — surprise-swap the area background to a random one
@@ -313,6 +313,9 @@ Stacks freely with `mirror_area` and `punishment_area` on the same area.
 
 ### Shadow Mod Visibility
 Shadow moderators (`SHADOW` perm bit, no `ADMIN`) are completely hidden from `/gas`/`/players` for non-admin viewers — no "Mod:" line is shown at all. Only admins see them, labelled as `Mod: <name> (shadow)`. Previously the line still rendered as `Mod: Moderator`, which let other moderators infer staff status.
+
+### `/unpunish` Self-Removal Protection
+Punishments now record the issuer's permission tier (`IssuerSystem`/`IssuerMod`/`IssuerShadow`/`IssuerAdmin`) in the `PUNISHMENTS.ISSUER_TIER` column. A regular moderator cannot use `/unpunish` to lift a punishment that an admin or shadow mod applied to them — `/unpunish self`, `/unpunish -t <type> self`, and the self-target slice of `/unpunish all` are all gated. Admins and shadow mods bypass the gate. Persists across restarts via DB migration 18.
 
 ### IPHub VPN Firewall
 When `iphub_api_key` is set, moderators can run `/firewall on|off`. New IPs are checked against IPHub; VPN/proxy IPs are rejected. Known IPs are never re-checked (respects 1,000 requests/day free tier).
