@@ -46,6 +46,7 @@ lock_music = false
 
 # Doki area: Doki Doki Literature Club style chaos. Each IC message rolls:
 #   1/300  — replace text with a Haschen-themed Monika-style quote
+#   1/100  — replace text with one of 130+ original Haschen-themed poems (cute / wholesome / devotional / unhinged / gore / horror / scrambled-horror; ≤256 chars)
 #   1/200  — replace text with a dark Haschen anagram (no hint shown — players unscramble for themselves)
 #   1/150  — replace text with a zalgo-corrupted Haschen catchphrase
 #   1/100  — zalgo-scramble the player's actual text
