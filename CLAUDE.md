@@ -298,6 +298,7 @@ Word-list-based automatic enforcement. Actions: permanent ban (silent), kick, mu
 ### Doki Area Effect
 Per-area chaos mode for literature-club-themed areas. Enable with `doki_area = true` on the area entry in `areas.toml`. Each IC message rolls independently:
 - 1/300 — replace text with a Haschen-themed Monika-style quote
+- 1/100 — replace text with one of 130+ original Haschen-themed poems (cute, wholesome, devotional, unhinged, gorey, horror, or letter-scrambled horror; capped at 256 chars)
 - 1/200 — replace text with a dark Haschen anagram (unscrambles to a hidden Haschen-themed phrase)
 - 1/150 — replace text with a zalgo-corrupted Haschen catchphrase
 - 1/100 — zalgo-scramble the player's actual text
