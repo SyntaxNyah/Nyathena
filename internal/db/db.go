@@ -135,7 +135,7 @@ const MaxChipBalance = 10_000_000
 
 // Database version.
 // This should be incremented whenever changes are made to the DB that require existing databases to upgrade.
-const ver = 16
+const ver = 18
 
 // MaxFavourites is the maximum number of favourite characters a player can save.
 const MaxFavourites = 100
