@@ -310,7 +310,7 @@ func formatPlaytime(seconds int64) string {
 // anonymous connections are excluded. Results come from a single efficient
 // INNER JOIN query — no extra resource cost.
 func cmdPlaytimeTop(client *Client, args []string, usage string) {
-	n := 10
+	n := 25
 	remaining := args
 
 	// Accept an optional leading "top" subcommand keyword (case-insensitive, no allocation).
