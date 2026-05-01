@@ -530,6 +530,41 @@ func pktIC(client *Client, p *packet.Packet) {
 			args[4] = encode(modifiedMsg)
 		}
 
+		// SFX curse: replace the IC packet's SFX field with the cursed URL
+		// stored in customData. Args[6] is sfx_name in the AO2 IC packet.
+		if p.punishmentType == PunishmentSfxCurse && p.customData != "" {
+			args[6] = p.customData
+		}
+
+		// Shrink/Grow/Wide: rewrite args[19] (offset "x&y") to lock the
+		// vertical or horizontal offset to the value stored in customData.
+		// We preserve the other axis from any client-supplied offset to
+		// keep things sensible (e.g. /shrink doesn't override /wide).
+		if p.punishmentType == PunishmentShrink || p.punishmentType == PunishmentGrow || p.punishmentType == PunishmentWide {
+			locked, err := strconv.Atoi(p.customData)
+			if err == nil && locked >= -100 && locked <= 100 {
+				curX, curY := 0, 0
+				if args[19] != "" {
+					parts := strings.Split(decode(args[19]), "&")
+					if v, e := strconv.Atoi(parts[0]); e == nil {
+						curX = v
+					}
+					if len(parts) > 1 {
+						if v, e := strconv.Atoi(parts[1]); e == nil {
+							curY = v
+						}
+					}
+				}
+				switch p.punishmentType {
+				case PunishmentShrink, PunishmentGrow:
+					curY = locked
+				case PunishmentWide:
+					curX = locked
+				}
+				args[19] = encode(fmt.Sprintf("%d&%d", curX, curY))
+			}
+		}
+
 		// Handle name modifications
 		if p.punishmentType == PunishmentEmoji {
 			args[3] = GetRandomEmoji()

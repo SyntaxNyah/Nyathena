@@ -1509,6 +1509,50 @@ func ApplyPunishmentToText(text string, pType PunishmentType) string {
 		return applyBrainrot(text)
 	case PunishmentGordonRamsay:
 		return applyGordonRamsay(text)
+	case PunishmentCherri:
+		return applyCherri(text)
+	case PunishmentClown:
+		return applyClown(text)
+	case PunishmentJester:
+		return applyJester(text)
+	case PunishmentJoker:
+		return applyJoker(text)
+	case PunishmentMime:
+		return applyMime(text)
+	case PunishmentBiblebot:
+		return applyBiblebot(text)
+	case PunishmentSmugdere:
+		return applySmugdere(text)
+	case PunishmentDeretsun:
+		return applyDeretsun(text)
+	case PunishmentBokodere:
+		return applyBokodere(text)
+	case PunishmentThugdere:
+		return applyThugdere(text)
+	case PunishmentTeasedere:
+		return applyTeasedere(text)
+	case PunishmentDorodere:
+		return applyDorodere(text)
+	case PunishmentHinedere:
+		return applyHinedere(text)
+	case PunishmentHajidere:
+		return applyHajidere(text)
+	case PunishmentRindere:
+		return applyRindere(text)
+	case PunishmentUtsudere:
+		return applyUtsudere(text)
+	case PunishmentDarudere:
+		return applyDarudere(text)
+	case PunishmentButsudere:
+		return applyButsudere(text)
+	case PunishmentSDere:
+		return applySDere(text)
+	case PunishmentMDere:
+		return applyMDere(text)
+	case PunishmentTsuyodere:
+		return applyTsuyodere(text)
+	case PunishmentOmnidere:
+		return applyOmnidere(text)
 	default:
 		return text
 	}
