@@ -2722,6 +2722,22 @@ func initCommands() {
 			reqPerms: permissions.PermissionField["NONE"],
 			category: "general",
 		},
+		"potions": {
+			handler:  cmdPotions,
+			minArgs:  0,
+			usage:    "Usage: /potions",
+			desc:     "Lists every potion you can drink. Effects are self-applied for 5 minutes.",
+			reqPerms: permissions.PermissionField["NONE"],
+			category: "general",
+		},
+		"potion": {
+			handler:  cmdPotion,
+			minArgs:  1,
+			usage:    "Usage: /potion <name|off>\nUse /potions to see the menu. /potion off flushes every active potion.",
+			desc:     "Drink a named potion (5-minute self-applied effect) or use /potion off to remove every active potion at once.",
+			reqPerms: permissions.PermissionField["NONE"],
+			category: "general",
+		},
 	}
 }
 

@@ -98,7 +98,12 @@ func TestCommandRegexCaseInsensitive(t *testing.T) {
 		{"/join-tournament", "join-tournament", true},
 		{"/JOIN-TOURNAMENT", "join-tournament", true},
 		{"notacommand", "", false},
-		{"/123", "", false},
+		// Digit-led commands are intentionally allowed (the regex's own
+		// docstring lists /51 as a valid example, and the registry has
+		// /8ball, /51, etc.). The previous "{/123, false}" assertion
+		// contradicted the regex contract and was failing on every run.
+		{"/8ball", "8ball", true},
+		{"/51", "51", true},
 	}
 
 	for _, tt := range tests {

@@ -285,6 +285,32 @@ func applicationCommands() []*discordgo.ApplicationCommand {
 			Description:              "Restart the server process.",
 			DefaultMemberPermissions: func() *int64 { p := int64(discordgo.PermissionAdministrator); return &p }(),
 		},
+		// Nyathena fork additions: security toggles mirroring the in-game
+		// /firewall and /lockdown commands so mods on Discord don't have
+		// to log into the AO server during an incident.
+		{
+			Name:        "firewall",
+			Description: "Toggle the IPHub VPN/proxy firewall (on/off).",
+			Options: []*discordgo.ApplicationCommandOption{
+				{Type: discordgo.ApplicationCommandOptionString, Name: "state", Description: "on or off", Required: true,
+					Choices: []*discordgo.ApplicationCommandOptionChoice{
+						{Name: "on", Value: "on"},
+						{Name: "off", Value: "off"},
+					}},
+			},
+		},
+		{
+			Name:        "lockdown",
+			Description: "Toggle server lockdown, or whitelist every connected player.",
+			Options: []*discordgo.ApplicationCommandOption{
+				{Type: discordgo.ApplicationCommandOptionString, Name: "action", Description: "on / off / whitelist_all", Required: true,
+					Choices: []*discordgo.ApplicationCommandOptionChoice{
+						{Name: "on", Value: "on"},
+						{Name: "off", Value: "off"},
+						{Name: "whitelist_all", Value: "whitelist_all"},
+					}},
+			},
+		},
 	}
 }
 
@@ -347,5 +373,8 @@ func (b *Bot) commandHandlers() map[string]func(*discordgo.Session, *discordgo.I
 		"banlist":  b.handleBanList,
 		// Server control
 		"restart": b.handleRestart,
+		// Nyathena fork additions
+		"firewall": b.handleFirewall,
+		"lockdown": b.handleLockdown,
 	}
 }
