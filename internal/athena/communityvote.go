@@ -449,7 +449,7 @@ func cvoteAccept(client *Client, args []string) {
 			client.SendServerMessage(fmt.Sprintf(
 				"Player (UID %d) is no longer connected.", targetUID))
 		} else {
-			target.SendPacket("KK", communityReason)
+			target.SendPacketSync("KK", communityReason)
 			target.conn.Close()
 			sendPlayerArup()
 			if err := webhook.PostKick(target.CurrentCharacter(), target.Showname(), target.OOCName(),
@@ -512,7 +512,7 @@ func cvoteAccept(client *Client, args []string) {
 				client.SendServerMessage("Failed to record ban in the database.")
 				break
 			}
-			target.SendPacket("KB", fmt.Sprintf("%s\nUntil: %s\nID: %d",
+			target.SendPacketSync("KB", fmt.Sprintf("%s\nUntil: %s\nID: %d",
 				communityReason, untilS, id))
 			target.conn.Close()
 			forgetIP(target.Ipid())

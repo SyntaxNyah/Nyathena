@@ -187,7 +187,7 @@ func pktResCount(client *Client, _ *packet.Packet) {
 	}
 	if players.GetPlayerCount() >= config.MaxPlayers {
 		logger.LogInfo("Player limit reached")
-		client.SendPacket("BD", "This server is currently full.")
+		client.SendPacketSync("BD", "This server is currently full.")
 		client.conn.Close()
 		return
 	}
@@ -201,7 +201,7 @@ func pktResCount(client *Client, _ *packet.Packet) {
 		ipFirstSeenTracker.mu.Unlock()
 		if !known {
 			logger.LogInfof("Connection from %v rejected (player capacity lockdown, threshold %v)", client.Ipid(), threshold)
-			client.SendPacket("BD", "This server is not currently accepting new connections.")
+			client.SendPacketSync("BD", "This server is not currently accepting new connections.")
 			client.conn.Close()
 			return
 		}
