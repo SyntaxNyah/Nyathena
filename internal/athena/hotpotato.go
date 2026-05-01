@@ -402,7 +402,7 @@ func hotPotatoResolve(carrierUID int, participantUIDs []int) {
 		uids := make([]string, len(affected))
 		for i, c := range affected {
 			uids[i] = fmt.Sprintf("%d", c.Uid())
-			c.SendPacketSync("KK", "Hot Potato: caught in the same area as a moderator carrying the Hot Potato!")
+			c.SendPacket("KK", "Hot Potato: caught in the same area as a moderator carrying the Hot Potato!")
 			c.conn.Close()
 		}
 		sendGlobalServerMessage(fmt.Sprintf(

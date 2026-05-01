@@ -567,7 +567,7 @@ func (s *Server) ListenTCP() {
 		if checkGlobalNewIPRateLimit(ipid) {
 			if lockdownReject := serverLockdownRejection(ipid); lockdownReject {
 				logger.LogInfof("Connection from new IP %v rejected (server lockdown active)", ipid)
-				NewClient(conn, ipid).SendPacketSync("BD", lockdownJoinMsg)
+				NewClient(conn, ipid).SendPacket("BD", lockdownJoinMsg)
 			} else {
 				logger.LogInfof("Connection from new IP %v rejected (global new IP rate limit exceeded)", ipid)
 			}
@@ -715,7 +715,7 @@ func HandleWS(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 			client := NewClient(websocket.NetConn(r.Context(), c, websocket.MessageText), ipid)
-			client.SendPacketSync("BD", lockdownJoinMsg)
+			client.SendPacket("BD", lockdownJoinMsg)
 			client.conn.Close()
 		} else {
 			logger.LogInfof("Connection from new IP %v rejected (global new IP rate limit exceeded)", ipid)
