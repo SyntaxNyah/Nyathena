@@ -28,7 +28,6 @@ import (
 	"time"
 
 	"github.com/MangosArentLiterature/Athena/internal/area"
-	"github.com/MangosArentLiterature/Athena/internal/db"
 )
 
 func cmdPos(client *Client, args []string, _ string) {
@@ -47,6 +46,17 @@ func cmdPos(client *Client, args []string, _ string) {
 		}
 	}
 	client.SendServerMessage(fmt.Sprintf("Invalid position. Available positions: %v", strings.Join(validPositions, ", ")))
+}
+
+// pairDisplayName returns the player's showname (in-character display name)
+// when set, falling back to their OOC name. Pair messages reference IC
+// presence rather than OOC identity, so showname matches the user's mental
+// model of "who that character is" better than their OOC alias.
+func pairDisplayName(c *Client) string {
+	if name := c.EffectiveShowname(); name != "" {
+		return name
+	}
+	return c.OOCName()
 }
 
 // Handles /pair
@@ -91,11 +101,11 @@ func cmdPair(client *Client, args []string, _ string) {
 		// Establish UID-tracked pair on both sides so it persists across area changes.
 		client.SetForcePairUID(target.Uid())
 		target.SetForcePairUID(client.Uid())
-		client.SendServerMessage(fmt.Sprintf("Now pairing with %v.", target.OOCName()))
-		target.SendServerMessage(fmt.Sprintf("%v accepted your pair request.", client.OOCName()))
+		client.SendServerMessage(fmt.Sprintf("Now pairing with %v.", pairDisplayName(target)))
+		target.SendServerMessage(fmt.Sprintf("%v accepted your pair request.", pairDisplayName(client)))
 	} else {
-		client.SendServerMessage(fmt.Sprintf("Sent pair request to %v.", target.OOCName()))
-		target.SendServerMessage(fmt.Sprintf("%v wants to pair with you. Type /pair %v to accept.", client.OOCName(), client.Uid()))
+		client.SendServerMessage(fmt.Sprintf("Sent pair request to %v.", pairDisplayName(target)))
+		target.SendServerMessage(fmt.Sprintf("%v wants to pair with you. Type /pair %v to accept.", pairDisplayName(client), client.Uid()))
 	}
 }
 
@@ -153,34 +163,55 @@ func cmdForcePair(client *Client, args []string, _ string) {
 }
 
 // Handles /unpair
-
+//
+// Full bidirectional reset. Previously /unpair only fully cleared the partner's
+// state when ForcePairUID was set, which could leave a stale PairWantedID on a
+// peer (especially after the canceller's CharID changed since the request was
+// sent) and produce a desync where one side still appeared paired. Now we walk
+// the entire client list and clear PairWantedID + ForcePairUID on anyone who
+// references us by UID OR by current/historical CharID, then clear our own.
 func cmdUnpair(client *Client, _ []string, _ string) {
-	if client.PairWantedID() == -1 && client.ForcePairUID() == -1 {
-		client.SendServerMessage("You do not have an active pair request.")
-		return
-	}
+	clientUID := client.Uid()
+	clientCharID := client.CharID()
+	cancellerName := pairDisplayName(client)
 
-	// If force-paired, clear force-pair state on both sides.
-	if client.ForcePairUID() >= 0 {
-		if partner, err := getClientByUid(client.ForcePairUID()); err == nil {
-			partner.SetForcePairUID(-1)
-			partner.SetPairWantedID(-1)
-			partner.SendServerMessage(fmt.Sprintf("%v has cancelled the pair.", client.OOCName()))
-		}
-		client.SetForcePairUID(-1)
-	}
+	hadPair := client.PairWantedID() != -1 || client.ForcePairUID() != -1
 
-	// Notify any client that was paired with us.
-	cancellerName := client.OOCName()
-	cancellerCharID := client.CharID()
+	// Clear every reference to this client on every other client.
+	notified := 0
 	clients.ForEach(func(c *Client) {
-		if c != client && c.PairWantedID() == cancellerCharID {
+		if c == client {
+			return
+		}
+		referenced := false
+		if c.ForcePairUID() == clientUID {
+			c.SetForcePairUID(-1)
+			referenced = true
+		}
+		if clientCharID >= 0 && c.PairWantedID() == clientCharID {
+			c.SetPairWantedID(-1)
+			referenced = true
+		}
+		if referenced {
 			c.SendServerMessage(fmt.Sprintf("%v has cancelled the pair.", cancellerName))
+			notified++
 		}
 	})
 
+	// Clear our own state regardless of whether a partner was found.
+	client.SetForcePairUID(-1)
 	client.SetPairWantedID(-1)
-	client.SendServerMessage("Pair cancelled.")
+
+	switch {
+	case hadPair && notified > 0:
+		client.SendServerMessage("Pair cancelled.")
+	case hadPair:
+		// We had local state but no peer was referencing us — most likely a
+		// stale request whose target already disconnected. Clear silently.
+		client.SendServerMessage("Pair cancelled.")
+	default:
+		client.SendServerMessage("You do not have an active pair request.")
+	}
 }
 
 // Handles /forceunpair
@@ -782,18 +813,44 @@ func cmdMaso(client *Client, _ []string, _ string) {
 	}
 }
 
-// Handles /suicide
+// defaultEightBallAnswers is the fallback list when 8ball.txt is missing or
+// empty. Mirrors the 20 classic Magic 8 Ball responses.
+var defaultEightBallAnswers = []string{
+	"It is certain.",
+	"It is decidedly so.",
+	"Without a doubt.",
+	"Yes - definitely.",
+	"You may rely on it.",
+	"As I see it, yes.",
+	"Most likely.",
+	"Outlook good.",
+	"Yes.",
+	"Signs point to yes.",
+	"Reply hazy, try again.",
+	"Ask again later.",
+	"Better not tell you now.",
+	"Cannot predict now.",
+	"Concentrate and ask again.",
+	"Don't count on it.",
+	"My reply is no.",
+	"My sources say no.",
+	"Outlook not so good.",
+	"Very doubtful.",
+}
 
-func cmdSuicide(client *Client, _ []string, _ string) {
-banTime := time.Now().UTC().Unix()
-until := time.Now().UTC().Add(10 * time.Minute).Unix()
-untilS := time.Unix(until, 0).UTC().Format("02 Jan 2006 15:04 MST")
-reason := "You chose this. See you in 10 minutes."
-id, err := db.AddBan(client.Ipid(), client.Hdid(), banTime, until, reason, "Server")
-if err == nil {
-client.SendPacketSync("KB", fmt.Sprintf("%v\nUntil: %v\nID: %v", reason, untilS, id))
-} else {
-client.SendPacketSync("KB", fmt.Sprintf("%v\nUntil: %v", reason, untilS))
+// Handles /8ball
+func cmd8Ball(client *Client, args []string, _ string) {
+	question := strings.TrimSpace(strings.Join(args, " "))
+	if question == "" {
+		client.SendServerMessage("Usage: /8ball <question>")
+		return
+	}
+	pool := eightBallAnswers
+	if len(pool) == 0 {
+		pool = defaultEightBallAnswers
+	}
+	answer := pool[rand.Intn(len(pool))]
+	sendAreaServerMessage(client.Area(), fmt.Sprintf("%v asked: %s\n🎱 The Magic 8-Ball says: %s",
+		pairDisplayName(client), question, answer))
 }
-client.conn.Close()
-}
+

@@ -18,6 +18,7 @@ package db
 
 import (
 	"database/sql"
+	"errors"
 	"fmt"
 	"strconv"
 	"strings"
@@ -210,7 +211,7 @@ func Open() error {
 	if err != nil {
 		return err
 	}
-	_, err = db.Exec("CREATE TABLE IF NOT EXISTS USERS(USERNAME TEXT PRIMARY KEY, PASSWORD TEXT, PERMISSIONS TEXT, IPID TEXT NOT NULL DEFAULT '', GAMBLE_HIDE INTEGER NOT NULL DEFAULT 0, ACTIVE_TAG TEXT NOT NULL DEFAULT '')")
+	_, err = db.Exec("CREATE TABLE IF NOT EXISTS USERS(USERNAME TEXT PRIMARY KEY, PASSWORD TEXT, PERMISSIONS TEXT, IPID TEXT NOT NULL DEFAULT '', GAMBLE_HIDE INTEGER NOT NULL DEFAULT 0, ACTIVE_TAG TEXT NOT NULL DEFAULT '', USERNAME_RESETS INTEGER NOT NULL DEFAULT 0)")
 	if err != nil {
 		return err
 	}
@@ -587,6 +588,20 @@ func upgradeDB(v int) error {
 		if _, err := db.Exec("PRAGMA user_version = 18"); err != nil {
 			return err
 		}
+		fallthrough
+	case 18:
+		// Add USERNAME_RESETS counter to USERS so /resetusername can enforce
+		// a hard cap (3) on how many times a player may rename their account.
+		var usersExists int
+		db.QueryRow("SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='USERS'").Scan(&usersExists) //nolint:errcheck
+		if usersExists > 0 {
+			if _, err := db.Exec("ALTER TABLE USERS ADD COLUMN USERNAME_RESETS INTEGER NOT NULL DEFAULT 0"); err != nil {
+				return err
+			}
+		}
+		if _, err := db.Exec("PRAGMA user_version = 19"); err != nil {
+			return err
+		}
 	}
 	return nil
 }
@@ -706,6 +721,70 @@ func RegisterPlayerHashed(username string, hashedPassword []byte, ipid string) e
 	_, err := db.Exec("INSERT INTO USERS(USERNAME, PASSWORD, PERMISSIONS, IPID) VALUES(?, ?, '0', ?)", username, hashedPassword, ipid)
 	return err
 }
+
+// MaxUsernameResets is the cap on /resetusername invocations per account.
+const MaxUsernameResets = 3
+
+// GetUsernameResets returns how many times this account has renamed itself.
+// Used by /resetusername to enforce the per-account cap.
+func GetUsernameResets(username string) (int, error) {
+	if db == nil {
+		return 0, nil
+	}
+	var n int
+	switch err := db.QueryRow("SELECT USERNAME_RESETS FROM USERS WHERE USERNAME = ?", username).Scan(&n); {
+	case err == sql.ErrNoRows:
+		return 0, nil
+	case err != nil:
+		return 0, err
+	}
+	return n, nil
+}
+
+// RenameAccount renames an account and increments the per-account rename
+// counter atomically. Returns ErrUsernameTaken if the new name is already in
+// use, or ErrUsernameLimit if the account has already reached its cap.
+func RenameAccount(oldName, newName string) error {
+	if db == nil {
+		return nil
+	}
+	tx, err := db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback() //nolint:errcheck
+
+	var resets int
+	switch err := tx.QueryRow("SELECT USERNAME_RESETS FROM USERS WHERE USERNAME = ?", oldName).Scan(&resets); {
+	case err == sql.ErrNoRows:
+		return sql.ErrNoRows
+	case err != nil:
+		return err
+	}
+	if resets >= MaxUsernameResets {
+		return ErrUsernameLimit
+	}
+
+	// Reject if the new name is already taken (case-sensitive — matches USERS PK).
+	var existing int
+	if err := tx.QueryRow("SELECT COUNT(*) FROM USERS WHERE USERNAME = ?", newName).Scan(&existing); err != nil {
+		return err
+	}
+	if existing > 0 {
+		return ErrUsernameTaken
+	}
+
+	if _, err := tx.Exec("UPDATE USERS SET USERNAME = ?, USERNAME_RESETS = USERNAME_RESETS + 1 WHERE USERNAME = ?", newName, oldName); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
+// ErrUsernameTaken indicates a /resetusername target is already registered.
+var ErrUsernameTaken = errors.New("username already taken")
+
+// ErrUsernameLimit indicates the account has hit MaxUsernameResets.
+var ErrUsernameLimit = errors.New("username reset limit reached")
 
 // LinkIPIDToUser associates an IPID with a user account.
 // Called on every successful login so the leaderboard can show account names.
@@ -1553,9 +1632,20 @@ func GetTopChipBalances(n int) ([]ChipEntry, error) {
 // GetTopPlaytimes returns the top n registered players by accumulated playtime, ordered
 // descending. Only players with a linked account are included; anonymous IPIDs are excluded.
 // The IPID is returned alongside each entry for live-session merging but is never displayed.
+// Includes both player and moderator accounts (shadow mods too) — there is no permission
+// filter; any USERS row with a linked IPID and non-zero playtime is eligible.
 func GetTopPlaytimes(n int) ([]PlaytimeEntry, error) {
+	return GetTopPlaytimesPaged(n, 0)
+}
+
+// GetTopPlaytimesPaged returns up to n entries starting at the given offset.
+// Used to back the paginated /playtime top <page> command.
+func GetTopPlaytimesPaged(n, offset int) ([]PlaytimeEntry, error) {
 	if db == nil {
 		return nil, nil
+	}
+	if offset < 0 {
+		offset = 0
 	}
 	rows, err := db.Query(`
 		SELECT k.IPID, u.USERNAME, k.PLAYTIME
@@ -1563,7 +1653,7 @@ func GetTopPlaytimes(n int) ([]PlaytimeEntry, error) {
 		INNER JOIN USERS u ON u.IPID = k.IPID
 		WHERE k.PLAYTIME > 0
 		ORDER BY k.PLAYTIME DESC
-		LIMIT ?`, n)
+		LIMIT ? OFFSET ?`, n, offset)
 	if err != nil {
 		return nil, err
 	}
@@ -1577,6 +1667,61 @@ func GetTopPlaytimes(n int) ([]PlaytimeEntry, error) {
 		entries = append(entries, e)
 	}
 	return entries, rows.Err()
+}
+
+// CountPlaytimeEntries returns the total number of accounts that would appear
+// in the playtime leaderboard. Used to compute the last page number for
+// /playtime top <page>.
+func CountPlaytimeEntries() (int, error) {
+	if db == nil {
+		return 0, nil
+	}
+	var n int
+	err := db.QueryRow(`
+		SELECT COUNT(*)
+		FROM KNOWN_IPS k
+		INNER JOIN USERS u ON u.IPID = k.IPID
+		WHERE k.PLAYTIME > 0`).Scan(&n)
+	return n, err
+}
+
+// AllRegisteredIPIDs returns every (username, ipid, current_playtime) triple
+// for registered accounts whose IPID is set. Used by /reloadplaytime to
+// re-merge any orphaned KNOWN_IPS playtime into the linked account.
+func AllRegisteredIPIDs() ([]struct {
+	Username string
+	IPID     string
+	Playtime int64
+}, error) {
+	if db == nil {
+		return nil, nil
+	}
+	rows, err := db.Query(`
+		SELECT u.USERNAME, u.IPID, COALESCE(k.PLAYTIME, 0)
+		FROM USERS u
+		LEFT JOIN KNOWN_IPS k ON k.IPID = u.IPID
+		WHERE u.IPID != ''`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []struct {
+		Username string
+		IPID     string
+		Playtime int64
+	}
+	for rows.Next() {
+		var r struct {
+			Username string
+			IPID     string
+			Playtime int64
+		}
+		if err := rows.Scan(&r.Username, &r.IPID, &r.Playtime); err != nil {
+			return out, err
+		}
+		out = append(out, r)
+	}
+	return out, rows.Err()
 }
 
 // UnscrambleEntry holds one row from the UNSCRAMBLE_WINS leaderboard.

@@ -75,6 +75,7 @@ var (
 var (
 	config                                 *settings.Config
 	characters, music, backgrounds, parrot, cdns []string
+	eightBallAnswers                       []string // optional /8ball responses loaded from 8ball.txt
 	charactersByName                       map[string]int // O(1) lookup: lowercase name → character ID
 	areas                                  []*area.Area
 	areaNames                              string
@@ -200,6 +201,7 @@ type Server struct {
 	music                  []string
 	backgrounds            []string
 	parrot                 []string
+	eightBall              []string
 	cdns                   []string
 	areas                  []*area.Area
 	areaNames              string
@@ -349,6 +351,12 @@ func NewServer(conf *settings.Config) (*Server, error) {
 	} else if len(s.parrot) == 0 {
 		return nil, fmt.Errorf("empty parrot list")
 	}
+
+	// 8ball.txt is optional. When the file is missing or empty, /8ball falls
+	// back to a hard-coded default answer set so the command always works.
+	if loaded, eerr := settings.LoadFile("/8ball.txt"); eerr == nil {
+		s.eightBall = loaded
+	}
 	s.cdns = settings.LoadCDNs()
 	_, err = str2duration.ParseDuration(conf.BanLen)
 	if err != nil {
@@ -465,6 +473,7 @@ func NewServer(conf *settings.Config) (*Server, error) {
 	music = s.music
 	backgrounds = s.backgrounds
 	parrot = s.parrot
+	eightBallAnswers = s.eightBall
 	cdns = s.cdns
 	areas = s.areas
 	areaNames = s.areaNames
