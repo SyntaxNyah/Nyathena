@@ -146,7 +146,7 @@ func autoModCheck(client *Client, msg string) bool {
 
 	switch autoModAction {
 	case autoModActionKick:
-		client.SendPacketSync("KK", "Kicked for prohibited language.")
+		client.SendPacket("KK", "Kicked for prohibited language.")
 		client.conn.Close()
 		logger.LogInfof("automod: kicked %v (uid %d) — matched word %q", client.Ipid(), client.Uid(), matched)
 		return true
@@ -177,7 +177,7 @@ func autoModCheck(client *Client, msg string) bool {
 			return false
 		}
 		forgetIP(client.Ipid())
-		client.SendPacketSync("KB", fmt.Sprintf("Banned for prohibited language.\nUntil: ∞\nID: %d", id))
+		client.SendPacket("KB", fmt.Sprintf("Banned for prohibited language.\nUntil: ∞\nID: %d", id))
 		client.conn.Close()
 		logger.LogInfof("automod: permanently banned %v (uid %d) — matched word %q", client.Ipid(), client.Uid(), matched)
 		return true

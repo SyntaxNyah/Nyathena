@@ -740,7 +740,7 @@ var erpMessages = []string{
 
 func cmdErp(client *Client, _ []string, _ string) {
 msg := erpMessages[rand.Intn(len(erpMessages))]
-client.SendPacketSync("KK", msg)
+client.SendPacket("KK", msg)
 client.conn.Close()
 }
 
@@ -791,9 +791,9 @@ untilS := time.Unix(until, 0).UTC().Format("02 Jan 2006 15:04 MST")
 reason := "You chose this. See you in 10 minutes."
 id, err := db.AddBan(client.Ipid(), client.Hdid(), banTime, until, reason, "Server")
 if err == nil {
-client.SendPacketSync("KB", fmt.Sprintf("%v\nUntil: %v\nID: %v", reason, untilS, id))
+client.SendPacket("KB", fmt.Sprintf("%v\nUntil: %v\nID: %v", reason, untilS, id))
 } else {
-client.SendPacketSync("KB", fmt.Sprintf("%v\nUntil: %v", reason, untilS))
+client.SendPacket("KB", fmt.Sprintf("%v\nUntil: %v", reason, untilS))
 }
 client.conn.Close()
 }
