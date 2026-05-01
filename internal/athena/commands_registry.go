@@ -306,6 +306,14 @@ func initCommands() {
 			reqPerms: permissions.PermissionField["NONE"],
 			category: "general",
 		},
+		"getmusic": {
+			handler:  cmdGetMusic,
+			minArgs:  0,
+			usage:    "Usage: /getmusic",
+			desc:     "Shows the URL of the song currently playing in this area and re-sends the MC packet to just you (useful when your client's audio bugged out).",
+			reqPerms: permissions.PermissionField["NONE"],
+			category: "general",
+		},
 		"hide": {
 			handler:  cmdHide,
 			minArgs:  0,
@@ -664,6 +672,22 @@ func initCommands() {
 			usage:    "Usage: /unforcename <uid>",
 			desc:     "Removes a forced showname from a player.",
 			reqPerms: permissions.PermissionField["KICK"],
+			category: "moderation",
+		},
+		"charshuffle": {
+			handler:  cmdCharShuffle,
+			minArgs:  0,
+			usage:    "Usage: /charshuffle",
+			desc:     "Randomly permutes the character ID of every player in the area (char1↔char2, etc). Originals are remembered — use /uncharshuffle to restore.",
+			reqPerms: permissions.PermissionField["MUTE"],
+			category: "moderation",
+		},
+		"uncharshuffle": {
+			handler:  cmdUnCharShuffle,
+			minArgs:  0,
+			usage:    "Usage: /uncharshuffle",
+			desc:     "Restores every player to the character they had before /charshuffle.",
+			reqPerms: permissions.PermissionField["MUTE"],
 			category: "moderation",
 		},
 		"nameshuffle": {
@@ -2750,6 +2774,14 @@ func ParseCommand(client *Client, command string, args []string) {
 			// Check if it's a known category first
 			for _, cat := range helpCategoryList {
 				if cmdName == cat.name {
+					// The "punishment" category has dozens of entries — flat
+					// alphabetic listing was unreadable. Render it grouped by
+					// sub-theme (text effects, dere, animal, themed quote,
+					// timing/visibility, etc.) so players and mods can scan it.
+					if cat.name == "punishment" {
+						client.SendServerMessage(renderPunishmentHelp(client, casinoEnabled, accountsEnabled, voiceEnabledNow))
+						return
+					}
 					var lines []string
 					for name, cmd := range Commands {
 						if cmd.category != cat.name {

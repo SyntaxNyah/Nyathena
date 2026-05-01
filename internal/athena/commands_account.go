@@ -29,6 +29,7 @@ import (
 
 	"github.com/MangosArentLiterature/Athena/internal/db"
 	"github.com/MangosArentLiterature/Athena/internal/logger"
+	"github.com/MangosArentLiterature/Athena/internal/permissions"
 	"golang.org/x/crypto/bcrypt"
 )
 
@@ -505,6 +506,13 @@ func cmdProfile(client *Client, args []string, _ string) {
 	}
 	sb.WriteString(fmt.Sprintf("  Active tag:  %v\n", tagDisplay))
 	sb.WriteString(fmt.Sprintf("  Favourites:  %v\n", favsDisplay))
+	// DJ insignia: vinyl record next to the music line so it's obvious at a
+	// glance whether the player has DJ privileges. Mods see no badge here —
+	// they have their own staff lines and shouldn't double up.
+	if permissions.HasPermission(target.Perms(), permissions.PermissionField["DJ"]) &&
+		!permissions.IsModerator(target.Perms()) {
+		sb.WriteString("  Music:       💿 DJ\n")
+	}
 	if activePunishments > 0 {
 		sb.WriteString(fmt.Sprintf("  Punishments: %d active\n", activePunishments))
 	}

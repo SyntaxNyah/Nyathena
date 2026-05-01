@@ -997,6 +997,9 @@ func pktAM(client *Client, p *packet.Packet) {
 		if len(p.Body) > 3 {
 			effects = p.Body[3]
 		}
+		// Track the current song so /getmusic can re-fetch it for clients
+		// whose audio dropped or who joined mid-track.
+		client.Area().SetCurrentSong(song)
 		writeToArea(client.Area(), "MC", song, p.Body[1], name, "1", "0", effects)
 	} else if strings.Contains(areaNames, decodedSong) {
 		if decodedSong == client.Area().Name() {

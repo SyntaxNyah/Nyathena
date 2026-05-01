@@ -298,6 +298,7 @@ type Client struct {
 	possessing          int          // UID of the client being possessed (-1 if not possessing anyone)
 	possessedPos        string       // Position of the possessed target (saved at time of possession)
 	forcedShowname      string       // Showname forced by a moderator ("" if none)
+	shuffledOrigCharID  int          // Original char ID before /charshuffle (-2 = not shuffled)
 	forcedIniswapChar   string       // Character name forced for iniswap-style IC output ("" = none)
 	forcedIniswapIDStr  string       // Pre-computed strconv.Itoa(charID) matching forcedIniswapChar ("" = none)
 	connectedAt         time.Time    // Time the client joined the server (uid assigned); zero if not yet joined
@@ -353,8 +354,9 @@ func NewClient(conn net.Conn, ipid string) *Client {
 		ipid:            ipid,
 		forcePairUID:    -1,
 		possessing:      -1,
-		jailAreaID:      -1,
-		charStuckCharID: -1,
+		jailAreaID:         -1,
+		charStuckCharID:    -1,
+		shuffledOrigCharID: -2, // -2 = "not shuffled" sentinel; -1 = shuffled but original was charselect
 		sendCh:          make(chan []byte, sendQueueSize),
 		done:            make(chan struct{}),
 	}
