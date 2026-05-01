@@ -1509,6 +1509,50 @@ func ApplyPunishmentToText(text string, pType PunishmentType) string {
 		return applyBrainrot(text)
 	case PunishmentGordonRamsay:
 		return applyGordonRamsay(text)
+	case PunishmentCherri:
+		return applyCherri(text)
+	case PunishmentClown:
+		return applyClown(text)
+	case PunishmentJester:
+		return applyJester(text)
+	case PunishmentJoker:
+		return applyJoker(text)
+	case PunishmentMime:
+		return applyMime(text)
+	case PunishmentBiblebot:
+		return applyBiblebot(text)
+	case PunishmentSmugdere:
+		return applySmugdere(text)
+	case PunishmentDeretsun:
+		return applyDeretsun(text)
+	case PunishmentBokodere:
+		return applyBokodere(text)
+	case PunishmentThugdere:
+		return applyThugdere(text)
+	case PunishmentTeasedere:
+		return applyTeasedere(text)
+	case PunishmentDorodere:
+		return applyDorodere(text)
+	case PunishmentHinedere:
+		return applyHinedere(text)
+	case PunishmentHajidere:
+		return applyHajidere(text)
+	case PunishmentRindere:
+		return applyRindere(text)
+	case PunishmentUtsudere:
+		return applyUtsudere(text)
+	case PunishmentDarudere:
+		return applyDarudere(text)
+	case PunishmentButsudere:
+		return applyButsudere(text)
+	case PunishmentSDere:
+		return applySDere(text)
+	case PunishmentMDere:
+		return applyMDere(text)
+	case PunishmentTsuyodere:
+		return applyTsuyodere(text)
+	case PunishmentOmnidere:
+		return applyOmnidere(text)
 	default:
 		return text
 	}
@@ -2433,6 +2477,38 @@ var recipeStepVerbs = []string{
 	"Reduce", "Simmer", "Bring to a boil", "Bake at 350°F with",
 }
 
+// recipeStepLabels and recipeStepVerbsByStep give each numbered step its
+// own flavour and verb pool so /recipe doesn't feel like the same template
+// over and over. Step 1 is "prep", step 2 is "combine", step 3 is "cook",
+// step 4 is "plate" — each picks from its own thematic verb list.
+var (
+	recipeStepLabels = []string{"Step 1", "Step 2", "Step 3", "Step 4"}
+
+	recipeStep1Verbs = []string{
+		"Wash and dice", "Mince", "Pat dry", "Prep your station with",
+		"Carefully separate", "Trim the edges off", "Bring to room temperature",
+		"Lay out on parchment paper", "Measure out exactly", "Sift",
+	}
+	recipeStep2Verbs = []string{
+		"Combine", "Whisk together", "Fold in", "Cream", "Emulsify",
+		"Mix gently", "Beat to soft peaks with", "Knead lightly with",
+		"Marinate for 20 minutes with", "Bind together using",
+	}
+	recipeStep3Verbs = []string{
+		"Sear in a cast-iron skillet with", "Slow-roast at 275°F with",
+		"Deglaze the pan with", "Reduce by half", "Sous-vide at 60°C with",
+		"Flambé briefly with", "Steam for 8 minutes alongside", "Fry in clarified butter with",
+		"Smoke over applewood with", "Bring to a rolling boil and add",
+	}
+	recipeStep4Verbs = []string{
+		"Plate over a bed of", "Garnish with a delicate sprig of",
+		"Drizzle with a balsamic reduction of", "Crown with",
+		"Top with a quenelle of", "Dust with finely shaved",
+		"Surround with a moat of", "Finish with a single tear of",
+		"Place beside a smear of", "Sprinkle just before service with",
+	}
+)
+
 // recipeEndings are amusing cooking-instruction suffixes.
 var recipeEndings = []string{
 	"Serve immediately.",
@@ -2447,15 +2523,38 @@ var recipeEndings = []string{
 	"Sprinkle with regret before serving.",
 	"Baste every 15 minutes for optimal results.",
 	"Allow to cool before consuming.",
+	"Pair with a confident shrug.",
+	"Plate with intention.",
+	"Photograph for the lookbook.",
+	"Tap the spoon twice for tradition.",
 }
 
-// applyRecipe reformats the text as a cooking recipe instruction step.
+// applyRecipe reformats the text as one of four numbered recipe steps,
+// each with its own thematic verb pool so the rotation feels deliberate
+// rather than a random reshuffle of the same words. The step number is
+// chosen per-message so a stream of /recipe lines reads like a real
+// recipe: Step 1, Step 3, Step 2, Step 4...
 func applyRecipe(text string) string {
-	verb := recipeStepVerbs[rand.Intn(len(recipeStepVerbs))]
+	stepIdx := rand.Intn(len(recipeStepLabels))
+	label := recipeStepLabels[stepIdx]
+	var verb string
+	switch stepIdx {
+	case 0:
+		verb = recipeStep1Verbs[rand.Intn(len(recipeStep1Verbs))]
+	case 1:
+		verb = recipeStep2Verbs[rand.Intn(len(recipeStep2Verbs))]
+	case 2:
+		verb = recipeStep3Verbs[rand.Intn(len(recipeStep3Verbs))]
+	case 3:
+		verb = recipeStep4Verbs[rand.Intn(len(recipeStep4Verbs))]
+	default:
+		verb = recipeStepVerbs[rand.Intn(len(recipeStepVerbs))]
+	}
 	ending := recipeEndings[rand.Intn(len(recipeEndings))]
 	var b strings.Builder
-	b.Grow(len("Step 1: ") + len(verb) + len(" \"") + len(text) + len("\". ") + len(ending))
-	b.WriteString("Step 1: ")
+	b.Grow(len(label) + len(": ") + len(verb) + len(" \"") + len(text) + len("\". ") + len(ending))
+	b.WriteString(label)
+	b.WriteString(": ")
 	b.WriteString(verb)
 	b.WriteString(" \"")
 	b.WriteString(text)

@@ -33,8 +33,17 @@ import (
 )
 
 func cmdAbout(client *Client, _ []string, _ string) {
-	client.SendServerMessage(fmt.Sprintf("Running Athena version %v.\nAthena is open source software; for documentation, bug reports, and source code, see: %v",
-		version, "https://github.com/MangosArentLiterature/Athena."))
+	client.SendServerMessage(fmt.Sprintf(
+		"Running Nyathena version %v.\n"+
+			"\n"+
+			"Nyathena is a fork of Athena maintained by SyntaxNyah.\n"+
+			"Fork source code & documentation: https://github.com/SyntaxNyah/Nyathena\n"+
+			"\n"+
+			"Original Athena project by MangosArentLiterature — full credit\n"+
+			"goes to Mango for the upstream server that everything in this\n"+
+			"fork is built on top of.\n"+
+			"Upstream: https://github.com/MangosArentLiterature/Athena",
+		version))
 }
 
 // Handles /allowcms
@@ -182,16 +191,22 @@ func cmdCharSelect(client *Client, args []string, _ string) {
 // Handles /randomchar
 
 func cmdRandomChar(client *Client, _ []string, _ string) {
-	// Enforce 5-second rate limit.
-	const cooldown = 5 * time.Second
-	if last := client.LastRandomCharTime(); !last.IsZero() && time.Since(last) < cooldown {
-		remaining := int(time.Until(last.Add(cooldown)).Seconds()) + 1
-		unit := "seconds"
-		if remaining == 1 {
-			unit = "second"
+	// DJs and moderators bypass the cooldown — they need to be able to swap
+	// freely while running events or moderating. Regular users keep the 5s
+	// rate limit so they can't spam-flicker the character list.
+	hasDJ := permissions.HasPermission(client.Perms(), permissions.PermissionField["DJ"])
+	isMod := permissions.IsModerator(client.Perms())
+	if !hasDJ && !isMod {
+		const cooldown = 5 * time.Second
+		if last := client.LastRandomCharTime(); !last.IsZero() && time.Since(last) < cooldown {
+			remaining := int(time.Until(last.Add(cooldown)).Seconds()) + 1
+			unit := "seconds"
+			if remaining == 1 {
+				unit = "second"
+			}
+			client.SendServerMessage(fmt.Sprintf("Please wait %d %s before using /randomchar again.", remaining, unit))
+			return
 		}
-		client.SendServerMessage(fmt.Sprintf("Please wait %d %s before using /randomchar again.", remaining, unit))
-		return
 	}
 	if client.IsTunged() {
 		client.SendServerMessage("You have been tunged and cannot change characters until the effect is removed.")
@@ -453,6 +468,7 @@ func cmdAreaKick(client *Client, args []string, _ string) {
 		return
 	}
 	toKick := getUidList(strings.Split(args[0], ","))
+	originArea := client.Area()
 
 	var count int
 	var report string
@@ -464,6 +480,12 @@ func cmdAreaKick(client *Client, args []string, _ string) {
 			client.SendServerMessage("You can't kick yourself from the area.")
 			continue
 		}
+		// Remove from the area's invite list before moving them. /lock adds
+		// every current occupant to the invite list at lock time, which meant
+		// a kicked player could simply walk back in. Pulling their UID first
+		// closes that loophole — they have to be explicitly re-invited (or
+		// the area unlocked) before they can return.
+		originArea.RemoveInvited(c.Uid())
 		c.ChangeArea(areas[0])
 		c.SendServerMessage("You were kicked from the area!")
 		count++

@@ -25,10 +25,10 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/MangosArentLiterature/Athena/internal/area"
-	"github.com/MangosArentLiterature/Athena/internal/db"
 )
 
 func cmdPos(client *Client, args []string, _ string) {
@@ -47,6 +47,17 @@ func cmdPos(client *Client, args []string, _ string) {
 		}
 	}
 	client.SendServerMessage(fmt.Sprintf("Invalid position. Available positions: %v", strings.Join(validPositions, ", ")))
+}
+
+// pairDisplayName returns the player's showname (in-character display name)
+// when set, falling back to their OOC name. Pair messages reference IC
+// presence rather than OOC identity, so showname matches the user's mental
+// model of "who that character is" better than their OOC alias.
+func pairDisplayName(c *Client) string {
+	if name := c.EffectiveShowname(); name != "" {
+		return name
+	}
+	return c.OOCName()
 }
 
 // Handles /pair
@@ -91,11 +102,11 @@ func cmdPair(client *Client, args []string, _ string) {
 		// Establish UID-tracked pair on both sides so it persists across area changes.
 		client.SetForcePairUID(target.Uid())
 		target.SetForcePairUID(client.Uid())
-		client.SendServerMessage(fmt.Sprintf("Now pairing with %v.", target.OOCName()))
-		target.SendServerMessage(fmt.Sprintf("%v accepted your pair request.", client.OOCName()))
+		client.SendServerMessage(fmt.Sprintf("Now pairing with %v.", pairDisplayName(target)))
+		target.SendServerMessage(fmt.Sprintf("%v accepted your pair request.", pairDisplayName(client)))
 	} else {
-		client.SendServerMessage(fmt.Sprintf("Sent pair request to %v.", target.OOCName()))
-		target.SendServerMessage(fmt.Sprintf("%v wants to pair with you. Type /pair %v to accept.", client.OOCName(), client.Uid()))
+		client.SendServerMessage(fmt.Sprintf("Sent pair request to %v.", pairDisplayName(target)))
+		target.SendServerMessage(fmt.Sprintf("%v wants to pair with you. Type /pair %v to accept.", pairDisplayName(client), client.Uid()))
 	}
 }
 
@@ -153,34 +164,55 @@ func cmdForcePair(client *Client, args []string, _ string) {
 }
 
 // Handles /unpair
-
+//
+// Full bidirectional reset. Previously /unpair only fully cleared the partner's
+// state when ForcePairUID was set, which could leave a stale PairWantedID on a
+// peer (especially after the canceller's CharID changed since the request was
+// sent) and produce a desync where one side still appeared paired. Now we walk
+// the entire client list and clear PairWantedID + ForcePairUID on anyone who
+// references us by UID OR by current/historical CharID, then clear our own.
 func cmdUnpair(client *Client, _ []string, _ string) {
-	if client.PairWantedID() == -1 && client.ForcePairUID() == -1 {
-		client.SendServerMessage("You do not have an active pair request.")
-		return
-	}
+	clientUID := client.Uid()
+	clientCharID := client.CharID()
+	cancellerName := pairDisplayName(client)
 
-	// If force-paired, clear force-pair state on both sides.
-	if client.ForcePairUID() >= 0 {
-		if partner, err := getClientByUid(client.ForcePairUID()); err == nil {
-			partner.SetForcePairUID(-1)
-			partner.SetPairWantedID(-1)
-			partner.SendServerMessage(fmt.Sprintf("%v has cancelled the pair.", client.OOCName()))
-		}
-		client.SetForcePairUID(-1)
-	}
+	hadPair := client.PairWantedID() != -1 || client.ForcePairUID() != -1
 
-	// Notify any client that was paired with us.
-	cancellerName := client.OOCName()
-	cancellerCharID := client.CharID()
+	// Clear every reference to this client on every other client.
+	notified := 0
 	clients.ForEach(func(c *Client) {
-		if c != client && c.PairWantedID() == cancellerCharID {
+		if c == client {
+			return
+		}
+		referenced := false
+		if c.ForcePairUID() == clientUID {
+			c.SetForcePairUID(-1)
+			referenced = true
+		}
+		if clientCharID >= 0 && c.PairWantedID() == clientCharID {
+			c.SetPairWantedID(-1)
+			referenced = true
+		}
+		if referenced {
 			c.SendServerMessage(fmt.Sprintf("%v has cancelled the pair.", cancellerName))
+			notified++
 		}
 	})
 
+	// Clear our own state regardless of whether a partner was found.
+	client.SetForcePairUID(-1)
 	client.SetPairWantedID(-1)
-	client.SendServerMessage("Pair cancelled.")
+
+	switch {
+	case hadPair && notified > 0:
+		client.SendServerMessage("Pair cancelled.")
+	case hadPair:
+		// We had local state but no peer was referencing us — most likely a
+		// stale request whose target already disconnected. Clear silently.
+		client.SendServerMessage("Pair cancelled.")
+	default:
+		client.SendServerMessage("You do not have an active pair request.")
+	}
 }
 
 // Handles /forceunpair
@@ -442,45 +474,105 @@ func cmdRoll(client *Client, args []string, _ string) {
 	addToBuffer(client, "CMD", fmt.Sprintf("Rolled %v.", flags.Arg(0)), false)
 }
 
-// Handles /setrole
+// rpsChallenge records the first player's hidden RPS commitment in an area.
+// We don't broadcast their choice — the second player has to commit blind so
+// they can't game-theory the result by watching the first move.
+type rpsChallenge struct {
+	UID       int
+	Name      string
+	Choice    string
+	CreatedAt time.Time
+}
 
-func cmdRps(client *Client, args []string, _ string) {
-	// Check cooldown (30 seconds)
-	if time.Now().UTC().Before(client.LastRpsTime().Add(30 * time.Second)) && !client.LastRpsTime().IsZero() {
-		remaining := time.Until(client.LastRpsTime().Add(30 * time.Second))
-		client.SendServerMessage(fmt.Sprintf("Please wait %v seconds before playing RPS again.", int(remaining.Seconds())+1))
-		return
+// rpsState tracks one pending RPS challenge per area. Mod commands and the
+// challenge logic both run on goroutines, so accesses are guarded.
+var (
+	rpsState   = map[*area.Area]*rpsChallenge{}
+	rpsStateMu = struct{ sync.Mutex }{}
+)
+
+// rpsBeats answers "does a beat b?".
+func rpsBeats(a, b string) bool {
+	switch {
+	case a == "rock" && b == "scissors",
+		a == "scissors" && b == "paper",
+		a == "paper" && b == "rock":
+		return true
 	}
+	return false
+}
 
+// Handles /rps <rock|paper|scissors>
+//
+// Player-vs-player: the first call starts a hidden challenge in the area,
+// the second call (from any other player) commits a choice and resolves it.
+// Replaces the prior server-vs-player coin-flip-style version, which felt
+// pointless when there are real opponents in the room.
+//
+// 30-second window per player. Challenges auto-expire after 30s.
+func cmdRps(client *Client, args []string, _ string) {
 	choice := strings.ToLower(args[0])
 	if choice != "rock" && choice != "paper" && choice != "scissors" {
 		client.SendServerMessage("Invalid choice. Use: rock, paper, or scissors.")
 		return
 	}
 
-	// Update last RPS time
-	client.SetLastRpsTime(time.Now().UTC())
-
-	// Generate random server choice
-	choices := []string{"rock", "paper", "scissors"}
-	serverChoice := choices[rand.Intn(3)]
-
-	// Determine winner
-	var result string
-	if choice == serverChoice {
-		result = "It's a tie!"
-	} else if (choice == "rock" && serverChoice == "scissors") ||
-		(choice == "paper" && serverChoice == "rock") ||
-		(choice == "scissors" && serverChoice == "paper") {
-		result = fmt.Sprintf("%v wins!", client.OOCName())
-	} else {
-		result = "Server wins!"
+	if !client.LastRpsTime().IsZero() && time.Since(client.LastRpsTime()) < 30*time.Second {
+		remaining := int((30*time.Second - time.Since(client.LastRpsTime())).Seconds()) + 1
+		client.SendServerMessage(fmt.Sprintf("Please wait %d seconds before playing RPS again.", remaining))
+		return
 	}
 
-	// Broadcast to area
-	message := fmt.Sprintf("%v played %v, Server played %v. %v", client.OOCName(), choice, serverChoice, result)
-	sendAreaServerMessage(client.Area(), message)
-	addToBuffer(client, "GAME", fmt.Sprintf("Played RPS: %v vs %v - %v", choice, serverChoice, result), false)
+	rpsStateMu.Lock()
+	defer rpsStateMu.Unlock()
+
+	a := client.Area()
+	pending, ok := rpsState[a]
+	// Stale-challenge cleanup: an old challenge from a player who left or
+	// gave up shouldn't block a new game.
+	if ok && time.Since(pending.CreatedAt) > 30*time.Second {
+		delete(rpsState, a)
+		pending, ok = nil, false
+	}
+
+	if !ok {
+		// First mover: stash the hidden challenge and announce it.
+		rpsState[a] = &rpsChallenge{
+			UID:       client.Uid(),
+			Name:      pairDisplayName(client),
+			Choice:    choice,
+			CreatedAt: time.Now().UTC(),
+		}
+		client.SetLastRpsTime(time.Now().UTC())
+		sendAreaServerMessage(a, fmt.Sprintf(
+			"✊✋✌️ %v has thrown an RPS challenge! Anyone can answer with /rps <rock|paper|scissors> within 30 seconds.",
+			pairDisplayName(client)))
+		client.SendServerMessage(fmt.Sprintf("Your hidden choice: %s. Waiting for an opponent...", choice))
+		return
+	}
+
+	if pending.UID == client.Uid() {
+		client.SendServerMessage("You're already the challenger — wait for someone else to answer your /rps.")
+		return
+	}
+
+	// Second mover: resolve.
+	delete(rpsState, a)
+	client.SetLastRpsTime(time.Now().UTC())
+
+	var result string
+	switch {
+	case pending.Choice == choice:
+		result = "It's a tie!"
+	case rpsBeats(pending.Choice, choice):
+		result = fmt.Sprintf("%v wins!", pending.Name)
+	default:
+		result = fmt.Sprintf("%v wins!", pairDisplayName(client))
+	}
+	sendAreaServerMessage(a, fmt.Sprintf(
+		"%v (%s) vs %v (%s) — %s",
+		pending.Name, pending.Choice, pairDisplayName(client), choice, result))
+	addToBuffer(client, "GAME", fmt.Sprintf("RPS: %v vs %v -> %v", pending.Choice, choice, result), false)
 }
 
 // Handles /coinflip
@@ -782,18 +874,69 @@ func cmdMaso(client *Client, _ []string, _ string) {
 	}
 }
 
-// Handles /suicide
+// defaultEightBallAnswers is the fallback list when 8ball.txt is missing or
+// empty. Mirrors the 20 classic Magic 8 Ball responses.
+var defaultEightBallAnswers = []string{
+	"It is certain.",
+	"It is decidedly so.",
+	"Without a doubt.",
+	"Yes - definitely.",
+	"You may rely on it.",
+	"As I see it, yes.",
+	"Most likely.",
+	"Outlook good.",
+	"Yes.",
+	"Signs point to yes.",
+	"Reply hazy, try again.",
+	"Ask again later.",
+	"Better not tell you now.",
+	"Cannot predict now.",
+	"Concentrate and ask again.",
+	"Don't count on it.",
+	"My reply is no.",
+	"My sources say no.",
+	"Outlook not so good.",
+	"Very doubtful.",
+}
 
-func cmdSuicide(client *Client, _ []string, _ string) {
-banTime := time.Now().UTC().Unix()
-until := time.Now().UTC().Add(10 * time.Minute).Unix()
-untilS := time.Unix(until, 0).UTC().Format("02 Jan 2006 15:04 MST")
-reason := "You chose this. See you in 10 minutes."
-id, err := db.AddBan(client.Ipid(), client.Hdid(), banTime, until, reason, "Server")
-if err == nil {
-client.SendPacket("KB", fmt.Sprintf("%v\nUntil: %v\nID: %v", reason, untilS, id))
-} else {
-client.SendPacket("KB", fmt.Sprintf("%v\nUntil: %v", reason, untilS))
+// Handles /getmusic
+//
+// Two functions in one:
+//  1. Prints the URL of the song currently playing in the area (some clients
+//     have flaky audio handling and players want to copy/paste the URL).
+//  2. Replays the song to ONLY the requesting client by sending an MC packet
+//     directly to them — useful when their client bugged out and the song
+//     never started, without disturbing anyone else's playback position.
+func cmdGetMusic(client *Client, _ []string, _ string) {
+	song := client.Area().CurrentSong()
+	if song == "" {
+		client.SendServerMessage("No track is currently playing in this area.")
+		return
+	}
+	decoded := decode(song)
+	client.SendServerMessage(fmt.Sprintf("🎵 Now playing: %s", decoded))
+	// Re-send the music change to just this client so a stuck audio player
+	// gets nudged into starting the track. Other clients are unaffected.
+	cidStr := client.CharIDStr()
+	if cidStr == "" {
+		cidStr = "0"
+	}
+	client.SendPacket("MC", song, cidStr, "Server", "1", "0", "0")
 }
-client.conn.Close()
+
+// Handles /8ball
+func cmd8Ball(client *Client, args []string, _ string) {
+	question := strings.TrimSpace(strings.Join(args, " "))
+	if question == "" {
+		client.SendServerMessage("Usage: /8ball <question>")
+		return
+	}
+	pool := eightBallAnswers
+	if len(pool) == 0 {
+		pool = defaultEightBallAnswers
+	}
+	answer := pool[rand.Intn(len(pool))]
+	sendAreaServerMessage(client.Area(), fmt.Sprintf("%v asked: %s\n🎱 The Magic 8-Ball says: %s",
+		pairDisplayName(client), question, answer))
 }
+

@@ -29,6 +29,7 @@ import (
 	"github.com/MangosArentLiterature/Athena/internal/db"
 	"github.com/MangosArentLiterature/Athena/internal/discord/bot"
 	"github.com/MangosArentLiterature/Athena/internal/logger"
+	"github.com/MangosArentLiterature/Athena/internal/permissions"
 )
 
 // warnings is a simple in-memory warning store keyed by IPID.
@@ -475,6 +476,65 @@ func (a *ServerAdapter) LockArea(areaName string) error {
 		}
 	}
 	return fmt.Errorf("area not found: %s", areaName)
+}
+
+// SetFirewall toggles the IPHub VPN/proxy firewall. Mirrors in-game /firewall.
+// Returns an error if the API key isn't configured (matches the in-game guard).
+func (a *ServerAdapter) SetFirewall(on bool) error {
+	if on {
+		if config.IPHubAPIKey == "" {
+			return fmt.Errorf("cannot enable firewall: no iphub_api_key configured in config.toml")
+		}
+		firewallActive.Store(true)
+		clients.ForEach(func(c *Client) {
+			if c.Uid() != -1 && permissions.HasPermission(c.Perms(), permissions.PermissionField["BAN"]) {
+				c.SendPacket("CT", "OOC", "🔥 VPN firewall enabled by a Discord moderator.", "1")
+			}
+		})
+		return nil
+	}
+	firewallActive.Store(false)
+	clients.ForEach(func(c *Client) {
+		if c.Uid() != -1 && permissions.HasPermission(c.Perms(), permissions.PermissionField["BAN"]) {
+			c.SendPacket("CT", "OOC", "🔓 VPN firewall disabled by a Discord moderator.", "1")
+		}
+	})
+	return nil
+}
+
+// SetLockdown toggles server-wide new-IPID lockdown. Mirrors in-game /lockdown.
+func (a *ServerAdapter) SetLockdown(on bool) error {
+	serverLockdown.Store(on)
+	msg := "🔓 Server lockdown lifted by a Discord moderator."
+	if on {
+		msg = "🔒 Server lockdown enabled by a Discord moderator."
+	}
+	clients.ForEach(func(c *Client) {
+		if c.Uid() != -1 && permissions.IsModerator(c.Perms()) {
+			c.SendPacket("CT", "OOC", msg, "1")
+		}
+	})
+	return nil
+}
+
+// WhitelistAllConnected adds every currently-connected player's IPID to the
+// known/whitelist set so they can rejoin during lockdown. Mirrors in-game
+// /lockdown whitelist all. Returns the number of IPIDs whitelisted.
+func (a *ServerAdapter) WhitelistAllConnected() (int, error) {
+	count := 0
+	clients.ForEach(func(c *Client) {
+		if c.Uid() == -1 {
+			return
+		}
+		ipid := c.Ipid()
+		recordIPFirstSeen(ipid)
+		if err := db.MarkIPKnown(ipid); err != nil {
+			logger.LogErrorf("WhitelistAllConnected: persist IPID %s: %v", ipid, err)
+			return
+		}
+		count++
+	})
+	return count, nil
 }
 
 // UnlockArea unlocks a named area.

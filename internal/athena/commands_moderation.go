@@ -322,7 +322,11 @@ func cmdGlobal(client *Client, args []string, _ string) {
 		client.SendServerMessage(fmt.Sprintf("New users must wait %d %s before using OOC chat.", remaining, unit))
 		return
 	}
-	writeToAll("CT", fmt.Sprintf("[GLOBAL] [UID %d] %v", client.Uid(), client.OOCName()), strings.Join(args, " "), "1")
+	tag := formatTagDisplay(db.GetActiveTag(client.Ipid()))
+	if tag != "" {
+		tag += " "
+	}
+	writeToAll("CT", fmt.Sprintf("[GLOBAL] [UID %d] %s%v", client.Uid(), tag, client.OOCName()), strings.Join(args, " "), "1")
 }
 
 // Handles /hide
@@ -720,9 +724,26 @@ func cmdPlayers(client *Client, args []string, _ string) {
 	var out strings.Builder
 	out.WriteString("\nPlayers\n----------\n")
 	if *all {
+		// /gas hides empty areas to keep the list usable on servers with many areas.
+		// "Empty" = nobody visible to the requester. Admins still see hidden players,
+		// so an area with only hidden occupants is empty for everyone else but not them.
+		shown := 0
+		hiddenAreas := 0
 		for _, a := range areas {
+			ac := grouped[a]
+			if ac == nil || len(ac.list) == 0 {
+				hiddenAreas++
+				continue
+			}
 			printArea(&out, a)
 			out.WriteString("----------\n")
+			shown++
+		}
+		if shown == 0 {
+			out.WriteString("(no areas have visible players)\n----------\n")
+		}
+		if hiddenAreas > 0 {
+			fmt.Fprintf(&out, "%d empty area(s) hidden.\n", hiddenAreas)
 		}
 	} else {
 		printArea(&out, targetArea)

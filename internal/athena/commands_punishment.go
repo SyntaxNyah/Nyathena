@@ -636,6 +636,60 @@ func parsePunishmentType(s string) PunishmentType {
 		return PunishmentBrainrot
 	case "gordonramsay":
 		return PunishmentGordonRamsay
+	case "cherri":
+		return PunishmentCherri
+	case "clown":
+		return PunishmentClown
+	case "jester":
+		return PunishmentJester
+	case "joker":
+		return PunishmentJoker
+	case "mime":
+		return PunishmentMime
+	case "biblebot":
+		return PunishmentBiblebot
+	case "smugdere":
+		return PunishmentSmugdere
+	case "deretsun":
+		return PunishmentDeretsun
+	case "bokodere":
+		return PunishmentBokodere
+	case "thugdere":
+		return PunishmentThugdere
+	case "teasedere":
+		return PunishmentTeasedere
+	case "dorodere":
+		return PunishmentDorodere
+	case "hinedere":
+		return PunishmentHinedere
+	case "hajidere":
+		return PunishmentHajidere
+	case "rindere":
+		return PunishmentRindere
+	case "utsudere":
+		return PunishmentUtsudere
+	case "darudere":
+		return PunishmentDarudere
+	case "butsudere":
+		return PunishmentButsudere
+	case "sdere":
+		return PunishmentSDere
+	case "mdere":
+		return PunishmentMDere
+	case "tsuyodere":
+		return PunishmentTsuyodere
+	case "omnidere":
+		return PunishmentOmnidere
+	case "megamaso":
+		return PunishmentMegamaso
+	case "sfxcurse":
+		return PunishmentSfxCurse
+	case "shrink":
+		return PunishmentShrink
+	case "grow":
+		return PunishmentGrow
+	case "wide":
+		return PunishmentWide
 	default:
 		return PunishmentNone
 	}

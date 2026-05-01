@@ -142,6 +142,7 @@ Copy `config_sample/` to `config/` before first run.
 | `roles.toml` | Moderator role permissions |
 | `characters.txt` | Allowed characters |
 | `music.txt` | Music list |
+| `8ball.txt` | (Optional) `/8ball` response pool. Falls back to a built-in 20-line classic list if missing or empty. |
 | `backgrounds.txt` | Background list |
 | `banned_words.txt` | AutoMod word list |
 | `parrot.txt` | Parrot command word list |
@@ -157,17 +158,19 @@ Copy `config_sample/` to `config/` before first run.
 
 ## Features Beyond Base Athena
 
-### Punishment System (41 Commands)
+### Punishment System (90+ Commands)
 
-All punishment commands require `MUTE` permission, support `-d <duration>` (max 24 h) and `-r <reason>`, accept comma-separated UIDs, and auto-expire. Multiple types stack on a single player.
+All punishment commands require `MUTE` permission unless noted. They support `-d <duration>` (max 24 h) and `-r <reason>`, accept comma-separated UIDs, and auto-expire. Multiple types stack on a single player.
 
-**Remove:** `/unpunish <uid>` (all) or `/unpunish -t <type> <uid>` (specific)
+`/help punishment` is now grouped by sub-theme (text effects / dere archetypes / animal filters / themed quotes / audio / timing / stacking) so the long list is finally scannable.
 
-#### Text Modification (14)
-`/whisper`, `/backward`, `/stutterstep`, `/elongate`, `/uppercase`, `/lowercase`, `/robotic`, `/alternating`, `/fancy`, `/uwu`, `/pirate`, `/shakespearean`, `/caveman`, `/slang`
+**Remove:** `/unpunish <uid>` (all) or `/unpunish -t <type> <uid>` (specific). Self-removal is gated for staff-issued punishments — see "/unpunish Self-Removal Protection" below.
 
-#### Visibility / Cosmetic (2)
-`/emoji`, `/invisible`
+#### Text Modification (15)
+`/whisper`, `/backward`, `/stutterstep`, `/elongate`, `/uppercase`, `/lowercase`, `/robotic`, `/alternating`, `/fancy`, `/uwu`, `/pirate`, `/shakespearean`, `/caveman`, `/slang`, `/cherri` (Capitalizes Every Word)
+
+#### Visibility / Cosmetic (5)
+`/emoji`, `/invisible`, `/shrink`, `/grow`, `/wide` (vertical/horizontal sprite-offset locks; reverse with `/unshrink` / `/ungrow` / `/unwide`)
 
 #### Timing Effects (4)
 `/slowpoke`, `/fastspammer`, `/pause`, `/lag`
@@ -184,11 +187,23 @@ All punishment commands require `MUTE` permission, support `-d <duration>` (max 
 #### Advanced (2)
 `/haiku`, `/autospell`
 
-#### Fun Personality (6)
-`/thesaurusoverload`, `/valleygirl`, `/babytalk`, `/thirdperson`, `/unreliablenarrator`, `/uncannyvalley`
+#### Fun Personality (10)
+`/thesaurusoverload`, `/valleygirl`, `/babytalk`, `/thirdperson`, `/unreliablenarrator`, `/uncannyvalley`, `/clown`, `/jester`, `/joker`, `/mime`
 
-#### Themed Quote (1)
-`/gordonramsay` — replaces every IC line with a Gordon Ramsay kitchen tirade (60+ quotes). Requires `MUTE`.
+#### Themed Quote Replacers (2)
+- `/gordonramsay` — replaces every IC line with a Gordon Ramsay kitchen tirade (60+ quotes)
+- `/biblebot` — replaces every IC line with a random Bible verse
+
+#### Audio (2)
+- `/sfxcurse <uid> <sfx-url>` — forces an SFX file to play on every IC message; URL must be `http(s)://…` or under `/base/sounds/…`
+- `/unsfx <uid>` — lifts the SFX curse
+
+#### Dere Archetypes (25)
+Original 10: `/tsundere`, `/yandere`, `/kuudere`, `/dandere`, `/deredere`, `/himedere`, `/kamidere`, `/undere`, `/bakadere`, `/mayadere`
+
+Nyathena additions: `/smugdere`, `/deretsun`, `/bokodere`, `/thugdere`, `/teasedere`, `/dorodere`, `/hinedere`, `/hajidere`, `/rindere`, `/utsudere`, `/darudere`, `/butsudere`, `/sdere`, `/mdere`, `/tsuyodere`
+
+`/omnidere` picks a random dere flavour for **every** IC message from the full pool — maximum tonal whiplash.
 
 #### Punishment Stacking
 ```
@@ -202,14 +217,43 @@ Voluntary competitive mode where participants receive 2–3 random punishments; 
 /join-tournament                # any user
 ```
 
+#### `/megamaso` — Self-applied Stack Mode
+Self-applied "max chaos" mode. The first call rolls a random punishment for 10 minutes; each subsequent `/megamaso` while still under the effect **adds another random punishment to the stack** instead of replacing it. Lets a player pile on as many concurrent effects as they like.
+
+```
+/megamaso       # any user
+```
+
 #### Coinflip Challenge
 Area-scoped 30-second PvP challenge. Players must choose opposite sides.
 ```
 /coinflip <heads|tails>
 ```
 
+### Potions System
+Self-applied 5-minute fun effects accessed via `/potion <name>`. `/potions` lists the cabinet; `/potion off` flushes every active potion.
+
+| Potion | Effect |
+|--------|--------|
+| `drunk` | Slurs and shuffles letters |
+| `uwu` | Wewites yowo wowds wike this |
+| `shy` | Stuttering, hesitant speech |
+| `dramatic` | Shakespearean tongue |
+| `pirate` | Yarrr! |
+| `poet` | Poetic flourish |
+| `caveman` | Talk simple. Words short. |
+| `fancy` | Unicode fancy characters |
+| `chef` | Swedish-Chef-isms |
+| `cherri` | Capitalizes Every Word |
+| `omnidere` | Each line picks a random dere flavour |
+| `character` | Auto-rotates your character every 30 seconds |
+
+The `character` potion is a per-client goroutine, not a punishment — `/potion off` cancels its rotation cleanly.
+
 ### Persistent Pairing
-UID-based mutual pairing surviving area/character changes. Dissolves on disconnect.
+UID-based mutual pairing surviving area/character changes. Dissolves on disconnect. Pair messages now reference each player's **showname** (in-character display name) when set, falling back to OOC name only when no showname exists, so pair text matches the IC fiction rather than OOC identity.
+
+`/unpair` is now a full bidirectional reset: it clears `PairWantedID` and `ForcePairUID` on every client that references the canceller (by UID or by current/historical CharID), preventing the desync where a stale pair-wanted-id lingered on a peer after the canceller's character changed.
 ```
 /pair <uid>
 /unpair
@@ -319,7 +363,54 @@ Shadow moderators (`SHADOW` perm bit, no `ADMIN`) are completely hidden from `/g
 Punishments now record the issuer's permission tier (`IssuerSystem`/`IssuerMod`/`IssuerShadow`/`IssuerAdmin`) in the `PUNISHMENTS.ISSUER_TIER` column. A regular moderator cannot use `/unpunish` to lift a punishment that an admin or shadow mod applied to them — `/unpunish self`, `/unpunish -t <type> self`, and the self-target slice of `/unpunish all` are all gated. Admins and shadow mods bypass the gate. Persists across restarts via DB migration 18.
 
 ### IPHub VPN Firewall
-When `iphub_api_key` is set, moderators can run `/firewall on|off`. New IPs are checked against IPHub; VPN/proxy IPs are rejected. Known IPs are never re-checked (respects 1,000 requests/day free tier).
+When `iphub_api_key` is set, moderators can run `/firewall on|off` from in-game **or** from Discord (`/firewall on|off` slash command). New IPs are checked against IPHub; VPN/proxy IPs are rejected. Known IPs are never re-checked (respects 1,000 requests/day free tier).
+
+### Discord Bot Security Toggles
+Mirrors the in-game security commands so moderators don't have to be logged in to the AO server during an incident.
+
+| Discord slash | Behaviour |
+|---------------|-----------|
+| `/firewall on` / `/firewall off` | Toggle the IPHub VPN/proxy firewall. Refuses to enable if `iphub_api_key` is unset. |
+| `/lockdown on` / `/lockdown off` | Toggle the server-wide new-IPID lockdown. |
+| `/lockdown whitelist_all` | Whitelist every currently-connected IPID so they can rejoin during lockdown. |
+
+### `/charshuffle` and `/uncharshuffle`
+Mirrors `/nameshuffle` but operates on character IDs. Randomly permutes everyone's character (char 1 → char 2, char 2 → char 5, etc.) using Sattolo's algorithm so every player ends up on someone else's sprite. Originals are remembered per-client so `/uncharshuffle` puts everyone back exactly. Requires `MUTE`.
+
+### `/getmusic`
+For every player. Prints the URL of the song currently playing in the area **and** re-sends the MC packet to just the requesting client. Useful when a client's audio handling glitched and the song never started — the user can either copy the URL or have the bot poke their player to restart playback locally.
+
+### `/8ball <question>`
+For every player. Picks an answer from `config/8ball.txt` if present, otherwise from the built-in 20 classic Magic 8-Ball responses. The sample shipped in `config_sample/8ball.txt` adds a few cheeky extras.
+
+### `/resetusername <new-username>`
+Lets a logged-in player rename their account without losing their playtime, chips, wardrobe, tags, or anything else tied to their account. Capped at **3 renames per account** (DB column `USERS.USERNAME_RESETS`, migration 19).
+
+### `/playtime` Pagination
+`/playtime top` lists 25 entries per page; pass a page number for the next 25 (`/playtime top 2` = positions 26–50). Both player accounts and moderator accounts (including shadow mods) are eligible — there's no permission filter.
+
+`/reloadplaytime` (admin) re-links every registered account to its IPID and merges any orphaned playtime — fixes the bug where an account created on a long-running anonymous IPID didn't show pre-existing hours on the leaderboard until the server restarted.
+
+### `/profile` DJ Insignia
+Players with the `DJ` permission bit (and no moderator privileges) get a 💿 vinyl badge on their `/profile` card so DJs are visible at a glance. Mods are unaffected — they have their own staff lines.
+
+### `/global` Tag Display
+`/global` now shows the sender's `[tag]` in the prefix, matching local-OOC formatting.
+
+### `/gas` Empty-Area Suppression
+`/gas` (the all-areas player listing) hides empty areas to keep the listing scannable on servers with many areas. The empty-area count is shown at the bottom.
+
+### `/randomchar` DJ/Mod Cooldown Bypass
+`/randomchar` keeps its 5-second cooldown for regular users, but **DJs and moderators bypass it entirely** so they can swap freely while running events.
+
+### `/rps` (Player vs Player)
+`/rps <rock|paper|scissors>` is now PvP. The first call commits a **hidden** choice and posts an open challenge to the area; the second player commits blind (so they can't game-theory the first move) and the result is resolved. 30-second window per player.
+
+### Locked-Room Kick Lockout (Bug Fix)
+Previously, `/lock` added every current occupant to the area's invite list, so a CM kicking a player from the locked area didn't actually keep them out — they'd walk right back in. The kick command now also pulls the target's UID from the invite list, so they can't return until the room is unlocked or they're explicitly re-invited.
+
+### Recipe Step Variety
+`/recipe` rotates through Step 1 → Step 4 with **separate verb pools per step** (prep / combine / cook / plate). A stream of `/recipe` lines now reads like a real recipe instead of the same template.
 
 ### Other Features
 - Hot Potato area minigame
@@ -330,6 +421,7 @@ When `iphub_api_key` is set, moderators can run `/firewall on|off`. New IPs are 
 - `/randomchar`, `/possess`
 - In-place server restart via `syscall.Exec`
 - Testimony recorder (inherited from upstream Athena)
+- `/about` credits SyntaxNyah's fork and full credit to MangosArentLiterature's upstream Athena.
 
 ## Testing
 

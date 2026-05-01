@@ -104,4 +104,11 @@ type ServerInterface interface {
 
 	// Server control
 	Restart() error
+
+	// Security toggles (Nyathena fork): the IPHub VPN firewall and the
+	// server-wide new-connection lockdown can both be controlled from
+	// Discord, mirroring the in-game /firewall and /lockdown commands.
+	SetFirewall(on bool) error
+	SetLockdown(on bool) error
+	WhitelistAllConnected() (int, error)
 }

@@ -173,6 +173,50 @@ const (
 	PunishmentBrainrot
 	// Gordon Ramsay punishment — replaces every IC line with an iconic Ramsay quote.
 	PunishmentGordonRamsay
+	// Cherri punishment — Capitalizes Every Single Word like Cherri.
+	PunishmentCherri
+	// Clown / Jester / Joker / Mime — themed text transforms used as
+	// moderator gag commands.
+	PunishmentClown
+	PunishmentJester
+	PunishmentJoker
+	PunishmentMime
+	// Biblebot — replaces every IC line with a random Bible verse.
+	PunishmentBiblebot
+	// Additional dere archetypes covering the most distinct mainstream entries
+	// from the popular dere taxonomy. Less common entries (sub-1% varieties)
+	// are not enumerated separately — they fold into /omnidere's random pool.
+	PunishmentSmugdere
+	PunishmentDeretsun
+	PunishmentBokodere
+	PunishmentThugdere
+	PunishmentTeasedere
+	PunishmentDorodere
+	PunishmentHinedere
+	PunishmentHajidere
+	PunishmentRindere
+	PunishmentUtsudere
+	PunishmentDarudere
+	PunishmentButsudere
+	PunishmentSDere
+	PunishmentMDere
+	PunishmentTsuyodere
+	// Omnidere — picks a random dere flavour per message, drawing from the
+	// full archetype pool for maximum tonal whiplash.
+	PunishmentOmnidere
+	// Megamaso — random punishment for 10 minutes, retrigger stacks another
+	// random punishment on top instead of replacing the previous one.
+	PunishmentMegamaso
+	// SfxCurse — forces a specific SFX file to be appended to every IC
+	// message the target sends. The SFX URL is stored in the punishment's
+	// CustomData field rather than the enum.
+	PunishmentSfxCurse
+	// Shrink / Grow / Wide — lock the target into a fixed vertical or
+	// horizontal sprite offset, applied on every IC message. Stored offset
+	// lives in the punishment's CustomData (numeric).
+	PunishmentShrink
+	PunishmentGrow
+	PunishmentWide
 )
 
 // IssuerTier records the permission tier of the moderator who applied a
@@ -254,6 +298,7 @@ type Client struct {
 	possessing          int          // UID of the client being possessed (-1 if not possessing anyone)
 	possessedPos        string       // Position of the possessed target (saved at time of possession)
 	forcedShowname      string       // Showname forced by a moderator ("" if none)
+	shuffledOrigCharID  int          // Original char ID before /charshuffle (-2 = not shuffled)
 	forcedIniswapChar   string       // Character name forced for iniswap-style IC output ("" = none)
 	forcedIniswapIDStr  string       // Pre-computed strconv.Itoa(charID) matching forcedIniswapChar ("" = none)
 	connectedAt         time.Time    // Time the client joined the server (uid assigned); zero if not yet joined
@@ -284,10 +329,11 @@ func NewClient(conn net.Conn, ipid string) *Client {
 		charIDStr:       "-1",
 		pair:            ClientPairInfo{wanted_id: -1},
 		ipid:            ipid,
-		forcePairUID:    -1,
-		possessing:      -1,
-		jailAreaID:      -1,
-		charStuckCharID: -1,
+		forcePairUID:       -1,
+		possessing:         -1,
+		jailAreaID:         -1,
+		charStuckCharID:    -1,
+		shuffledOrigCharID: -2, // -2 = "not shuffled" sentinel; -1 = shuffled but original was charselect
 	}
 }
 
@@ -2173,6 +2219,60 @@ func (p PunishmentType) String() string {
 		return "brainrot"
 	case PunishmentGordonRamsay:
 		return "gordonramsay"
+	case PunishmentCherri:
+		return "cherri"
+	case PunishmentClown:
+		return "clown"
+	case PunishmentJester:
+		return "jester"
+	case PunishmentJoker:
+		return "joker"
+	case PunishmentMime:
+		return "mime"
+	case PunishmentBiblebot:
+		return "biblebot"
+	case PunishmentSmugdere:
+		return "smugdere"
+	case PunishmentDeretsun:
+		return "deretsun"
+	case PunishmentBokodere:
+		return "bokodere"
+	case PunishmentThugdere:
+		return "thugdere"
+	case PunishmentTeasedere:
+		return "teasedere"
+	case PunishmentDorodere:
+		return "dorodere"
+	case PunishmentHinedere:
+		return "hinedere"
+	case PunishmentHajidere:
+		return "hajidere"
+	case PunishmentRindere:
+		return "rindere"
+	case PunishmentUtsudere:
+		return "utsudere"
+	case PunishmentDarudere:
+		return "darudere"
+	case PunishmentButsudere:
+		return "butsudere"
+	case PunishmentSDere:
+		return "sdere"
+	case PunishmentMDere:
+		return "mdere"
+	case PunishmentTsuyodere:
+		return "tsuyodere"
+	case PunishmentOmnidere:
+		return "omnidere"
+	case PunishmentMegamaso:
+		return "megamaso"
+	case PunishmentSfxCurse:
+		return "sfxcurse"
+	case PunishmentShrink:
+		return "shrink"
+	case PunishmentGrow:
+		return "grow"
+	case PunishmentWide:
+		return "wide"
 	default:
 		return "none"
 	}

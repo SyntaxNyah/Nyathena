@@ -117,6 +117,7 @@ type Area struct {
 	casinoMaxTables     int
 	casinoJackpot       bool
 	casinoJackpotPool   int64
+	currentSong         string // last broadcast song name (encoded), used by /getmusic
 	randomPunishEnabled bool
 	mirrorArea          bool
 	punishmentArea      bool
@@ -1247,5 +1248,23 @@ func (a *Area) LogSilenced() bool {
 func (a *Area) SetLogSilenced(v bool) {
 	a.mu.Lock()
 	a.logSilenced = v
+	a.mu.Unlock()
+}
+
+// CurrentSong returns the last song that was broadcast as the area's BGM.
+// Used by /getmusic so a player whose client missed the MC packet (or
+// dropped the audio) can re-fetch the URL and re-trigger playback locally.
+// Returns "" when no track has played yet in the area.
+func (a *Area) CurrentSong() string {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return a.currentSong
+}
+
+// SetCurrentSong records the most-recently-broadcast song name. Called
+// from the IC/music packet handler whenever an MC change goes out.
+func (a *Area) SetCurrentSong(s string) {
+	a.mu.Lock()
+	a.currentSong = s
 	a.mu.Unlock()
 }

@@ -29,6 +29,7 @@ import (
 
 	"github.com/MangosArentLiterature/Athena/internal/db"
 	"github.com/MangosArentLiterature/Athena/internal/logger"
+	"github.com/MangosArentLiterature/Athena/internal/permissions"
 	"golang.org/x/crypto/bcrypt"
 )
 
@@ -304,41 +305,55 @@ func formatPlaytime(seconds int64) string {
 	return fmt.Sprintf("%dm", m)
 }
 
-// Handles /playtime [top [n]]
+// playtimePageSize is the number of entries shown per /playtime top page.
+const playtimePageSize = 25
+
+// Handles /playtime [top [page]]
 //
-// Displays the global playtime leaderboard. Only registered players appear;
-// anonymous connections are excluded. Results come from a single efficient
-// INNER JOIN query — no extra resource cost.
+// Displays the global playtime leaderboard, paginated 25 per page.
+// `/playtime top` shows page 1 (positions 1–25); `/playtime top 2` shows
+// 26–50; and so on. Both player accounts and moderator accounts (including
+// shadow mods) are eligible — the leaderboard does not filter by permission.
 func cmdPlaytimeTop(client *Client, args []string, usage string) {
-	n := 25
+	page := 1
 	remaining := args
 
-	// Accept an optional leading "top" subcommand keyword (case-insensitive, no allocation).
+	// Accept an optional leading "top" subcommand keyword.
 	if len(remaining) > 0 && strings.EqualFold(remaining[0], "top") {
 		remaining = remaining[1:]
 	}
 
-	// Accept an optional count argument (1–50). Any other token is a usage error.
+	// Accept an optional page number. Anything else is a usage error.
 	if len(remaining) > 0 {
-		if v, err := strconv.Atoi(remaining[0]); err == nil && v > 0 && v <= 50 {
-			n = v
+		if v, err := strconv.Atoi(remaining[0]); err == nil && v > 0 {
+			page = v
 		} else {
 			client.SendServerMessage(usage)
 			return
 		}
 	}
 
-	entries, err := db.GetTopPlaytimes(n)
+	offset := (page - 1) * playtimePageSize
+	entries, err := db.GetTopPlaytimesPaged(playtimePageSize, offset)
 	if err != nil || len(entries) == 0 {
-		client.SendServerMessage("No playtime data available yet.")
+		if page == 1 {
+			client.SendServerMessage("No playtime data available yet.")
+		} else {
+			client.SendServerMessage(fmt.Sprintf("No entries on page %d.", page))
+		}
 		return
+	}
+
+	total, _ := db.CountPlaytimeEntries()
+	totalPages := (total + playtimePageSize - 1) / playtimePageSize
+	if totalPages < 1 {
+		totalPages = 1
 	}
 
 	// Build a map of IPID → current-session seconds for all connected clients
 	// so the leaderboard reflects live playtime, not just the last-flushed DB value.
 	// Multiple clients may share the same IPID (multiclient), so use += to sum
 	// all active sessions for the same IPID, matching clientCleanup behaviour.
-	// Pre-size with player count to avoid rehashing.
 	liveSecs := make(map[string]int64, players.GetPlayerCount())
 	clients.ForEach(func(c *Client) {
 		if connAt := c.ConnectedAt(); !connAt.IsZero() {
@@ -347,26 +362,60 @@ func cmdPlaytimeTop(client *Client, args []string, usage string) {
 			}
 		}
 	})
-	// Merge live session seconds into the DB entries and re-sort.
 	if len(liveSecs) > 0 {
 		for i := range entries {
 			if s, ok := liveSecs[entries[i].Ipid]; ok {
 				entries[i].Playtime += s
 			}
 		}
+		// Note: re-sorting only re-orders entries within this page slice. Cross-page
+		// reordering on tight contests is acceptable; the DB query already provides
+		// the canonical ordering.
 		sort.Slice(entries, func(i, j int) bool {
 			return entries[i].Playtime > entries[j].Playtime
 		})
 	}
 
-	// Pre-size the builder: header ~35 bytes + ~35 bytes per row.
 	var sb strings.Builder
-	sb.Grow(35 + len(entries)*35)
-	sb.WriteString(fmt.Sprintf("\n⏱ Playtime Leaderboard (Top %d)\n", len(entries)))
+	sb.Grow(60 + len(entries)*35)
+	sb.WriteString(fmt.Sprintf("\n⏱ Playtime Leaderboard — Page %d/%d (%d total)\n",
+		page, totalPages, total))
 	for i, e := range entries {
-		sb.WriteString(fmt.Sprintf("  %2d. %-20v  %v\n", i+1, e.Username, formatPlaytime(e.Playtime)))
+		rank := offset + i + 1
+		sb.WriteString(fmt.Sprintf("  %3d. %-20v  %v\n", rank, e.Username, formatPlaytime(e.Playtime)))
+	}
+	if page < totalPages {
+		sb.WriteString(fmt.Sprintf("\nUse /playtime top %d for the next page.\n", page+1))
 	}
 	client.SendServerMessage(sb.String())
+}
+
+// cmdReloadPlaytime is an admin tool that walks every registered account and
+// re-runs LinkIPIDToUser to merge any orphaned playtime that may have been
+// stranded on a previous IPID. Useful after the bug where an account created
+// from a long-running anonymous IPID didn't immediately reflect the
+// pre-existing playtime on the leaderboard until a server restart.
+func cmdReloadPlaytime(client *Client, _ []string, _ string) {
+	rows, err := db.AllRegisteredIPIDs()
+	if err != nil {
+		client.SendServerMessage(fmt.Sprintf("Reload failed: %v", err))
+		return
+	}
+	if len(rows) == 0 {
+		client.SendServerMessage("No registered accounts found.")
+		return
+	}
+	relinked := 0
+	for _, r := range rows {
+		if err := db.LinkIPIDToUser(r.Username, r.IPID); err != nil {
+			logger.LogErrorf("reloadplaytime: relink %v failed: %v", r.Username, err)
+			continue
+		}
+		relinked++
+	}
+	client.SendServerMessage(fmt.Sprintf(
+		"Playtime reload complete. Re-linked %d/%d account(s). The leaderboard now reflects all merged playtime; new entries appear on the next /playtime top.",
+		relinked, len(rows)))
 }
 
 // cmdProfile implements /profile [uid]. With no argument, shows the caller's
@@ -457,8 +506,78 @@ func cmdProfile(client *Client, args []string, _ string) {
 	}
 	sb.WriteString(fmt.Sprintf("  Active tag:  %v\n", tagDisplay))
 	sb.WriteString(fmt.Sprintf("  Favourites:  %v\n", favsDisplay))
+	// DJ insignia: vinyl record next to the music line so it's obvious at a
+	// glance whether the player has DJ privileges. Mods see no badge here —
+	// they have their own staff lines and shouldn't double up.
+	if permissions.HasPermission(target.Perms(), permissions.PermissionField["DJ"]) &&
+		!permissions.IsModerator(target.Perms()) {
+		sb.WriteString("  Music:       💿 DJ\n")
+	}
 	if activePunishments > 0 {
 		sb.WriteString(fmt.Sprintf("  Punishments: %d active\n", activePunishments))
 	}
 	client.SendServerMessage(sb.String())
+}
+
+// Handles /resetusername <new-username>
+//
+// Lets a logged-in player rename their account without losing their
+// playtime, chips, wardrobe, tags, or anything else tied to their account.
+// Capped at db.MaxUsernameResets renames per account so the system can't be
+// abused for impersonation churn.
+func cmdResetUsername(client *Client, args []string, _ string) {
+	if !client.Authenticated() {
+		client.SendServerMessage("You must be logged in to rename your account. Use /login <username> <password> first.")
+		return
+	}
+	oldName := client.ModName()
+	if oldName == "" {
+		client.SendServerMessage("Could not determine your account name.")
+		return
+	}
+	newName := args[0]
+	if !validUsernameRe.MatchString(newName) {
+		client.SendServerMessage(
+			"❌ That username isn't valid.\n" +
+				"Usernames must be 3–20 characters and may only contain letters (A–Z, a–z), digits (0–9), and underscores (_).")
+		return
+	}
+	if newName == oldName {
+		client.SendServerMessage("Your new username must be different from your current one.")
+		return
+	}
+	if db.IsModUser(newName) {
+		client.SendServerMessage(fmt.Sprintf("'%v' is reserved by a staff account. Please pick a different name.", newName))
+		return
+	}
+	resets, err := db.GetUsernameResets(oldName)
+	if err != nil {
+		logger.LogErrorf("resetusername: read counter for %v: %v", oldName, err)
+		client.SendServerMessage("Rename failed. Please try again later.")
+		return
+	}
+	if resets >= db.MaxUsernameResets {
+		client.SendServerMessage(fmt.Sprintf(
+			"You've already used all %d username changes on this account. The cap exists to keep impersonation in check — staff can override it if needed.",
+			db.MaxUsernameResets))
+		return
+	}
+	switch err := db.RenameAccount(oldName, newName); {
+	case err == db.ErrUsernameTaken:
+		client.SendServerMessage(fmt.Sprintf("'%v' is already in use by another account. Pick a different name.", newName))
+		return
+	case err == db.ErrUsernameLimit:
+		client.SendServerMessage(fmt.Sprintf("You've already used all %d username changes on this account.", db.MaxUsernameResets))
+		return
+	case err != nil:
+		logger.LogErrorf("resetusername: rename %v -> %v: %v", oldName, newName, err)
+		client.SendServerMessage("Rename failed. Please try again later.")
+		return
+	}
+	client.SetModName(newName)
+	remaining := db.MaxUsernameResets - (resets + 1)
+	client.SendServerMessage(fmt.Sprintf(
+		"✅ Renamed '%v' → '%v'. (%d rename(s) remaining on this account.)",
+		oldName, newName, remaining))
+	addToBuffer(client, "CMD", fmt.Sprintf("Renamed account %v -> %v.", oldName, newName), false)
 }

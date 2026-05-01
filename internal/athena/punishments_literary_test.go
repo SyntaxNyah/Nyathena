@@ -188,8 +188,18 @@ func TestApplyRecipe(t *testing.T) {
 		t.Errorf("applyRecipe(%q) = %q does not contain original text", input, result)
 	}
 
-	if !strings.HasPrefix(result, "Step 1:") {
-		t.Errorf("applyRecipe(%q) = %q does not start with \"Step 1:\"", input, result)
+	// The Nyathena fork rotates through Step 1–4, each with its own verb
+	// pool, so the "always Step 1:" assertion no longer holds. Accept any
+	// step label from the canonical list.
+	hasStep := false
+	for _, label := range recipeStepLabels {
+		if strings.HasPrefix(result, label+":") {
+			hasStep = true
+			break
+		}
+	}
+	if !hasStep {
+		t.Errorf("applyRecipe(%q) = %q does not start with a known step label (Step 1–4)", input, result)
 	}
 
 	hasEnding := false
