@@ -79,31 +79,31 @@ func voiceEnabled() bool {
 // voiceICEConfigJSON returns the JSON blob advertised to clients describing
 // the ICE servers they should use.  Clients pass this directly into
 // RTCPeerConnection's configuration.
+//
+// The `urls` field is emitted as a JSON STRING (one entry per server URL),
+// not an array.  RTCPeerConnection accepts both shapes per the spec, but
+// webAO's TypeScript handler strict-types `urls: string` and silently
+// rejects arrays — the symptom is a successful VC_CAPS receive followed
+// by no voice panel render.
 func voiceICEConfigJSON() string {
 	if !voiceEnabled() {
 		return "[]"
 	}
 	type iceServer struct {
-		URLs       []string `json:"urls"`
-		Username   string   `json:"username,omitempty"`
-		Credential string   `json:"credential,omitempty"`
+		URLs       string `json:"urls"`
+		Username   string `json:"username,omitempty"`
+		Credential string `json:"credential,omitempty"`
 	}
 	var servers []iceServer
 	for _, s := range config.STUNServers {
 		if s = strings.TrimSpace(s); s != "" {
-			servers = append(servers, iceServer{URLs: []string{s}})
+			servers = append(servers, iceServer{URLs: s})
 		}
 	}
-	if len(config.TURNServers) > 0 {
-		var urls []string
-		for _, s := range config.TURNServers {
-			if s = strings.TrimSpace(s); s != "" {
-				urls = append(urls, s)
-			}
-		}
-		if len(urls) > 0 {
+	for _, s := range config.TURNServers {
+		if s = strings.TrimSpace(s); s != "" {
 			servers = append(servers, iceServer{
-				URLs:       urls,
+				URLs:       s,
 				Username:   config.TURNUsername,
 				Credential: config.TURNCredential,
 			})
