@@ -41,8 +41,27 @@ import (
 	"sync"
 
 	"github.com/MangosArentLiterature/Athena/internal/area"
+	"github.com/MangosArentLiterature/Athena/internal/logger"
 	"github.com/MangosArentLiterature/Athena/internal/packet"
 )
+
+// LogVoiceConfig prints the decoded [Voice] config at startup so operators
+// can see at a glance whether the section was loaded.  Called once from
+// NewServer, after `config` is wired to the package-level singleton.
+func LogVoiceConfig() {
+	if config == nil {
+		logger.LogInfo("voice: config is nil at startup (this is a bug)")
+		return
+	}
+	logger.LogInfof("voice: enable_voice=%v ptt_only=%v max_peers_per_area=%d stun_servers=%d turn_servers=%d default_area_voice_allowed=%v",
+		config.EnableVoice,
+		config.PTTOnly,
+		config.MaxPeersPerArea,
+		len(config.STUNServers),
+		len(config.TURNServers),
+		config.DefaultAreaVoiceAllowed,
+	)
+}
 
 // voiceRooms tracks which UIDs are currently publishing voice in each area.
 // Guarded by voiceMu.  Keyed by *area.Area pointer, matching the client.Area()
@@ -103,6 +122,7 @@ func voiceICEConfigJSON() string {
 // voice UI.
 func sendVoiceCaps(client *Client) {
 	if !voiceEnabled() {
+		logger.LogInfof("voice: emitting VC_CAPS#0#1#0#[]#%% to UID %d (voice disabled)", client.Uid())
 		client.SendPacket("VC_CAPS", "0", "1", "0", "[]")
 		return
 	}
@@ -110,13 +130,10 @@ func sendVoiceCaps(client *Client) {
 	if config.PTTOnly {
 		ptt = "1"
 	}
-	client.SendPacket(
-		"VC_CAPS",
-		"1",
-		ptt,
-		strconv.Itoa(config.MaxPeersPerArea),
-		voiceICEConfigJSON(),
-	)
+	maxPeers := strconv.Itoa(config.MaxPeersPerArea)
+	iceJSON := voiceICEConfigJSON()
+	logger.LogInfof("voice: emitting VC_CAPS#1#%s#%s#%s#%% to UID %d", ptt, maxPeers, iceJSON, client.Uid())
+	client.SendPacket("VC_CAPS", "1", ptt, maxPeers, iceJSON)
 }
 
 // currentVoicePeers returns the set of UIDs currently in voice in the given
