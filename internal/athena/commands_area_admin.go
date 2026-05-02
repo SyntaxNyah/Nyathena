@@ -513,7 +513,7 @@ func cmdKickOther(client *Client, args []string, _ string) {
 		if c.Hdid() != callerHDID {
 			return
 		}
-		c.SendPacketSync("KK", "Ghost client kicked.")
+		c.SendPacket("KK", "Ghost client kicked.")
 		c.conn.Close()
 		count++
 	})
