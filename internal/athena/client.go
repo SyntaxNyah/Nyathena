@@ -318,22 +318,94 @@ type Client struct {
 	ignoredIPIDs        sync.Map     // Set of IPIDs permanently ignored by this client. Key: IPID string, Value: struct{}. Lock-free reads.
 	lastPingNano        atomic.Int64 // Unix nanosecond timestamp of the last CH packet; 0 until seeded on join.
 	masoPunishment      PunishmentType // Active self-applied maso punishment type; PunishmentNone if inactive.
+
+	// Outbound packet queue. SendPacket enqueues here non-blockingly; a
+	// dedicated writer goroutine (started in HandleClient) drains sendCh and
+	// performs the actual TCP write. This decouples broadcasters (whose
+	// goroutine iterates every client in the area) from individual slow
+	// consumers — a single bot whose recv buffer is full can no longer stall
+	// every other player's IC sends.
+	//
+	// If the queue is full a packet is dropped silently rather than
+	// disconnecting the client; bursty join sequences (sendPlayerListToClient
+	// can issue 4–5 packets per existing player) must not kick legitimate
+	// players. Genuinely stuck consumers are caught by the writer goroutine's
+	// 5-second Write deadline, which trips markClosed when it fires.
+	sendCh        chan []byte
+	done          chan struct{}
+	closeDoneOnce sync.Once
+	closed        atomic.Bool
 }
 
-// NewClient returns a new client.
+// sendQueueSize bounds the per-client outbound packet backlog. Sized to
+// comfortably absorb the worst legitimate burst: sendPlayerListToClient emits
+// up to ~5 packets per existing player on join, so even a 1000-player server
+// has headroom. At ~150 bytes/packet this is ~1.2 MiB per client in the worst
+// case — acceptable, and only reached by stuck consumers (briefly, before the
+// writer's Write timeout disconnects them).
+const sendQueueSize = 8192
+
+// NewClient returns a new client. The outbound writer goroutine is NOT
+// started here — HandleClient starts it once the connection has cleared the
+// early-reject checks, so a Client created solely to deliver a one-shot
+// rejection packet (e.g. NewClient(...).SendPacketSync("BD",...) on lockdown)
+// never leaks a writer goroutine.
 func NewClient(conn net.Conn, ipid string) *Client {
 	return &Client{
-		conn:            conn,
-		uid:             -1,
-		char:            -1,
-		charIDStr:       "-1",
-		pair:            ClientPairInfo{wanted_id: -1},
-		ipid:            ipid,
+		conn:               conn,
+		uid:                -1,
+		char:               -1,
+		charIDStr:          "-1",
+		pair:               ClientPairInfo{wanted_id: -1},
+		ipid:               ipid,
 		forcePairUID:       -1,
 		possessing:         -1,
 		jailAreaID:         -1,
 		charStuckCharID:    -1,
 		shuffledOrigCharID: -2, // -2 = "not shuffled" sentinel; -1 = shuffled but original was charselect
+		sendCh:             make(chan []byte, sendQueueSize),
+		done:               make(chan struct{}),
+	}
+}
+
+// runWriter drains the client's outbound packet queue and performs the TCP
+// writes. One goroutine per client, started by HandleClient after the
+// early-reject checks. Decoupling the write from SendPacket means a stuck
+// consumer (full kernel send buffer, dead connection that hasn't FIN'd, etc.)
+// only blocks its own writer — never a broadcaster iterating across every
+// client in an area, which was the root cause of the connection-flood freeze
+// where legitimate IC sends locked up while raid bots filled their TCP
+// buffers.
+//
+// The 5-second SetWriteDeadline doubles as the slow-consumer detector: if the
+// kernel can't accept a packet within 5 seconds, the consumer is genuinely
+// stuck and we tear them down via markClosed.
+func (client *Client) runWriter() {
+	for {
+		select {
+		case buf := <-client.sendCh:
+			client.conn.SetWriteDeadline(time.Now().Add(5 * time.Second)) //nolint:errcheck
+			_, err := client.conn.Write(buf)
+			if logger.EnableNetworkLogging {
+				logger.WriteNetworkLog(client.ipid, client.Hdid(), "SEND", string(buf))
+			}
+			if err != nil {
+				client.markClosed()
+				return
+			}
+		case <-client.done:
+			return
+		}
+	}
+}
+
+// markClosed atomically transitions the client to the closed state, signals
+// the writer goroutine to exit, and tears down the underlying connection.
+// Idempotent and safe to call from any goroutine.
+func (client *Client) markClosed() {
+	if client.closed.CompareAndSwap(false, true) {
+		client.closeDoneOnce.Do(func() { close(client.done) })
+		client.conn.Close()
 	}
 }
 
@@ -360,12 +432,17 @@ func (client *Client) HandleClient() {
 	}
 
 	if config.MCLimit != 0 && clients.CountByIPID(client.Ipid()) >= config.MCLimit {
-		client.SendPacket("BD", "Too many connections from your IP. Please disconnect your other clients. If you have no other clients open, wait 1-2 minutes and try again.")
+		client.SendPacketSync("BD", "Too many connections from your IP. Please disconnect your other clients. If you have no other clients open, wait 1-2 minutes and try again.")
 		client.conn.Close()
 		return
 	}
 
 	clients.AddClient(client)
+
+	// Spawn the outbound writer goroutine now that the connection has cleared
+	// the early-reject checks. All async SendPacket calls below this point
+	// enqueue onto sendCh; runWriter performs the actual TCP write.
+	go client.runWriter()
 
 	go timeout(client)
 
@@ -436,12 +513,66 @@ func (client *Client) write(message string) {
 	client.mu.Unlock()
 }
 
-// SendPacket sends the client a packet with the given header and contents.
-// A bytes.Buffer from packetBufPool is used to assemble the packet in a
-// single allocation-free pass; the buffer is returned to the pool afterwards.
-// Write errors are intentionally ignored: any underlying connection failure
-// will surface on the next read in HandleClient, which closes the connection.
+// SendPacket enqueues a packet for asynchronous delivery. The packet is built
+// into a freshly allocated buffer and pushed to sendCh non-blockingly;
+// runWriter performs the actual socket write. This means a broadcaster (e.g.
+// an IC broadcast iterating every client in the area) is never blocked on a
+// single slow consumer's full TCP send buffer — the symptom during connection
+// floods where legitimate IC messages froze even though connection rate
+// limits were rejecting the bots.
+//
+// If sendCh is full the packet is silently DROPPED (not disconnected). The
+// queue is sized to absorb the worst legitimate burst (sendPlayerListToClient
+// on a heavily populated server), so overflow only happens when a consumer is
+// genuinely stuck — and we let the writer goroutine's 5-second Write deadline
+// be the disconnect signal rather than queue length, which was prone to
+// killing legitimate users on bursty join sequences.
 func (client *Client) SendPacket(header string, contents ...string) {
+	// Tests construct *Client via struct literal, bypassing NewClient and
+	// leaving sendCh/done nil. Fall back to the synchronous path so existing
+	// tests still observe the write on the underlying conn. Production paths
+	// always create clients via NewClient so this branch is never taken.
+	if client.sendCh == nil {
+		client.SendPacketSync(header, contents...)
+		return
+	}
+	if client.closed.Load() {
+		return
+	}
+
+	// Pre-size the buffer in a single allocation: header + ('#' + content)*N + "#%".
+	n := len(header) + 2
+	for _, c := range contents {
+		n += 1 + len(c)
+	}
+	buf := make([]byte, 0, n)
+	buf = append(buf, header...)
+	for _, c := range contents {
+		buf = append(buf, '#')
+		buf = append(buf, c...)
+	}
+	buf = append(buf, '#', '%')
+
+	select {
+	case client.sendCh <- buf:
+	default:
+		// Queue full — drop the packet. Most AO2 packets (IC/OOC/PU/ARUP) are
+		// non-critical; losing one is far better than disconnecting the
+		// player. A truly stuck consumer will hit the writer's 5-second Write
+		// deadline shortly and be torn down then.
+	}
+}
+
+// SendPacketSync writes a packet directly to the socket, bypassing the
+// outbound queue. Use this only on paths that must guarantee the bytes reach
+// the kernel before the caller closes the connection — e.g. lockdown / ban
+// rejection messages that are immediately followed by conn.Close(). Blocks
+// the caller for up to the 5-second write deadline, so it must NOT be used
+// from a broadcast loop.
+func (client *Client) SendPacketSync(header string, contents ...string) {
+	if client.closed.Load() {
+		return
+	}
 	b := packetBufPool.Get().(*bytes.Buffer)
 	b.Reset()
 	b.WriteString(header)
@@ -454,7 +585,6 @@ func (client *Client) SendPacket(header string, contents ...string) {
 	client.mu.Lock()
 	client.conn.SetWriteDeadline(time.Now().Add(5 * time.Second)) //nolint:errcheck
 	if logger.EnableNetworkLogging {
-		// Logging paths need a string copy; keep them off the common fast path.
 		msg := b.String()
 		client.conn.Write(b.Bytes()) //nolint:errcheck
 		logger.WriteNetworkLog(client.ipid, client.hdid, "SEND", msg)
@@ -578,7 +708,7 @@ func (client *Client) clientCleanup() {
 	}
 	handleCasinoDisconnect(client)
 	handleMafiaDisconnect(client)
-	client.conn.Close()
+	client.markClosed()
 	clients.RemoveClient(client)
 }
 
@@ -1042,7 +1172,7 @@ func (client *Client) CheckBanned(by db.BanLookup) bool {
 		} else {
 			duration = time.Unix(baninfo.Duration, 0).UTC().Format("02 Jan 2006 15:04 MST")
 		}
-		client.SendPacket("BD", fmt.Sprintf("%v\nUntil: %v\nID: %v", baninfo.Reason, duration, baninfo.Id))
+		client.SendPacketSync("BD", fmt.Sprintf("%v\nUntil: %v\nID: %v", baninfo.Reason, duration, baninfo.Id))
 		client.conn.Close()
 		return true
 	}
