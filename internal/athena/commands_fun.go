@@ -832,7 +832,7 @@ var erpMessages = []string{
 
 func cmdErp(client *Client, _ []string, _ string) {
 msg := erpMessages[rand.Intn(len(erpMessages))]
-client.SendPacketSync("KK", msg)
+client.SendPacket("KK", msg)
 client.conn.Close()
 }
 

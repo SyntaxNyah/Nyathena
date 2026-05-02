@@ -96,7 +96,7 @@ func cmdBan(client *Client, args []string, usage string) {
 				}
 				reportBuilder.WriteString(c.Ipid())
 			}
-			c.SendPacketSync("KB", fmt.Sprintf("%v\nUntil: %v\nID: %v", reason, untilS, id))
+			c.SendPacket("KB", fmt.Sprintf("%v\nUntil: %v\nID: %v", reason, untilS, id))
 			c.conn.Close()
 			forgetIP(c.Ipid())
 			deleteAccountForIPID(c.Ipid())
@@ -139,12 +139,12 @@ func cmdBan(client *Client, args []string, usage string) {
 				deleteAccountForIPID(ipid)
 				for _, c := range onlineClients {
 					if id, ok := banIDByHdid[c.Hdid()]; ok {
-						c.SendPacketSync("KB", fmt.Sprintf("%v\nUntil: %v\nID: %v", reason, untilS, id))
+						c.SendPacket("KB", fmt.Sprintf("%v\nUntil: %v\nID: %v", reason, untilS, id))
 						if err := webhook.PostBan(c.CurrentCharacter(), c.Showname(), c.OOCName(), ipid, c.Uid(), id, *duration, reason, client.DisplayModName()); err != nil {
 							logger.LogErrorf("while posting ban webhook: %v", err)
 						}
 					} else {
-						c.SendPacketSync("KB", fmt.Sprintf("%v\nUntil: %v", reason, untilS))
+						c.SendPacket("KB", fmt.Sprintf("%v\nUntil: %v", reason, untilS))
 					}
 					c.conn.Close()
 				}
@@ -383,7 +383,7 @@ func cmdKick(client *Client, args []string, usage string) {
 			reportBuilder.WriteString(", ")
 		}
 		reportBuilder.WriteString(c.Ipid())
-		c.SendPacketSync("KK", reason)
+		c.SendPacket("KK", reason)
 		c.conn.Close()
 		count++
 		if err := webhook.PostKick(c.CurrentCharacter(), c.Showname(), c.OOCName(), c.Ipid(), reason, client.DisplayModName(), c.Uid()); err != nil {
@@ -1569,7 +1569,7 @@ func cmdBotBan(client *Client, _ []string, _ string) {
 			logger.LogErrorf("botban: failed to ban IPID %v: %v", c.Ipid(), err)
 			return
 		}
-		c.SendPacketSync("KB", fmt.Sprintf("Botban: spectator with insufficient playtime.\nUntil: ∞\nID: %v", id))
+		c.SendPacket("KB", fmt.Sprintf("Botban: spectator with insufficient playtime.\nUntil: ∞\nID: %v", id))
 		c.conn.Close()
 		forgetIP(c.Ipid())
 		count++
