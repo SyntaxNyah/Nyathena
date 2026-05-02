@@ -488,6 +488,12 @@ func NewServer(conf *settings.Config) (*Server, error) {
 	// so that pktReqAM performs a single write with no allocations.
 	smPacket = buildSMPacket(s.areaNames, s.music)
 
+	// Dump the decoded [Voice] config so operators can confirm at a glance
+	// whether the section was loaded.  If voice_allowed appears off here even
+	// though config.toml has enable_voice = true, the section name or struct
+	// tags are mismatched and VC_CAPS will go out as "voice disabled".
+	LogVoiceConfig()
+
 	initCommands()
 	validateCommands()
 	initAutoMod(conf)

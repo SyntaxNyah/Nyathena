@@ -235,6 +235,13 @@ func pktReqDone(client *Client, _ *packet.Packet) {
 	}
 	client.JoinArea(areas[0])
 	client.SendPacket("DONE")
+	// Re-emit VC_CAPS at the end of the join handshake.  pktId already sends
+	// it once during the early ID phase, but some clients (notably webAO,
+	// which builds its voice subsystem after SI/SC/SM/DONE) ignore packets
+	// that arrive before that subsystem exists.  Sending it again here, after
+	// DONE and after the client's UID is assigned, guarantees the voice panel
+	// can render whether or not the client also caught the early copy.
+	sendVoiceCaps(client)
 	sendCMArup()
 	sendStatusArup()
 	sendLockArup()
