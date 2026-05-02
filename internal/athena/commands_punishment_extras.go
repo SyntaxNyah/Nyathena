@@ -203,7 +203,7 @@ func cmdSfxCurse(client *Client, args []string, usage string) {
 	count := 0
 	for _, c := range toCurse {
 		c.AddPunishmentWithData(PunishmentSfxCurse, duration, *reason, sfx)
-		c.SendServerMessage(fmt.Sprintf("🔊 You are now SFX-cursed: every IC message will play %s.", sfx))
+		c.SendServerMessage(fmt.Sprintf("🔊 You are now SFX-cursed: every IC message will play %s", sfx))
 		count++
 	}
 	client.SendServerMessage(fmt.Sprintf("Applied SFX curse to %d client(s).", count))
