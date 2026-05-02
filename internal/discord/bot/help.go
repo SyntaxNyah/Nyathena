@@ -71,6 +71,8 @@ var commandHelp = map[string]struct {
 	"unreliablenarrator": {"/unreliablenarrator [-d duration] [-r reason] <uid1>,<uid2>...", "Makes IC messages sound suspiciously unreliable with hedges, contradictions, and self-doubting commentary (e.g. 'I didn't do it' → 'I allegedly didn't do it (or so I recall.)').", "Moderator", "/unreliablenarrator 5 -d 20m -r \"Stop gaslighting the courtroom\"", []string{"thirdperson", "paranoid", "unpunish"}},
 	"uncannyvalley":      {"/uncannyvalley [-d duration] [-r reason] <uid1>,<uid2>...", "Adds glitchy system notes to IC messages and subtly mutates the player's display name each message (e.g. name: 'Phoenix' → 'Phœnix_', message appended with '[checksum mismatch]').", "Moderator", "/uncannyvalley 5 -d 45m -r \"Become slightly incorrect\"", []string{"unreliablenarrator", "emoji", "unpunish"}},
 	"maso":               {"/maso", "Self-apply a random punishment for 10 minutes. Type /maso again while active to reroll to a different random punishment.", "None (any player)", "/maso", []string{"unpunish", "roulette"}},
+	"firewall":           {"/firewall <on|off>", "Toggle the IPHub VPN/proxy firewall. Refuses to enable if iphub_api_key is unset.", "Moderator", "/firewall on", []string{"lockdown"}},
+	"lockdown":           {"/lockdown <on|off|whitelist_all>", "Toggle server-wide new-IPID lockdown, or whitelist every currently-connected IPID so they can rejoin during lockdown.", "Moderator", "/lockdown on", []string{"firewall"}},
 }
 
 // handleHelp handles the /help command.
@@ -137,7 +139,9 @@ func (b *Bot) handleHelp(s *discordgo.Session, i *discordgo.InteractionCreate) {
 				Name: "🎭 Custom Punishments",
 				Value: "`/parrot` `/drunk` `/slowpoke`\n" +
 					"`/roulette` `/spotlight` `/whisper`\n" +
-					"`/stutterstep` `/backward`",
+					"`/stutterstep` `/backward`\n" +
+					"`/thesaurusoverload` `/valleygirl` `/babytalk`\n" +
+					"`/thirdperson` `/unreliablenarrator` `/uncannyvalley`",
 				Inline: false,
 			},
 			{
@@ -164,6 +168,12 @@ func (b *Bot) handleHelp(s *discordgo.Session, i *discordgo.InteractionCreate) {
 			{
 				Name:   "⚙️ Server Control",
 				Value:  "`/restart` — Restart the server",
+				Inline: false,
+			},
+			{
+				Name: "🔒 Security Controls",
+				Value: "`/firewall on|off` — Toggle the IPHub VPN/proxy firewall\n" +
+					"`/lockdown on|off|whitelist_all` — Toggle new-IPID lockdown or whitelist all connected players",
 				Inline: false,
 			},
 			{
