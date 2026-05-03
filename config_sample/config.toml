@@ -660,6 +660,15 @@ turn_servers = []
 turn_username = ""
 turn_credential = ""
 
+# When true, instructs clients to set RTCPeerConnection's iceTransportPolicy
+# to "relay", forcing all audio through your TURN servers and hiding peers'
+# IPs from each other.  Useful for privacy-conscious deployments.
+#
+# Requires at least one entry in turn_servers — with force_relay = true and
+# no TURN servers configured, no peer can connect at all.  A startup warning
+# is emitted in that case.
+force_relay = false
+
 # Default voice-allowed setting for areas that don't set `voice_allowed`
 # explicitly in areas.toml.  When true (default), every area permits voice
 # once enable_voice is on; set to false to make voice opt-in per area.

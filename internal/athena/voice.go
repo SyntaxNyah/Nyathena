@@ -23,7 +23,7 @@ package athena
 // Topology is full-mesh per area; peers negotiate directly.
 //
 // Protocol:
-//   VC_CAPS#<enabled>#<ptt_only>#<max_peers>#<ice_json>#%   (S→C, on handshake)
+//   VC_CAPS#<enabled>#<ptt_only>#<max_peers>#<ice_json>#<force_relay>#%  (S→C, on handshake)
 //   VC_JOIN#<uid>#%                                         (C→S, then broadcast to area)
 //   VC_LEAVE#<uid>#%                                        (C→S or server-generated)
 //   VC_PEERS#<csv_uids>#%                                   (S→C, current voice peers in area)
@@ -53,14 +53,18 @@ func LogVoiceConfig() {
 		logger.LogInfo("voice: config is nil at startup (this is a bug)")
 		return
 	}
-	logger.LogInfof("voice: enable_voice=%v ptt_only=%v max_peers_per_area=%d stun_servers=%d turn_servers=%d default_area_voice_allowed=%v",
+	logger.LogInfof("voice: enable_voice=%v ptt_only=%v max_peers_per_area=%d stun_servers=%d turn_servers=%d force_relay=%v default_area_voice_allowed=%v",
 		config.EnableVoice,
 		config.PTTOnly,
 		config.MaxPeersPerArea,
 		len(config.STUNServers),
 		len(config.TURNServers),
+		config.ForceRelay,
 		config.DefaultAreaVoiceAllowed,
 	)
+	if config.EnableVoice && config.ForceRelay && len(config.TURNServers) == 0 {
+		logger.LogWarning("voice: force_relay=true but turn_servers is empty — clients will be unable to connect")
+	}
 }
 
 // voiceRooms tracks which UIDs are currently publishing voice in each area.
@@ -122,18 +126,22 @@ func voiceICEConfigJSON() string {
 // voice UI.
 func sendVoiceCaps(client *Client) {
 	if !voiceEnabled() {
-		logger.LogInfof("voice: emitting VC_CAPS#0#1#0#[]#%% to UID %d (voice disabled)", client.Uid())
-		client.SendPacket("VC_CAPS", "0", "1", "0", "[]")
+		logger.LogInfof("voice: emitting VC_CAPS#0#1#0#[]#0#%% to UID %d (voice disabled)", client.Uid())
+		client.SendPacket("VC_CAPS", "0", "1", "0", "[]", "0")
 		return
 	}
 	ptt := "0"
 	if config.PTTOnly {
 		ptt = "1"
 	}
+	forceRelay := "0"
+	if config.ForceRelay {
+		forceRelay = "1"
+	}
 	maxPeers := strconv.Itoa(config.MaxPeersPerArea)
 	iceJSON := voiceICEConfigJSON()
-	logger.LogInfof("voice: emitting VC_CAPS#1#%s#%s#%s#%% to UID %d", ptt, maxPeers, iceJSON, client.Uid())
-	client.SendPacket("VC_CAPS", "1", ptt, maxPeers, iceJSON)
+	logger.LogInfof("voice: emitting VC_CAPS#1#%s#%s#%s#%s#%% to UID %d", ptt, maxPeers, iceJSON, forceRelay, client.Uid())
+	client.SendPacket("VC_CAPS", "1", ptt, maxPeers, iceJSON, forceRelay)
 }
 
 // currentVoicePeers returns the set of UIDs currently in voice in the given
