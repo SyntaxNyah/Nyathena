@@ -223,7 +223,9 @@ func leaveVoiceForClient(client *Client) {
 		return
 	}
 	uidStr := strconv.Itoa(client.Uid())
-	writeToArea(a, "VC_LEAVE", uidStr)
+	// Broadcast only to remaining voice-room peers — they're the ones with an
+	// open WebRTC connection to the leaving client that needs to be torn down.
+	writeToAreaVoice(a, client.Uid(), "VC_LEAVE", uidStr)
 }
 
 // writeToAreaVoice sends a packet to every client in a's voice room, optionally
@@ -293,12 +295,25 @@ func pktVCJoin(client *Client, _ *packet.Packet) {
 		client.SendServerMessage(fmt.Sprintf("New users must wait %ds before using voice chat.", wait))
 		return
 	}
-	if ok, retry := allowVoiceJoin(client.Uid()); !ok {
-		client.SendServerMessage(fmt.Sprintf("Voice join rate limit: try again in %ds.", retry))
-		return
-	}
 	uid := client.Uid()
 	if inVoiceRoom(a, uid) {
+		// Client is retrying while already joined (e.g. WebRTC failed and client
+		// is attempting to re-initiate). Re-send the current peer list so they can
+		// re-initiate signalling without consuming a rate-limit slot or re-adding
+		// themselves to the room.
+		peers := currentVoicePeers(a)
+		peerStrs := make([]string, 0, len(peers))
+		for _, p := range peers {
+			if p == uid {
+				continue
+			}
+			peerStrs = append(peerStrs, strconv.Itoa(p))
+		}
+		client.SendPacket("VC_PEERS", strings.Join(peerStrs, ","))
+		return
+	}
+	if ok, retry := allowVoiceJoin(uid); !ok {
+		client.SendServerMessage(fmt.Sprintf("Voice join rate limit: try again in %ds.", retry))
 		return
 	}
 	if !addVoicePeer(a, uid, config.MaxPeersPerArea) {

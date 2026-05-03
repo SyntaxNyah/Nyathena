@@ -716,6 +716,7 @@ func (client *Client) clientCleanup() {
 				a.RemoveInvited(client.Uid())
 			}
 		}
+		clearVoiceRateStateForUID(client.Uid())
 		uids.ReleaseUid(client.Uid())
 		players.RemovePlayer()
 		if config.Advertise {
