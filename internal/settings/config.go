@@ -164,6 +164,7 @@ type VoiceConfig struct {
 	TURNServers              []string `toml:"turn_servers"`
 	TURNUsername             string   `toml:"turn_username"`
 	TURNCredential           string   `toml:"turn_credential"`
+	ForceRelay               bool     `toml:"force_relay"`
 	DefaultAreaVoiceAllowed  bool     `toml:"default_area_voice_allowed"`
 	JoinRateLimit            int      `toml:"join_rate_limit"`
 	JoinRateLimitWindow      int      `toml:"join_rate_limit_window"`
@@ -266,6 +267,7 @@ func DefaultConfig() *Config {
 			TURNServers:             []string{},
 			TURNUsername:            "",
 			TURNCredential:          "",
+			ForceRelay:              false,
 			DefaultAreaVoiceAllowed: true,
 			JoinRateLimit:           3,
 			JoinRateLimitWindow:     10,

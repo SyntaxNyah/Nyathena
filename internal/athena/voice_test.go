@@ -69,6 +69,45 @@ func voiceTestConfig(enabled bool, maxPeers int) *settings.Config {
 	return cfg
 }
 
+func TestSendVoiceCapsEmitsForceRelayField(t *testing.T) {
+	origConfig := config
+	t.Cleanup(func() { config = origConfig })
+
+	cases := []struct {
+		name        string
+		enabled     bool
+		forceRelay  bool
+		wantInOrder []string
+	}{
+		// Disabled branch always emits zeroed-out caps with force_relay=0
+		// regardless of the configured value.
+		{"disabled", false, false, []string{"VC_CAPS#0#1#0#[]#0#%"}},
+		{"disabled_with_force_relay_set", false, true, []string{"VC_CAPS#0#1#0#[]#0#%"}},
+		// Enabled branch reflects ForceRelay as the 5th field.
+		{"enabled_no_relay", true, false, []string{"VC_CAPS#1#1#6#", "#0#%"}},
+		{"enabled_with_relay", true, true, []string{"VC_CAPS#1#1#6#", "#1#%"}},
+	}
+
+	a := area.NewArea(area.AreaData{}, 10, 10, area.EviAny)
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			cfg := voiceTestConfig(tc.enabled, 6)
+			cfg.VoiceConfig.ForceRelay = tc.forceRelay
+			config = cfg
+
+			client, conn := newVoiceClient(t, 1, a)
+			sendVoiceCaps(client)
+			out := conn.String()
+			for _, want := range tc.wantInOrder {
+				if !strings.Contains(out, want) {
+					t.Errorf("sendVoiceCaps output missing %q\n  got: %q", want, out)
+				}
+			}
+		})
+	}
+}
+
 func newVoiceClient(t *testing.T, uid int, a *area.Area) (*Client, *captureConn) {
 	t.Helper()
 	conn := &captureConn{}
