@@ -193,7 +193,7 @@ func allowRate(m map[int][]time.Time, uid int, limit int, window time.Duration) 
 	}
 	if len(trimmed) >= limit {
 		// Earliest within-window event determines the wait.
-		retry := int(window-now.Sub(trimmed[0])) + 1
+		retry := int((window - now.Sub(trimmed[0])).Seconds()) + 1
 		if retry < 1 {
 			retry = 1
 		}
