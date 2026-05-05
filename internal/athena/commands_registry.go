@@ -2726,7 +2726,7 @@ func initCommands() {
 			handler:  cmdFromSoftware,
 			minArgs:  1,
 			usage:    "Usage: /fromsoftware [-d duration] [-r reason] global | <uid1>,<uid2>...",
-			desc:     "Censors words from fromsoft.txt in the target's IC messages, replacing each matching word with asterisks (one per letter).",
+			desc:     "Censors words from fromsoft.txt in the target's IC messages, replacing each occurrence (including inside larger words) with asterisks (one per letter).",
 			reqPerms: permissions.PermissionField["MUTE"],
 			category: "punishment",
 		},

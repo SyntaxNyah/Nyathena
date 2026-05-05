@@ -2,9 +2,10 @@
    Nyathena fork additions: /fromsoftware punishment.
 
    Loads a word list from config/fromsoft.txt at startup. While the
-   punishment is active every word a player sends that matches an entry in
-   the list (whole-word, case-insensitive) is replaced with one asterisk per
-   letter in the IC message visible to the area. */
+   punishment is active, every occurrence of a listed word as a substring of
+   any token the player sends is replaced with one asterisk per letter — so
+   "ho" in the list will censor "should" → "s**uld", "how" → "**w", etc.
+   That's the joke: it's an overzealous censor. */
 
 package athena
 
@@ -12,8 +13,8 @@ import (
 	"bufio"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
-	"unicode"
 	"unicode/utf8"
 
 	"github.com/MangosArentLiterature/Athena/internal/logger"
@@ -55,31 +56,43 @@ func initFromSoftWords() {
 	logger.LogInfof("fromsoftware: loaded %d word(s) from %q", len(words), path)
 }
 
-// applyFromSoftware replaces each word that appears in the fromsoftWords list
-// with one asterisk per letter. Matching is whole-word and case-insensitive;
-// surrounding punctuation (e.g. commas, exclamation marks) is preserved on the
-// token but stripped before the lookup so "bum!" also triggers a match for "bum".
+// applyFromSoftware replaces every occurrence of a fromsoftWords entry as a
+// substring within each space-separated token with one asterisk per rune.
+// Matching is case-insensitive. Longer entries are applied before shorter ones
+// so that a two-letter entry cannot split a region already blanked by a longer
+// entry. The replacement is intentionally substring-level — entries like "ho"
+// will censor "should" → "s**uld", "how" → "**w", etc.
 func applyFromSoftware(text string) string {
 	if len(fromsoftWords) == 0 {
 		return text
 	}
 
-	words := strings.Fields(text)
-	for i, w := range words {
-		// Strip surrounding non-letter / non-digit runes to get the bare word.
-		core := strings.ToLower(strings.TrimFunc(w, func(r rune) bool {
-			return !unicode.IsLetter(r) && !unicode.IsDigit(r)
-		}))
-		if _, ok := fromsoftWords[core]; !ok {
-			continue
-		}
-		// Locate the core substring in the original token and overwrite it
-		// with one asterisk per rune while keeping any flanking punctuation intact.
-		lower := strings.ToLower(w)
-		if idx := strings.Index(lower, core); idx >= 0 {
-			stars := strings.Repeat("*", utf8.RuneCountInString(core))
-			words[i] = w[:idx] + stars + w[idx+len(core):]
-		}
+	// Build a slice of bad words sorted longest-first so that a longer match
+	// takes precedence over a shorter one that overlaps it.
+	sorted := make([]string, 0, len(fromsoftWords))
+	for w := range fromsoftWords {
+		sorted = append(sorted, w)
 	}
-	return truncateText(strings.Join(words, " "))
+	sort.Slice(sorted, func(i, j int) bool {
+		return len(sorted[i]) > len(sorted[j])
+	})
+
+	tokens := strings.Fields(text)
+	for i, tok := range tokens {
+		lower := strings.ToLower(tok)
+		for _, bad := range sorted {
+			stars := strings.Repeat("*", utf8.RuneCountInString(bad))
+			// Replace all non-overlapping occurrences of bad within this token.
+			for {
+				idx := strings.Index(lower, bad)
+				if idx < 0 {
+					break
+				}
+				tok = tok[:idx] + stars + tok[idx+len(bad):]
+				lower = lower[:idx] + stars + lower[idx+len(bad):]
+			}
+		}
+		tokens[i] = tok
+	}
+	return truncateText(strings.Join(tokens, " "))
 }

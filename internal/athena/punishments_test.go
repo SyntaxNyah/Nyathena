@@ -180,6 +180,7 @@ func TestApplyFromSoftware(t *testing.T) {
 	fromsoftWords = map[string]struct{}{
 		"bum":  {},
 		"bart": {},
+		"ho":   {},
 	}
 	defer func() { fromsoftWords = map[string]struct{}{} }()
 
@@ -187,12 +188,25 @@ func TestApplyFromSoftware(t *testing.T) {
 		input string
 		want  string
 	}{
-		{"bum", "***"},                   // 3-letter word → 3 asterisks
-		{"bart", "****"},                 // 4-letter word → 4 asterisks
-		{"bum!", "***!"},                 // trailing punctuation preserved
-		{"hello bum world", "hello *** world"}, // word in sentence
-		{"BUM", "***"},                   // case-insensitive
-		{"hello world", "hello world"},   // no match → unchanged
+		// Exact / whole-token matches still work.
+		{"bum", "***"},
+		{"bart", "****"},
+		{"BUM", "***"},                          // case-insensitive
+		{"hello world", "hello world"},           // no match
+		{"hello bum world", "hello *** world"},   // word in sentence
+
+		// Punctuation flanking a matched token is preserved.
+		{"bum!", "***!"},
+
+		// Substring matching — the joke: "ho" censors inside larger words.
+		{"how", "**w"},
+		{"who", "w**"},
+		{"should", "s**uld"},
+		{"HOW", "**W"}, // case-insensitive substring
+
+		// Longer entry takes priority over a shorter overlapping entry.
+		// "bum" is 3 chars; "ho" won't split a region already starred by "bum".
+		{"bum", "***"},
 	}
 	for _, tt := range tests {
 		got := applyFromSoftware(tt.input)
