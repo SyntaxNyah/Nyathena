@@ -590,7 +590,7 @@ func pktIC(client *Client, p *packet.Packet) {
 
 		// Handle name modifications
 		if p.punishmentType == PunishmentEmoji {
-			args[3] = GetRandomEmoji()
+			args[4] = GetRandomEmoji()
 		}
 		if p.punishmentType == PunishmentUncannyValley {
 			name := args[15]
