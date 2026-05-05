@@ -3,8 +3,8 @@
 
    Loads a word list from config/fromsoft.txt at startup. While the
    punishment is active every word a player sends that matches an entry in
-   the list (whole-word, case-insensitive) is replaced with *** in the IC
-   message visible to the area. */
+   the list (whole-word, case-insensitive) is replaced with one asterisk per
+   letter in the IC message visible to the area. */
 
 package athena
 
@@ -14,6 +14,7 @@ import (
 	"path/filepath"
 	"strings"
 	"unicode"
+	"unicode/utf8"
 
 	"github.com/MangosArentLiterature/Athena/internal/logger"
 	"github.com/MangosArentLiterature/Athena/internal/settings"
@@ -55,9 +56,9 @@ func initFromSoftWords() {
 }
 
 // applyFromSoftware replaces each word that appears in the fromsoftWords list
-// with ***. Matching is whole-word and case-insensitive; surrounding
-// punctuation (e.g. commas, exclamation marks) is preserved on the token but
-// stripped before the lookup so "bum!" also triggers a match for "bum".
+// with one asterisk per letter. Matching is whole-word and case-insensitive;
+// surrounding punctuation (e.g. commas, exclamation marks) is preserved on the
+// token but stripped before the lookup so "bum!" also triggers a match for "bum".
 func applyFromSoftware(text string) string {
 	if len(fromsoftWords) == 0 {
 		return text
@@ -73,10 +74,11 @@ func applyFromSoftware(text string) string {
 			continue
 		}
 		// Locate the core substring in the original token and overwrite it
-		// with *** while keeping any flanking punctuation intact.
+		// with one asterisk per rune while keeping any flanking punctuation intact.
 		lower := strings.ToLower(w)
 		if idx := strings.Index(lower, core); idx >= 0 {
-			words[i] = w[:idx] + "***" + w[idx+len(core):]
+			stars := strings.Repeat("*", utf8.RuneCountInString(core))
+			words[i] = w[:idx] + stars + w[idx+len(core):]
 		}
 	}
 	return truncateText(strings.Join(words, " "))

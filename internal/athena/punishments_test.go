@@ -175,6 +175,33 @@ func TestApplyCensor(t *testing.T) {
 	}
 }
 
+func TestApplyFromSoftware(t *testing.T) {
+	// Seed the word list with test words.
+	fromsoftWords = map[string]struct{}{
+		"bum":  {},
+		"bart": {},
+	}
+	defer func() { fromsoftWords = map[string]struct{}{} }()
+
+	tests := []struct {
+		input string
+		want  string
+	}{
+		{"bum", "***"},                   // 3-letter word → 3 asterisks
+		{"bart", "****"},                 // 4-letter word → 4 asterisks
+		{"bum!", "***!"},                 // trailing punctuation preserved
+		{"hello bum world", "hello *** world"}, // word in sentence
+		{"BUM", "***"},                   // case-insensitive
+		{"hello world", "hello world"},   // no match → unchanged
+	}
+	for _, tt := range tests {
+		got := applyFromSoftware(tt.input)
+		if got != tt.want {
+			t.Errorf("applyFromSoftware(%q) = %q, want %q", tt.input, got, tt.want)
+		}
+	}
+}
+
 func TestApplyConfused(t *testing.T) {
 	input := "one two three"
 	result := applyConfused(input)
