@@ -25,12 +25,16 @@ type punishmentSubcategory struct {
 }
 
 // punishmentHelpGroups is the canonical sub-grouping for /help punishment.
-// Any command in the "punishment" registry category that isn't named here
+// Any command in the "punishment" registry category that is not named here
 // falls into the "Other / extras" bucket so nothing goes missing.
+//
+// Global flag: every punishment command that accepts UIDs also accepts the
+// keyword "global" in place of a UID list to apply the effect to every
+// non-moderator currently in the issuer's area.
 var punishmentHelpGroups = []punishmentSubcategory{
 	{
 		emoji: "💬", title: "Text effects",
-		desc: "Rewrite the target's IC text — light, mostly cosmetic.",
+		desc: "Rewrite the target's IC text — light, mostly cosmetic. Supports 'global' in place of UIDs.",
 		cmds: []string{"whisper", "backward", "stutterstep", "elongate", "uppercase", "lowercase",
 			"robotic", "alternating", "fancy", "uwu", "pirate", "shakespearean", "caveman",
 			"censor", "fromsoftware", "confused", "paranoid", "drunk", "hiccup", "whistle", "mumble",
@@ -42,18 +46,18 @@ var punishmentHelpGroups = []punishmentSubcategory{
 	},
 	{
 		emoji: "🎭", title: "Themed quote replacers",
-		desc: "Discard the player's text and substitute a themed line per message.",
+		desc: "Discard the player's text and substitute a themed line per message. Supports 'global'.",
 		cmds: []string{"recipe", "rickroll", "pickup", "brainrot", "gordonramsay", "biblebot",
 			"mime", "subtitles", "spotlight"},
 	},
 	{
 		emoji: "🃏", title: "Persona / personality",
-		desc: "Wraps every line in a persona's prefix/suffix flavour.",
+		desc: "Wraps every line in a persona's prefix/suffix flavour. Supports 'global'.",
 		cmds: []string{"clown", "jester", "joker", "tourettes", "translator"},
 	},
 	{
 		emoji: "💖", title: "Dere archetypes",
-		desc: "Anime-style relationship-trope flavour. /omnidere mixes them all.",
+		desc: "Anime-style relationship-trope flavour. /omnidere mixes them all. Supports 'global'.",
 		cmds: []string{"omnidere", "tsundere", "yandere", "kuudere", "dandere", "deredere",
 			"himedere", "kamidere", "undere", "bakadere", "mayadere",
 			"smugdere", "deretsun", "bokodere", "thugdere", "teasedere", "dorodere",
@@ -62,20 +66,20 @@ var punishmentHelpGroups = []punishmentSubcategory{
 	},
 	{
 		emoji: "🐾", title: "Animal filters",
-		desc: "Replace text with animal sounds.",
+		desc: "Replace text with animal sounds. Supports 'global'.",
 		cmds: []string{"monkey", "snake", "dog", "cat", "bird", "cow", "frog", "duck",
 			"horse", "lion", "zoo", "bunny"},
 	},
 	{
 		emoji: "👁", title: "Visibility / cosmetic",
 		desc: "Hides the player or alters their visual presentation.",
-		cmds: []string{"emoji", "invisible", "shrink", "grow", "wide",
+		cmds: []string{"emoji", "invisible", "shrink", "grow", "wide", "areainiswap",
 			"unshrink", "ungrow", "unwide"},
 	},
 	{
 		emoji: "⏱", title: "Timing & throughput",
 		desc: "Slow, speed up, or pace the target's IC chat.",
-		cmds: []string{"slowpoke", "fastspammer", "pause", "lag"},
+		cmds: []string{"slowpoke", "fastspammer", "lag"},
 	},
 	{
 		emoji: "🔊", title: "Audio / SFX",
@@ -84,14 +88,19 @@ var punishmentHelpGroups = []punishmentSubcategory{
 	},
 	{
 		emoji: "💥", title: "Stacking / chaos",
-		desc: "Combine multiple effects on a single target.",
+		desc: "Combine multiple effects on a single target. /stack and /randompunishall support 'global'.",
 		cmds: []string{"stack", "torment", "roulette", "lovebomb", "degrade",
-			"emoticon", "51", "icwarp", "unicwarp", "megamaso", "maso"},
+			"emoticon", "51", "icwarp", "unicwarp", "megamaso", "maso",
+			"randompunishall", "togglerandompunish", "tournament"},
 	},
 	{
 		emoji: "🧹", title: "Removal & control",
 		desc: "Lift active punishments.",
-		cmds: []string{"unpunish", "unlag"},
+		cmds: []string{"unpunish", "unlag",
+			"un51", "unacademic", "unbabytalk", "undegrade", "unlovebomb",
+			"unphilosopher", "unpoet", "unquote", "unrecipe", "unsarcasm",
+			"unslang", "unthesaurusoverload", "unthirdperson", "untranslator",
+			"ununcannyvalley", "ununreliablenarrator", "unupsidedown", "unvalleygirl"},
 	},
 }
 
@@ -129,7 +138,7 @@ func renderPunishmentHelp(client *Client, casinoEnabled, accountsEnabled, voiceE
 	rendered := make(map[string]struct{}, len(available))
 
 	var sb strings.Builder
-	sb.WriteString("🎭 Punishment Commands\nText-effect and behaviour punishments. Most require MUTE.\nUse /help <command> for usage.\n")
+	sb.WriteString("🎭 Punishment Commands\nText-effect and behaviour punishments. Most require MUTE.\n💡 Global mode: any command that takes UIDs also accepts 'global' to affect every\n   non-moderator in your current area. Example: /tsundere global\nUse /help <command> for usage.\n")
 
 	for _, group := range punishmentHelpGroups {
 		var lines []string

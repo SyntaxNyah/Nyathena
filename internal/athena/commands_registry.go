@@ -1037,7 +1037,7 @@ func initCommands() {
 		"whisper": {
 			handler:  cmdWhisper,
 			minArgs:  1,
-			usage:    "Usage: /whisper [-d duration] [-r reason] <uid1>,<uid2>...",
+			usage:    "Usage: /whisper [-d duration] [-r reason] global | <uid1>,<uid2>...",
 			desc:     "Makes messages only visible to mods and CMs.",
 			reqPerms: permissions.PermissionField["MUTE"],
 			category: "punishment",
@@ -1045,7 +1045,7 @@ func initCommands() {
 		"backward": {
 			handler:  cmdBackward,
 			minArgs:  1,
-			usage:    "Usage: /backward [-d duration] [-r reason] <uid1>,<uid2>...",
+			usage:    "Usage: /backward [-d duration] [-r reason] global | <uid1>,<uid2>...",
 			desc:     "Reverses character order in messages.",
 			reqPerms: permissions.PermissionField["MUTE"],
 			category: "punishment",
@@ -1053,7 +1053,7 @@ func initCommands() {
 		"stutterstep": {
 			handler:  cmdStutterstep,
 			minArgs:  1,
-			usage:    "Usage: /stutterstep [-d duration] [-r reason] <uid1>,<uid2>...",
+			usage:    "Usage: /stutterstep [-d duration] [-r reason] global | <uid1>,<uid2>...",
 			desc:     "Doubles every word in messages.",
 			reqPerms: permissions.PermissionField["MUTE"],
 			category: "punishment",
@@ -1061,7 +1061,7 @@ func initCommands() {
 		"elongate": {
 			handler:  cmdElongate,
 			minArgs:  1,
-			usage:    "Usage: /elongate [-d duration] [-r reason] <uid1>,<uid2>...",
+			usage:    "Usage: /elongate [-d duration] [-r reason] global | <uid1>,<uid2>...",
 			desc:     "Repeats vowels in messages.",
 			reqPerms: permissions.PermissionField["MUTE"],
 			category: "punishment",
@@ -1069,7 +1069,7 @@ func initCommands() {
 		"uppercase": {
 			handler:  cmdUppercase,
 			minArgs:  1,
-			usage:    "Usage: /uppercase [-d duration] [-r reason] <uid1>,<uid2>...",
+			usage:    "Usage: /uppercase [-d duration] [-r reason] global | <uid1>,<uid2>...",
 			desc:     "Forces messages to UPPERCASE.",
 			reqPerms: permissions.PermissionField["MUTE"],
 			category: "punishment",
@@ -1077,7 +1077,7 @@ func initCommands() {
 		"lowercase": {
 			handler:  cmdLowercase,
 			minArgs:  1,
-			usage:    "Usage: /lowercase [-d duration] [-r reason] <uid1>,<uid2>...",
+			usage:    "Usage: /lowercase [-d duration] [-r reason] global | <uid1>,<uid2>...",
 			desc:     "Forces messages to lowercase.",
 			reqPerms: permissions.PermissionField["MUTE"],
 			category: "punishment",
@@ -1085,7 +1085,7 @@ func initCommands() {
 		"robotic": {
 			handler:  cmdRobotic,
 			minArgs:  1,
-			usage:    "Usage: /robotic [-d duration] [-r reason] <uid1>,<uid2>...",
+			usage:    "Usage: /robotic [-d duration] [-r reason] global | <uid1>,<uid2>...",
 			desc:     "Replaces messages with [BEEP] [BOOP] robotic sounds.",
 			reqPerms: permissions.PermissionField["MUTE"],
 			category: "punishment",
@@ -1093,7 +1093,7 @@ func initCommands() {
 		"alternating": {
 			handler:  cmdAlternating,
 			minArgs:  1,
-			usage:    "Usage: /alternating [-d duration] [-r reason] <uid1>,<uid2>...",
+			usage:    "Usage: /alternating [-d duration] [-r reason] global | <uid1>,<uid2>...",
 			desc:     "Makes messages AlTeRnAtInG cAsE.",
 			reqPerms: permissions.PermissionField["MUTE"],
 			category: "punishment",
@@ -1101,7 +1101,7 @@ func initCommands() {
 		"fancy": {
 			handler:  cmdFancy,
 			minArgs:  1,
-			usage:    "Usage: /fancy [-d duration] [-r reason] <uid1>,<uid2>...",
+			usage:    "Usage: /fancy [-d duration] [-r reason] global | <uid1>,<uid2>...",
 			desc:     "Converts messages to Unicode fancy characters.",
 			reqPerms: permissions.PermissionField["MUTE"],
 			category: "punishment",
@@ -1109,7 +1109,7 @@ func initCommands() {
 		"uwu": {
 			handler:  cmdUwu,
 			minArgs:  1,
-			usage:    "Usage: /uwu [-d duration] [-r reason] <uid1>,<uid2>...",
+			usage:    "Usage: /uwu [-d duration] [-r reason] global | <uid1>,<uid2>...",
 			desc:     "Converts messages to UwU speak.",
 			reqPerms: permissions.PermissionField["MUTE"],
 			category: "punishment",
@@ -1117,7 +1117,7 @@ func initCommands() {
 		"pirate": {
 			handler:  cmdPirate,
 			minArgs:  1,
-			usage:    "Usage: /pirate [-d duration] [-r reason] <uid1>,<uid2>...",
+			usage:    "Usage: /pirate [-d duration] [-r reason] global | <uid1>,<uid2>...",
 			desc:     "Converts messages to pirate speech.",
 			reqPerms: permissions.PermissionField["MUTE"],
 			category: "punishment",
@@ -1125,7 +1125,7 @@ func initCommands() {
 		"shakespearean": {
 			handler:  cmdShakespearean,
 			minArgs:  1,
-			usage:    "Usage: /shakespearean [-d duration] [-r reason] <uid1>,<uid2>...",
+			usage:    "Usage: /shakespearean [-d duration] [-r reason] global | <uid1>,<uid2>...",
 			desc:     "Converts messages to Shakespearean English.",
 			reqPerms: permissions.PermissionField["MUTE"],
 			category: "punishment",
@@ -1133,7 +1133,7 @@ func initCommands() {
 		"caveman": {
 			handler:  cmdCaveman,
 			minArgs:  1,
-			usage:    "Usage: /caveman [-d duration] [-r reason] <uid1>,<uid2>...",
+			usage:    "Usage: /caveman [-d duration] [-r reason] global | <uid1>,<uid2>...",
 			desc:     "Converts messages to caveman grunts.",
 			reqPerms: permissions.PermissionField["MUTE"],
 			category: "punishment",
@@ -1142,7 +1142,7 @@ func initCommands() {
 		"emoji": {
 			handler:  cmdEmoji,
 			minArgs:  1,
-			usage:    "Usage: /emoji [-d duration] [-r reason] <uid1>,<uid2>...",
+			usage:    "Usage: /emoji [-d duration] [-r reason] global | <uid1>,<uid2>...",
 			desc:     "Replaces name with random emojis.",
 			reqPerms: permissions.PermissionField["MUTE"],
 			category: "punishment",
@@ -1150,7 +1150,7 @@ func initCommands() {
 		"invisible": {
 			handler:  cmdInvisible,
 			minArgs:  1,
-			usage:    "Usage: /invisible [-d duration] [-r reason] <uid1>,<uid2>...",
+			usage:    "Usage: /invisible [-d duration] [-r reason] global | <uid1>,<uid2>...",
 			desc:     "Prevents user from seeing other players' messages.",
 			reqPerms: permissions.PermissionField["MUTE"],
 			category: "punishment",
@@ -1159,7 +1159,7 @@ func initCommands() {
 		"slowpoke": {
 			handler:  cmdSlowpoke,
 			minArgs:  1,
-			usage:    "Usage: /slowpoke [-d duration] [-r reason] <uid1>,<uid2>...",
+			usage:    "Usage: /slowpoke [-d duration] [-r reason] global | <uid1>,<uid2>...",
 			desc:     "Delays messages before sending.",
 			reqPerms: permissions.PermissionField["MUTE"],
 			category: "punishment",
@@ -1167,7 +1167,7 @@ func initCommands() {
 		"fastspammer": {
 			handler:  cmdFastspammer,
 			minArgs:  1,
-			usage:    "Usage: /fastspammer [-d duration] [-r reason] <uid1>,<uid2>...",
+			usage:    "Usage: /fastspammer [-d duration] [-r reason] global | <uid1>,<uid2>...",
 			desc:     "Rate limits messages heavily.",
 			reqPerms: permissions.PermissionField["MUTE"],
 			category: "punishment",
@@ -1200,7 +1200,7 @@ func initCommands() {
 		"subtitles": {
 			handler:  cmdSubtitles,
 			minArgs:  1,
-			usage:    "Usage: /subtitles [-d duration] [-r reason] <uid1>,<uid2>...",
+			usage:    "Usage: /subtitles [-d duration] [-r reason] global | <uid1>,<uid2>...",
 			desc:     "Adds confusing subtitles to messages.",
 			reqPerms: permissions.PermissionField["MUTE"],
 			category: "punishment",
@@ -1208,7 +1208,7 @@ func initCommands() {
 		"roulette": {
 			handler:  cmdRoulette,
 			minArgs:  0,
-			usage:    "Usage: /roulette join | /roulette [-d duration] [-r reason] <uid1>,<uid2>...",
+			usage:    "Usage: /roulette join | /roulette [-d duration] [-r reason] global | <uid1>,<uid2>...",
 			desc:     "Join Russian Roulette game, or apply roulette punishment to user(s) (requires MUTE permission).",
 			reqPerms: permissions.PermissionField["NONE"],
 			category: "minigames",
@@ -1216,7 +1216,7 @@ func initCommands() {
 		"spotlight": {
 			handler:  cmdSpotlight,
 			minArgs:  1,
-			usage:    "Usage: /spotlight [-d duration] [-r reason] <uid1>,<uid2>...",
+			usage:    "Usage: /spotlight [-d duration] [-r reason] global | <uid1>,<uid2>...",
 			desc:     "Announces all actions publicly.",
 			reqPerms: permissions.PermissionField["MUTE"],
 			category: "punishment",
@@ -1225,7 +1225,7 @@ func initCommands() {
 		"censor": {
 			handler:  cmdCensor,
 			minArgs:  1,
-			usage:    "Usage: /censor [-d duration] [-r reason] <uid1>,<uid2>...",
+			usage:    "Usage: /censor [-d duration] [-r reason] global | <uid1>,<uid2>...",
 			desc:     "Replaces words with [CENSORED].",
 			reqPerms: permissions.PermissionField["MUTE"],
 			category: "punishment",
@@ -1233,7 +1233,7 @@ func initCommands() {
 		"confused": {
 			handler:  cmdConfused,
 			minArgs:  1,
-			usage:    "Usage: /confused [-d duration] [-r reason] <uid1>,<uid2>...",
+			usage:    "Usage: /confused [-d duration] [-r reason] global | <uid1>,<uid2>...",
 			desc:     "Randomly reorders words in messages.",
 			reqPerms: permissions.PermissionField["MUTE"],
 			category: "punishment",
@@ -1241,7 +1241,7 @@ func initCommands() {
 		"paranoid": {
 			handler:  cmdParanoid,
 			minArgs:  1,
-			usage:    "Usage: /paranoid [-d duration] [-r reason] <uid1>,<uid2>...",
+			usage:    "Usage: /paranoid [-d duration] [-r reason] global | <uid1>,<uid2>...",
 			desc:     "Adds paranoid text to messages.",
 			reqPerms: permissions.PermissionField["MUTE"],
 			category: "punishment",
@@ -1249,7 +1249,7 @@ func initCommands() {
 		"drunk": {
 			handler:  cmdDrunk,
 			minArgs:  1,
-			usage:    "Usage: /drunk [-d duration] [-r reason] <uid1>,<uid2>...",
+			usage:    "Usage: /drunk [-d duration] [-r reason] global | <uid1>,<uid2>...",
 			desc:     "Slurs and repeats words in messages.",
 			reqPerms: permissions.PermissionField["MUTE"],
 			category: "punishment",
@@ -1257,7 +1257,7 @@ func initCommands() {
 		"hiccup": {
 			handler:  cmdHiccup,
 			minArgs:  1,
-			usage:    "Usage: /hiccup [-d duration] [-r reason] <uid1>,<uid2>...",
+			usage:    "Usage: /hiccup [-d duration] [-r reason] global | <uid1>,<uid2>...",
 			desc:     "Interrupts words with 'hic'.",
 			reqPerms: permissions.PermissionField["MUTE"],
 			category: "punishment",
@@ -1265,7 +1265,7 @@ func initCommands() {
 		"whistle": {
 			handler:  cmdWhistle,
 			minArgs:  1,
-			usage:    "Usage: /whistle [-d duration] [-r reason] <uid1>,<uid2>...",
+			usage:    "Usage: /whistle [-d duration] [-r reason] global | <uid1>,<uid2>...",
 			desc:     "Replaces letters with whistles.",
 			reqPerms: permissions.PermissionField["MUTE"],
 			category: "punishment",
@@ -1273,7 +1273,7 @@ func initCommands() {
 		"mumble": {
 			handler:  cmdMumble,
 			minArgs:  1,
-			usage:    "Usage: /mumble [-d duration] [-r reason] <uid1>,<uid2>...",
+			usage:    "Usage: /mumble [-d duration] [-r reason] global | <uid1>,<uid2>...",
 			desc:     "Obscures message text.",
 			reqPerms: permissions.PermissionField["MUTE"],
 			category: "punishment",
@@ -1282,7 +1282,7 @@ func initCommands() {
 		"spaghetti": {
 			handler:  cmdSpaghetti,
 			minArgs:  1,
-			usage:    "Usage: /spaghetti [-d duration] [-r reason] <uid1>,<uid2>...",
+			usage:    "Usage: /spaghetti [-d duration] [-r reason] global | <uid1>,<uid2>...",
 			desc:     "Combines multiple random effects.",
 			reqPerms: permissions.PermissionField["MUTE"],
 			category: "punishment",
@@ -1290,7 +1290,7 @@ func initCommands() {
 		"torment": {
 			handler:  cmdTorment,
 			minArgs:  1,
-			usage:    "Usage: /torment [-d duration] [-r reason] <uid1>,<uid2>...",
+			usage:    "Usage: /torment [-d duration] [-r reason] global | <uid1>,<uid2>...",
 			desc:     "Cycles through different effects.",
 			reqPerms: permissions.PermissionField["MUTE"],
 			category: "punishment",
@@ -1298,7 +1298,7 @@ func initCommands() {
 		"rng": {
 			handler:  cmdRng,
 			minArgs:  1,
-			usage:    "Usage: /rng [-d duration] [-r reason] <uid1>,<uid2>...",
+			usage:    "Usage: /rng [-d duration] [-r reason] global | <uid1>,<uid2>...",
 			desc:     "Applies random effect from pool each message.",
 			reqPerms: permissions.PermissionField["MUTE"],
 			category: "punishment",
@@ -1306,7 +1306,7 @@ func initCommands() {
 		"essay": {
 			handler:  cmdEssay,
 			minArgs:  1,
-			usage:    "Usage: /essay [-d duration] [-r reason] <uid1>,<uid2>...",
+			usage:    "Usage: /essay [-d duration] [-r reason] global | <uid1>,<uid2>...",
 			desc:     "Requires minimum 50 characters.",
 			reqPerms: permissions.PermissionField["MUTE"],
 			category: "punishment",
@@ -1315,7 +1315,7 @@ func initCommands() {
 		"haiku": {
 			handler:  cmdHaiku,
 			minArgs:  1,
-			usage:    "Usage: /haiku [-d duration] [-r reason] <uid1>,<uid2>...",
+			usage:    "Usage: /haiku [-d duration] [-r reason] global | <uid1>,<uid2>...",
 			desc:     "Requires 5-7-5 syllable format.",
 			reqPerms: permissions.PermissionField["MUTE"],
 			category: "punishment",
@@ -1323,7 +1323,7 @@ func initCommands() {
 		"autospell": {
 			handler:  cmdAutospell,
 			minArgs:  1,
-			usage:    "Usage: /autospell [-d duration] [-r reason] <uid1>,<uid2>...",
+			usage:    "Usage: /autospell [-d duration] [-r reason] global | <uid1>,<uid2>...",
 			desc:     "Autocorrects to wrong words.",
 			reqPerms: permissions.PermissionField["MUTE"],
 			category: "punishment",
@@ -1332,7 +1332,7 @@ func initCommands() {
 		"monkey": {
 			handler:  cmdMonkey,
 			minArgs:  1,
-			usage:    "Usage: /monkey [-d duration] [-r reason] <uid1>,<uid2>...",
+			usage:    "Usage: /monkey [-d duration] [-r reason] global | <uid1>,<uid2>...",
 			desc:     "Replaces messages with monkey noises (ook, eek, ooh ooh).",
 			reqPerms: permissions.PermissionField["MUTE"],
 			category: "punishment",
@@ -1340,7 +1340,7 @@ func initCommands() {
 		"snake": {
 			handler:  cmdSnake,
 			minArgs:  1,
-			usage:    "Usage: /snake [-d duration] [-r reason] <uid1>,<uid2>...",
+			usage:    "Usage: /snake [-d duration] [-r reason] global | <uid1>,<uid2>...",
 			desc:     "Makes messages hissss like a ssssnake.",
 			reqPerms: permissions.PermissionField["MUTE"],
 			category: "punishment",
@@ -1348,7 +1348,7 @@ func initCommands() {
 		"dog": {
 			handler:  cmdDog,
 			minArgs:  1,
-			usage:    "Usage: /dog [-d duration] [-r reason] <uid1>,<uid2>...",
+			usage:    "Usage: /dog [-d duration] [-r reason] global | <uid1>,<uid2>...",
 			desc:     "Replaces messages with dog sounds (woof, arf, grr, bork).",
 			reqPerms: permissions.PermissionField["MUTE"],
 			category: "punishment",
@@ -1356,7 +1356,7 @@ func initCommands() {
 		"cat": {
 			handler:  cmdCat,
 			minArgs:  1,
-			usage:    "Usage: /cat [-d duration] [-r reason] <uid1>,<uid2>...",
+			usage:    "Usage: /cat [-d duration] [-r reason] global | <uid1>,<uid2>...",
 			desc:     "Replaces messages with cat sounds (meow, purrr~, mrrrow).",
 			reqPerms: permissions.PermissionField["MUTE"],
 			category: "punishment",
@@ -1364,7 +1364,7 @@ func initCommands() {
 		"bird": {
 			handler:  cmdBird,
 			minArgs:  1,
-			usage:    "Usage: /bird [-d duration] [-r reason] <uid1>,<uid2>...",
+			usage:    "Usage: /bird [-d duration] [-r reason] global | <uid1>,<uid2>...",
 			desc:     "Replaces messages with bird sounds (tweet, chirp, squawk).",
 			reqPerms: permissions.PermissionField["MUTE"],
 			category: "punishment",
@@ -1372,7 +1372,7 @@ func initCommands() {
 		"cow": {
 			handler:  cmdCow,
 			minArgs:  1,
-			usage:    "Usage: /cow [-d duration] [-r reason] <uid1>,<uid2>...",
+			usage:    "Usage: /cow [-d duration] [-r reason] global | <uid1>,<uid2>...",
 			desc:     "Replaces messages with cow sounds (moo, mooo, MOOO).",
 			reqPerms: permissions.PermissionField["MUTE"],
 			category: "punishment",
@@ -1380,7 +1380,7 @@ func initCommands() {
 		"frog": {
 			handler:  cmdFrog,
 			minArgs:  1,
-			usage:    "Usage: /frog [-d duration] [-r reason] <uid1>,<uid2>...",
+			usage:    "Usage: /frog [-d duration] [-r reason] global | <uid1>,<uid2>...",
 			desc:     "Replaces messages with frog sounds (ribbit, croak).",
 			reqPerms: permissions.PermissionField["MUTE"],
 			category: "punishment",
@@ -1388,7 +1388,7 @@ func initCommands() {
 		"duck": {
 			handler:  cmdDuck,
 			minArgs:  1,
-			usage:    "Usage: /duck [-d duration] [-r reason] <uid1>,<uid2>...",
+			usage:    "Usage: /duck [-d duration] [-r reason] global | <uid1>,<uid2>...",
 			desc:     "Replaces messages with duck sounds (quack, QUACK).",
 			reqPerms: permissions.PermissionField["MUTE"],
 			category: "punishment",
@@ -1396,7 +1396,7 @@ func initCommands() {
 		"horse": {
 			handler:  cmdHorse,
 			minArgs:  1,
-			usage:    "Usage: /horse [-d duration] [-r reason] <uid1>,<uid2>...",
+			usage:    "Usage: /horse [-d duration] [-r reason] global | <uid1>,<uid2>...",
 			desc:     "Replaces messages with horse sounds (neigh, whinny, snort).",
 			reqPerms: permissions.PermissionField["MUTE"],
 			category: "punishment",
@@ -1404,7 +1404,7 @@ func initCommands() {
 		"lion": {
 			handler:  cmdLion,
 			minArgs:  1,
-			usage:    "Usage: /lion [-d duration] [-r reason] <uid1>,<uid2>...",
+			usage:    "Usage: /lion [-d duration] [-r reason] global | <uid1>,<uid2>...",
 			desc:     "Replaces messages with lion sounds (ROAR, grrr, rawr).",
 			reqPerms: permissions.PermissionField["MUTE"],
 			category: "punishment",
@@ -1412,7 +1412,7 @@ func initCommands() {
 		"zoo": {
 			handler:  cmdZoo,
 			minArgs:  1,
-			usage:    "Usage: /zoo [-d duration] [-r reason] <uid1>,<uid2>...",
+			usage:    "Usage: /zoo [-d duration] [-r reason] global | <uid1>,<uid2>...",
 			desc:     "Applies a random animal sound punishment to each message.",
 			reqPerms: permissions.PermissionField["MUTE"],
 			category: "punishment",
@@ -1420,7 +1420,7 @@ func initCommands() {
 		"bunny": {
 			handler:  cmdBunny,
 			minArgs:  1,
-			usage:    "Usage: /bunny [-d duration] [-r reason] <uid1>,<uid2>...",
+			usage:    "Usage: /bunny [-d duration] [-r reason] global | <uid1>,<uid2>...",
 			desc:     "Replaces messages with bunny sounds (*thump*, *binky!*, *flops*).",
 			reqPerms: permissions.PermissionField["MUTE"],
 			category: "punishment",
@@ -1428,7 +1428,7 @@ func initCommands() {
 		"tsundere": {
 			handler:  cmdTsundere,
 			minArgs:  1,
-			usage:    "Usage: /tsundere [-d duration] [-r reason] <uid1>,<uid2>...",
+			usage:    "Usage: /tsundere [-d duration] [-r reason] global | <uid1>,<uid2>...",
 			desc:     "It's not like I wanted to punish you, b-baka!! Wraps messages in tsundere denial.",
 			reqPerms: permissions.PermissionField["MUTE"],
 			category: "punishment",
@@ -1436,7 +1436,7 @@ func initCommands() {
 		"yandere": {
 			handler:  cmdYandere,
 			minArgs:  1,
-			usage:    "Usage: /yandere [-d duration] [-r reason] <uid1>,<uid2>...",
+			usage:    "Usage: /yandere [-d duration] [-r reason] global | <uid1>,<uid2>...",
 			desc:     "Hehehe~ wraps messages in obsessive yandere flavour.",
 			reqPerms: permissions.PermissionField["MUTE"],
 			category: "punishment",
@@ -1444,7 +1444,7 @@ func initCommands() {
 		"kuudere": {
 			handler:  cmdKuudere,
 			minArgs:  1,
-			usage:    "Usage: /kuudere [-d duration] [-r reason] <uid1>,<uid2>...",
+			usage:    "Usage: /kuudere [-d duration] [-r reason] global | <uid1>,<uid2>...",
 			desc:     "Delivers messages in cold, emotionless monotone.",
 			reqPerms: permissions.PermissionField["MUTE"],
 			category: "punishment",
@@ -1452,7 +1452,7 @@ func initCommands() {
 		"dandere": {
 			handler:  cmdDandere,
 			minArgs:  1,
-			usage:    "Usage: /dandere [-d duration] [-r reason] <uid1>,<uid2>...",
+			usage:    "Usage: /dandere [-d duration] [-r reason] global | <uid1>,<uid2>...",
 			desc:     "Makes messages extremely shy and hesitant with stutters.",
 			reqPerms: permissions.PermissionField["MUTE"],
 			category: "punishment",
@@ -1460,7 +1460,7 @@ func initCommands() {
 		"deredere": {
 			handler:  cmdDeredere,
 			minArgs:  1,
-			usage:    "Usage: /deredere [-d duration] [-r reason] <uid1>,<uid2>...",
+			usage:    "Usage: /deredere [-d duration] [-r reason] global | <uid1>,<uid2>...",
 			desc:     "Wraps messages in over-the-top lovey-dovey sweetness.",
 			reqPerms: permissions.PermissionField["MUTE"],
 			category: "punishment",
@@ -1468,7 +1468,7 @@ func initCommands() {
 		"himedere": {
 			handler:  cmdHimedere,
 			minArgs:  1,
-			usage:    "Usage: /himedere [-d duration] [-r reason] <uid1>,<uid2>...",
+			usage:    "Usage: /himedere [-d duration] [-r reason] global | <uid1>,<uid2>...",
 			desc:     "Makes messages imperious and royalty-like, commoner.",
 			reqPerms: permissions.PermissionField["MUTE"],
 			category: "punishment",
@@ -1476,7 +1476,7 @@ func initCommands() {
 		"kamidere": {
 			handler:  cmdKamidere,
 			minArgs:  1,
-			usage:    "Usage: /kamidere [-d duration] [-r reason] <uid1>,<uid2>...",
+			usage:    "Usage: /kamidere [-d duration] [-r reason] global | <uid1>,<uid2>...",
 			desc:     "Delivers messages as a self-proclaimed god to unworthy mortals.",
 			reqPerms: permissions.PermissionField["MUTE"],
 			category: "punishment",
@@ -1484,7 +1484,7 @@ func initCommands() {
 		"undere": {
 			handler:  cmdUndere,
 			minArgs:  1,
-			usage:    "Usage: /undere [-d duration] [-r reason] <uid1>,<uid2>...",
+			usage:    "Usage: /undere [-d duration] [-r reason] global | <uid1>,<uid2>...",
 			desc:     "Forces messages to agree with everything unconditionally.",
 			reqPerms: permissions.PermissionField["MUTE"],
 			category: "punishment",
@@ -1492,7 +1492,7 @@ func initCommands() {
 		"bakadere": {
 			handler:  cmdBakadere,
 			minArgs:  1,
-			usage:    "Usage: /bakadere [-d duration] [-r reason] <uid1>,<uid2>...",
+			usage:    "Usage: /bakadere [-d duration] [-r reason] global | <uid1>,<uid2>...",
 			desc:     "Inserts clumsy, airheaded interjections into every message.",
 			reqPerms: permissions.PermissionField["MUTE"],
 			category: "punishment",
@@ -1500,7 +1500,7 @@ func initCommands() {
 		"mayadere": {
 			handler:  cmdMayadere,
 			minArgs:  1,
-			usage:    "Usage: /mayadere [-d duration] [-r reason] <uid1>,<uid2>...",
+			usage:    "Usage: /mayadere [-d duration] [-r reason] global | <uid1>,<uid2>...",
 			desc:     "Wraps messages in eerie, enigmatic mystery. Kukuku~",
 			reqPerms: permissions.PermissionField["MUTE"],
 			category: "punishment",
@@ -1508,7 +1508,7 @@ func initCommands() {
 		"emoticon": {
 			handler:  cmdEmoticon,
 			minArgs:  1,
-			usage:    "Usage: /emoticon [-d duration] [-r reason] <uid1>,<uid2>...",
+			usage:    "Usage: /emoticon [-d duration] [-r reason] global | <uid1>,<uid2>...",
 			desc:     "Forces user to speak only in emoticons (:P, :D, :3, etc.).",
 			reqPerms: permissions.PermissionField["MUTE"],
 			category: "punishment",
@@ -1533,7 +1533,7 @@ func initCommands() {
 		"degrade": {
 			handler:  cmdDegrade,
 			minArgs:  1,
-			usage:    "Usage: /degrade [-d duration] [-r reason] <uid1>,<uid2>...",
+			usage:    "Usage: /degrade [-d duration] [-r reason] global | <uid1>,<uid2>...",
 			desc:     "Forces IC messages to be replaced with degrading self-insults. Moderator only.",
 			reqPerms: permissions.PermissionField["MUTE"],
 			category: "punishment",
@@ -1549,7 +1549,7 @@ func initCommands() {
 		"tourettes": {
 			handler:  cmdTourettes,
 			minArgs:  1,
-			usage:    "Usage: /tourettes [-d duration] [-r reason] <uid1>,<uid2>...",
+			usage:    "Usage: /tourettes [-d duration] [-r reason] global | <uid1>,<uid2>...",
 			desc:     "Causes random outbursts to be inserted into IC messages (swearing, random objects, nonsense, animal noises). Moderator only.",
 			reqPerms: permissions.PermissionField["MUTE"],
 			category: "punishment",
@@ -1557,7 +1557,7 @@ func initCommands() {
 		"slang": {
 			handler:  cmdSlang,
 			minArgs:  1,
-			usage:    "Usage: /slang [-d duration] [-r reason] <uid1>,<uid2>...",
+			usage:    "Usage: /slang [-d duration] [-r reason] global | <uid1>,<uid2>...",
 			desc:     "Converts messages to internet slang abbreviations (e.g. 'i don't know' -> 'idk', 'got to go' -> 'gtg').",
 			reqPerms: permissions.PermissionField["MUTE"],
 			category: "punishment",
@@ -1573,7 +1573,7 @@ func initCommands() {
 		"thesaurusoverload": {
 			handler:  cmdThesaurusOverload,
 			minArgs:  1,
-			usage:    "Usage: /thesaurusoverload [-d duration] [-r reason] <uid1>,<uid2>...",
+			usage:    "Usage: /thesaurusoverload [-d duration] [-r reason] global | <uid1>,<uid2>...",
 			desc:     "Forces IC messages to use comically pompous synonyms and smug parentheticals. Moderator only.",
 			reqPerms: permissions.PermissionField["MUTE"],
 			category: "punishment",
@@ -1589,7 +1589,7 @@ func initCommands() {
 		"valleygirl": {
 			handler:  cmdValleyGirl,
 			minArgs:  1,
-			usage:    "Usage: /valleygirl [-d duration] [-r reason] <uid1>,<uid2>...",
+			usage:    "Usage: /valleygirl [-d duration] [-r reason] global | <uid1>,<uid2>...",
 			desc:     "Injects valley-girl filler words, vowel stretching, and dramatic tone into IC messages. Moderator only.",
 			reqPerms: permissions.PermissionField["MUTE"],
 			category: "punishment",
@@ -1605,7 +1605,7 @@ func initCommands() {
 		"babytalk": {
 			handler:  cmdBabytalk,
 			minArgs:  1,
-			usage:    "Usage: /babytalk [-d duration] [-r reason] <uid1>,<uid2>...",
+			usage:    "Usage: /babytalk [-d duration] [-r reason] global | <uid1>,<uid2>...",
 			desc:     "Converts IC messages to toddler-style baby talk with phonetic substitutions and stage directions. Moderator only.",
 			reqPerms: permissions.PermissionField["MUTE"],
 			category: "punishment",
@@ -1621,7 +1621,7 @@ func initCommands() {
 		"thirdperson": {
 			handler:  cmdThirdPerson,
 			minArgs:  1,
-			usage:    "Usage: /thirdperson [-d duration] [-r reason] <uid1>,<uid2>...",
+			usage:    "Usage: /thirdperson [-d duration] [-r reason] global | <uid1>,<uid2>...",
 			desc:     "Forces IC messages into third-person narration using the player's display name, with mood tags. Moderator only.",
 			reqPerms: permissions.PermissionField["MUTE"],
 			category: "punishment",
@@ -1637,7 +1637,7 @@ func initCommands() {
 		"unreliablenarrator": {
 			handler:  cmdUnreliableNarrator,
 			minArgs:  1,
-			usage:    "Usage: /unreliablenarrator [-d duration] [-r reason] <uid1>,<uid2>...",
+			usage:    "Usage: /unreliablenarrator [-d duration] [-r reason] global | <uid1>,<uid2>...",
 			desc:     "Makes IC messages sound suspiciously unreliable with hedges, contradictions, and self-doubting commentary. Moderator only.",
 			reqPerms: permissions.PermissionField["MUTE"],
 			category: "punishment",
@@ -1653,7 +1653,7 @@ func initCommands() {
 		"uncannyvalley": {
 			handler:  cmdUncannyValley,
 			minArgs:  1,
-			usage:    "Usage: /uncannyvalley [-d duration] [-r reason] <uid1>,<uid2>...",
+			usage:    "Usage: /uncannyvalley [-d duration] [-r reason] global | <uid1>,<uid2>...",
 			desc:     "Adds glitchy system notes to IC messages and subtly mutates the player's display name each message. Moderator only.",
 			reqPerms: permissions.PermissionField["MUTE"],
 			category: "punishment",
@@ -1669,7 +1669,7 @@ func initCommands() {
 		"51": {
 			handler:  cmd51,
 			minArgs:  1,
-			usage:    "Usage: /51 [-d duration] [-r reason] <uid1>,<uid2>...",
+			usage:    "Usage: /51 [-d duration] [-r reason] global | <uid1>,<uid2>...",
 			desc:     "Replaces each IC message with a random line from the 51-messages story. Moderator only.",
 			reqPerms: permissions.PermissionField["MUTE"],
 			category: "punishment",
@@ -1685,7 +1685,7 @@ func initCommands() {
 		"philosopher": {
 			handler:  cmdPhilosopher,
 			minArgs:  1,
-			usage:    "Usage: /philosopher [-d duration] [-r reason] <uid1>,<uid2>...",
+			usage:    "Usage: /philosopher [-d duration] [-r reason] global | <uid1>,<uid2>...",
 			desc:     "Appends a random deep philosophical question to every IC message. Moderator only.",
 			reqPerms: permissions.PermissionField["MUTE"],
 			category: "punishment",
@@ -1701,7 +1701,7 @@ func initCommands() {
 		"poet": {
 			handler:  cmdPoet,
 			minArgs:  1,
-			usage:    "Usage: /poet [-d duration] [-r reason] <uid1>,<uid2>...",
+			usage:    "Usage: /poet [-d duration] [-r reason] global | <uid1>,<uid2>...",
 			desc:     "Wraps every IC message in lyrical poetic flourishes. Moderator only.",
 			reqPerms: permissions.PermissionField["MUTE"],
 			category: "punishment",
@@ -1717,7 +1717,7 @@ func initCommands() {
 		"upsidedown": {
 			handler:  cmdUpsidedown,
 			minArgs:  1,
-			usage:    "Usage: /upsidedown [-d duration] [-r reason] <uid1>,<uid2>...",
+			usage:    "Usage: /upsidedown [-d duration] [-r reason] global | <uid1>,<uid2>...",
 			desc:     "Flips every IC message upside-down using Unicode characters. Moderator only.",
 			reqPerms: permissions.PermissionField["MUTE"],
 			category: "punishment",
@@ -1733,7 +1733,7 @@ func initCommands() {
 		"sarcasm": {
 			handler:  cmdSarcasm,
 			minArgs:  1,
-			usage:    "Usage: /sarcasm [-d duration] [-r reason] <uid1>,<uid2>...",
+			usage:    "Usage: /sarcasm [-d duration] [-r reason] global | <uid1>,<uid2>...",
 			desc:     "Adds sarcastic parenthetical commentary to every IC message. Moderator only.",
 			reqPerms: permissions.PermissionField["MUTE"],
 			category: "punishment",
@@ -1749,7 +1749,7 @@ func initCommands() {
 		"academic": {
 			handler:  cmdAcademic,
 			minArgs:  1,
-			usage:    "Usage: /academic [-d duration] [-r reason] <uid1>,<uid2>...",
+			usage:    "Usage: /academic [-d duration] [-r reason] global | <uid1>,<uid2>...",
 			desc:     "Wraps every IC message in overly formal academic language. Moderator only.",
 			reqPerms: permissions.PermissionField["MUTE"],
 			category: "punishment",
@@ -1765,7 +1765,7 @@ func initCommands() {
 		"recipe": {
 			handler:  cmdRecipe,
 			minArgs:  1,
-			usage:    "Usage: /recipe [-d duration] [-r reason] <uid1>,<uid2>...",
+			usage:    "Usage: /recipe [-d duration] [-r reason] global | <uid1>,<uid2>...",
 			desc:     "Reformats every IC message as a cooking recipe step. Moderator only.",
 			reqPerms: permissions.PermissionField["MUTE"],
 			category: "punishment",
@@ -1781,7 +1781,7 @@ func initCommands() {
 		"quote": {
 			handler:  cmdQuote,
 			minArgs:  1,
-			usage:    "Usage: /quote [-d duration] [-r reason] <uid1>,<uid2>...",
+			usage:    "Usage: /quote [-d duration] [-r reason] global | <uid1>,<uid2>...",
 			desc:     "Wraps IC messages in quotation marks with a 50% chance. Moderator only.",
 			reqPerms: permissions.PermissionField["MUTE"],
 			category: "punishment",
@@ -1849,7 +1849,7 @@ func initCommands() {
 		"icwarp": {
 			handler: cmdICWarp,
 			minArgs: 1,
-			usage: "Usage: /icwarp [-d duration] [-r reason] <uid1>,<uid2>...\n" +
+			usage: "Usage: /icwarp [-d duration] [-r reason] global | <uid1>,<uid2>...\n" +
 				"       /icwarp global on\n" +
 				"       /icwarp global off\n" +
 				"-d: Duration (default 10m, max 24h). -r: Reason for logs.\n" +
@@ -1872,7 +1872,7 @@ func initCommands() {
 		"stack": {
 			handler:  cmdStack,
 			minArgs:  2,
-			usage:    "Usage: /stack <punishment1> <punishment2> [<punishment3>...] [-d duration] [-r reason] <uid1>,<uid2>...",
+			usage:    "Usage: /stack <punishment1> <punishment2> [<punishment3>...] [-d duration] [-r reason] global | <uid1>,<uid2>...",
 			desc:     "Applies multiple punishment effects to user(s) simultaneously.",
 			reqPerms: permissions.PermissionField["MUTE"],
 			category: "punishment",
@@ -2381,7 +2381,7 @@ func initCommands() {
 		"timewarp": {
 			handler:  cmdTimewarp,
 			minArgs:  1,
-			usage:    "Usage: /timewarp [-d duration] [-r reason] <uid1>,<uid2>...",
+			usage:    "Usage: /timewarp [-d duration] [-r reason] global | <uid1>,<uid2>...",
 			desc:     "Shuffles the word order of the target's IC messages.",
 			reqPerms: permissions.PermissionField["MUTE"],
 			category: "punishment",
@@ -2389,7 +2389,7 @@ func initCommands() {
 		"morse": {
 			handler:  cmdMorse,
 			minArgs:  1,
-			usage:    "Usage: /morse [-d duration] [-r reason] <uid1>,<uid2>...",
+			usage:    "Usage: /morse [-d duration] [-r reason] global | <uid1>,<uid2>...",
 			desc:     "Converts the target's IC messages to Morse code dots and dashes.",
 			reqPerms: permissions.PermissionField["MUTE"],
 			category: "punishment",
@@ -2397,7 +2397,7 @@ func initCommands() {
 		"rickroll": {
 			handler:  cmdRickroll,
 			minArgs:  1,
-			usage:    "Usage: /rickroll [-d duration] [-r reason] <uid1>,<uid2>...",
+			usage:    "Usage: /rickroll [-d duration] [-r reason] global | <uid1>,<uid2>...",
 			desc:     "Replaces the target's IC messages with meme-styled lyric-adjacent stand-in lines.",
 			reqPerms: permissions.PermissionField["MUTE"],
 			category: "punishment",
@@ -2405,7 +2405,7 @@ func initCommands() {
 		"pickup": {
 			handler:  cmdPickup,
 			minArgs:  1,
-			usage:    "Usage: /pickup [-d duration] [-r reason] <uid1>,<uid2>...",
+			usage:    "Usage: /pickup [-d duration] [-r reason] global | <uid1>,<uid2>...",
 			desc:     "Replaces every IC message the target sends with a catastrophically cheesy pickup line.",
 			reqPerms: permissions.PermissionField["MUTE"],
 			category: "punishment",
@@ -2413,7 +2413,7 @@ func initCommands() {
 		"brainrot": {
 			handler:  cmdBrainrot,
 			minArgs:  1,
-			usage:    "Usage: /brainrot [-d duration] [-r reason] <uid1>,<uid2>...",
+			usage:    "Usage: /brainrot [-d duration] [-r reason] global | <uid1>,<uid2>...",
 			desc:     "Corrupts the target's IC messages with maximum skibidi sigma Italian brainrot energy.",
 			reqPerms: permissions.PermissionField["MUTE"],
 			category: "punishment",
@@ -2421,7 +2421,7 @@ func initCommands() {
 		"vowelhell": {
 			handler:  cmdVowelhell,
 			minArgs:  1,
-			usage:    "Usage: /vowelhell [-d duration] [-r reason] <uid1>,<uid2>...",
+			usage:    "Usage: /vowelhell [-d duration] [-r reason] global | <uid1>,<uid2>...",
 			desc:     "Replaces every consonant in the target's messages with a random vowel.",
 			reqPerms: permissions.PermissionField["MUTE"],
 			category: "punishment",
@@ -2429,7 +2429,7 @@ func initCommands() {
 		"chef": {
 			handler:  cmdChef,
 			minArgs:  1,
-			usage:    "Usage: /chef [-d duration] [-r reason] <uid1>,<uid2>...",
+			usage:    "Usage: /chef [-d duration] [-r reason] global | <uid1>,<uid2>...",
 			desc:     "Swedish-Chef filter — bork bork bork!",
 			reqPerms: permissions.PermissionField["MUTE"],
 			category: "punishment",
@@ -2437,7 +2437,7 @@ func initCommands() {
 		"karen": {
 			handler:  cmdKaren,
 			minArgs:  1,
-			usage:    "Usage: /karen [-d duration] [-r reason] <uid1>,<uid2>...",
+			usage:    "Usage: /karen [-d duration] [-r reason] global | <uid1>,<uid2>...",
 			desc:     "Wraps each message in escalating entitled complaints and manager demands.",
 			reqPerms: permissions.PermissionField["MUTE"],
 			category: "punishment",
@@ -2445,7 +2445,7 @@ func initCommands() {
 		"passiveaggressive": {
 			handler:  cmdPassiveAggressive,
 			minArgs:  1,
-			usage:    "Usage: /passiveaggressive [-d duration] [-r reason] <uid1>,<uid2>...",
+			usage:    "Usage: /passiveaggressive [-d duration] [-r reason] global | <uid1>,<uid2>...",
 			desc:     "Adds chilly, performatively-polite framings and sign-offs. It's fine. Really.",
 			reqPerms: permissions.PermissionField["MUTE"],
 			category: "punishment",
@@ -2453,7 +2453,7 @@ func initCommands() {
 		"nervous": {
 			handler:  cmdNervous,
 			minArgs:  1,
-			usage:    "Usage: /nervous [-d duration] [-r reason] <uid1>,<uid2>...",
+			usage:    "Usage: /nervous [-d duration] [-r reason] global | <uid1>,<uid2>...",
 			desc:     "Sprinkles stuttering, um/uh fillers, and jittery trailing apologies.",
 			reqPerms: permissions.PermissionField["MUTE"],
 			category: "punishment",
@@ -2461,7 +2461,7 @@ func initCommands() {
 		"dreamsequence": {
 			handler:  cmdDreamSequence,
 			minArgs:  1,
-			usage:    "Usage: /dreamsequence [-d duration] [-r reason] <uid1>,<uid2>...",
+			usage:    "Usage: /dreamsequence [-d duration] [-r reason] global | <uid1>,<uid2>...",
 			desc:     "Rewrites IC messages as surreal, dreamlike fragments.",
 			reqPerms: permissions.PermissionField["MUTE"],
 			category: "punishment",
@@ -2469,7 +2469,7 @@ func initCommands() {
 		"gordonramsay": {
 			handler:  cmdGordonRamsay,
 			minArgs:  1,
-			usage:    "Usage: /gordonramsay [-d duration] [-r reason] <uid1>,<uid2>...",
+			usage:    "Usage: /gordonramsay [-d duration] [-r reason] global | <uid1>,<uid2>...",
 			desc:     "Replaces every IC line the target sends with a Gordon Ramsay kitchen tirade.",
 			reqPerms: permissions.PermissionField["MUTE"],
 			category: "punishment",
@@ -2477,7 +2477,7 @@ func initCommands() {
 		"cherri": {
 			handler:  cmdCherri,
 			minArgs:  1,
-			usage:    "Usage: /cherri [-d duration] [-r reason] <uid1>,<uid2>...",
+			usage:    "Usage: /cherri [-d duration] [-r reason] global | <uid1>,<uid2>...",
 			desc:     "Forces The Target To Capitalize Every Word Like Cherri Does.",
 			reqPerms: permissions.PermissionField["MUTE"],
 			category: "punishment",
@@ -2485,7 +2485,7 @@ func initCommands() {
 		"clown": {
 			handler:  cmdClown,
 			minArgs:  1,
-			usage:    "Usage: /clown [-d duration] [-r reason] <uid1>,<uid2>...",
+			usage:    "Usage: /clown [-d duration] [-r reason] global | <uid1>,<uid2>...",
 			desc:     "Wraps every IC message in clown honks and circus filler. 🤡",
 			reqPerms: permissions.PermissionField["MUTE"],
 			category: "punishment",
@@ -2493,7 +2493,7 @@ func initCommands() {
 		"jester": {
 			handler:  cmdJester,
 			minArgs:  1,
-			usage:    "Usage: /jester [-d duration] [-r reason] <uid1>,<uid2>...",
+			usage:    "Usage: /jester [-d duration] [-r reason] global | <uid1>,<uid2>...",
 			desc:     "Wraps messages in theatrical jester flourishes and bell-jingle SFX text.",
 			reqPerms: permissions.PermissionField["MUTE"],
 			category: "punishment",
@@ -2501,7 +2501,7 @@ func initCommands() {
 		"joker": {
 			handler:  cmdJoker,
 			minArgs:  1,
-			usage:    "Usage: /joker [-d duration] [-r reason] <uid1>,<uid2>...",
+			usage:    "Usage: /joker [-d duration] [-r reason] global | <uid1>,<uid2>...",
 			desc:     "Peppers chaotic laughter throughout every IC message. HAHAHA!",
 			reqPerms: permissions.PermissionField["MUTE"],
 			category: "punishment",
@@ -2509,7 +2509,7 @@ func initCommands() {
 		"mime": {
 			handler:  cmdMime,
 			minArgs:  1,
-			usage:    "Usage: /mime [-d duration] [-r reason] <uid1>,<uid2>...",
+			usage:    "Usage: /mime [-d duration] [-r reason] global | <uid1>,<uid2>...",
 			desc:     "Replaces every IC line with a silent mime action — *gestures wordlessly*.",
 			reqPerms: permissions.PermissionField["MUTE"],
 			category: "punishment",
@@ -2517,7 +2517,7 @@ func initCommands() {
 		"biblebot": {
 			handler:  cmdBiblebot,
 			minArgs:  1,
-			usage:    "Usage: /biblebot [-d duration] [-r reason] <uid1>,<uid2>...",
+			usage:    "Usage: /biblebot [-d duration] [-r reason] global | <uid1>,<uid2>...",
 			desc:     "Replaces every IC line with a random Bible verse.",
 			reqPerms: permissions.PermissionField["MUTE"],
 			category: "punishment",
@@ -2525,7 +2525,7 @@ func initCommands() {
 		"smugdere": {
 			handler:  cmdSmugdere,
 			minArgs:  1,
-			usage:    "Usage: /smugdere [-d duration] [-r reason] <uid1>,<uid2>...",
+			usage:    "Usage: /smugdere [-d duration] [-r reason] global | <uid1>,<uid2>...",
 			desc:     "Smug, condescending dere — looks down on everyone, obviously.",
 			reqPerms: permissions.PermissionField["MUTE"],
 			category: "punishment",
@@ -2533,7 +2533,7 @@ func initCommands() {
 		"deretsun": {
 			handler:  cmdDeretsun,
 			minArgs:  1,
-			usage:    "Usage: /deretsun [-d duration] [-r reason] <uid1>,<uid2>...",
+			usage:    "Usage: /deretsun [-d duration] [-r reason] global | <uid1>,<uid2>...",
 			desc:     "Tsun-leaning dere flavour. The most popular pick.",
 			reqPerms: permissions.PermissionField["MUTE"],
 			category: "punishment",
@@ -2541,7 +2541,7 @@ func initCommands() {
 		"bokodere": {
 			handler:  cmdBokodere,
 			minArgs:  1,
-			usage:    "Usage: /bokodere [-d duration] [-r reason] <uid1>,<uid2>...",
+			usage:    "Usage: /bokodere [-d duration] [-r reason] global | <uid1>,<uid2>...",
 			desc:     "Violently affectionate dere — threats interleaved with care.",
 			reqPerms: permissions.PermissionField["MUTE"],
 			category: "punishment",
@@ -2549,7 +2549,7 @@ func initCommands() {
 		"thugdere": {
 			handler:  cmdThugdere,
 			minArgs:  1,
-			usage:    "Usage: /thugdere [-d duration] [-r reason] <uid1>,<uid2>...",
+			usage:    "Usage: /thugdere [-d duration] [-r reason] global | <uid1>,<uid2>...",
 			desc:     "Streetwise dere — every message in fam/yo/no-cap idiom.",
 			reqPerms: permissions.PermissionField["MUTE"],
 			category: "punishment",
@@ -2557,7 +2557,7 @@ func initCommands() {
 		"teasedere": {
 			handler:  cmdTeasedere,
 			minArgs:  1,
-			usage:    "Usage: /teasedere [-d duration] [-r reason] <uid1>,<uid2>...",
+			usage:    "Usage: /teasedere [-d duration] [-r reason] global | <uid1>,<uid2>...",
 			desc:     "Flirty teasing dere — playful pokes and winks.",
 			reqPerms: permissions.PermissionField["MUTE"],
 			category: "punishment",
@@ -2565,7 +2565,7 @@ func initCommands() {
 		"dorodere": {
 			handler:  cmdDorodere,
 			minArgs:  1,
-			usage:    "Usage: /dorodere [-d duration] [-r reason] <uid1>,<uid2>...",
+			usage:    "Usage: /dorodere [-d duration] [-r reason] global | <uid1>,<uid2>...",
 			desc:     "Dirt-stained, twisted dere — smiles through grime.",
 			reqPerms: permissions.PermissionField["MUTE"],
 			category: "punishment",
@@ -2573,7 +2573,7 @@ func initCommands() {
 		"hinedere": {
 			handler:  cmdHinedere,
 			minArgs:  1,
-			usage:    "Usage: /hinedere [-d duration] [-r reason] <uid1>,<uid2>...",
+			usage:    "Usage: /hinedere [-d duration] [-r reason] global | <uid1>,<uid2>...",
 			desc:     "Sarcastic, aloof dere — perpetually exasperated.",
 			reqPerms: permissions.PermissionField["MUTE"],
 			category: "punishment",
@@ -2581,7 +2581,7 @@ func initCommands() {
 		"hajidere": {
 			handler:  cmdHajidere,
 			minArgs:  1,
-			usage:    "Usage: /hajidere [-d duration] [-r reason] <uid1>,<uid2>...",
+			usage:    "Usage: /hajidere [-d duration] [-r reason] global | <uid1>,<uid2>...",
 			desc:     "Mortified, blushing dere — perpetually embarrassed.",
 			reqPerms: permissions.PermissionField["MUTE"],
 			category: "punishment",
@@ -2589,7 +2589,7 @@ func initCommands() {
 		"rindere": {
 			handler:  cmdRindere,
 			minArgs:  1,
-			usage:    "Usage: /rindere [-d duration] [-r reason] <uid1>,<uid2>...",
+			usage:    "Usage: /rindere [-d duration] [-r reason] global | <uid1>,<uid2>...",
 			desc:     "Cold, distant dere — barely speaks to you.",
 			reqPerms: permissions.PermissionField["MUTE"],
 			category: "punishment",
@@ -2597,7 +2597,7 @@ func initCommands() {
 		"utsudere": {
 			handler:  cmdUtsudere,
 			minArgs:  1,
-			usage:    "Usage: /utsudere [-d duration] [-r reason] <uid1>,<uid2>...",
+			usage:    "Usage: /utsudere [-d duration] [-r reason] global | <uid1>,<uid2>...",
 			desc:     "Depressive dere — everything is pointless.",
 			reqPerms: permissions.PermissionField["MUTE"],
 			category: "punishment",
@@ -2605,7 +2605,7 @@ func initCommands() {
 		"darudere": {
 			handler:  cmdDarudere,
 			minArgs:  1,
-			usage:    "Usage: /darudere [-d duration] [-r reason] <uid1>,<uid2>...",
+			usage:    "Usage: /darudere [-d duration] [-r reason] global | <uid1>,<uid2>...",
 			desc:     "Lazy, perpetually-tired dere — yawns through every line.",
 			reqPerms: permissions.PermissionField["MUTE"],
 			category: "punishment",
@@ -2613,7 +2613,7 @@ func initCommands() {
 		"butsudere": {
 			handler:  cmdButsudere,
 			minArgs:  1,
-			usage:    "Usage: /butsudere [-d duration] [-r reason] <uid1>,<uid2>...",
+			usage:    "Usage: /butsudere [-d duration] [-r reason] global | <uid1>,<uid2>...",
 			desc:     "Apathetic, deadpan dere — couldn't care less.",
 			reqPerms: permissions.PermissionField["MUTE"],
 			category: "punishment",
@@ -2621,7 +2621,7 @@ func initCommands() {
 		"sdere": {
 			handler:  cmdSDere,
 			minArgs:  1,
-			usage:    "Usage: /sdere [-d duration] [-r reason] <uid1>,<uid2>...",
+			usage:    "Usage: /sdere [-d duration] [-r reason] global | <uid1>,<uid2>...",
 			desc:     "Dominant dere archetype — gives orders.",
 			reqPerms: permissions.PermissionField["MUTE"],
 			category: "punishment",
@@ -2629,7 +2629,7 @@ func initCommands() {
 		"mdere": {
 			handler:  cmdMDere,
 			minArgs:  1,
-			usage:    "Usage: /mdere [-d duration] [-r reason] <uid1>,<uid2>...",
+			usage:    "Usage: /mdere [-d duration] [-r reason] global | <uid1>,<uid2>...",
 			desc:     "Submissive dere archetype — apologetic and meek.",
 			reqPerms: permissions.PermissionField["MUTE"],
 			category: "punishment",
@@ -2637,7 +2637,7 @@ func initCommands() {
 		"tsuyodere": {
 			handler:  cmdTsuyodere,
 			minArgs:  1,
-			usage:    "Usage: /tsuyodere [-d duration] [-r reason] <uid1>,<uid2>...",
+			usage:    "Usage: /tsuyodere [-d duration] [-r reason] global | <uid1>,<uid2>...",
 			desc:     "Strength-obsessed dere — flexes in every sentence.",
 			reqPerms: permissions.PermissionField["MUTE"],
 			category: "punishment",
@@ -2645,7 +2645,7 @@ func initCommands() {
 		"omnidere": {
 			handler:  cmdOmnidere,
 			minArgs:  1,
-			usage:    "Usage: /omnidere [-d duration] [-r reason] <uid1>,<uid2>...",
+			usage:    "Usage: /omnidere [-d duration] [-r reason] global | <uid1>,<uid2>...",
 			desc:     "All deres at once — every IC message picks a random dere flavour for maximum tonal whiplash.",
 			reqPerms: permissions.PermissionField["MUTE"],
 			category: "punishment",
@@ -2661,7 +2661,7 @@ func initCommands() {
 		"sfxcurse": {
 			handler:  cmdSfxCurse,
 			minArgs:  2,
-			usage:    "Usage: /sfxcurse [-d duration] [-r reason] <uid1>,<uid2>... <sfx-url>",
+			usage:    "Usage: /sfxcurse [-d duration] [-r reason] global | <uid1>,<uid2>... <sfx-url>",
 			desc:     "Forces the target to emit the specified SFX (URL or /base/sounds/ path) on every IC message.",
 			reqPerms: permissions.PermissionField["MUTE"],
 			category: "punishment",
@@ -2677,7 +2677,7 @@ func initCommands() {
 		"shrink": {
 			handler:  cmdShrink,
 			minArgs:  1,
-			usage:    "Usage: /shrink [-d duration] [-r reason] <uid1>,<uid2>... [offset]",
+			usage:    "Usage: /shrink [-d duration] [-r reason] global | <uid1>,<uid2>... [offset]",
 			desc:     "Locks the target's vertical sprite offset into a negative value (default -25). Persists per IC message until /unshrink.",
 			reqPerms: permissions.PermissionField["MUTE"],
 			category: "punishment",
@@ -2685,7 +2685,7 @@ func initCommands() {
 		"grow": {
 			handler:  cmdGrow,
 			minArgs:  1,
-			usage:    "Usage: /grow [-d duration] [-r reason] <uid1>,<uid2>... [offset]",
+			usage:    "Usage: /grow [-d duration] [-r reason] global | <uid1>,<uid2>... [offset]",
 			desc:     "Locks the target's vertical sprite offset into a positive value (default +25). Persists per IC message until /ungrow.",
 			reqPerms: permissions.PermissionField["MUTE"],
 			category: "punishment",
@@ -2693,7 +2693,7 @@ func initCommands() {
 		"wide": {
 			handler:  cmdWide,
 			minArgs:  1,
-			usage:    "Usage: /wide [-d duration] [-r reason] <uid1>,<uid2>... [offset]",
+			usage:    "Usage: /wide [-d duration] [-r reason] global | <uid1>,<uid2>... [offset]",
 			desc:     "Locks the target's horizontal sprite offset (default +50). Persists per IC message until /unwide.",
 			reqPerms: permissions.PermissionField["MUTE"],
 			category: "punishment",
@@ -2725,7 +2725,7 @@ func initCommands() {
 		"fromsoftware": {
 			handler:  cmdFromSoftware,
 			minArgs:  1,
-			usage:    "Usage: /fromsoftware [-d duration] [-r reason] <uid1>,<uid2>...",
+			usage:    "Usage: /fromsoftware [-d duration] [-r reason] global | <uid1>,<uid2>...",
 			desc:     "Censors words from fromsoft.txt in the target's IC messages, replacing each matching word with ***.",
 			reqPerms: permissions.PermissionField["MUTE"],
 			category: "punishment",
