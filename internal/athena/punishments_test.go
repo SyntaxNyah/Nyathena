@@ -175,6 +175,50 @@ func TestApplyCensor(t *testing.T) {
 	}
 }
 
+func TestApplyFromSoftware(t *testing.T) {
+	// Seed the word list with test words.
+	fromsoftWords = map[string]struct{}{
+		"bum":  {},
+		"bart": {},
+		"ho":   {},
+	}
+	defer func() { fromsoftWords = map[string]struct{}{} }()
+
+	tests := []struct {
+		input string
+		want  string
+	}{
+		// Exact / whole-token matches still work.
+		{"bum", "***"},
+		{"bart", "****"},
+		{"BUM", "***"},                          // case-insensitive
+		{"hello world", "hello world"},           // no match
+		{"hello bum world", "hello *** world"},   // word in sentence
+
+		// Punctuation flanking a matched token is preserved.
+		{"bum!", "***!"},
+
+		// Substring matching — the joke: "ho" censors inside larger words.
+		{"how", "**w"},
+		{"who", "w**"},
+		{"should", "s**uld"},
+		{"HOW", "**W"}, // case-insensitive substring
+
+		// Longer entry takes priority over a shorter overlapping entry.
+		// "bum" (3 chars) is applied before "ho" — "hobum" has "ho" at the
+		// start and "bum" at the end with no overlap, so both are starred.
+		// "bumhole": "bum"→"***" first, then "ho" inside "hole"→"**le".
+		{"hobum", "*****"},     // "ho"→"**" + "bum"→"***"; no overlap
+		{"bumhole", "*****le"}, // "bum"→"***" then "ho" in "hole"→"**le"
+	}
+	for _, tt := range tests {
+		got := applyFromSoftware(tt.input)
+		if got != tt.want {
+			t.Errorf("applyFromSoftware(%q) = %q, want %q", tt.input, got, tt.want)
+		}
+	}
+}
+
 func TestApplyConfused(t *testing.T) {
 	input := "one two three"
 	result := applyConfused(input)

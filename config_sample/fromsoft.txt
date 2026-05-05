@@ -1,7 +1,8 @@
 # fromsoft.txt — word list for the /fromsoftware punishment.
 # One word per line. Lines starting with # are comments.
-# Any word listed here will be replaced with *** in the IC messages of
-# a player who has the /fromsoftware punishment active.
+# Every occurrence of a listed word as a *substring* of any token is replaced
+# with asterisks (one per letter), so short entries like "ho" will censor
+# inside larger words — "should" → "s**uld", "how" → "**w". That's the joke.
 #
 # Example entries (replace or extend with your own):
 bum
