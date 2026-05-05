@@ -1,0 +1,12 @@
+# fromsoft.txt — word list for the /fromsoftware punishment.
+# One word per line. Lines starting with # are comments.
+# Any word listed here will be replaced with *** in the IC messages of
+# a player who has the /fromsoftware punishment active.
+#
+# Example entries (replace or extend with your own):
+bum
+ass
+damn
+hell
+crap
+bastard

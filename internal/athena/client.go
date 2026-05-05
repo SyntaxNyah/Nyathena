@@ -218,6 +218,8 @@ const (
 	PunishmentShrink
 	PunishmentGrow
 	PunishmentWide
+	// FromSoftware — replaces words that appear in config/fromsoft.txt with ***.
+	PunishmentFromSoftware
 )
 
 // IssuerTier records the permission tier of the moderator who applied a
@@ -2426,6 +2428,8 @@ func (p PunishmentType) String() string {
 		return "grow"
 	case PunishmentWide:
 		return "wide"
+	case PunishmentFromSoftware:
+		return "fromsoftware"
 	default:
 		return "none"
 	}

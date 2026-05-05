@@ -75,9 +75,6 @@ func cmdPunishment(client *Client, args []string, usage string, pType Punishment
 	}
 
 	tier := issuerTierFor(client)
-	toPunish := getUidList(strings.Split(flags.Arg(0), ","))
-	var count int
-	var report string
 
 	msg := fmt.Sprintf("You have been punished with '%v' effect", pType.String())
 	if duration > 0 {
@@ -86,6 +83,38 @@ func cmdPunishment(client *Client, args []string, usage string, pType Punishment
 	if *reason != "" {
 		msg += " for reason: " + *reason
 	}
+
+	// "global" applies the punishment to every non-moderator in the issuer's area.
+	if strings.EqualFold(flags.Arg(0), "global") {
+		var count int
+		var report string
+		targetArea := client.Area()
+		issuerUID := client.Uid()
+		clients.ForEach(func(c *Client) {
+			if c.Area() != targetArea || c.Uid() == issuerUID || permissions.IsModerator(c.Perms()) {
+				return
+			}
+			c.AddPunishmentBy(pType, duration, *reason, tier)
+			var expires int64
+			if duration > 0 {
+				expires = time.Now().UTC().Add(duration).Unix()
+			}
+			if err := db.UpsertTextPunishmentBy(c.Ipid(), int(pType), expires, *reason, int(tier)); err != nil {
+				logger.LogErrorf("Failed to persist text punishment for %v: %v", c.Ipid(), err)
+			}
+			c.SendServerMessage(msg)
+			count++
+			report += fmt.Sprintf("%v, ", c.Uid())
+		})
+		report = strings.TrimSuffix(report, ", ")
+		client.SendServerMessage(fmt.Sprintf("Applied '%v' punishment globally to %v client(s) in area.", pType.String(), count))
+		addToBuffer(client, "CMD", fmt.Sprintf("Applied '%v' punishment globally to %v.", pType.String(), report), false)
+		return
+	}
+
+	toPunish := getUidList(strings.Split(flags.Arg(0), ","))
+	var count int
+	var report string
 
 	for _, c := range toPunish {
 		c.AddPunishmentBy(pType, duration, *reason, tier)
@@ -744,6 +773,8 @@ func parsePunishmentType(s string) PunishmentType {
 		return PunishmentGrow
 	case "wide":
 		return PunishmentWide
+	case "fromsoftware":
+		return PunishmentFromSoftware
 	default:
 		return PunishmentNone
 	}
