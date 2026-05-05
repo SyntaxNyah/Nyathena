@@ -18,7 +18,8 @@ package area
 
 import (
 	"fmt"
-	"strings"
+
+	"github.com/MangosArentLiterature/Athena/internal/packet"
 )
 
 // TstState returns the testimony recorder's current state.
@@ -63,9 +64,7 @@ func (a *Area) TstInsert(s string) error {
 		return fmt.Errorf("index out of range")
 	}
 	if a.tr.Index != 0 {
-		x := strings.Split(s, "#")
-		x[14] = "1"
-		s = strings.Join(x, "#")
+		s = packet.SetTextColorInServerString(s, "1")
 	}
 	a.tr.Testimony = append(a.tr.Testimony, "")
 	copy(a.tr.Testimony[a.tr.Index+2:], a.tr.Testimony[a.tr.Index+1:])
@@ -98,9 +97,7 @@ func (a *Area) TstUpdate(s string) error {
 		return fmt.Errorf("index out of range")
 	}
 	if a.tr.Index != 0 {
-		x := strings.Split(s, "#")
-		x[14] = "1"
-		s = strings.Join(x, "#")
+		s = packet.SetTextColorInServerString(s, "1")
 	}
 	a.tr.Testimony[a.tr.Index] = s
 	return nil
@@ -145,9 +142,7 @@ func (a *Area) TstAppend(s string) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	if a.tr.Index != 0 {
-		x := strings.Split(s, "#")
-		x[14] = "1"
-		s = strings.Join(x, "#")
+		s = packet.SetTextColorInServerString(s, "1")
 	}
 	a.tr.Testimony = append(a.tr.Testimony, s)
 }

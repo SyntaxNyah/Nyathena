@@ -110,7 +110,7 @@ const casinoWelcomeMsg = "🎰 Welcome! This server runs the Nyathena Casino —
 	"🔒 Passwords stored with bcrypt — never in plain text.\n" +
 	"🔇 Use /gamble hide to toggle gambling broadcast messages."
 
-// validDeskMods is the set of accepted values for args[0] (desk_mod) in MS packets.
+// validDeskMods is the set of accepted values for MSPacket.DeskMod.
 // Defined at package level to avoid a slice allocation on every IC message.
 var validDeskMods = []string{"chat", "0", "1", "2", "3", "4", "5"}
 
@@ -334,32 +334,27 @@ func pktIC(client *Client, p *packet.Packet) {
 		client.SendServerMessage("You are not allowed to speak in this area.")
 		return
 	}
-	// Clients can send differing numbers of arguments depending on their version.
-	// Rather than individually check arguments, we simply copy the arguments that *do* exist.
-	// Nonexisting args will simply be blank.
-	args := make([]string, 26)
-	copy(args, p.Body)
 
-	// The MS#% packet sent from the server has a different number of args than the clients because of pairing.
-	// For some godforsaken reason, AO2 places these new arguments in two different spots in the middle of the packet.
-	// So two insertions are required.
-	args = append(args[:19], args[17:]...)
-	args = append(args[:20], args[18:]...)
+	// Decode the wire-form client packet body into the structured MSPacket
+	// type exactly once. From this point on the IC pipeline operates on named
+	// fields; nothing else in this function indexes into the packet by slot.
+	// The reverse encode happens once at the bottom via ms.ServerArgs().
+	ms := packet.ParseMSClient(p.Body)
 
-	// Save the admin's own args before any fullpossess transformation so that
+	// Save the admin's own values before any fullpossess transformation so that
 	// state updates (showname, pairInfo, textColor) always reflect the admin's
 	// own character — not the target's — even during fullpossess.
-	ownCharName := args[2]
-	ownEmote := args[3]
-	ownTextColor := args[14]
-	ownShowname := args[15]
+	ownCharName := ms.Character
+	ownEmote := ms.Emote
+	ownTextColor := ms.TextColor
+	ownShowname := ms.Showname
 	hasForcedIniswap := false
 
 	// If a moderator has forced a showname for this client, override whatever
 	// name the client sent in the packet.
 	if forced := client.ForcedShowname(); forced != "" {
 		ownShowname = forced
-		args[15] = forced
+		ms.Showname = forced
 	}
 
 	// If a moderator has forced an iniswap character for this client, override
@@ -369,8 +364,8 @@ func pktIC(client *Client, p *packet.Packet) {
 	if charName, charIDStr := client.ForcedIniswapInfo(); charName != "" {
 		hasForcedIniswap = true
 		ownCharName = charName
-		args[2] = charName
-		args[8] = charIDStr
+		ms.Character = charName
+		ms.CharID = charIDStr
 	}
 
 	// Track if we're in fullpossess mode for validation adjustments
@@ -429,17 +424,17 @@ func pktIC(client *Client, p *packet.Packet) {
 			}
 
 			// Replace character and appearance with target's (including their saved position)
-			args[2] = targetCharName             // character name (target's displayed character, including iniswap)
-			args[3] = targetEmote                // emote
-			args[5] = client.PossessedPos()      // position (saved target position)
-			args[8] = strconv.Itoa(targetCharID) // char_id (ID of target's displayed character)
+			ms.Character = targetCharName
+			ms.Emote = targetEmote
+			ms.Side = client.PossessedPos()
+			ms.CharID = strconv.Itoa(targetCharID)
 
 			// Use target's text color
 			targetTextColor := target.LastTextColor()
 			if targetTextColor == "" {
 				targetTextColor = "0"
 			}
-			args[14] = targetTextColor
+			ms.TextColor = targetTextColor
 
 			// Use target's showname, respecting any moderator-forced showname,
 			// and falling back to the displayed character name.
@@ -447,14 +442,14 @@ func pktIC(client *Client, p *packet.Packet) {
 			if strings.TrimSpace(targetShowname) == "" {
 				targetShowname = targetCharName
 			}
-			args[15] = targetShowname
+			ms.Showname = targetShowname
 		}
 	}
 
 	if pos := client.Pos(); pos != "" {
-		args[5] = pos
+		ms.Side = pos
 	} else {
-		client.SetPos(args[5])
+		client.SetPos(ms.Side)
 	}
 
 	// Check for expired punishments and collect the still-active ones in a single
@@ -468,8 +463,8 @@ func pktIC(client *Client, p *packet.Packet) {
 	// it can be (a) used for icwarp backlog history recording and (b) skipped
 	// for icwarp replacement when no history is available.
 	var originalICMsg string
-	if args[4] != "" {
-		originalICMsg = decode(args[4])
+	if ms.Message != "" {
+		originalICMsg = decode(ms.Message)
 	}
 
 	// Apply punishment text modifications
@@ -480,8 +475,8 @@ func pktIC(client *Client, p *packet.Packet) {
 		p := &punishments[i]
 
 		// Apply text modifications
-		if args[4] != "" {
-			decodedMsg := decode(args[4])
+		if ms.Message != "" {
+			decodedMsg := decode(ms.Message)
 			var modifiedMsg string
 
 			// Use state-aware version for punishments that need it
@@ -536,39 +531,39 @@ func pktIC(client *Client, p *packet.Packet) {
 			} else {
 				modifiedMsg = ApplyPunishmentToText(decodedMsg, p.punishmentType)
 			}
-			args[4] = encode(modifiedMsg)
+			ms.Message = encode(modifiedMsg)
 		}
 
-		// SFX curse: replace the IC packet's SFX field with the cursed sound.
-		// Args[6] is sfx_name in the AO2 IC packet. Both desktop AO2 and WebAO
-		// expect the bare filename stem here, NOT a full URL — desktop clients
-		// resolve it against their local base/sounds/general/ directory while
-		// WebAO prepends the configured asset URL and appends ".opus".
-		// Sending a raw http(s) URL in sfx_name would cause both clients to
-		// fail silently, so we strip path and extension, keeping only the stem
-		// (e.g. "aai-cammy-bubble"). args[9] (sfx_delay) is forced to "0" so
-		// the sound fires immediately regardless of what the sender's packet
-		// contained. sfxCurseActive is set so that a post-NoInterrupt fixup
-		// below can ensure the emote_modifier is in the set {1, 2, 6}; WebAO's
+		// SFX curse: replace the IC packet's SfxName with the cursed sound.
+		// Both desktop AO2 and WebAO expect the bare filename stem here, NOT a
+		// full URL — desktop clients resolve it against their local
+		// base/sounds/general/ directory while WebAO prepends the configured
+		// asset URL and appends ".opus". Sending a raw http(s) URL in
+		// SfxName would cause both clients to fail silently, so we strip
+		// path and extension, keeping only the stem (e.g.
+		// "aai-cammy-bubble"). SfxDelay is forced to "0" so the sound fires
+		// immediately regardless of what the sender's packet contained.
+		// sfxCurseActive is set so that a post-NoInterrupt fixup below can
+		// ensure the EmoteModifier is in the set {1, 2, 6}; WebAO's
 		// chat_tick only plays the emote SFX for those three values, so
-		// emote_modifier 0 or 5 would otherwise silence the sound even though
-		// sfx_name is correctly populated.
+		// EmoteModifier 0 or 5 would otherwise silence the sound even though
+		// SfxName is correctly populated.
 		if p.punishmentType == PunishmentSfxCurse && p.customData != "" {
-			args[6] = sfxBareNameFromURL(p.customData)
-			args[9] = "0"
+			ms.SfxName = sfxBareNameFromURL(p.customData)
+			ms.SfxDelay = "0"
 			sfxCurseActive = true
 		}
 
-		// Shrink/Grow/Wide: rewrite args[19] (offset "x&y") to lock the
-		// vertical or horizontal offset to the value stored in customData.
-		// We preserve the other axis from any client-supplied offset to
-		// keep things sensible (e.g. /shrink doesn't override /wide).
+		// Shrink/Grow/Wide: rewrite SelfOffset ("x&y") to lock the vertical
+		// or horizontal offset to the value stored in customData. We preserve
+		// the other axis from any client-supplied offset to keep things
+		// sensible (e.g. /shrink doesn't override /wide).
 		if p.punishmentType == PunishmentShrink || p.punishmentType == PunishmentGrow || p.punishmentType == PunishmentWide {
 			locked, err := strconv.Atoi(p.customData)
 			if err == nil && locked >= -100 && locked <= 100 {
 				curX, curY := 0, 0
-				if args[19] != "" {
-					parts := strings.Split(decode(args[19]), "&")
+				if ms.SelfOffset != "" {
+					parts := strings.Split(decode(ms.SelfOffset), "&")
 					if v, e := strconv.Atoi(parts[0]); e == nil {
 						curX = v
 					}
@@ -584,21 +579,21 @@ func pktIC(client *Client, p *packet.Packet) {
 				case PunishmentWide:
 					curX = locked
 				}
-				args[19] = encode(fmt.Sprintf("%d&%d", curX, curY))
+				ms.SelfOffset = encode(fmt.Sprintf("%d&%d", curX, curY))
 			}
 		}
 
 		// Handle name modifications
 		if p.punishmentType == PunishmentEmoji {
-			args[4] = GetRandomEmoji()
+			ms.Message = GetRandomEmoji()
 		}
 		if p.punishmentType == PunishmentUncannyValley {
-			name := args[15]
+			name := ms.Showname
 			if strings.TrimSpace(name) == "" && client.CharID() >= 0 && client.CharID() < len(characters) {
 				name = characters[client.CharID()]
 			}
 			if name != "" {
-				args[15] = MutateShowname(name)
+				ms.Showname = MutateShowname(name)
 			}
 		}
 	}
@@ -607,132 +602,132 @@ func pktIC(client *Client, p *packet.Packet) {
 	// exempt moderator, replace their message with a random past IC message
 	// they sent in this area. Applied after per-client punishments so it
 	// stacks naturally with any other active effects.
-	if args[4] != "" && client.Area().ICWarpGlobal() && client.Uid() != client.Area().ICWarpExemptUID() {
+	if ms.Message != "" && client.Area().ICWarpGlobal() && client.Uid() != client.Area().ICWarpExemptUID() {
 		if past, ok := client.Area().RandomPastICMessage(client.Ipid()); ok {
-			args[4] = encode(past)
+			ms.Message = encode(past)
 		}
 	}
 
 	if client.IsParrot() { // Bring out the parrot please.
-		args[4] = getParrotMsg()
+		ms.Message = getParrotMsg()
 	}
 	if client.IsNarrator() {
-		args[3] = ""
+		ms.Emote = ""
 	}
 	if flip := client.CheckAndToggleDanceFlip(); flip != "" {
-		args[12] = flip
+		ms.Flip = flip
 	}
-	// emote_mod: 4 crashes old clients, remap to PREANIM_ZOOM; only {0,1,2,5,6} are valid (matches Akashi).
-	emote_mod, err := strconv.Atoi(args[7])
+	// EmoteModifier 4 crashes old clients, remap to PREANIM_ZOOM; only {0,1,2,5,6} are valid (matches Akashi).
+	emote_mod, err := strconv.Atoi(ms.EmoteModifier)
 	if err != nil {
 		return
 	}
 	if emote_mod == 4 {
 		emote_mod = 6
-		args[7] = "6"
+		ms.EmoteModifier = "6"
 	}
 	if emote_mod != 0 && emote_mod != 1 && emote_mod != 2 && emote_mod != 5 && emote_mod != 6 {
 		return
 	}
-	objStr, _, _ := strings.Cut(args[10], "&")
+	objStr, _, _ := strings.Cut(ms.ShoutModifier, "&")
 	objection, err := strconv.Atoi(objStr)
 	if err != nil {
 		return
 	}
-	evi, err := strconv.Atoi(args[11])
+	evi, err := strconv.Atoi(ms.Evidence)
 	if err != nil {
 		return
 	}
-	text, err := strconv.Atoi(args[14])
+	text, err := strconv.Atoi(ms.TextColor)
 	if err != nil {
 		return
 	}
 
-	if args[22] == "" {
-		args[22] = "0"
+	if ms.NonInterruptingPreAnim == "" {
+		ms.NonInterruptingPreAnim = "0"
 	}
-	if args[23] == "" {
-		args[23] = "0"
+	if ms.SfxLooping == "" {
+		ms.SfxLooping = "0"
 	}
-	if args[24] == "" {
-		args[24] = "0"
+	if ms.Screenshake == "" {
+		ms.Screenshake = "0"
 	}
-	if args[28] == "" || client.CharID() != client.Area().LastSpeaker() {
-		args[28] = "0"
+	if ms.Additive == "" || client.CharID() != client.Area().LastSpeaker() {
+		ms.Additive = "0"
 	}
 	// Area-level force_nointerrupt mirrors Akashi's forceImmediate: convert PREANIM variants to their non-preanim twin and force immediate=1 so the preanim plays alongside the text.
 	if client.Area().NoInterrupt() {
 		switch emote_mod {
 		case 1, 2:
 			emote_mod = 0
-			args[7] = "0"
-			args[22] = "1"
+			ms.EmoteModifier = "0"
+			ms.NonInterruptingPreAnim = "1"
 		case 6:
 			emote_mod = 5
-			args[7] = "5"
-			args[22] = "1"
+			ms.EmoteModifier = "5"
+			ms.NonInterruptingPreAnim = "1"
 		}
 	}
 
 	// SFX curse post-fixup: WebAO's chat_tick only triggers emote SFX playback
-	// when emote_modifier (args[7]) is 1, 2, or 6. When the value is 0 (idle)
-	// or 5 (talking, no preanim), WebAO silently skips the sound even though
-	// sfx_name is set. This runs after the NoInterrupt block above to avoid
+	// when EmoteModifier is 1, 2, or 6. When the value is 0 (idle) or 5
+	// (talking, no preanim), WebAO silently skips the sound even though
+	// SfxName is set. This runs after the NoInterrupt block above to avoid
 	// being overwritten. We promote the modifier to 1 and clear the preanim
 	// name to "-" so no visual preanim animation plays — only the SFX fires.
-	if sfxCurseActive && (args[7] == "0" || args[7] == "5") {
-		args[7] = "1"
-		args[1] = "-"
+	if sfxCurseActive && (ms.EmoteModifier == "0" || ms.EmoteModifier == "5") {
+		ms.EmoteModifier = "1"
+		ms.PreAnim = "-"
 	}
 
 	// Decode the message text once; reused for length validation, testimony navigation, and automod.
-	msgText := decode(args[4])
+	msgText := decode(ms.Message)
 
 	// Single lock to obtain the stuck character ID; -1 means not stuck.
 	// Used in both iniswap cases below to avoid redundant mutex acquisitions.
 	stuckCharID := client.charStuckID()
 
-	// desk_mod "chat" is a legacy alias for "1"; rewrite to match Akashi.
-	if args[0] == "chat" {
-		args[0] = "1"
+	// DeskMod "chat" is a legacy alias for "1"; rewrite to match Akashi.
+	if ms.DeskMod == "chat" {
+		ms.DeskMod = "1"
 	}
 
 	switch {
-	case !sliceutil.ContainsString(validDeskMods, args[0]): // desk_mod
+	case !sliceutil.ContainsString(validDeskMods, ms.DeskMod):
 		return
-	case !isPossessing && !hasForcedIniswap && !strings.EqualFold(characters[client.CharID()], args[2]) && !client.Area().IniswapAllowed(): // character name (skip check when possessing or forced iniswap)
+	case !isPossessing && !hasForcedIniswap && !strings.EqualFold(characters[client.CharID()], ms.Character) && !client.Area().IniswapAllowed(): // character name (skip check when possessing or forced iniswap)
 		client.SendServerMessage("Iniswapping is not allowed in this area.")
 		return
-	case !isPossessing && !hasForcedIniswap && stuckCharID >= 0 && !strings.EqualFold(characters[stuckCharID], args[2]): // block iniswap when charstuck unless forced iniswap
+	case !isPossessing && !hasForcedIniswap && stuckCharID >= 0 && !strings.EqualFold(characters[stuckCharID], ms.Character): // block iniswap when charstuck unless forced iniswap
 		client.SendServerMessage(fmt.Sprintf("You are character stuck as %v and cannot iniswap.", characters[stuckCharID]))
 		return
-	case len(msgText) > config.MaxMsg: // message
+	case len(msgText) > config.MaxMsg:
 		client.SendServerMessage("Your message exceeds the maximum message length!")
 		return
-	case args[4] == client.LastMsg():
+	case ms.Message == client.LastMsg():
 		return
-	case !isPossessing && !hasForcedIniswap && args[8] != client.CharIDStr(): // char_id (skip check when possessing or forced iniswap)
+	case !isPossessing && !hasForcedIniswap && ms.CharID != client.CharIDStr(): // skip check when possessing or forced iniswap
 		return
-	case objection < 0 || objection > 4: // objection_mod
+	case objection < 0 || objection > 4:
 		return
-	case evi < 0 || evi > len(client.Area().Evidence()): // evidence
+	case evi < 0 || evi > len(client.Area().Evidence()):
 		return
-	case args[12] != "0" && args[12] != "1": // flipping
+	case ms.Flip != "0" && ms.Flip != "1":
 		return
-	case args[13] != "0" && args[13] != "1": // realization
+	case ms.Realization != "0" && ms.Realization != "1":
 		return
-	case text < 0 || text > 8: // text color (0-8 per AO2 protocol)
+	case text < 0 || text > 8: // 0-8 per AO2 protocol
 		return
-	case len(args[15]) > maxShownameLength: // showname
+	case len(ms.Showname) > maxShownameLength:
 		client.SendServerMessage("Your showname is too long!")
 		return
-	case args[22] != "0" && args[22] != "1": // non-interrupting preanim
+	case ms.NonInterruptingPreAnim != "0" && ms.NonInterruptingPreAnim != "1":
 		return
-	case args[23] != "0" && args[23] != "1": // sfx looping
+	case ms.SfxLooping != "0" && ms.SfxLooping != "1":
 		return
-	case args[24] != "0" && args[24] != "1": // screenshake
+	case ms.Screenshake != "0" && ms.Screenshake != "1":
 		return
-	case args[28] != "0" && args[28] != "1": // additive
+	case ms.Additive != "0" && ms.Additive != "1":
 		return
 	}
 
@@ -742,27 +737,27 @@ func pktIC(client *Client, p *packet.Packet) {
 	// courtroom position, preventing the pairing sprite from breaking on clients.
 	if client.ForcePairUID() >= 0 {
 		if partner, err := getClientByUid(client.ForcePairUID()); err == nil && partner.CharID() >= 0 {
-			args[16] = partner.CharIDStr()
+			ms.OtherCharID = partner.CharIDStr()
 			client.SetPairWantedID(partner.CharID())
 			partner.SetPairWantedID(client.CharID())
 			if pos := partner.Pos(); pos != "" {
-				args[5] = pos
+				ms.Side = pos
 				client.SetPos(pos)
 			}
 		}
 	}
 
 	// If the client used /pair to set a desired pair but has not selected one via the
-	// in-client pair button (args[16] is absent or -1), inject the server-set pair
+	// in-client pair button (OtherCharID is absent or -1), inject the server-set pair
 	// character ID so the pairing animation activates exactly as if the pair button
 	// had been used.
-	if (args[16] == "" || args[16] == "-1") && client.PairWantedID() != -1 {
-		args[16] = strconv.Itoa(client.PairWantedID())
+	if (ms.OtherCharID == "" || ms.OtherCharID == "-1") && client.PairWantedID() != -1 {
+		ms.OtherCharID = strconv.Itoa(client.PairWantedID())
 	}
 
 	// Pairing validation
-	if args[16] != "" && args[16] != "-1" {
-		pidStr, _, _ := strings.Cut(args[16], "^")
+	if ms.OtherCharID != "" && ms.OtherCharID != "-1" {
+		pidStr, _, _ := strings.Cut(ms.OtherCharID, "^")
 		pid, err := strconv.Atoi(pidStr)
 		if err != nil {
 			return
@@ -790,27 +785,27 @@ func pktIC(client *Client, p *packet.Packet) {
 			}
 			if c.CharID() == pid && c.PairWantedID() == client.CharID() && (isForce || c.Pos() == client.Pos()) {
 				pairinfo := c.PairInfo()
-				args[17] = pairinfo.name
-				args[18] = pairinfo.emote
-				args[20] = pairinfo.offset
-				args[21] = pairinfo.flip
+				ms.OtherName = pairinfo.name
+				ms.OtherEmote = pairinfo.emote
+				ms.OtherOffset = pairinfo.offset
+				ms.OtherFlip = pairinfo.flip
 				pairing = true
 			}
 		})
 		if !pairing {
-			args[16] = "-1^"
-			args[17] = ""
-			args[18] = ""
+			ms.OtherCharID = "-1^"
+			ms.OtherName = ""
+			ms.OtherEmote = ""
 		}
 	} else {
-		// No pair attempted: ensure otherName/otherEmote are empty.
-		args[17] = ""
-		args[18] = ""
+		// No pair attempted: ensure OtherName/OtherEmote are empty.
+		ms.OtherName = ""
+		ms.OtherEmote = ""
 	}
 
 	// Offset validation
-	if args[19] != "" {
-		offsets := strings.Split(decode(args[19]), "&")
+	if ms.SelfOffset != "" {
+		offsets := strings.Split(decode(ms.SelfOffset), "&")
 		x_offset, err := strconv.Atoi(offsets[0])
 		if err != nil {
 			return
@@ -836,11 +831,11 @@ func pktIC(client *Client, p *packet.Packet) {
 				break
 			}
 			if client.Area().CurrentTstIndex() == 0 {
-				args[4] = "~~\n-- " + args[4] + " --"
-				args[14] = "3"
+				ms.Message = "~~\n-- " + ms.Message + " --"
+				ms.TextColor = "3"
 				writeToArea(client.Area(), "RT", "testimony1")
 			}
-			client.Area().TstAppend(strings.Join(args, "#"))
+			client.Area().TstAppend(ms.ServerString())
 			client.Area().TstAdvance()
 		case area.TRInserting:
 			if client.Area().TstLen() >= config.MaxStatement {
@@ -848,7 +843,7 @@ func pktIC(client *Client, p *packet.Packet) {
 				client.Area().SetTstState(area.TRPlayback)
 				break
 			}
-			client.Area().TstInsert(strings.Join(args, "#"))
+			client.Area().TstInsert(ms.ServerString())
 			client.Area().SetTstState(area.TRPlayback)
 			client.Area().TstAdvance()
 		case area.TRUpdating:
@@ -857,7 +852,7 @@ func pktIC(client *Client, p *packet.Packet) {
 				client.Area().SetTstState(area.TRPlayback)
 				break
 			}
-			client.Area().TstUpdate(strings.Join(args, "#"))
+			client.Area().TstUpdate(ms.ServerString())
 			client.Area().SetTstState(area.TRPlayback)
 		}
 	}
@@ -888,8 +883,8 @@ func pktIC(client *Client, p *packet.Packet) {
 	// Use the admin's own (pre-transformation) values for state updates so that
 	// the admin's showname, pairInfo and textColor are never overwritten with
 	// the target's during fullpossess.
-	client.SetPairInfo(ownCharName, ownEmote, args[12], args[19])
-	client.SetLastMsg(args[4])
+	client.SetPairInfo(ownCharName, ownEmote, ms.Flip, ms.SelfOffset)
+	client.SetLastMsg(ms.Message)
 	client.SetLastTextColor(ownTextColor)
 	newShowname := ownShowname
 	if strings.TrimSpace(ownShowname) == "" {
@@ -927,15 +922,15 @@ func pktIC(client *Client, p *packet.Packet) {
 	if autoModCheck(client, msgText) {
 		return
 	}
-	if args[15] != "" {
-		if autoModCheck(client, decode(args[15])) {
+	if ms.Showname != "" {
+		if autoModCheck(client, decode(ms.Showname)) {
 			return
 		}
 	}
 
 	// Torment: ghost or delay the message without the client noticing.
 	if isIPIDTormented(client.Ipid()) {
-		handleTormentedIC(client, args)
+		handleTormentedIC(client, ms)
 		return
 	}
 
@@ -944,10 +939,10 @@ func pktIC(client *Client, p *packet.Packet) {
 	// per-client punishments already ran. Nothing is persisted — the effect
 	// evaporates the moment the speaker leaves the area. Translator is
 	// included in the random pool only if it's fully configured server-wide.
-	if client.Area().PunishmentArea() && args[4] != "" {
-		decoded := decode(args[4])
+	if client.Area().PunishmentArea() && ms.Message != "" {
+		decoded := decode(ms.Message)
 		mutated, _ := applyAreaRandomPunishmentText(decoded, translatorEnabled())
-		args[4] = encode(mutated)
+		ms.Message = encode(mutated)
 	}
 
 	// Mirror area: if this area has mirror=true in its TOML config, reverse the
@@ -955,19 +950,19 @@ func pktIC(client *Client, p *packet.Packet) {
 	// every punishment transform so the reversal is the last word on the text.
 	// The packet wire-format fields are otherwise untouched, so clients can
 	// connect and render the message normally — they just see it backwards.
-	if client.Area().MirrorArea() && args[4] != "" {
-		mirrored := reverseRunes(decode(args[4]))
-		args[4] = encode(mirrored)
+	if client.Area().MirrorArea() && ms.Message != "" {
+		mirrored := reverseRunes(decode(ms.Message))
+		ms.Message = encode(mirrored)
 	}
 
 	// Doki area: per-message chaos rolls (Haschen quote takeovers, zalgo
 	// scrambles, dark anagrams, surprise BG swaps). Independent of mirror
 	// and punishment_area so they can all stack on the same area if desired.
-	if client.Area().DokiArea() && args[4] != "" {
-		decoded := decode(args[4])
+	if client.Area().DokiArea() && ms.Message != "" {
+		decoded := decode(ms.Message)
 		res := applyDokiEffect(decoded)
 		if res.Text != decoded {
-			args[4] = encode(res.Text)
+			ms.Message = encode(res.Text)
 		}
 		if res.SwapBG && len(backgrounds) > 0 {
 			bg := backgrounds[rand.Intn(len(backgrounds))]
@@ -976,13 +971,15 @@ func pktIC(client *Client, p *packet.Packet) {
 		}
 	}
 
-	writeToAreaFrom(client.Ipid(), permissions.IsModerator(client.Perms()), client.Area(), "MS", args...)
+	// Encode the structured packet back into wire format exactly once and
+	// hand it to the broadcaster.
+	writeToAreaFrom(client.Ipid(), permissions.IsModerator(client.Perms()), client.Area(), "MS", ms.ServerArgs()...)
 	// Record the original (pre-punishment) decoded message in the area's icwarp
 	// history so future icwarp lookups have something to pick from.
 	if originalICMsg != "" {
 		client.Area().RecordICMessage(client.Ipid(), originalICMsg)
 	}
-	addToBuffer(client, "IC", "\""+args[4]+"\"", false)
+	addToBuffer(client, "IC", "\""+ms.Message+"\"", false)
 }
 
 // reverseRunes returns s with its runes (not bytes) reversed. Used by the

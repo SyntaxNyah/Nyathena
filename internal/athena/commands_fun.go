@@ -29,6 +29,7 @@ import (
 	"time"
 
 	"github.com/MangosArentLiterature/Athena/internal/area"
+	"github.com/MangosArentLiterature/Athena/internal/packet"
 )
 
 func cmdPos(client *Client, args []string, _ string) {
@@ -328,52 +329,44 @@ func cmdPossess(client *Client, args []string, _ string) {
 		}
 	}
 
-	// Create the IC message packet args following the MS packet format
-	// This is a ONE-TIME possession that copies the target's appearance completely
-	icArgs := make([]string, 30)
-	icArgs[0] = "chat"                        // desk_mod
-	icArgs[1] = ""                            // pre-anim
-	icArgs[2] = targetCharName                // character name (target's displayed character, including iniswap)
-	icArgs[3] = targetEmote                   // emote (target's emote)
-	icArgs[4] = encodedMsg                    // message (encoded)
-	icArgs[5] = target.Pos()                  // position (target's position to spoof them)
-	icArgs[6] = ""                            // sfx-name
-	icArgs[7] = "0"                           // emote_mod
-	icArgs[8] = strconv.Itoa(targetCharID)    // char_id (ID of target's displayed character)
-	icArgs[9] = "0"                           // sfx-delay
-	icArgs[10] = "0"                          // objection_mod
-	icArgs[11] = "0"                          // evidence
-	icArgs[12] = "0"                          // flipping
-	icArgs[13] = "0"                          // realization
-	// Use target's last text color, default to "0" (white) if none set
+	// Use target's last text color, default to "0" (white) if none set.
 	targetTextColor := target.LastTextColor()
 	if targetTextColor == "" {
 		targetTextColor = "0"
 	}
-	icArgs[14] = targetTextColor              // text color (target's color)
-	// Use target's showname, falling back to displayed character name
+	// Use target's showname, falling back to displayed character name.
 	showname := target.Showname()
 	if strings.TrimSpace(showname) == "" {
 		showname = targetCharName
 	}
-	icArgs[15] = showname                     // showname (target's showname)
-	icArgs[16] = "-1"                         // pair_id
-	icArgs[17] = ""                           // pair_charid (server pairing)
-	icArgs[18] = ""                           // pair_emote (server pairing)
-	icArgs[19] = ""                           // offset
-	icArgs[20] = ""                           // pair_offset (server pairing)
-	icArgs[21] = ""                           // pair_flip (server pairing)
-	icArgs[22] = "0"                          // non-interrupting pre
-	icArgs[23] = "0"                          // sfx-looping
-	icArgs[24] = "0"                          // screenshake
-	icArgs[25] = ""                           // frames_shake
-	icArgs[26] = ""                           // frames_realization
-	icArgs[27] = ""                           // frames_sfx
-	icArgs[28] = "0"                          // additive
-	icArgs[29] = ""                           // blank (reserved)
+
+	// Build a one-time possession MS packet that copies the target's
+	// appearance completely. The struct is encoded to wire format exactly
+	// once on the call to writeToArea.
+	ms := &packet.MSPacket{
+		DeskMod:       "chat",
+		Character:     targetCharName,
+		Emote:         targetEmote,
+		Message:       encodedMsg,
+		Side:          target.Pos(),
+		EmoteModifier: "0",
+		CharID:        strconv.Itoa(targetCharID),
+		SfxDelay:      "0",
+		ShoutModifier: "0",
+		Evidence:      "0",
+		Flip:          "0",
+		Realization:   "0",
+		TextColor:     targetTextColor,
+		Showname:      showname,
+		OtherCharID:   "-1",
+		NonInterruptingPreAnim: "0",
+		SfxLooping:    "0",
+		Screenshake:   "0",
+		Additive:      "0",
+	}
 
 	// Send the IC message to the target's area
-	writeToArea(target.Area(), "MS", icArgs...)
+	writeToArea(target.Area(), "MS", ms.ServerArgs()...)
 
 	// Log the possession (use original message for readability in logs)
 	addToBuffer(client, "CMD", fmt.Sprintf("Possessed UID %v to say: \"%v\"", uid, msg), true)
