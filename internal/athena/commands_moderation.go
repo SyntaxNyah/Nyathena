@@ -1074,7 +1074,7 @@ func cmdForceName(client *Client, args []string, _ string) {
 		return
 	}
 	// Store as AO2-encoded so it can be placed directly into the IC packet's
-	// showname field (args[15]) without an extra encode step on every message.
+	// MSPacket.Showname field without an extra encode step on every message.
 	target.SetForcedShowname(encode(name))
 	// PU and in-server messages use the decoded (display) form.
 	writeToAll("PU", strconv.Itoa(target.Uid()), "2", name)

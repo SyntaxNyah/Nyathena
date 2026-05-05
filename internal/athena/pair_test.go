@@ -18,94 +18,125 @@ package athena
 
 import (
 	"testing"
+
+	"github.com/MangosArentLiterature/Athena/internal/packet"
 )
 
-// simulatePairArgInsertions replicates the two array insertions performed by
-// pktIC to make room for the server-side otherName/otherEmote fields.
-func simulatePairArgInsertions(clientArgs []string) []string {
-	args := make([]string, 26)
-	copy(args, clientArgs)
-	args = append(args[:19], args[17:]...)
-	args = append(args[:20], args[18:]...)
-	return args
-}
-
-// applyPairSanitization replicates the sanitization logic added to pktIC:
-// when there is no valid pair (args[16] is "" or "-1"), clear otherName and
-// otherEmote (args[17] and args[18]).
-func applyPairSanitization(args []string) {
-	if args[16] == "" || args[16] == "-1" {
-		args[17] = ""
-		args[18] = ""
+// applyPairSanitization replicates the no-pair sanitization branch of pktIC:
+// when OtherCharID is "" or "-1", OtherName and OtherEmote must be cleared
+// regardless of any value the client may have leaked into those slots.
+func applyPairSanitization(ms *packet.MSPacket) {
+	if ms.OtherCharID == "" || ms.OtherCharID == "-1" {
+		ms.OtherName = ""
+		ms.OtherEmote = ""
 	}
 }
 
-// TestPairArgSanitizationNoPair verifies that when otherCharId is -1 (no pair),
-// the otherName and otherEmote fields are cleared even if the client sent
-// garbage values in those positions.
+// TestPairArgSanitizationNoPair verifies that when OtherCharID is "-1" (no
+// pair), the OtherName and OtherEmote fields are cleared even if the
+// underlying packet had garbage in those slots.
 func TestPairArgSanitizationNoPair(t *testing.T) {
-	// Simulate a client packet where:
-	//   [16] = "-1"  (no pair wanted)
-	//   [17] = "0"   (self_offset, ends up as garbage in otherName slot)
-	//   [18] = "0"   (other_offset, ends up as garbage in otherEmote slot)
-	clientArgs := make([]string, 26)
-	clientArgs[16] = "-1"
-	clientArgs[17] = "0"   // self_offset – becomes garbage in otherName slot
-	clientArgs[18] = "0"   // other_offset – becomes garbage in otherEmote slot
-	clientArgs[19] = "0"   // noninterrupting_preanim
-
-	args := simulatePairArgInsertions(clientArgs)
-
-	// Before sanitization, args[17] and args[18] contain garbage.
-	// Apply the sanitization as pktIC now does.
-	applyPairSanitization(args)
-
-	if args[16] != "-1" {
-		t.Errorf("args[16] (otherCharId) should remain \"-1\", got %q", args[16])
+	// Construct a server-format MS packet that simulates a stale OtherName /
+	// OtherEmote left over from a previous pair, with OtherCharID set to
+	// "-1" (no pair wanted).
+	ms := &packet.MSPacket{
+		OtherCharID: "-1",
+		OtherName:   "leftover_pair_char",
+		OtherEmote:  "leftover_pair_emote",
 	}
-	if args[17] != "" {
-		t.Errorf("args[17] (otherName) should be empty when no pair, got %q", args[17])
+
+	applyPairSanitization(ms)
+
+	if ms.OtherCharID != "-1" {
+		t.Errorf("OtherCharID should remain \"-1\", got %q", ms.OtherCharID)
 	}
-	if args[18] != "" {
-		t.Errorf("args[18] (otherEmote) should be empty when no pair, got %q", args[18])
+	if ms.OtherName != "" {
+		t.Errorf("OtherName should be empty when no pair, got %q", ms.OtherName)
+	}
+	if ms.OtherEmote != "" {
+		t.Errorf("OtherEmote should be empty when no pair, got %q", ms.OtherEmote)
 	}
 }
 
-// TestPairArgSanitizationGarbageOffsets verifies the same behaviour when the
-// server would have forwarded non-zero offset strings as garbage otherName/otherEmote.
+// TestPairArgSanitizationGarbageOffsets covers the same path with
+// non-default offset-shaped strings — the sanitization must not care what
+// the contents look like, only that OtherCharID indicates "no pair".
 func TestPairArgSanitizationGarbageOffsets(t *testing.T) {
-	clientArgs := make([]string, 26)
-	clientArgs[16] = "-1"
-	clientArgs[17] = "0     0" // multi-value offset string – garbage in otherName slot
-	clientArgs[18] = "0"
-	clientArgs[19] = "0"
-
-	args := simulatePairArgInsertions(clientArgs)
-	applyPairSanitization(args)
-
-	if args[17] != "" {
-		t.Errorf("args[17] (otherName) should be empty when no pair, got %q", args[17])
+	ms := &packet.MSPacket{
+		OtherCharID: "-1",
+		OtherName:   "0     0",
+		OtherEmote:  "0",
 	}
-	if args[18] != "" {
-		t.Errorf("args[18] (otherEmote) should be empty when no pair, got %q", args[18])
+
+	applyPairSanitization(ms)
+
+	if ms.OtherName != "" {
+		t.Errorf("OtherName should be empty when no pair, got %q", ms.OtherName)
+	}
+	if ms.OtherEmote != "" {
+		t.Errorf("OtherEmote should be empty when no pair, got %q", ms.OtherEmote)
 	}
 }
 
-// TestPairArgSanitizationEmptyCharId verifies sanitization when args[16] is
-// completely absent (blank string) – also a "no pair" state.
+// TestPairArgSanitizationEmptyCharId verifies sanitization when OtherCharID
+// is completely absent (blank string) — also a "no pair" state.
 func TestPairArgSanitizationEmptyCharId(t *testing.T) {
-	clientArgs := make([]string, 26)
-	// args[16] left as "" (client did not send a pair char id)
-	clientArgs[17] = "50"  // some offset value
-	clientArgs[18] = "-25" // some offset value
+	ms := &packet.MSPacket{
+		// OtherCharID left as "" (client did not send a pair char id)
+		OtherName:  "50",
+		OtherEmote: "-25",
+	}
 
-	args := simulatePairArgInsertions(clientArgs)
-	applyPairSanitization(args)
+	applyPairSanitization(ms)
 
+	if ms.OtherName != "" {
+		t.Errorf("OtherName should be empty when no pair, got %q", ms.OtherName)
+	}
+	if ms.OtherEmote != "" {
+		t.Errorf("OtherEmote should be empty when no pair, got %q", ms.OtherEmote)
+	}
+}
+
+// TestParseMSClientToServerExpands verifies that a 26-field client-format MS
+// body, when parsed and re-encoded as a server packet, produces a 30-field
+// slice with OtherName / OtherEmote inserted at slots 17 / 18 (matching the
+// "two insertions" behavior the pre-refactor code handled inline).
+func TestParseMSClientToServerExpands(t *testing.T) {
+	body := make([]string, 26)
+	body[5] = "wit"
+	body[14] = "0"
+	body[16] = "-1"
+	body[17] = "0&0" // self_offset on the client side (client slot 17)
+	body[18] = "0"   // noninterrupting_preanim on the client side (client slot 18)
+
+	ms := packet.ParseMSClient(body)
+	if ms.OtherCharID != "-1" {
+		t.Errorf("OtherCharID = %q, want -1", ms.OtherCharID)
+	}
+	if ms.SelfOffset != "0&0" {
+		t.Errorf("SelfOffset = %q, want \"0&0\"", ms.SelfOffset)
+	}
+	if ms.NonInterruptingPreAnim != "0" {
+		t.Errorf("NonInterruptingPreAnim = %q, want \"0\"", ms.NonInterruptingPreAnim)
+	}
+
+	args := ms.ServerArgs()
+	if len(args) != 30 {
+		t.Fatalf("ServerArgs len = %d, want 30", len(args))
+	}
+	if args[16] != "-1" {
+		t.Errorf("server slot 16 (OtherCharID) = %q, want -1", args[16])
+	}
 	if args[17] != "" {
-		t.Errorf("args[17] (otherName) should be empty when no pair, got %q", args[17])
+		t.Errorf("server slot 17 (OtherName) should be empty for client-origin packet, got %q", args[17])
 	}
 	if args[18] != "" {
-		t.Errorf("args[18] (otherEmote) should be empty when no pair, got %q", args[18])
+		t.Errorf("server slot 18 (OtherEmote) should be empty for client-origin packet, got %q", args[18])
+	}
+	if args[19] != "0&0" {
+		t.Errorf("server slot 19 (SelfOffset) = %q, want \"0&0\"", args[19])
+	}
+	if args[22] != "0" {
+		t.Errorf("server slot 22 (NonInterruptingPreAnim) = %q, want \"0\"", args[22])
 	}
 }

@@ -29,6 +29,7 @@ import (
 
 	"github.com/MangosArentLiterature/Athena/internal/db"
 	"github.com/MangosArentLiterature/Athena/internal/logger"
+	"github.com/MangosArentLiterature/Athena/internal/packet"
 	"github.com/MangosArentLiterature/Athena/internal/settings"
 )
 
@@ -213,7 +214,11 @@ func startTormentDisconnect(client *Client) {
 // time.AfterFunc is used instead of a goroutine+sleep so no goroutine stack is
 // parked during the wait; the callback runs in a fresh goroutine only when the
 // timer fires.
-func handleTormentedIC(client *Client, args []string) {
+func handleTormentedIC(client *Client, ms *packet.MSPacket) {
+	// Encode once into wire-format args; reused for both the immediate echo
+	// and the deferred broadcast.
+	args := ms.ServerArgs()
+
 	// Echo to sender immediately so it looks like it went through.
 	client.SendPacket("MS", args...)
 
@@ -226,14 +231,13 @@ func handleTormentedIC(client *Client, args []string) {
 	// area changes or client disconnects.
 	targetArea := client.Area()
 	senderUID := client.Uid()
-	msgLabel := args[4]
-	argsCopy := append([]string(nil), args...)
+	msgLabel := ms.Message
 
 	time.AfterFunc(20*time.Second, func() {
 		// Deliver to everyone currently in the original area except the sender.
 		clients.ForEach(func(c *Client) {
 			if c.Area() == targetArea && c.Uid() != senderUID {
-				c.SendPacket("MS", argsCopy...)
+				c.SendPacket("MS", args...)
 			}
 		})
 		addToBuffer(client, "IC", "\""+msgLabel+"\"", false)
