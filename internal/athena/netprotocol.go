@@ -475,6 +475,7 @@ func pktIC(client *Client, p *packet.Packet) {
 	// Apply punishment text modifications
 	// Note: punishments is a copy of the active punishments
 	// State modifications must use UpdatePunishmentState to persist changes
+	var sfxCurseActive bool
 	for i := range punishments {
 		p := &punishments[i]
 
@@ -539,20 +540,23 @@ func pktIC(client *Client, p *packet.Packet) {
 		}
 
 		// SFX curse: replace the IC packet's SFX field with the cursed sound.
-		// Args[6] is sfx_name in the AO2 IC packet. AO2 clients (both desktop
-		// and WebAO) expect the bare filename stem here, NOT a full URL.
-		// Desktop clients resolve it against their local base/sounds/general/
-		// directory; WebAO prepends the configured asset URL. Sending a raw
-		// http(s) URL in sfx_name would cause both client types to fail
-		// silently. We therefore strip the path and extension, keeping only
-		// the filename stem (e.g. "aai-cammy-bubble"). We also force
-		// args[9] (sfx_delay) to "0" so the sound trigger fires immediately
-		// even when the sender's packet had no SFX configured.
+		// Args[6] is sfx_name in the AO2 IC packet. Both desktop AO2 and WebAO
+		// expect the bare filename stem here, NOT a full URL — desktop clients
+		// resolve it against their local base/sounds/general/ directory while
+		// WebAO prepends the configured asset URL and appends ".opus".
+		// Sending a raw http(s) URL in sfx_name would cause both clients to
+		// fail silently, so we strip path and extension, keeping only the stem
+		// (e.g. "aai-cammy-bubble"). args[9] (sfx_delay) is forced to "0" so
+		// the sound fires immediately regardless of what the sender's packet
+		// contained. sfxCurseActive is set so that a post-NoInterrupt fixup
+		// below can ensure the emote_modifier is in the set {1, 2, 6}; WebAO's
+		// chat_tick only plays the emote SFX for those three values, so
+		// emote_modifier 0 or 5 would otherwise silence the sound even though
+		// sfx_name is correctly populated.
 		if p.punishmentType == PunishmentSfxCurse && p.customData != "" {
 			args[6] = sfxBareNameFromURL(p.customData)
-			if args[9] == "" || args[9] == "-1" {
-				args[9] = "0"
-			}
+			args[9] = "0"
+			sfxCurseActive = true
 		}
 
 		// Shrink/Grow/Wide: rewrite args[19] (offset "x&y") to lock the
@@ -668,6 +672,17 @@ func pktIC(client *Client, p *packet.Packet) {
 			args[7] = "5"
 			args[22] = "1"
 		}
+	}
+
+	// SFX curse post-fixup: WebAO's chat_tick only triggers emote SFX playback
+	// when emote_modifier (args[7]) is 1, 2, or 6. When the value is 0 (idle)
+	// or 5 (talking, no preanim), WebAO silently skips the sound even though
+	// sfx_name is set. This runs after the NoInterrupt block above to avoid
+	// being overwritten. We promote the modifier to 1 and clear the preanim
+	// name to "-" so no visual preanim animation plays — only the SFX fires.
+	if sfxCurseActive && (args[7] == "0" || args[7] == "5") {
+		args[7] = "1"
+		args[1] = "-"
 	}
 
 	// Decode the message text once; reused for length validation, testimony navigation, and automod.
