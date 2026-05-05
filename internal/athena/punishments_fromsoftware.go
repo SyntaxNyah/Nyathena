@@ -77,19 +77,25 @@ func applyFromSoftware(text string) string {
 		return len(sorted[i]) > len(sorted[j])
 	})
 
+	// Pre-compute the asterisk replacement string for each bad word.
+	stars := make(map[string]string, len(sorted))
+	for _, w := range sorted {
+		stars[w] = strings.Repeat("*", utf8.RuneCountInString(w))
+	}
+
 	tokens := strings.Fields(text)
 	for i, tok := range tokens {
 		lower := strings.ToLower(tok)
 		for _, bad := range sorted {
-			stars := strings.Repeat("*", utf8.RuneCountInString(bad))
+			s := stars[bad]
 			// Replace all non-overlapping occurrences of bad within this token.
 			for {
 				idx := strings.Index(lower, bad)
 				if idx < 0 {
 					break
 				}
-				tok = tok[:idx] + stars + tok[idx+len(bad):]
-				lower = lower[:idx] + stars + lower[idx+len(bad):]
+				tok = tok[:idx] + s + tok[idx+len(bad):]
+				lower = lower[:idx] + s + lower[idx+len(bad):]
 			}
 		}
 		tokens[i] = tok

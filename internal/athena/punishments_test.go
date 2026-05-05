@@ -205,8 +205,11 @@ func TestApplyFromSoftware(t *testing.T) {
 		{"HOW", "**W"}, // case-insensitive substring
 
 		// Longer entry takes priority over a shorter overlapping entry.
-		// "bum" is 3 chars; "ho" won't split a region already starred by "bum".
-		{"bum", "***"},
+		// "bum" (3 chars) is applied before "ho" — "hobum" has "ho" at the
+		// start and "bum" at the end with no overlap, so both are starred.
+		// "bumhole": "bum"→"***" first, then "ho" inside "hole"→"**le".
+		{"hobum", "*****"},     // "ho"→"**" + "bum"→"***"; no overlap
+		{"bumhole", "*****le"}, // "bum"→"***" then "ho" in "hole"→"**le"
 	}
 	for _, tt := range tests {
 		got := applyFromSoftware(tt.input)
