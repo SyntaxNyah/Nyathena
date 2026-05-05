@@ -1553,6 +1553,8 @@ func ApplyPunishmentToText(text string, pType PunishmentType) string {
 		return applyTsuyodere(text)
 	case PunishmentOmnidere:
 		return applyOmnidere(text)
+	case PunishmentFromSoftware:
+		return applyFromSoftware(text)
 	default:
 		return text
 	}

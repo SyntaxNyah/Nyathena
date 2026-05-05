@@ -497,6 +497,7 @@ func NewServer(conf *settings.Config) (*Server, error) {
 	initCommands()
 	validateCommands()
 	initAutoMod(conf)
+	initFromSoftWords()
 	initCvote(conf)
 	initHotConfig(conf)
 	// Initialise the goroutine pool if a limit is configured.

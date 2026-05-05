@@ -33,7 +33,7 @@ var punishmentHelpGroups = []punishmentSubcategory{
 		desc: "Rewrite the target's IC text — light, mostly cosmetic.",
 		cmds: []string{"whisper", "backward", "stutterstep", "elongate", "uppercase", "lowercase",
 			"robotic", "alternating", "fancy", "uwu", "pirate", "shakespearean", "caveman",
-			"censor", "confused", "paranoid", "drunk", "hiccup", "whistle", "mumble",
+			"censor", "fromsoftware", "confused", "paranoid", "drunk", "hiccup", "whistle", "mumble",
 			"slang", "cherri", "morse", "vowelhell", "upsidedown", "autospell",
 			"thesaurusoverload", "valleygirl", "babytalk", "thirdperson",
 			"unreliablenarrator", "uncannyvalley", "chef", "karen", "passiveaggressive",

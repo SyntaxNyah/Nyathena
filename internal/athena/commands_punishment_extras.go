@@ -313,3 +313,8 @@ func cmdUngrow(client *Client, args []string, _ string) {
 func cmdUnwide(client *Client, args []string, _ string) {
 	removeOffsetPunishment(client, args, PunishmentWide, "wide")
 }
+
+// /fromsoftware
+func cmdFromSoftware(client *Client, args []string, usage string) {
+	cmdPunishment(client, args, usage, PunishmentFromSoftware)
+}
