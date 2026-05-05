@@ -1183,8 +1183,16 @@ func initCommands() {
 		"lag": {
 			handler:  cmdLag,
 			minArgs:  1,
-			usage:    "Usage: /lag [-d duration] [-r reason] <uid1>,<uid2>...",
-			desc:     "Batches and delays messages.",
+			usage:    "Usage: /lag <uid>",
+			desc:     "Adds a player's IPID to the lag list (ghost/delayed messages, silent disconnect).",
+			reqPerms: permissions.PermissionField["MUTE"],
+			category: "punishment",
+		},
+		"unlag": {
+			handler:  cmdUnlag,
+			minArgs:  1,
+			usage:    "Usage: /unlag <uid>",
+			desc:     "Removes a player's IPID from the lag list.",
 			reqPerms: permissions.PermissionField["MUTE"],
 			category: "punishment",
 		},

@@ -192,6 +192,12 @@ func startTormentDisconnect(client *Client) {
 	// Unpredictable initial delay (5 s to 4 min).
 	time.Sleep(time.Duration(5+tormentIntn(235)) * time.Second)
 
+	// Re-check that the IPID is still tormented before disconnecting so that
+	// /unlag (or /untorment) can cancel pending timers by removing the IPID.
+	if !isIPIDTormented(client.Ipid()) {
+		return
+	}
+
 	// Close the underlying connection directly — no prior packet — so the
 	// disconnect appears as natural causes rather than a visible kick.
 	client.conn.Close()
