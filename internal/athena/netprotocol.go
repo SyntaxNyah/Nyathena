@@ -21,6 +21,7 @@ import (
 	"encoding/base64"
 	"fmt"
 	"math/rand"
+	"path"
 	"regexp"
 	"strconv"
 	"strings"
@@ -537,10 +538,21 @@ func pktIC(client *Client, p *packet.Packet) {
 			args[4] = encode(modifiedMsg)
 		}
 
-		// SFX curse: replace the IC packet's SFX field with the cursed URL
-		// stored in customData. Args[6] is sfx_name in the AO2 IC packet.
+		// SFX curse: replace the IC packet's SFX field with the cursed sound.
+		// Args[6] is sfx_name in the AO2 IC packet. AO2 clients (both desktop
+		// and WebAO) expect the bare filename stem here, NOT a full URL.
+		// Desktop clients resolve it against their local base/sounds/general/
+		// directory; WebAO prepends the configured asset URL. Sending a raw
+		// http(s) URL in sfx_name would cause both client types to fail
+		// silently. We therefore strip the path and extension, keeping only
+		// the filename stem (e.g. "aai-cammy-bubble"). We also force
+		// args[9] (sfx_delay) to "0" so the sound trigger fires immediately
+		// even when the sender's packet had no SFX configured.
 		if p.punishmentType == PunishmentSfxCurse && p.customData != "" {
-			args[6] = p.customData
+			args[6] = sfxBareNameFromURL(p.customData)
+			if args[9] == "" || args[9] == "-1" {
+				args[9] = "0"
+			}
 		}
 
 		// Shrink/Grow/Wide: rewrite args[19] (offset "x&y") to lock the
@@ -1348,4 +1360,23 @@ func decode(s string) string {
 // encode returns a decoded string in AO2-encoded form.
 func encode(s string) string {
 	return encoder.Replace(s)
+}
+
+// sfxBareNameFromURL extracts the bare sound filename (no path, no extension)
+// from a full URL or /base/sounds/ path stored in a SFX curse's customData.
+// AO2 clients expect the sfx_name field to be just the filename stem (e.g.
+// "aai-cammy-bubble"), not a full URL. Desktop clients resolve it relative to
+// their local base/sounds/general/ directory; WebAO clients prepend their
+// configured asset URL. Sending the raw URL in sfx_name causes both to fail.
+// Examples:
+//
+//	"https://miku.pizza/base/sounds/general/aai-cammy-bubble.opus" → "aai-cammy-bubble"
+//	"/base/sounds/general/aai-cammy-bubble.opus"                   → "aai-cammy-bubble"
+//	"aai-cammy-bubble"                                             → "aai-cammy-bubble"
+func sfxBareNameFromURL(s string) string {
+	base := path.Base(s) // extracts the last path component, works on URLs too
+	if ext := path.Ext(base); ext != "" {
+		base = base[:len(base)-len(ext)]
+	}
+	return base
 }
