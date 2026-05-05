@@ -74,7 +74,7 @@ var punishmentHelpGroups = []punishmentSubcategory{
 	},
 	{
 		emoji: "⏱", title: "Timing & throughput",
-		desc: "Slow, speed up, lag, or pace the target's IC chat.",
+		desc: "Slow, speed up, or pace the target's IC chat.",
 		cmds: []string{"slowpoke", "fastspammer", "pause", "lag"},
 	},
 	{
@@ -91,7 +91,7 @@ var punishmentHelpGroups = []punishmentSubcategory{
 	{
 		emoji: "🧹", title: "Removal & control",
 		desc: "Lift active punishments.",
-		cmds: []string{"unpunish"},
+		cmds: []string{"unpunish", "unlag"},
 	},
 }
 

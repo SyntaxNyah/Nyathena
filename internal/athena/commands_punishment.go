@@ -171,8 +171,62 @@ func cmdFastspammer(client *Client, args []string, usage string) {
 	cmdPunishment(client, args, usage, PunishmentFastspammer)
 }
 
+// cmdLag adds a player's IPID to the torment list, applying the same fake-lag
+// effects as the automod torment action: ghost/delayed IC and OOC messages and
+// a silent random disconnect timer. Requires MUTE permission.
 func cmdLag(client *Client, args []string, usage string) {
-	cmdPunishment(client, args, usage, PunishmentLag)
+	if len(args) == 0 {
+		client.SendServerMessage("Not enough arguments:\n" + usage)
+		return
+	}
+	uid, err := strconv.Atoi(strings.TrimSpace(args[0]))
+	if err != nil {
+		client.SendServerMessage("Invalid UID.")
+		return
+	}
+	target, err := getClientByUid(uid)
+	if err != nil {
+		client.SendServerMessage("No client found with that UID.")
+		return
+	}
+	ipid := target.Ipid()
+	if isIPIDTormented(ipid) {
+		client.SendServerMessage(fmt.Sprintf("UID %d (IPID %s) is already lagged.", uid, ipid))
+		return
+	}
+	addTormentedIP(ipid)
+	// Start a disconnect timer for every session currently open under that IPID.
+	for _, c := range getClientsByIpid(ipid) {
+		go startTormentDisconnect(c)
+	}
+	client.SendServerMessage(fmt.Sprintf("Added UID %d (IPID %s) to the lag list.", uid, ipid))
+	addToBuffer(client, "CMD", fmt.Sprintf("lagged UID %d IPID %s", uid, ipid), true)
+}
+
+// cmdUnlag removes a player's IPID from the torment list. Requires MUTE permission.
+func cmdUnlag(client *Client, args []string, usage string) {
+	if len(args) == 0 {
+		client.SendServerMessage("Not enough arguments:\n" + usage)
+		return
+	}
+	uid, err := strconv.Atoi(strings.TrimSpace(args[0]))
+	if err != nil {
+		client.SendServerMessage("Invalid UID.")
+		return
+	}
+	target, err := getClientByUid(uid)
+	if err != nil {
+		client.SendServerMessage("No client found with that UID.")
+		return
+	}
+	ipid := target.Ipid()
+	if !isIPIDTormented(ipid) {
+		client.SendServerMessage(fmt.Sprintf("UID %d (IPID %s) is not on the lag list.", uid, ipid))
+		return
+	}
+	removeTormentedIP(ipid)
+	client.SendServerMessage(fmt.Sprintf("Removed UID %d (IPID %s) from the lag list.", uid, ipid))
+	addToBuffer(client, "CMD", fmt.Sprintf("unlagged UID %d IPID %s", uid, ipid), true)
 }
 
 func cmdSubtitles(client *Client, args []string, usage string) {
