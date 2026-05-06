@@ -297,6 +297,7 @@ type Client struct {
 	lastRandomBgTime    time.Time    // Tracks last /randombg time for cooldown
 	lastDJBgTime        time.Time    // Tracks last /bg time for DJ rate limit (1 min)
 	lastRandomSongTime  time.Time    // Tracks last /randomsong time for cooldown
+	lastTranslateTime   time.Time    // Tracks last /translate time for cooldown
 	forcePairUID        int          // UID of the client this client is force-paired with (-1 if none)
 	possessing          int          // UID of the client being possessed (-1 if not possessing anyone)
 	possessedPos        string       // Position of the possessed target (saved at time of possession)
@@ -1840,6 +1841,22 @@ func (client *Client) CheckAndUpdateRandomSongCooldown(cooldown time.Duration) (
 		return false, cooldown - elapsed
 	}
 	client.lastRandomSongTime = now
+	return true, 0
+}
+
+// CheckAndUpdateTranslateCooldown atomically checks whether the /translate
+// cooldown has elapsed and, if so, records the current time as the new
+// last-use timestamp.  It returns (true, 0) when the command is allowed, or
+// (false, remaining) when the client is still in cooldown.
+func (client *Client) CheckAndUpdateTranslateCooldown(cooldown time.Duration) (bool, time.Duration) {
+	client.mu.Lock()
+	defer client.mu.Unlock()
+	now := time.Now()
+	elapsed := now.Sub(client.lastTranslateTime)
+	if !client.lastTranslateTime.IsZero() && elapsed < cooldown {
+		return false, cooldown - elapsed
+	}
+	client.lastTranslateTime = now
 	return true, 0
 }
 

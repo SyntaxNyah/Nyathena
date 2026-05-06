@@ -223,3 +223,29 @@ func TestTranslatorCircuitBreaker(t *testing.T) {
 		t.Errorf("breaker-open call leaked to upstream: before=%d after=%d", before, calls.Load())
 	}
 }
+
+// TestCheckAndUpdateTranslateCooldown verifies that the per-client cooldown
+// gate correctly allows the first call and blocks subsequent calls within the
+// cooldown window.
+func TestCheckAndUpdateTranslateCooldown(t *testing.T) {
+	const testCooldown = 25 * time.Second
+	c := &Client{}
+
+	// First call should always be allowed.
+	ok, remaining := c.CheckAndUpdateTranslateCooldown(testCooldown)
+	if !ok {
+		t.Fatal("first CheckAndUpdateTranslateCooldown call should be allowed")
+	}
+	if remaining != 0 {
+		t.Errorf("remaining should be 0 on first allowed call, got %v", remaining)
+	}
+
+	// Immediate second call must be denied.
+	ok, remaining = c.CheckAndUpdateTranslateCooldown(testCooldown)
+	if ok {
+		t.Fatal("second CheckAndUpdateTranslateCooldown call within window should be denied")
+	}
+	if remaining <= 0 || remaining > testCooldown {
+		t.Errorf("remaining should be between 0 and %v, got %v", testCooldown, remaining)
+	}
+}
