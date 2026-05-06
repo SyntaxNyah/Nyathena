@@ -452,8 +452,9 @@ func cmdTranslate(client *Client, args []string, usage string) {
 	lang := args[len(args)-1]
 	text := strings.Join(args[:len(args)-1], " ")
 
+	isRandom := strings.EqualFold(lang, "random")
 	code := resolveLanguage(lang)
-	if !strings.EqualFold(lang, "random") && code == "" {
+	if !isRandom && code == "" {
 		client.SendServerMessage(fmt.Sprintf(
 			"Unknown language %q.\n"+
 				"  • English names — french, spanish, japanese, german, russian, arabic, ...\n"+
@@ -482,18 +483,24 @@ func cmdTranslate(client *Client, args []string, usage string) {
 		}
 	}
 
-	translated := applyTranslator(text, lang)
-	if translated == text {
-		// applyTranslator returned the original — either the API is down or the
-		// breaker is open.  Give the player a friendly message rather than
-		// silently echoing their input.
+	// Check if the API is reachable before burning the cooldown slot output.
+	// breakerOpen is a fast local check — no network round-trip.
+	if breakerOpen() {
 		client.SendServerMessage("Translation unavailable right now. Please try again later.")
 		return
 	}
 
-	displayLang := strings.ToUpper(lang)
-	if code != "" {
+	translated := applyTranslator(text, lang)
+
+	// Build a human-readable label for the output line.
+	var displayLang string
+	switch {
+	case isRandom:
+		displayLang = "random (multiple languages)"
+	case code != "":
 		displayLang = code
+	default:
+		displayLang = strings.ToUpper(lang)
 	}
 	client.SendServerMessage(fmt.Sprintf("[Translate → %s] %s", displayLang, translated))
 }

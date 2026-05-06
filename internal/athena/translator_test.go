@@ -228,10 +228,11 @@ func TestTranslatorCircuitBreaker(t *testing.T) {
 // gate correctly allows the first call and blocks subsequent calls within the
 // cooldown window.
 func TestCheckAndUpdateTranslateCooldown(t *testing.T) {
+	const testCooldown = 25 * time.Second
 	c := &Client{}
 
 	// First call should always be allowed.
-	ok, remaining := c.CheckAndUpdateTranslateCooldown(25 * time.Second)
+	ok, remaining := c.CheckAndUpdateTranslateCooldown(testCooldown)
 	if !ok {
 		t.Fatal("first CheckAndUpdateTranslateCooldown call should be allowed")
 	}
@@ -240,11 +241,11 @@ func TestCheckAndUpdateTranslateCooldown(t *testing.T) {
 	}
 
 	// Immediate second call must be denied.
-	ok, remaining = c.CheckAndUpdateTranslateCooldown(25 * time.Second)
+	ok, remaining = c.CheckAndUpdateTranslateCooldown(testCooldown)
 	if ok {
 		t.Fatal("second CheckAndUpdateTranslateCooldown call within window should be denied")
 	}
-	if remaining <= 0 || remaining > 25*time.Second {
-		t.Errorf("remaining should be between 0 and 25s, got %v", remaining)
+	if remaining <= 0 || remaining > testCooldown {
+		t.Errorf("remaining should be between 0 and %v, got %v", testCooldown, remaining)
 	}
 }
