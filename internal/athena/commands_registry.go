@@ -722,6 +722,27 @@ func initCommands() {
 			reqPerms: permissions.PermissionField["KICK"],
 			category: "moderation",
 		},
+		"translate": {
+			handler: cmdTranslate,
+			minArgs: 2,
+			usage: "Usage: /translate <text> <language>\n" +
+				"  <language> may be:\n" +
+				"    • an English name  — french, spanish, japanese, german, russian, arabic, ...\n" +
+				"    • an ISO code      — fr, es, ja, de, ru, ar, zh-CN, ...\n" +
+				"    • the keyword      — random  (each word translated into a different language)\n" +
+				"\n" +
+				"Examples:\n" +
+				"  /translate はっはっはっ！！うっせえ、ボケ！！ english\n" +
+				"  /translate Good morning! japanese\n" +
+				"  /translate Hello world french\n" +
+				"\n" +
+				"Has a 25-second cooldown per player (configurable via translate_cooldown in config.toml).\n" +
+				"Requires enable_translator_punishment = true and translator_api_key set in config.toml.\n" +
+				"Moderators bypass the cooldown.",
+			desc:     "Translates text into another language using DeepL. Available to all players with a 25-second cooldown.",
+			reqPerms: permissions.PermissionField["NONE"],
+			category: "general",
+		},
 		"areainiswap": {
 			handler:  cmdAreaIniswap,
 			minArgs:  1,

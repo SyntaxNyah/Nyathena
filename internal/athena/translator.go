@@ -32,6 +32,10 @@ import (
 	"github.com/MangosArentLiterature/Athena/internal/logger"
 )
 
+// translatorDefaultCooldown is the fallback cooldown for /translate when the
+// config value is zero or negative.
+const translatorDefaultCooldown = 25 * time.Second
+
 // translator targets DeepL's REST API.  The free tier
 // (https://api-free.deepl.com/v2/translate, 500 000 chars/month) fits the
 // "lenient free key" brief; pro users can point translator_api_url at
@@ -419,4 +423,77 @@ func applyTranslatorRandom(ctx context.Context, text string) string {
 	wg.Wait()
 
 	return strings.Join(out, " ")
+}
+
+// cmdTranslate is the /translate command handler.  Any player may use it to
+// translate a snippet of text via DeepL.  Requires enable_translator_punishment
+// to be true and translator_api_key to be set — if the punishment system is
+// configured, the same key and endpoint are reused so no extra configuration
+// is needed.
+//
+// Usage: /translate <text> <language>
+//
+// The last whitespace-separated token is taken as the target language; all
+// preceding tokens are the text to translate.  This matches the natural usage
+// shown in the problem statement:
+//
+//	/translate はっはっはっ！！うっせえ、ボケ！！ english
+func cmdTranslate(client *Client, args []string, usage string) {
+	if !translatorEnabled() {
+		client.SendServerMessage(
+			"The translation feature is not available on this server.\n" +
+				"(Requires enable_translator_punishment = true and translator_api_key set in config.toml.)")
+		return
+	}
+
+	// args has at least 2 entries (minArgs = 2): text token(s) + language.
+	// The registry joined them as individual whitespace tokens, so the last
+	// element is always the target language and the rest is the text.
+	lang := args[len(args)-1]
+	text := strings.Join(args[:len(args)-1], " ")
+
+	code := resolveLanguage(lang)
+	if !strings.EqualFold(lang, "random") && code == "" {
+		client.SendServerMessage(fmt.Sprintf(
+			"Unknown language %q.\n"+
+				"  • English names — french, spanish, japanese, german, russian, arabic, ...\n"+
+				"  • ISO codes     — fr, es, ja, de, ru, ar, zh-CN, ...\n"+
+				"  • Keyword       — random  (each word translated into a different language)\n"+
+				"Example: /translate Good morning! japanese",
+			lang))
+		return
+	}
+
+	// Enforce per-player cooldown.  Moderators bypass it entirely.
+	cd := translatorDefaultCooldown
+	if config != nil && config.TranslateCooldown > 0 {
+		cd = time.Duration(config.TranslateCooldown) * time.Second
+	}
+	if client.Perms() == 0 {
+		if ok, remaining := client.CheckAndUpdateTranslateCooldown(cd); !ok {
+			secs := int(remaining.Seconds()) + 1
+			unit := "seconds"
+			if secs == 1 {
+				unit = "second"
+			}
+			client.SendServerMessage(fmt.Sprintf(
+				"Please wait %d %s before using /translate again.", secs, unit))
+			return
+		}
+	}
+
+	translated := applyTranslator(text, lang)
+	if translated == text {
+		// applyTranslator returned the original — either the API is down or the
+		// breaker is open.  Give the player a friendly message rather than
+		// silently echoing their input.
+		client.SendServerMessage("Translation unavailable right now. Please try again later.")
+		return
+	}
+
+	displayLang := strings.ToUpper(lang)
+	if code != "" {
+		displayLang = code
+	}
+	client.SendServerMessage(fmt.Sprintf("[Translate → %s] %s", displayLang, translated))
 }

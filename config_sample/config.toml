@@ -425,6 +425,13 @@ translator_api_url = "https://api-free.deepl.com/v2/translate"
 # Default: "" (disabled).
 translator_api_key = ""
 
+# Cooldown in seconds for the /translate command (available to all players).
+# This is separate from the /translator punishment — /translate lets any player
+# translate a snippet of text on demand.  Set to 0 to remove the cooldown.
+# Moderators always bypass the cooldown regardless of this value.
+# Default: 25.
+translate_cooldown = 25
+
 # ─────────────────────────────────────────────────────────────────────────────
 # Casino & Player Account System
 # ─────────────────────────────────────────────────────────────────────────────
