@@ -127,7 +127,6 @@ type Area struct {
 	icMessages          map[string][]icMsg // per-IPID IC message history for icwarp
 	logSilenced         bool               // whether area-log writing and modcall forwarding are suppressed
 	voiceAllowed        bool               // runtime toggle: whether voice chat is permitted in this area
-	musicFrozen         bool               // hard music lock: no one (including CMs/DJs/mods) can change music
 }
 
 type AreaData struct {
@@ -772,22 +771,6 @@ func (a *Area) LockMusic() bool {
 func (a *Area) SetLockMusic(b bool) {
 	a.mu.Lock()
 	a.data.Lock_music = b
-	a.mu.Unlock()
-}
-
-// MusicFrozen returns whether the area has a hard music lock that blocks
-// regular players and DJs from changing the music. Moderators (including
-// shadow mods) and CMs are exempt and can still change music normally.
-func (a *Area) MusicFrozen() bool {
-	a.mu.Lock()
-	defer a.mu.Unlock()
-	return a.musicFrozen
-}
-
-// SetMusicFrozen sets or clears the hard music lock.
-func (a *Area) SetMusicFrozen(b bool) {
-	a.mu.Lock()
-	a.musicFrozen = b
 	a.mu.Unlock()
 }
 
