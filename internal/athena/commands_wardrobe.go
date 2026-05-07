@@ -19,6 +19,7 @@ package athena
 import (
 	"errors"
 	"fmt"
+	"strconv"
 	"strings"
 
 	"github.com/MangosArentLiterature/Athena/internal/db"
@@ -75,8 +76,8 @@ func cmdFavourite(client *Client, args []string, _ string) {
 	}
 	client.SendServerMessage(fmt.Sprintf(
 		"⭐ Added %v to your wardrobe favourites!\n"+
-			"Use /wardrobe to view your list, or /wardrobe %v to swap to them.",
-		canonicalName, canonicalName))
+			"Use /wardrobe to view your list, or /wardrobe <number> to swap by slot.",
+		canonicalName))
 }
 
 // Handles /wardrobe [char name]
@@ -95,29 +96,62 @@ func cmdWardrobe(client *Client, args []string, _ string) {
 	username := client.ModName()
 
 	// ── Swap path ────────────────────────────────────────────────────────────
-	// Resolve character and check membership with a single indexed DB lookup
-	// instead of fetching the entire favourites list just to scan it.
 	if len(args) > 0 {
-		charName := strings.Join(args, " ")
-		charID := getCharacterID(charName)
-		if charID == -1 {
-			client.SendServerMessage(fmt.Sprintf("Character \"%v\" was not found in the character list.", charName))
-			return
-		}
-		canonicalName := characters[charID]
+		var charID int
+		var canonicalName string
 
-		isFav, err := db.IsFavourite(username, canonicalName)
-		if err != nil {
-			client.SendServerMessage("Failed to check wardrobe. Please try again.")
-			return
+		// Allow swapping by wardrobe slot number (e.g. /wardrobe 1).
+		if len(args) == 1 {
+			if n, err := strconv.Atoi(args[0]); err == nil {
+				favourites, err := db.GetFavourites(username)
+				if err != nil {
+					client.SendServerMessage("Failed to load wardrobe. Please try again.")
+					return
+				}
+				if n < 1 || n > len(favourites) {
+					client.SendServerMessage(fmt.Sprintf(
+						"Wardrobe slot %d does not exist. You have %d character(s) saved.\n"+
+							"Use /wardrobe to see your list.",
+						n, len(favourites)))
+					return
+				}
+				canonicalName = favourites[n-1]
+				charID = getCharacterID(canonicalName)
+				if charID == -1 {
+					client.SendServerMessage(fmt.Sprintf(
+						"Character \"%v\" (slot %d) was not found in the character list.", canonicalName, n))
+					return
+				}
+				goto doSwap
+			}
 		}
-		if !isFav {
-			client.SendServerMessage(fmt.Sprintf(
-				"\"%v\" is not in your wardrobe.\n"+
-					"Use /favourite %v to add them first, then /wardrobe %v to swap.",
-				canonicalName, canonicalName, canonicalName))
-			return
+
+		// Name-based swap: resolve character and check membership with a single
+		// indexed DB lookup instead of fetching the entire favourites list.
+		{
+			charName := strings.Join(args, " ")
+			charID = getCharacterID(charName)
+			if charID == -1 {
+				client.SendServerMessage(fmt.Sprintf("Character \"%v\" was not found in the character list.", charName))
+				return
+			}
+			canonicalName = characters[charID]
+
+			isFav, err := db.IsFavourite(username, canonicalName)
+			if err != nil {
+				client.SendServerMessage("Failed to check wardrobe. Please try again.")
+				return
+			}
+			if !isFav {
+				client.SendServerMessage(fmt.Sprintf(
+					"\"%v\" is not in your wardrobe.\n"+
+						"Use /favourite %v to add them first, then /wardrobe %v to swap.",
+					canonicalName, canonicalName, canonicalName))
+				return
+			}
 		}
+
+	doSwap:
 
 		// Respect char-stuck punishment.
 		if stuckID := client.charStuckID(); stuckID >= 0 && charID != stuckID {
@@ -168,7 +202,7 @@ func cmdWardrobe(client *Client, args []string, _ string) {
 	for i, name := range favourites {
 		fmt.Fprintf(&sb, "  %2d. %v\n", i+1, name)
 	}
-	sb.WriteString("\nUse /wardrobe <char name> to swap to any character above.\n")
+	sb.WriteString("\nUse /wardrobe <number> or /wardrobe <char name> to swap.\n")
 	sb.WriteString("Use /favourite <char name> to add or remove characters.")
 	client.SendServerMessage(sb.String())
 }
