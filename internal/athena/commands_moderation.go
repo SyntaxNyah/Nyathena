@@ -666,15 +666,15 @@ func cmdPlayers(client *Client, args []string, _ string) {
 	targetArea := client.Area()
 
 	// Group clients by area in a single snapshot pass.
-	// Non-mods are always limited to their own area, regardless of the -a flag.
+	// When -a is set (i.e. /gas), collect from all areas regardless of mod status
+	// so non-mods can see which other areas are populated (without shownames).
 	type areaClients struct {
 		list []*Client
 	}
 	grouped := make(map[*area.Area]*areaClients, len(areas))
-	allFlag := *all && isMod
 	clients.ForEach(func(c *Client) {
 		a := c.Area()
-		if !allFlag && a != targetArea {
+		if !*all && a != targetArea {
 			return
 		}
 		if !isAdmin && c.Hidden() {
@@ -745,10 +745,12 @@ func cmdPlayers(client *Client, args []string, _ string) {
 
 	var out strings.Builder
 	out.WriteString("\nPlayers\n----------\n")
-	if *all && isMod {
+	if *all {
 		// /gas hides empty areas to keep the list usable on servers with many areas.
 		// "Empty" = nobody visible to the requester. Admins still see hidden players,
 		// so an area with only hidden occupants is empty for everyone else but not them.
+		// Non-mods see all populated areas but without shownames for players outside
+		// their own area (privacy rule — handled by sameArea in printArea).
 		shown := 0
 		hiddenAreas := 0
 		for _, a := range areas {
