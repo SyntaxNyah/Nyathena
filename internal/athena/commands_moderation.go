@@ -411,6 +411,14 @@ func cmdLogin(client *Client, args []string, _ string) {
 		client.SetModName(args[0])
 		// Link the current IPID to this account so leaderboards can show names.
 		db.LinkIPIDToUser(args[0], client.Ipid()) //nolint:errcheck
+		// Backfill IGNORER_USERNAME on any ignore rows added before this login,
+		// then merge any cross-IPID ignores from this account into memory.
+		db.BackfillIgnoreUsername(client.Ipid(), args[0]) //nolint:errcheck
+		if extraIgnores, err := db.LoadIgnoredIPIDs(client.Ipid(), args[0]); err == nil {
+			for _, ipid := range extraIgnores {
+				client.AddIgnoredIPID(ipid)
+			}
+		}
 		// Restore the account's gamble-hide preference for this session.
 		if hide, err := db.GetGambleHide(args[0]); err == nil {
 			client.SetGambleHide(hide)
@@ -654,14 +662,16 @@ func cmdPlayers(client *Client, args []string, _ string) {
 
 	isAdmin := permissions.HasPermission(client.Perms(), permissions.PermissionField["ADMIN"])
 	hasBanInfo := permissions.HasPermission(client.Perms(), permissions.PermissionField["BAN_INFO"])
+	isMod := permissions.IsModerator(client.Perms())
 	targetArea := client.Area()
 
 	// Group clients by area in a single snapshot pass.
+	// Non-mods are always limited to their own area, regardless of the -a flag.
 	type areaClients struct {
 		list []*Client
 	}
 	grouped := make(map[*area.Area]*areaClients, len(areas))
-	allFlag := *all
+	allFlag := *all && isMod
 	clients.ForEach(func(c *Client) {
 		a := c.Area()
 		if !allFlag && a != targetArea {
@@ -679,7 +689,9 @@ func cmdPlayers(client *Client, args []string, _ string) {
 	})
 
 	// writeEntry appends a single client's info to the builder.
-	writeEntry := func(b *strings.Builder, c *Client) {
+	// sameArea controls whether the showname is revealed: it is only shown
+	// when the displayed client shares the requester's area (privacy rule).
+	writeEntry := func(b *strings.Builder, c *Client, sameArea bool) {
 		if c.Hidden() {
 			b.WriteString("[HIDDEN] ")
 		}
@@ -688,6 +700,13 @@ func cmdPlayers(client *Client, args []string, _ string) {
 			prefix += " "
 		}
 		fmt.Fprintf(b, "%s[%v] %v\n", prefix, c.Uid(), c.CurrentCharacter())
+		// Show showname only to players in the same area — prevents stalking
+		// across rooms while still letting area-mates see IC display names.
+		if sameArea {
+			if sn := c.EffectiveShowname(); sn != "" {
+				fmt.Fprintf(b, "Showname: %v\n", sn)
+			}
+		}
 		if hasBanInfo {
 			if permissions.IsModerator(c.Perms()) {
 				// Shadow mods: hide the entire "Mod:" line from non-admin viewers.
@@ -714,16 +733,19 @@ func cmdPlayers(client *Client, args []string, _ string) {
 	printArea := func(b *strings.Builder, a *area.Area) {
 		count := a.VisiblePlayerCount()
 		fmt.Fprintf(b, "%v:\n%v players online.\n", a.Name(), count)
+		// Mods always see shownames for every area. Regular players only see
+		// shownames for occupants in their own area (privacy rule).
+		sameArea := a == targetArea || isMod
 		if ac := grouped[a]; ac != nil {
 			for _, c := range ac.list {
-				writeEntry(b, c)
+				writeEntry(b, c, sameArea)
 			}
 		}
 	}
 
 	var out strings.Builder
 	out.WriteString("\nPlayers\n----------\n")
-	if *all {
+	if *all && isMod {
 		// /gas hides empty areas to keep the list usable on servers with many areas.
 		// "Empty" = nobody visible to the requester. Admins still see hidden players,
 		// so an area with only hidden occupants is empty for everyone else but not them.
@@ -1785,10 +1807,48 @@ func cmdCharCurse(client *Client, args []string, usage string) {
 // cmdIgnore permanently ignores a user based on their IPID so their IC and OOC
 // messages are no longer shown to the caller. The ignore persists across
 // reconnections. The target is warned without revealing the caller's IPID.
+// Usage: /ignore <uid> | /ignore list
 func cmdIgnore(client *Client, args []string, usage string) {
+	// /ignore list — show the caller's numbered ignore list.
+	if args[0] == "list" {
+		username := ""
+		if client.Authenticated() {
+			username = client.ModName()
+		}
+		list, err := db.LoadIgnoredList(client.Ipid(), username)
+		if err != nil {
+			client.SendServerMessage("Failed to load ignore list.")
+			return
+		}
+		if len(list) == 0 {
+			client.SendServerMessage("Your ignore list is empty.")
+			return
+		}
+		entrySuffix := "ies"
+		if len(list) == 1 {
+			entrySuffix = "y"
+		}
+		var sb strings.Builder
+		sb.WriteString(fmt.Sprintf("Ignore list (%d entr%s):\n", len(list), entrySuffix))
+		for _, e := range list {
+			label := e.IPID
+			if e.Showname != "" && e.OOC != "" {
+				label = fmt.Sprintf("%s (OOC: %s) — %s", e.Showname, e.OOC, e.IPID)
+			} else if e.Showname != "" {
+				label = fmt.Sprintf("%s — %s", e.Showname, e.IPID)
+			} else if e.OOC != "" {
+				label = fmt.Sprintf("%s — %s", e.OOC, e.IPID)
+			}
+			sb.WriteString(fmt.Sprintf("  %d. %s\n", e.Position, label))
+		}
+		sb.WriteString("Use /unignore <number> to remove an entry.")
+		client.SendServerMessage(sb.String())
+		return
+	}
+
 	uid, err := strconv.Atoi(args[0])
 	if err != nil {
-		client.SendServerMessage("Invalid UID.")
+		client.SendServerMessage("Invalid UID. Use /ignore list to view your ignore list.")
 		return
 	}
 	target, err := getClientByUid(uid)
@@ -1807,49 +1867,81 @@ func cmdIgnore(client *Client, args []string, usage string) {
 	}
 
 	targetIPID := target.Ipid()
+	targetShowname := target.EffectiveShowname()
+	targetOOCName := target.OOCName()
+
+	username := ""
+	if client.Authenticated() {
+		username = client.ModName()
+	}
+
 	if client.IgnoresIPID(targetIPID) {
+		// Already ignoring — update the stored display names in case they changed.
+		db.UpdateIgnoredLabel(client.Ipid(), username, targetIPID, targetShowname, targetOOCName) //nolint:errcheck
 		client.SendServerMessage("You are already permanently ignoring that user.")
 		return
 	}
 
 	client.AddIgnoredIPID(targetIPID)
-	if err := db.AddIgnoredIP(client.Ipid(), targetIPID); err != nil {
+	if err := db.AddIgnoredIP(client.Ipid(), username, targetIPID, targetShowname, targetOOCName); err != nil {
 		logger.LogErrorf("Failed to persist ignore for %v -> %v: %v", client.Ipid(), targetIPID, err)
 	}
 
 	// Warn the target without revealing the ignorer's IPID.
 	target.SendServerMessage("⚠️ Warning: You have been permanently ignored by another user. This will persist across your reconnections.")
 
-	client.SendServerMessage(fmt.Sprintf("You are now permanently ignoring user [%d]. This will persist across their reconnections.", uid))
+	client.SendServerMessage(fmt.Sprintf("You are now permanently ignoring user [%d]. This will persist across their reconnections. Use /ignore list to view your full ignore list.", uid))
 	addToBuffer(client, "CMD", fmt.Sprintf("permanently ignored UID %d (IPID: %v)", uid, targetIPID), false)
 }
 
-// cmdUnignore removes a permanent IPID-based ignore for the given UID.
+// cmdUnignore removes a permanent IPID-based ignore. The argument may be either
+// an online UID (existing behaviour) or a 1-based list-position index from
+// /ignore list (new — allows unignoring offline users).
 func cmdUnignore(client *Client, args []string, usage string) {
-	uid, err := strconv.Atoi(args[0])
+	n, err := strconv.Atoi(args[0])
 	if err != nil {
-		client.SendServerMessage("Invalid UID.")
-		return
-	}
-	target, err := getClientByUid(uid)
-	if err != nil {
-		client.SendServerMessage("Client not found.")
+		client.SendServerMessage("Invalid argument. Use /unignore <uid> for an online user or /unignore <number> from /ignore list.")
 		return
 	}
 
-	targetIPID := target.Ipid()
-	if !client.IgnoresIPID(targetIPID) {
-		client.SendServerMessage("You are not ignoring that user.")
+	username := ""
+	if client.Authenticated() {
+		username = client.ModName()
+	}
+
+	// First attempt: treat as an online UID (original behaviour).
+	if target, clientErr := getClientByUid(n); clientErr == nil {
+		targetIPID := target.Ipid()
+		if !client.IgnoresIPID(targetIPID) {
+			client.SendServerMessage("You are not ignoring that user.")
+			return
+		}
+		client.RemoveIgnoredIPID(targetIPID)
+		if err := db.RemoveIgnoredIPByKnownIPID(client.Ipid(), username, targetIPID); err != nil {
+			logger.LogErrorf("Failed to remove persistent ignore for %v -> %v: %v", client.Ipid(), targetIPID, err)
+		}
+		client.SendServerMessage(fmt.Sprintf("Unignored user [%d].", n))
+		addToBuffer(client, "CMD", fmt.Sprintf("unignored UID %d (IPID: %v)", n, targetIPID), false)
 		return
 	}
 
+	// Fallback: treat as a list-position index so offline users can be unignored.
+	list, listErr := db.LoadIgnoredList(client.Ipid(), username)
+	if listErr != nil {
+		client.SendServerMessage("Failed to load ignore list.")
+		return
+	}
+	if n < 1 || n > len(list) {
+		client.SendServerMessage(fmt.Sprintf("No entry at position %d. Use /ignore list to see your current list.", n))
+		return
+	}
+	targetIPID := list[n-1].IPID
 	client.RemoveIgnoredIPID(targetIPID)
-	if err := db.RemoveIgnoredIP(client.Ipid(), targetIPID); err != nil {
+	if err := db.RemoveIgnoredIPByKnownIPID(client.Ipid(), username, targetIPID); err != nil {
 		logger.LogErrorf("Failed to remove persistent ignore for %v -> %v: %v", client.Ipid(), targetIPID, err)
 	}
-
-	client.SendServerMessage(fmt.Sprintf("Unignored user [%d].", uid))
-	addToBuffer(client, "CMD", fmt.Sprintf("unignored UID %d (IPID: %v)", uid, targetIPID), false)
+	client.SendServerMessage(fmt.Sprintf("Unignored list entry #%d (IPID: %s).", n, targetIPID))
+	addToBuffer(client, "CMD", fmt.Sprintf("unignored list entry #%d (IPID: %v)", n, targetIPID), false)
 }
 
 // cmdModnote manages per-IPID freeform moderator notes.
