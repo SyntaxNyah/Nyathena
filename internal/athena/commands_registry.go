@@ -450,6 +450,22 @@ func initCommands() {
 			reqPerms: permissions.PermissionField["CM"],
 			category: "area",
 		},
+		"musiclock": {
+			handler:  cmdMusicLock,
+			minArgs:  0,
+			usage:    "Usage: /musiclock",
+			desc:     "Hard-freezes music in the area. Regular players and DJs cannot change music until /musicunlock. Moderators and CMs remain exempt.",
+			reqPerms: permissions.PermissionField["CM"],
+			category: "area",
+		},
+		"musicunlock": {
+			handler:  cmdMusicUnlock,
+			minArgs:  0,
+			usage:    "Usage: /musicunlock",
+			desc:     "Lifts the hard music freeze set by /musiclock, restoring normal music permissions.",
+			reqPerms: permissions.PermissionField["CM"],
+			category: "area",
+		},
 		"log": {
 			handler:  cmdLog,
 			minArgs:  1,
