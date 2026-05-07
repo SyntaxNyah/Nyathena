@@ -411,6 +411,14 @@ func cmdLogin(client *Client, args []string, _ string) {
 		client.SetModName(args[0])
 		// Link the current IPID to this account so leaderboards can show names.
 		db.LinkIPIDToUser(args[0], client.Ipid()) //nolint:errcheck
+		// Backfill IGNORER_USERNAME on any ignore rows added before this login,
+		// then merge any cross-IPID ignores from this account into memory.
+		db.BackfillIgnoreUsername(client.Ipid(), args[0]) //nolint:errcheck
+		if extraIgnores, err := db.LoadIgnoredIPIDs(client.Ipid(), args[0]); err == nil {
+			for _, ipid := range extraIgnores {
+				client.AddIgnoredIPID(ipid)
+			}
+		}
 		// Restore the account's gamble-hide preference for this session.
 		if hide, err := db.GetGambleHide(args[0]); err == nil {
 			client.SetGambleHide(hide)
@@ -1785,10 +1793,41 @@ func cmdCharCurse(client *Client, args []string, usage string) {
 // cmdIgnore permanently ignores a user based on their IPID so their IC and OOC
 // messages are no longer shown to the caller. The ignore persists across
 // reconnections. The target is warned without revealing the caller's IPID.
+// Usage: /ignore <uid> | /ignore list
 func cmdIgnore(client *Client, args []string, usage string) {
+	// /ignore list — show the caller's numbered ignore list.
+	if args[0] == "list" {
+		username := ""
+		if client.Authenticated() {
+			username = client.ModName()
+		}
+		list, err := db.LoadIgnoredList(client.Ipid(), username)
+		if err != nil {
+			client.SendServerMessage("Failed to load ignore list.")
+			return
+		}
+		if len(list) == 0 {
+			client.SendServerMessage("Your ignore list is empty.")
+			return
+		}
+		var sb strings.Builder
+		sb.WriteString(fmt.Sprintf("Ignore list (%d entr%s):\n", len(list), func() string {
+			if len(list) == 1 {
+				return "y"
+			}
+			return "ies"
+		}()))
+		for _, e := range list {
+			sb.WriteString(fmt.Sprintf("  %d. %s\n", e.Position, e.IPID))
+		}
+		sb.WriteString("Use /unignore <number> to remove an entry.")
+		client.SendServerMessage(sb.String())
+		return
+	}
+
 	uid, err := strconv.Atoi(args[0])
 	if err != nil {
-		client.SendServerMessage("Invalid UID.")
+		client.SendServerMessage("Invalid argument. Use /ignore <uid> to ignore someone or /ignore list to view your list.")
 		return
 	}
 	target, err := getClientByUid(uid)
@@ -1812,44 +1851,70 @@ func cmdIgnore(client *Client, args []string, usage string) {
 		return
 	}
 
+	username := ""
+	if client.Authenticated() {
+		username = client.ModName()
+	}
 	client.AddIgnoredIPID(targetIPID)
-	if err := db.AddIgnoredIP(client.Ipid(), targetIPID); err != nil {
+	if err := db.AddIgnoredIP(client.Ipid(), username, targetIPID); err != nil {
 		logger.LogErrorf("Failed to persist ignore for %v -> %v: %v", client.Ipid(), targetIPID, err)
 	}
 
 	// Warn the target without revealing the ignorer's IPID.
 	target.SendServerMessage("⚠️ Warning: You have been permanently ignored by another user. This will persist across your reconnections.")
 
-	client.SendServerMessage(fmt.Sprintf("You are now permanently ignoring user [%d]. This will persist across their reconnections.", uid))
+	client.SendServerMessage(fmt.Sprintf("You are now permanently ignoring user [%d]. This will persist across their reconnections. Use /ignore list to view your full ignore list.", uid))
 	addToBuffer(client, "CMD", fmt.Sprintf("permanently ignored UID %d (IPID: %v)", uid, targetIPID), false)
 }
 
-// cmdUnignore removes a permanent IPID-based ignore for the given UID.
+// cmdUnignore removes a permanent IPID-based ignore. The argument may be either
+// an online UID (existing behaviour) or a 1-based list-position index from
+// /ignore list (new — allows unignoring offline users).
 func cmdUnignore(client *Client, args []string, usage string) {
-	uid, err := strconv.Atoi(args[0])
+	n, err := strconv.Atoi(args[0])
 	if err != nil {
-		client.SendServerMessage("Invalid UID.")
-		return
-	}
-	target, err := getClientByUid(uid)
-	if err != nil {
-		client.SendServerMessage("Client not found.")
+		client.SendServerMessage("Invalid argument. Use /unignore <uid> for an online user or /unignore <number> from /ignore list.")
 		return
 	}
 
-	targetIPID := target.Ipid()
-	if !client.IgnoresIPID(targetIPID) {
-		client.SendServerMessage("You are not ignoring that user.")
+	username := ""
+	if client.Authenticated() {
+		username = client.ModName()
+	}
+
+	// First attempt: treat as an online UID (original behaviour).
+	if target, uidErr := getClientByUid(n); uidErr == nil {
+		targetIPID := target.Ipid()
+		if !client.IgnoresIPID(targetIPID) {
+			client.SendServerMessage("You are not ignoring that user.")
+			return
+		}
+		client.RemoveIgnoredIPID(targetIPID)
+		if err := db.RemoveIgnoredIPByKnownIPID(client.Ipid(), username, targetIPID); err != nil {
+			logger.LogErrorf("Failed to remove persistent ignore for %v -> %v: %v", client.Ipid(), targetIPID, err)
+		}
+		client.SendServerMessage(fmt.Sprintf("Unignored user [%d].", n))
+		addToBuffer(client, "CMD", fmt.Sprintf("unignored UID %d (IPID: %v)", n, targetIPID), false)
 		return
 	}
 
+	// Fallback: treat as a list-position index so offline users can be unignored.
+	list, listErr := db.LoadIgnoredList(client.Ipid(), username)
+	if listErr != nil {
+		client.SendServerMessage("Failed to load ignore list.")
+		return
+	}
+	if n < 1 || n > len(list) {
+		client.SendServerMessage(fmt.Sprintf("No entry at position %d. Use /ignore list to see your current list.", n))
+		return
+	}
+	targetIPID := list[n-1].IPID
 	client.RemoveIgnoredIPID(targetIPID)
-	if err := db.RemoveIgnoredIP(client.Ipid(), targetIPID); err != nil {
+	if err := db.RemoveIgnoredIPByKnownIPID(client.Ipid(), username, targetIPID); err != nil {
 		logger.LogErrorf("Failed to remove persistent ignore for %v -> %v: %v", client.Ipid(), targetIPID, err)
 	}
-
-	client.SendServerMessage(fmt.Sprintf("Unignored user [%d].", uid))
-	addToBuffer(client, "CMD", fmt.Sprintf("unignored UID %d (IPID: %v)", uid, targetIPID), false)
+	client.SendServerMessage(fmt.Sprintf("Unignored list entry #%d (IPID: %s).", n, targetIPID))
+	addToBuffer(client, "CMD", fmt.Sprintf("unignored list entry #%d (IPID: %v)", n, targetIPID), false)
 }
 
 // cmdModnote manages per-IPID freeform moderator notes.

@@ -136,7 +136,7 @@ const MaxChipBalance = 10_000_000
 
 // Database version.
 // This should be incremented whenever changes are made to the DB that require existing databases to upgrade.
-const ver = 18
+const ver = 20
 
 // MaxFavourites is the maximum number of favourite characters a player can save.
 const MaxFavourites = 100
@@ -251,8 +251,9 @@ func Open() error {
 		return err
 	}
 	_, err = db.Exec(`CREATE TABLE IF NOT EXISTS IGNORED_IPS(
-		IGNORER_IPID TEXT NOT NULL,
-		IGNORED_IPID TEXT NOT NULL,
+		IGNORER_IPID     TEXT NOT NULL,
+		IGNORED_IPID     TEXT NOT NULL,
+		IGNORER_USERNAME TEXT NOT NULL DEFAULT '',
 		PRIMARY KEY (IGNORER_IPID, IGNORED_IPID)
 	)`)
 	if err != nil {
@@ -600,6 +601,42 @@ func upgradeDB(v int) error {
 			}
 		}
 		if _, err := db.Exec("PRAGMA user_version = 19"); err != nil {
+			return err
+		}
+		fallthrough
+	case 19:
+		// Add IGNORER_USERNAME to IGNORED_IPS so the ignore list is linked to a
+		// player account rather than just an IPID. This lets the list follow the
+		// player across IP changes and enables the numbered /ignore list and
+		// offline /unignore <N> workflow. Existing rows are backfilled from the
+		// USERS table (where the account IPID matches). Fresh databases get the
+		// column from the CREATE TABLE statement in Open().
+		var ignoredIPsExists int
+		db.QueryRow("SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='IGNORED_IPS'").Scan(&ignoredIPsExists) //nolint:errcheck
+		if ignoredIPsExists > 0 {
+			if _, err := db.Exec("ALTER TABLE IGNORED_IPS ADD COLUMN IGNORER_USERNAME TEXT NOT NULL DEFAULT ''"); err != nil {
+				return err
+			}
+			// Backfill username for every row whose IGNORER_IPID is linked to an
+			// account. USERS may not exist yet on brand-new databases (it is created
+			// in Open() after migrations run), so guard with an existence check.
+			// Any rows that cannot be backfilled here will be updated the next time
+			// the account owner logs in via BackfillIgnoreUsername.
+			var usersExists int
+			db.QueryRow("SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='USERS'").Scan(&usersExists) //nolint:errcheck
+			if usersExists > 0 {
+				if _, err := db.Exec(`
+					UPDATE IGNORED_IPS
+					SET IGNORER_USERNAME = COALESCE(
+						(SELECT USERNAME FROM USERS WHERE IPID = IGNORED_IPS.IGNORER_IPID AND IPID != ''),
+						''
+					)
+					WHERE IGNORER_USERNAME = ''`); err != nil {
+					return err
+				}
+			}
+		}
+		if _, err := db.Exec("PRAGMA user_version = 20"); err != nil {
 			return err
 		}
 	}
@@ -1419,31 +1456,64 @@ func LoadTormentedIPs() ([]string, error) {
 	return ipids, rows.Err()
 }
 
+// IgnoreEntry is one row from the ignore list, as shown to the player.
+type IgnoreEntry struct {
+	// Position is the 1-based display index in the ordered list.
+	Position int
+	// IPID is the ignored connection fingerprint.
+	IPID string
+}
+
 // AddIgnoredIP records that ignorerIPID has permanently ignored ignoredIPID.
-func AddIgnoredIP(ignorerIPID, ignoredIPID string) error {
+// ignorerUsername may be empty for unauthenticated clients; when set it is
+// stored so the ignore survives IP changes.
+func AddIgnoredIP(ignorerIPID, ignorerUsername, ignoredIPID string) error {
 	if db == nil {
 		return nil
 	}
-	_, err := db.Exec("INSERT OR IGNORE INTO IGNORED_IPS(IGNORER_IPID, IGNORED_IPID) VALUES(?, ?)", ignorerIPID, ignoredIPID)
+	_, err := db.Exec(
+		"INSERT OR IGNORE INTO IGNORED_IPS(IGNORER_IPID, IGNORER_USERNAME, IGNORED_IPID) VALUES(?, ?, ?)",
+		ignorerIPID, ignorerUsername, ignoredIPID,
+	)
 	return err
 }
 
-// RemoveIgnoredIP removes the permanent ignore between ignorerIPID and ignoredIPID.
-func RemoveIgnoredIP(ignorerIPID, ignoredIPID string) error {
+// RemoveIgnoredIPByKnownIPID removes every ignore row that matches the given
+// ignored IPID for this ignorer (matched by IPID or username so account-linked
+// rows are cleaned up regardless of which connection added them).
+func RemoveIgnoredIPByKnownIPID(ignorerIPID, ignorerUsername, ignoredIPID string) error {
 	if db == nil {
 		return nil
+	}
+	if ignorerUsername != "" {
+		_, err := db.Exec(
+			"DELETE FROM IGNORED_IPS WHERE (IGNORER_IPID = ? OR IGNORER_USERNAME = ?) AND IGNORED_IPID = ?",
+			ignorerIPID, ignorerUsername, ignoredIPID,
+		)
+		return err
 	}
 	_, err := db.Exec("DELETE FROM IGNORED_IPS WHERE IGNORER_IPID = ? AND IGNORED_IPID = ?", ignorerIPID, ignoredIPID)
 	return err
 }
 
-// LoadIgnoredIPIDs returns all IPIDs that ignorerIPID has permanently ignored.
-// Called when a client connects to pre-populate their in-memory ignore set.
-func LoadIgnoredIPIDs(ignorerIPID string) ([]string, error) {
+// LoadIgnoredIPIDs returns all IPIDs that ignorerIPID (or the linked account)
+// has permanently ignored. Called when a client connects to pre-populate their
+// in-memory ignore set. Results are deduplicated.
+func LoadIgnoredIPIDs(ignorerIPID, ignorerUsername string) ([]string, error) {
 	if db == nil {
 		return nil, nil
 	}
-	rows, err := db.Query("SELECT IGNORED_IPID FROM IGNORED_IPS WHERE IGNORER_IPID = ?", ignorerIPID)
+	var rows *sql.Rows
+	var err error
+	if ignorerUsername != "" {
+		rows, err = db.Query(
+			`SELECT DISTINCT IGNORED_IPID FROM IGNORED_IPS
+			 WHERE IGNORER_IPID = ? OR (IGNORER_USERNAME = ? AND IGNORER_USERNAME != '')`,
+			ignorerIPID, ignorerUsername,
+		)
+	} else {
+		rows, err = db.Query("SELECT IGNORED_IPID FROM IGNORED_IPS WHERE IGNORER_IPID = ?", ignorerIPID)
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -1457,6 +1527,58 @@ func LoadIgnoredIPIDs(ignorerIPID string) ([]string, error) {
 		ipids = append(ipids, ipid)
 	}
 	return ipids, rows.Err()
+}
+
+// LoadIgnoredList returns the full ordered ignore list for display purposes.
+// Entries are ordered by rowid (insertion order) and deduplicated. The
+// returned Position values are 1-based sequential display indices.
+func LoadIgnoredList(ignorerIPID, ignorerUsername string) ([]IgnoreEntry, error) {
+	if db == nil {
+		return nil, nil
+	}
+	var rows *sql.Rows
+	var err error
+	if ignorerUsername != "" {
+		rows, err = db.Query(
+			`SELECT DISTINCT IGNORED_IPID FROM IGNORED_IPS
+			 WHERE IGNORER_IPID = ? OR (IGNORER_USERNAME = ? AND IGNORER_USERNAME != '')
+			 ORDER BY rowid ASC`,
+			ignorerIPID, ignorerUsername,
+		)
+	} else {
+		rows, err = db.Query(
+			"SELECT IGNORED_IPID FROM IGNORED_IPS WHERE IGNORER_IPID = ? ORDER BY rowid ASC",
+			ignorerIPID,
+		)
+	}
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var list []IgnoreEntry
+	pos := 1
+	for rows.Next() {
+		var ipid string
+		if err := rows.Scan(&ipid); err != nil {
+			return list, fmt.Errorf("LoadIgnoredList scan: %w", err)
+		}
+		list = append(list, IgnoreEntry{Position: pos, IPID: ipid})
+		pos++
+	}
+	return list, rows.Err()
+}
+
+// BackfillIgnoreUsername updates IGNORER_USERNAME on existing ignore rows for
+// ignorerIPID that were added before the account was linked. Called on login.
+func BackfillIgnoreUsername(ignorerIPID, username string) error {
+	if db == nil {
+		return nil
+	}
+	_, err := db.Exec(
+		"UPDATE IGNORED_IPS SET IGNORER_USERNAME = ? WHERE IGNORER_IPID = ? AND IGNORER_USERNAME = ''",
+		username, ignorerIPID,
+	)
+	return err
 }
 
 // EnsureChipBalance ensures an IPID exists in the CHIPS table, creating it with 100 chips if absent.

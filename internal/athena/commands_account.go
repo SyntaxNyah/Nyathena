@@ -52,6 +52,8 @@ func generateCaptcha() (string, error) {
 func onRegistered(client *Client, username string) {
 	client.SetAuthenticated(true)
 	client.SetModName(username)
+	// Backfill IGNORER_USERNAME on any ignore rows added before registration.
+	db.BackfillIgnoreUsername(client.Ipid(), username) //nolint:errcheck
 	if config.EnableCasino {
 		if err := db.EnsureChipBalance(client.Ipid()); err != nil {
 			logger.LogErrorf("Failed to seed chip balance on register for %v: %v", username, err)

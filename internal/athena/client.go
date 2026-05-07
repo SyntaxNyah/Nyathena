@@ -445,8 +445,10 @@ func (client *Client) HandleClient() {
 		go startTormentDisconnect(client)
 	}
 
-	// Load this client's persisted ignore list.
-	if ignoredIPs, err := db.LoadIgnoredIPIDs(client.Ipid()); err != nil {
+	// Load this client's persisted ignore list. We don't yet know the account
+	// name at connect time, so pass empty username; any account-linked extras
+	// are merged in after a successful /login call.
+	if ignoredIPs, err := db.LoadIgnoredIPIDs(client.Ipid(), ""); err != nil {
 		logger.LogErrorf("Failed to load ignore list for %v: %v", client.Ipid(), err)
 	} else {
 		for _, ipid := range ignoredIPs {
