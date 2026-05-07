@@ -477,6 +477,7 @@ func pktIC(client *Client, p *packet.Packet) {
 	// Note: punishments is a copy of the active punishments
 	// State modifications must use UpdatePunishmentState to persist changes
 	var sfxCurseActive bool
+	var sfxCurseExternalURL string // non-empty when an external http(s) URL sfxcurse fires
 	for i := range punishments {
 		p := &punishments[i]
 
@@ -559,6 +560,14 @@ func pktIC(client *Client, p *packet.Packet) {
 			ms.SfxName = sfxBareNameFromURL(p.customData)
 			ms.SfxDelay = "0"
 			sfxCurseActive = true
+			// Track external URLs so that an MC fallback packet can be sent after
+			// the IC packet. Desktop AO2 clients play HTTP URLs via their media
+			// stack (Qt/etc.) when delivered through MC, which is how /play works.
+			// The SfxName URL above covers URL-aware clients; MC covers standard ones.
+			sfx := p.customData
+			if isExternalSfxURL(sfx) {
+				sfxCurseExternalURL = sfx
+			}
 		}
 
 		// Shrink/Grow/Wide: rewrite SelfOffset ("x&y") to lock the vertical
@@ -981,6 +990,16 @@ func pktIC(client *Client, p *packet.Packet) {
 	// Encode the structured packet back into wire format exactly once and
 	// hand it to the broadcaster.
 	writeToAreaFrom(client.Ipid(), permissions.IsModerator(client.Perms()), client.Area(), "MS", ms.ServerArgs()...)
+	// SFX curse MC fallback: for external http(s) URLs the sfx_name field alone
+	// is not enough because standard AO2 desktop clients look for a local file
+	// and WebAO concatenates the asset URL with the sound name (producing a
+	// garbage path). Sending a one-shot MC packet lets desktop AO2 clients
+	// play the URL through their media stack (the same mechanism /play uses),
+	// so the cursed sound actually plays for everyone in the area.
+	if sfxCurseExternalURL != "" {
+		writeToArea(client.Area(), "MC", sfxCurseExternalURL,
+			strconv.Itoa(client.CharID()), client.Showname(), "0", "0")
+	}
 	// Record the original (pre-punishment) decoded message in the area's icwarp
 	// history so future icwarp lookups have something to pick from.
 	if originalICMsg != "" {
@@ -1379,6 +1398,14 @@ func decode(s string) string {
 // encode returns a decoded string in AO2-encoded form.
 func encode(s string) string {
 	return encoder.Replace(s)
+}
+
+// isExternalSfxURL reports whether sfx is an external http(s) URL (i.e. not a
+// /base/sounds/ asset-server path). External URLs are delivered via MC packet
+// because standard AO2 clients cannot play them directly via the sfx_name field.
+func isExternalSfxURL(sfx string) bool {
+	return (strings.HasPrefix(sfx, "http://") || strings.HasPrefix(sfx, "https://")) &&
+		!strings.Contains(sfx, "/base/sounds/")
 }
 
 // sfxBareNameFromURL returns the value to send in the AO2 sfx_name field for a
