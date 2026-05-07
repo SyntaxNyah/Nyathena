@@ -774,7 +774,7 @@ func isAllowedCDN(rawURL string) bool {
 
 func cmdPlay(client *Client, args []string, _ string) {
 	if client.Area().MusicFrozen() {
-		client.SendServerMessage("Music is locked in this area — no changes allowed.")
+		client.SendServerMessage("Music is locked in this area - no changes allowed.")
 		return
 	}
 	if !permissions.HasPermission(client.Perms(), permissions.PermissionField["DJ"]) && !client.CanChangeMusic() {
