@@ -687,7 +687,9 @@ func cmdPlayers(client *Client, args []string, _ string) {
 	})
 
 	// writeEntry appends a single client's info to the builder.
-	writeEntry := func(b *strings.Builder, c *Client) {
+	// sameArea controls whether the showname is revealed: it is only shown
+	// when the displayed client shares the requester's area (privacy rule).
+	writeEntry := func(b *strings.Builder, c *Client, sameArea bool) {
 		if c.Hidden() {
 			b.WriteString("[HIDDEN] ")
 		}
@@ -696,6 +698,13 @@ func cmdPlayers(client *Client, args []string, _ string) {
 			prefix += " "
 		}
 		fmt.Fprintf(b, "%s[%v] %v\n", prefix, c.Uid(), c.CurrentCharacter())
+		// Show showname only to players in the same area — prevents stalking
+		// across rooms while still letting area-mates see IC display names.
+		if sameArea {
+			if sn := c.EffectiveShowname(); sn != "" {
+				fmt.Fprintf(b, "Showname: %v\n", sn)
+			}
+		}
 		if hasBanInfo {
 			if permissions.IsModerator(c.Perms()) {
 				// Shadow mods: hide the entire "Mod:" line from non-admin viewers.
@@ -722,9 +731,10 @@ func cmdPlayers(client *Client, args []string, _ string) {
 	printArea := func(b *strings.Builder, a *area.Area) {
 		count := a.VisiblePlayerCount()
 		fmt.Fprintf(b, "%v:\n%v players online.\n", a.Name(), count)
+		sameArea := a == targetArea
 		if ac := grouped[a]; ac != nil {
 			for _, c := range ac.list {
-				writeEntry(b, c)
+				writeEntry(b, c, sameArea)
 			}
 		}
 	}
@@ -1817,7 +1827,15 @@ func cmdIgnore(client *Client, args []string, usage string) {
 		var sb strings.Builder
 		sb.WriteString(fmt.Sprintf("Ignore list (%d entr%s):\n", len(list), entrySuffix))
 		for _, e := range list {
-			sb.WriteString(fmt.Sprintf("  %d. %s\n", e.Position, e.IPID))
+			label := e.IPID
+			if e.Showname != "" && e.OOC != "" {
+				label = fmt.Sprintf("%s (OOC: %s) — %s", e.Showname, e.OOC, e.IPID)
+			} else if e.Showname != "" {
+				label = fmt.Sprintf("%s — %s", e.Showname, e.IPID)
+			} else if e.OOC != "" {
+				label = fmt.Sprintf("%s — %s", e.OOC, e.IPID)
+			}
+			sb.WriteString(fmt.Sprintf("  %d. %s\n", e.Position, label))
 		}
 		sb.WriteString("Use /unignore <number> to remove an entry.")
 		client.SendServerMessage(sb.String())
@@ -1845,17 +1863,23 @@ func cmdIgnore(client *Client, args []string, usage string) {
 	}
 
 	targetIPID := target.Ipid()
-	if client.IgnoresIPID(targetIPID) {
-		client.SendServerMessage("You are already permanently ignoring that user.")
-		return
-	}
+	targetShowname := target.EffectiveShowname()
+	targetOOC := target.OOCName()
 
 	username := ""
 	if client.Authenticated() {
 		username = client.ModName()
 	}
+
+	if client.IgnoresIPID(targetIPID) {
+		// Already ignoring — update the stored display names in case they changed.
+		db.UpdateIgnoredLabel(client.Ipid(), username, targetIPID, targetShowname, targetOOC) //nolint:errcheck
+		client.SendServerMessage("You are already permanently ignoring that user.")
+		return
+	}
+
 	client.AddIgnoredIPID(targetIPID)
-	if err := db.AddIgnoredIP(client.Ipid(), username, targetIPID); err != nil {
+	if err := db.AddIgnoredIP(client.Ipid(), username, targetIPID, targetShowname, targetOOC); err != nil {
 		logger.LogErrorf("Failed to persist ignore for %v -> %v: %v", client.Ipid(), targetIPID, err)
 	}
 

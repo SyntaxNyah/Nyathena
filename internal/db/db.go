@@ -136,7 +136,7 @@ const MaxChipBalance = 10_000_000
 
 // Database version.
 // This should be incremented whenever changes are made to the DB that require existing databases to upgrade.
-const ver = 20
+const ver = 21
 
 // MaxFavourites is the maximum number of favourite characters a player can save.
 const MaxFavourites = 100
@@ -254,6 +254,8 @@ func Open() error {
 		IGNORER_IPID     TEXT NOT NULL,
 		IGNORED_IPID     TEXT NOT NULL,
 		IGNORER_USERNAME TEXT NOT NULL DEFAULT '',
+		IGNORED_SHOWNAME TEXT NOT NULL DEFAULT '',
+		IGNORED_OOC      TEXT NOT NULL DEFAULT '',
 		PRIMARY KEY (IGNORER_IPID, IGNORED_IPID)
 	)`)
 	if err != nil {
@@ -637,6 +639,24 @@ func upgradeDB(v int) error {
 			}
 		}
 		if _, err := db.Exec("PRAGMA user_version = 20"); err != nil {
+			return err
+		}
+		fallthrough
+	case 20:
+		// Add IGNORED_SHOWNAME and IGNORED_OOC to IGNORED_IPS so the ignore
+		// list can display the target's showname and OOC name for easy recall.
+		// Fresh databases get the columns from the CREATE TABLE in Open().
+		var ignoredIPsExists int
+		db.QueryRow("SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='IGNORED_IPS'").Scan(&ignoredIPsExists) //nolint:errcheck
+		if ignoredIPsExists > 0 {
+			if _, err := db.Exec("ALTER TABLE IGNORED_IPS ADD COLUMN IGNORED_SHOWNAME TEXT NOT NULL DEFAULT ''"); err != nil {
+				return err
+			}
+			if _, err := db.Exec("ALTER TABLE IGNORED_IPS ADD COLUMN IGNORED_OOC TEXT NOT NULL DEFAULT ''"); err != nil {
+				return err
+			}
+		}
+		if _, err := db.Exec("PRAGMA user_version = 21"); err != nil {
 			return err
 		}
 	}
@@ -1462,18 +1482,44 @@ type IgnoreEntry struct {
 	Position int
 	// IPID is the ignored connection fingerprint.
 	IPID string
+	// Showname is the ignored user's effective showname at the time they were ignored.
+	Showname string
+	// OOC is the ignored user's OOC name at the time they were ignored.
+	OOC string
 }
 
 // AddIgnoredIP records that ignorerIPID has permanently ignored ignoredIPID.
 // ignorerUsername may be empty for unauthenticated clients; when set it is
-// stored so the ignore survives IP changes.
-func AddIgnoredIP(ignorerIPID, ignorerUsername, ignoredIPID string) error {
+// stored so the ignore survives IP changes. showname and oocName capture the
+// target's display names at ignore time for later recall via /ignore list.
+func AddIgnoredIP(ignorerIPID, ignorerUsername, ignoredIPID, showname, oocName string) error {
 	if db == nil {
 		return nil
 	}
 	_, err := db.Exec(
-		"INSERT OR IGNORE INTO IGNORED_IPS(IGNORER_IPID, IGNORER_USERNAME, IGNORED_IPID) VALUES(?, ?, ?)",
-		ignorerIPID, ignorerUsername, ignoredIPID,
+		"INSERT OR IGNORE INTO IGNORED_IPS(IGNORER_IPID, IGNORER_USERNAME, IGNORED_IPID, IGNORED_SHOWNAME, IGNORED_OOC) VALUES(?, ?, ?, ?, ?)",
+		ignorerIPID, ignorerUsername, ignoredIPID, showname, oocName,
+	)
+	return err
+}
+
+// UpdateIgnoredLabel refreshes the stored showname and OOC name for an existing
+// ignore row. Called when the ignored user reconnects and their names may have
+// changed since they were first ignored.
+func UpdateIgnoredLabel(ignorerIPID, ignorerUsername, ignoredIPID, showname, oocName string) error {
+	if db == nil {
+		return nil
+	}
+	if ignorerUsername != "" {
+		_, err := db.Exec(
+			"UPDATE IGNORED_IPS SET IGNORED_SHOWNAME = ?, IGNORED_OOC = ? WHERE (IGNORER_IPID = ? OR IGNORER_USERNAME = ?) AND IGNORED_IPID = ?",
+			showname, oocName, ignorerIPID, ignorerUsername, ignoredIPID,
+		)
+		return err
+	}
+	_, err := db.Exec(
+		"UPDATE IGNORED_IPS SET IGNORED_SHOWNAME = ?, IGNORED_OOC = ? WHERE IGNORER_IPID = ? AND IGNORED_IPID = ?",
+		showname, oocName, ignorerIPID, ignoredIPID,
 	)
 	return err
 }
@@ -1540,14 +1586,14 @@ func LoadIgnoredList(ignorerIPID, ignorerUsername string) ([]IgnoreEntry, error)
 	var err error
 	if ignorerUsername != "" {
 		rows, err = db.Query(
-			`SELECT DISTINCT IGNORED_IPID FROM IGNORED_IPS
+			`SELECT DISTINCT IGNORED_IPID, IGNORED_SHOWNAME, IGNORED_OOC FROM IGNORED_IPS
 			 WHERE IGNORER_IPID = ? OR IGNORER_USERNAME = ?
 			 ORDER BY rowid ASC`,
 			ignorerIPID, ignorerUsername,
 		)
 	} else {
 		rows, err = db.Query(
-			"SELECT IGNORED_IPID FROM IGNORED_IPS WHERE IGNORER_IPID = ? ORDER BY rowid ASC",
+			"SELECT IGNORED_IPID, IGNORED_SHOWNAME, IGNORED_OOC FROM IGNORED_IPS WHERE IGNORER_IPID = ? ORDER BY rowid ASC",
 			ignorerIPID,
 		)
 	}
@@ -1558,11 +1604,11 @@ func LoadIgnoredList(ignorerIPID, ignorerUsername string) ([]IgnoreEntry, error)
 	var list []IgnoreEntry
 	pos := 1
 	for rows.Next() {
-		var ipid string
-		if err := rows.Scan(&ipid); err != nil {
+		var ipid, showname, ooc string
+		if err := rows.Scan(&ipid, &showname, &ooc); err != nil {
 			return list, fmt.Errorf("LoadIgnoredList scan: %w", err)
 		}
-		list = append(list, IgnoreEntry{Position: pos, IPID: ipid})
+		list = append(list, IgnoreEntry{Position: pos, IPID: ipid, Showname: showname, OOC: ooc})
 		pos++
 	}
 	return list, rows.Err()
