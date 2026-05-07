@@ -2662,7 +2662,7 @@ func initCommands() {
 			handler:  cmdSfxCurse,
 			minArgs:  2,
 			usage:    "Usage: /sfxcurse [-d duration] [-r reason] global | <uid1>,<uid2>... <sfx-url>",
-			desc:     "Forces the target to emit the specified SFX (URL or /base/sounds/ path) on every IC message.",
+			desc:     "Forces the target to emit the specified SFX on every IC message. Accepts any streamable http(s) URL (Discord CDN, custom hosting, etc.) or a /base/sounds/ path.",
 			reqPerms: permissions.PermissionField["MUTE"],
 			category: "punishment",
 		},
