@@ -1844,7 +1844,7 @@ func cmdIgnore(client *Client, args []string, usage string) {
 
 	uid, err := strconv.Atoi(args[0])
 	if err != nil {
-		client.SendServerMessage("Invalid argument. Use /ignore <uid> to ignore someone or /ignore list to view your list.")
+		client.SendServerMessage("Invalid UID. Use /ignore list to view your ignore list.")
 		return
 	}
 	target, err := getClientByUid(uid)
@@ -1864,7 +1864,7 @@ func cmdIgnore(client *Client, args []string, usage string) {
 
 	targetIPID := target.Ipid()
 	targetShowname := target.EffectiveShowname()
-	targetOOC := target.OOCName()
+	targetOOCName := target.OOCName()
 
 	username := ""
 	if client.Authenticated() {
@@ -1873,13 +1873,13 @@ func cmdIgnore(client *Client, args []string, usage string) {
 
 	if client.IgnoresIPID(targetIPID) {
 		// Already ignoring — update the stored display names in case they changed.
-		db.UpdateIgnoredLabel(client.Ipid(), username, targetIPID, targetShowname, targetOOC) //nolint:errcheck
+		db.UpdateIgnoredLabel(client.Ipid(), username, targetIPID, targetShowname, targetOOCName) //nolint:errcheck
 		client.SendServerMessage("You are already permanently ignoring that user.")
 		return
 	}
 
 	client.AddIgnoredIPID(targetIPID)
-	if err := db.AddIgnoredIP(client.Ipid(), username, targetIPID, targetShowname, targetOOC); err != nil {
+	if err := db.AddIgnoredIP(client.Ipid(), username, targetIPID, targetShowname, targetOOCName); err != nil {
 		logger.LogErrorf("Failed to persist ignore for %v -> %v: %v", client.Ipid(), targetIPID, err)
 	}
 
