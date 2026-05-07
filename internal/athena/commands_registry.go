@@ -454,7 +454,7 @@ func initCommands() {
 			handler:  cmdMusicLock,
 			minArgs:  0,
 			usage:    "Usage: /musiclock",
-			desc:     "Hard-freezes music in the area. No one (including CMs, DJs, or mods) can change the music until /musicunlock.",
+			desc:     "Hard-freezes music in the area. Regular players and DJs cannot change music until /musicunlock. Moderators and CMs remain exempt.",
 			reqPerms: permissions.PermissionField["CM"],
 			category: "area",
 		},

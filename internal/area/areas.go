@@ -775,8 +775,9 @@ func (a *Area) SetLockMusic(b bool) {
 	a.mu.Unlock()
 }
 
-// MusicFrozen returns whether the area has a hard music lock that prevents
-// anyone (including CMs, DJs, and moderators) from changing the music.
+// MusicFrozen returns whether the area has a hard music lock that blocks
+// regular players and DJs from changing the music. Moderators (including
+// shadow mods) and CMs are exempt and can still change music normally.
 func (a *Area) MusicFrozen() bool {
 	a.mu.Lock()
 	defer a.mu.Unlock()

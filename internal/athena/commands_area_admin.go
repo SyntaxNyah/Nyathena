@@ -587,7 +587,8 @@ func cmdLockMusic(client *Client, args []string, _ string) {
 	addToBuffer(client, "CMD", fmt.Sprintf("Set CM-only music list to %v.", args[0]), false)
 }
 
-// Handles /musiclock - hard music freeze: nobody can change music (jukebox, /play, /randomsong, DJ).
+// Handles /musiclock - hard music freeze: blocks regular players and DJs from changing music.
+// Moderators (including shadow mods) and CMs are exempt and can still change music.
 
 func cmdMusicLock(client *Client, _ []string, _ string) {
 	if client.Area().MusicFrozen() {
