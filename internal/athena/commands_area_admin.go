@@ -587,7 +587,7 @@ func cmdLockMusic(client *Client, args []string, _ string) {
 	addToBuffer(client, "CMD", fmt.Sprintf("Set CM-only music list to %v.", args[0]), false)
 }
 
-// Handles /musiclock — hard music freeze: nobody can change music (jukebox, /play, /randomsong, DJ).
+// Handles /musiclock - hard music freeze: nobody can change music (jukebox, /play, /randomsong, DJ).
 
 func cmdMusicLock(client *Client, _ []string, _ string) {
 	if client.Area().MusicFrozen() {
@@ -595,11 +595,11 @@ func cmdMusicLock(client *Client, _ []string, _ string) {
 		return
 	}
 	client.Area().SetMusicFrozen(true)
-	sendAreaServerMessage(client.Area(), fmt.Sprintf("🔒 %v has frozen the music — no one can change it until /musicunlock.", client.OOCName()))
+	sendAreaServerMessage(client.Area(), fmt.Sprintf("🔒 %v has frozen the music - no one can change it until /musicunlock.", client.OOCName()))
 	addToBuffer(client, "CMD", "Music frozen.", false)
 }
 
-// Handles /musicunlock — lifts the hard music freeze.
+// Handles /musicunlock - lifts the hard music freeze.
 
 func cmdMusicUnlock(client *Client, _ []string, _ string) {
 	if !client.Area().MusicFrozen() {
@@ -607,7 +607,7 @@ func cmdMusicUnlock(client *Client, _ []string, _ string) {
 		return
 	}
 	client.Area().SetMusicFrozen(false)
-	sendAreaServerMessage(client.Area(), fmt.Sprintf("🔓 %v has unfrozen the music — anyone can change it again.", client.OOCName()))
+	sendAreaServerMessage(client.Area(), fmt.Sprintf("🔓 %v has unfrozen the music - anyone can change it again.", client.OOCName()))
 	addToBuffer(client, "CMD", "Music unfrozen.", false)
 }
 
@@ -801,6 +801,10 @@ func cmdPlay(client *Client, args []string, _ string) {
 // Handles /randomsong
 
 func cmdRandomSong(client *Client, _ []string, _ string) {
+	if client.Area().MusicFrozen() {
+		client.SendServerMessage("Music is locked in this area - no changes allowed.")
+		return
+	}
 	if !client.CanChangeMusic() {
 		client.SendServerMessage("You are not allowed to change the music in this area.")
 		return
