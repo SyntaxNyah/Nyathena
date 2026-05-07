@@ -2344,8 +2344,8 @@ func initCommands() {
 		"wardrobe": {
 			handler:    cmdWardrobe,
 			minArgs:    0,
-			usage:      "Usage: /wardrobe | /wardrobe <char name>",
-			desc:       "View your saved favourite characters, or swap to one instantly.",
+			usage:      "Usage: /wardrobe | /wardrobe <char name or number>",
+			desc:       "View your saved favourite characters, or swap to one by name or slot number (e.g. /wardrobe 2).",
 			reqPerms:   permissions.PermissionField["NONE"],
 			accountCmd: true,
 			category:   "account",
@@ -2865,7 +2865,7 @@ func ParseCommand(client *Client, command string, args []string) {
 		if client.Authenticated() {
 			header = fmt.Sprintf("Logged in as: %v\n\n", client.ModName())
 			if accountsEnabled {
-				header += "👗 Your Wardrobe: /favourite <char> to save | /wardrobe to view | /wardrobe <char> to swap\n\n"
+				header += "👗 Your Wardrobe: /favourite <char> to save | /wardrobe to view | /wardrobe <char or #> to swap\n\n"
 			}
 		} else if accountsEnabled {
 			header = "💡 New here? /register <username> <password> — free account, no extra permissions.\n" +
