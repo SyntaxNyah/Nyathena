@@ -236,6 +236,12 @@ func pktReqDone(client *Client, _ *packet.Packet) {
 	}
 	client.JoinArea(areas[0])
 	client.SendPacket("DONE")
+	// Send BN after DONE so WebAO's viewport is fully initialized before the
+	// background and desk-overlay images are loaded.  Akashi follows the same
+	// ordering: HP / FA → DONE → BN.  Sending BN before DONE caused desk
+	// images to load against an unrendered viewport, leaving desks invisible
+	// on WebAO even when deskmod indicated they should be shown.
+	client.SendPacket("BN", areas[0].Background())
 	// Re-emit VC_CAPS at the end of the join handshake.  pktId already sends
 	// it once during the early ID phase, but some clients (notably webAO,
 	// which builds its voice subsystem after SI/SC/SM/DONE) ignore packets

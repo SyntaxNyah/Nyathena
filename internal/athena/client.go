@@ -1216,7 +1216,6 @@ func (client *Client) JoinArea(area *area.Area) {
 	client.SendPacket("CharsCheck", area.Taken()...)
 	client.SendPacket("HP", "1", strconv.Itoa(def))
 	client.SendPacket("HP", "2", strconv.Itoa(pro))
-	client.SendPacket("BN", area.Background())
 	if desc := area.Description(); desc != "" {
 		client.SendServerMessage("📍 " + desc)
 	}
@@ -1283,6 +1282,7 @@ func (client *Client) ChangeArea(a *area.Area) bool {
 		client.SetCharID(-1)
 	}
 	client.JoinArea(a)
+	client.SendPacket("BN", a.Background())
 	writeToAll("PU", strconv.Itoa(client.Uid()), "3", strconv.Itoa(getAreaIndex(a)))
 	if client.CharID() == -1 {
 		client.SendPacket("DONE")
@@ -1705,6 +1705,7 @@ func (client *Client) forceChangeArea(a *area.Area) {
 		client.SetCharID(-1)
 	}
 	client.JoinArea(a)
+	client.SendPacket("BN", a.Background())
 	writeToAll("PU", strconv.Itoa(client.Uid()), "3", strconv.Itoa(getAreaIndex(a)))
 	if client.CharID() == -1 {
 		client.SendPacket("DONE")

@@ -344,7 +344,7 @@ func cmdPossess(client *Client, args []string, _ string) {
 	// appearance completely. The struct is encoded to wire format exactly
 	// once on the call to writeToArea.
 	ms := &packet.MSPacket{
-		DeskMod:       "chat",
+		DeskMod:       "1",
 		Character:     targetCharName,
 		Emote:         targetEmote,
 		Message:       encodedMsg,
