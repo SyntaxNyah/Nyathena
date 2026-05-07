@@ -541,14 +541,15 @@ func pktIC(client *Client, p *packet.Packet) {
 		}
 
 		// SFX curse: replace the IC packet's SfxName with the cursed sound.
-		// Both desktop AO2 and WebAO expect the bare filename stem here, NOT a
-		// full URL — desktop clients resolve it against their local
-		// base/sounds/general/ directory while WebAO prepends the configured
-		// asset URL and appends ".opus". Sending a raw http(s) URL in
-		// SfxName would cause both clients to fail silently, so we strip
-		// path and extension, keeping only the stem (e.g.
-		// "aai-cammy-bubble"). SfxDelay is forced to "0" so the sound fires
-		// immediately regardless of what the sender's packet contained.
+		// For standard AO2 asset-server URLs (containing "/base/sounds/") and
+		// bare /base/sounds/ local paths, we extract the filename stem (e.g.
+		// "aai-cammy-bubble") so that desktop clients resolve it from their
+		// local base/sounds/general/ directory and WebAO clients prepend the
+		// configured asset URL. For other external http(s) URLs (e.g. Discord
+		// CDN, custom hosting), the full URL is forwarded as-is so that
+		// clients supporting URL-based audio can stream it directly.
+		// SfxDelay is forced to "0" so the sound fires immediately regardless
+		// of what the sender's packet contained.
 		// sfxCurseActive is set so that a post-NoInterrupt fixup below can
 		// ensure the EmoteModifier is in the set {1, 2, 6}; WebAO's
 		// chat_tick only plays the emote SFX for those three values, so
@@ -1380,18 +1381,29 @@ func encode(s string) string {
 	return encoder.Replace(s)
 }
 
-// sfxBareNameFromURL extracts the bare sound filename (no path, no extension)
-// from a full URL or /base/sounds/ path stored in a SFX curse's customData.
-// AO2 clients expect the sfx_name field to be just the filename stem (e.g.
-// "aai-cammy-bubble"), not a full URL. Desktop clients resolve it relative to
-// their local base/sounds/general/ directory; WebAO clients prepend their
-// configured asset URL. Sending the raw URL in sfx_name causes both to fail.
+// sfxBareNameFromURL returns the value to send in the AO2 sfx_name field for a
+// SFX curse customData entry:
+//
+//   - Standard AO2 asset-server URLs (http/https containing "/base/sounds/") and
+//     bare /base/sounds/ local paths → bare filename stem, no path, no extension.
+//     Desktop clients resolve the stem from their local base/sounds/general/ folder;
+//     WebAO prepends the configured asset URL and appends ".opus".
+//   - All other http(s) URLs (Discord CDN, custom hosting, etc.) → returned
+//     as-is so that clients supporting URL-based audio can fetch the file
+//     directly without any rewriting.
+//
 // Examples:
 //
 //	"https://miku.pizza/base/sounds/general/aai-cammy-bubble.opus" → "aai-cammy-bubble"
 //	"/base/sounds/general/aai-cammy-bubble.opus"                   → "aai-cammy-bubble"
 //	"aai-cammy-bubble"                                             → "aai-cammy-bubble"
+//	"https://cdn.discordapp.com/attachments/123/456/boom.opus"     → "https://cdn.discordapp.com/attachments/123/456/boom.opus"
 func sfxBareNameFromURL(s string) string {
+	isHTTP := strings.HasPrefix(s, "http://") || strings.HasPrefix(s, "https://")
+	if isHTTP && !strings.Contains(s, "/base/sounds/") {
+		// External URL (e.g. Discord CDN) — send as-is for URL-aware clients.
+		return s
+	}
 	base := path.Base(s) // extracts the last path component, works on URLs too
 	if ext := path.Ext(base); ext != "" {
 		base = base[:len(base)-len(ext)]

@@ -135,8 +135,13 @@ Permission bits are configured in `config/roles.toml`. Multiple bits are granted
 
 ```
 /sfxcurse 12 https://miku.pizza/base/sounds/general/meow.opus
+/sfxcurse 12 https://cdn.discordapp.com/attachments/123456789/987654321/boom.opus
 ```
-The target's IC packet's SFX field is overwritten with that URL on every line until `/unsfx 12`.
+The target's IC packet's SFX field is overwritten with the URL on every line until `/unsfx 12`.
+
+**URL handling:**
+- URLs that contain `/base/sounds/` (standard AO2 asset-server paths) have their filename stem extracted and sent to clients, which resolve it locally or via the configured asset URL.
+- All other `http(s)://` URLs (Discord CDN, custom hosting, etc.) are forwarded as-is so that clients supporting URL-based audio can stream the file directly.
 
 ### `/unpunish` Self-Removal Protection
 

@@ -180,9 +180,11 @@ func cmdSfxCurse(client *Client, args []string, usage string) {
 	uidArg := flags.Arg(0)
 	sfx := flags.Arg(1)
 	// Sanity-check the SFX URL — must be http/https or a bare path under /base/sounds/.
+	// Any streamable http(s) URL is accepted; external URLs (e.g. Discord CDN)
+	// are forwarded as-is to clients that support URL-based audio.
 	if !strings.HasPrefix(sfx, "http://") && !strings.HasPrefix(sfx, "https://") &&
 		!strings.HasPrefix(sfx, "/base/sounds/") {
-		client.SendServerMessage("SFX must be an http(s) URL or a path under /base/sounds/.")
+		client.SendServerMessage("SFX must be a streamable http(s) URL or a path under /base/sounds/.")
 		return
 	}
 	if u, err := url.Parse(sfx); err != nil || (u.Scheme != "" && u.Host == "") {
