@@ -1810,13 +1810,12 @@ func cmdIgnore(client *Client, args []string, usage string) {
 			client.SendServerMessage("Your ignore list is empty.")
 			return
 		}
+		entrySuffix := "ies"
+		if len(list) == 1 {
+			entrySuffix = "y"
+		}
 		var sb strings.Builder
-		sb.WriteString(fmt.Sprintf("Ignore list (%d entr%s):\n", len(list), func() string {
-			if len(list) == 1 {
-				return "y"
-			}
-			return "ies"
-		}()))
+		sb.WriteString(fmt.Sprintf("Ignore list (%d entr%s):\n", len(list), entrySuffix))
 		for _, e := range list {
 			sb.WriteString(fmt.Sprintf("  %d. %s\n", e.Position, e.IPID))
 		}
@@ -1883,7 +1882,7 @@ func cmdUnignore(client *Client, args []string, usage string) {
 	}
 
 	// First attempt: treat as an online UID (original behaviour).
-	if target, uidErr := getClientByUid(n); uidErr == nil {
+	if target, clientErr := getClientByUid(n); clientErr == nil {
 		targetIPID := target.Ipid()
 		if !client.IgnoresIPID(targetIPID) {
 			client.SendServerMessage("You are not ignoring that user.")

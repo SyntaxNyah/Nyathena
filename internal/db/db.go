@@ -1508,7 +1508,7 @@ func LoadIgnoredIPIDs(ignorerIPID, ignorerUsername string) ([]string, error) {
 	if ignorerUsername != "" {
 		rows, err = db.Query(
 			`SELECT DISTINCT IGNORED_IPID FROM IGNORED_IPS
-			 WHERE IGNORER_IPID = ? OR (IGNORER_USERNAME = ? AND IGNORER_USERNAME != '')`,
+			 WHERE IGNORER_IPID = ? OR IGNORER_USERNAME = ?`,
 			ignorerIPID, ignorerUsername,
 		)
 	} else {
@@ -1541,7 +1541,7 @@ func LoadIgnoredList(ignorerIPID, ignorerUsername string) ([]IgnoreEntry, error)
 	if ignorerUsername != "" {
 		rows, err = db.Query(
 			`SELECT DISTINCT IGNORED_IPID FROM IGNORED_IPS
-			 WHERE IGNORER_IPID = ? OR (IGNORER_USERNAME = ? AND IGNORER_USERNAME != '')
+			 WHERE IGNORER_IPID = ? OR IGNORER_USERNAME = ?
 			 ORDER BY rowid ASC`,
 			ignorerIPID, ignorerUsername,
 		)
