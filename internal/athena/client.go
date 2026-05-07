@@ -1282,13 +1282,18 @@ func (client *Client) ChangeArea(a *area.Area) bool {
 		client.SetCharID(-1)
 	}
 	client.JoinArea(a)
-	client.SendPacket("BN", a.Background())
 	writeToAll("PU", strconv.Itoa(client.Uid()), "3", strconv.Itoa(getAreaIndex(a)))
 	if client.CharID() == -1 {
+		// Send DONE before BN so WebAO's character-select viewport is
+		// initialized before the bench-overlay image loads fire.  This
+		// mirrors pktReqDone's ordering and matches Akashi's behaviour.
 		client.SendPacket("DONE")
 	} else {
 		writeToArea(a, "CharsCheck", a.Taken()...)
 	}
+	// BN always last — after any DONE — so desk-overlay images never load
+	// against an unrendered viewport on WebAO (same fix as initial join).
+	client.SendPacket("BN", a.Background())
 	addToBuffer(client, "AREA", "Joined area.", false)
 	return true
 }
@@ -1705,13 +1710,16 @@ func (client *Client) forceChangeArea(a *area.Area) {
 		client.SetCharID(-1)
 	}
 	client.JoinArea(a)
-	client.SendPacket("BN", a.Background())
 	writeToAll("PU", strconv.Itoa(client.Uid()), "3", strconv.Itoa(getAreaIndex(a)))
 	if client.CharID() == -1 {
+		// Send DONE before BN for the same reason as ChangeArea: WebAO
+		// must initialize the viewport before desk-overlay images load.
 		client.SendPacket("DONE")
 	} else {
 		writeToArea(a, "CharsCheck", a.Taken()...)
 	}
+	// BN always after any DONE so desk overlays load correctly on WebAO.
+	client.SendPacket("BN", a.Background())
 	addToBuffer(client, "AREA", "Joined area.", false)
 }
 
