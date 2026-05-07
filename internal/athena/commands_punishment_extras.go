@@ -191,6 +191,14 @@ func cmdSfxCurse(client *Client, args []string, usage string) {
 		client.SendServerMessage("Invalid SFX URL.")
 		return
 	}
+	// For external http(s) URLs, require the host to be on the CDN whitelist.
+	// /base/sounds/ paths are always allowed (they resolve to local asset server files).
+	if isExternalSfxURL(sfx) {
+		if !isAllowedCDN(sfx) {
+			client.SendServerMessage("That URL is not from a whitelisted CDN. Add the domain to config/cdns.txt to allow it.")
+			return
+		}
+	}
 
 	duration, err := str2duration.ParseDuration(*durationStr)
 	if err != nil {
