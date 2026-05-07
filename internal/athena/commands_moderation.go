@@ -662,14 +662,16 @@ func cmdPlayers(client *Client, args []string, _ string) {
 
 	isAdmin := permissions.HasPermission(client.Perms(), permissions.PermissionField["ADMIN"])
 	hasBanInfo := permissions.HasPermission(client.Perms(), permissions.PermissionField["BAN_INFO"])
+	isMod := permissions.IsModerator(client.Perms())
 	targetArea := client.Area()
 
 	// Group clients by area in a single snapshot pass.
+	// Non-mods are always limited to their own area, regardless of the -a flag.
 	type areaClients struct {
 		list []*Client
 	}
 	grouped := make(map[*area.Area]*areaClients, len(areas))
-	allFlag := *all
+	allFlag := *all && isMod
 	clients.ForEach(func(c *Client) {
 		a := c.Area()
 		if !allFlag && a != targetArea {
@@ -731,7 +733,9 @@ func cmdPlayers(client *Client, args []string, _ string) {
 	printArea := func(b *strings.Builder, a *area.Area) {
 		count := a.VisiblePlayerCount()
 		fmt.Fprintf(b, "%v:\n%v players online.\n", a.Name(), count)
-		sameArea := a == targetArea
+		// Mods always see shownames for every area. Regular players only see
+		// shownames for occupants in their own area (privacy rule).
+		sameArea := a == targetArea || isMod
 		if ac := grouped[a]; ac != nil {
 			for _, c := range ac.list {
 				writeEntry(b, c, sameArea)
@@ -741,7 +745,7 @@ func cmdPlayers(client *Client, args []string, _ string) {
 
 	var out strings.Builder
 	out.WriteString("\nPlayers\n----------\n")
-	if *all {
+	if *all && isMod {
 		// /gas hides empty areas to keep the list usable on servers with many areas.
 		// "Empty" = nobody visible to the requester. Admins still see hidden players,
 		// so an area with only hidden occupants is empty for everyone else but not them.
