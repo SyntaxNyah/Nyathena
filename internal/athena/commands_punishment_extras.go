@@ -19,6 +19,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/MangosArentLiterature/Athena/internal/permissions"
 	str2duration "github.com/xhit/go-str2duration/v2"
 )
 
@@ -207,6 +208,25 @@ func cmdSfxCurse(client *Client, args []string, usage string) {
 	}
 	if duration > 24*time.Hour {
 		duration = 24 * time.Hour
+	}
+
+	// "global" applies the SFX curse to every non-moderator in the issuer's area,
+	// excluding the issuer themselves.
+	if strings.EqualFold(uidArg, "global") {
+		targetArea := client.Area()
+		issuerUID := client.Uid()
+		var count int
+		clients.ForEach(func(c *Client) {
+			if c.Area() != targetArea || c.Uid() == issuerUID || permissions.IsModerator(c.Perms()) {
+				return
+			}
+			c.AddPunishmentWithData(PunishmentSfxCurse, duration, *reason, sfx)
+			c.SendServerMessage(fmt.Sprintf("🔊 You are now SFX-cursed: every IC message will play %s", sfx))
+			count++
+		})
+		client.SendServerMessage(fmt.Sprintf("Applied SFX curse to %d client(s) in the area.", count))
+		addToBuffer(client, "CMD", fmt.Sprintf("SFX curse global: %s", sfx), false)
+		return
 	}
 
 	toCurse := getUidList(strings.Split(uidArg, ","))
