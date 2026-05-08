@@ -160,7 +160,9 @@ Copy `config_sample/` to `config/` before first run.
 
 ### Punishment System (90+ Commands)
 
-All punishment commands require `MUTE` permission unless noted. They support `-d <duration>` (max 24 h) and `-r <reason>`, accept comma-separated UIDs, and auto-expire. Multiple types stack on a single player.
+All punishment commands require `MUTE` permission unless noted. They support `-d <duration>` (max 24 h), `-r <reason>`, and `-h` (hidden — suppresses the per-target OOC notification so the punishment applies silently; the issuer summary appends `(hidden)` so the mod can confirm). They accept comma-separated UIDs and auto-expire. Multiple types stack on a single player.
+
+The `-h` flag works on every applicator: single-effect commands (`/tsundere 7 -h`, `/tsundere global -h`), `/stack`, `/lovebomb`, `/sfxcurse`, `/shrink` / `/grow` / `/wide`, `/randompunishall` (also suppresses the area-wide "unleashed random chaos" announcement), `/translator curse`, and `/icwarp <uid>`. Self-applied effects (`/megamaso`, `/maso`) and the PvP `/coinflip` mini-game are unaffected since they aren't moderator-issued.
 
 `/help punishment` is now grouped by sub-theme (text effects / dere archetypes / animal filters / themed quotes / audio / timing / stacking) so the long list is finally scannable.
 

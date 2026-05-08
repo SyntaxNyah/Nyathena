@@ -171,6 +171,8 @@ func cmdSfxCurse(client *Client, args []string, usage string) {
 	flags.SetOutput(io.Discard)
 	durationStr := flags.String("d", "1h", "")
 	reason := flags.String("r", "sfxcurse", "")
+	// -h suppresses the per-target OOC notification so the curse applies silently.
+	hidden := flags.Bool("h", false, "")
 	flags.Parse(args)
 
 	if len(flags.Args()) < 2 {
@@ -221,10 +223,16 @@ func cmdSfxCurse(client *Client, args []string, usage string) {
 				return
 			}
 			c.AddPunishmentWithData(PunishmentSfxCurse, duration, *reason, sfx)
-			c.SendServerMessage(fmt.Sprintf("🔊 You are now SFX-cursed: every IC message will play %s", sfx))
+			if !*hidden {
+				c.SendServerMessage(fmt.Sprintf("🔊 You are now SFX-cursed: every IC message will play %s", sfx))
+			}
 			count++
 		})
-		client.SendServerMessage(fmt.Sprintf("Applied SFX curse to %d client(s) in the area.", count))
+		summary := fmt.Sprintf("Applied SFX curse to %d client(s) in the area.", count)
+		if *hidden {
+			summary += " (hidden)"
+		}
+		client.SendServerMessage(summary)
 		addToBuffer(client, "CMD", fmt.Sprintf("SFX curse global: %s", sfx), false)
 		return
 	}
@@ -233,10 +241,16 @@ func cmdSfxCurse(client *Client, args []string, usage string) {
 	count := 0
 	for _, c := range toCurse {
 		c.AddPunishmentWithData(PunishmentSfxCurse, duration, *reason, sfx)
-		c.SendServerMessage(fmt.Sprintf("🔊 You are now SFX-cursed: every IC message will play %s", sfx))
+		if !*hidden {
+			c.SendServerMessage(fmt.Sprintf("🔊 You are now SFX-cursed: every IC message will play %s", sfx))
+		}
 		count++
 	}
-	client.SendServerMessage(fmt.Sprintf("Applied SFX curse to %d client(s).", count))
+	summary := fmt.Sprintf("Applied SFX curse to %d client(s).", count)
+	if *hidden {
+		summary += " (hidden)"
+	}
+	client.SendServerMessage(summary)
 	addToBuffer(client, "CMD", fmt.Sprintf("SFX curse: %s", sfx), false)
 }
 
@@ -264,6 +278,8 @@ func applyShrinkGrowWide(client *Client, args []string, usage string, pType Puni
 	flags.SetOutput(io.Discard)
 	durationStr := flags.String("d", "1h", "")
 	reason := flags.String("r", pType.String(), "")
+	// -h suppresses the per-target OOC notification so the offset lock applies silently.
+	hidden := flags.Bool("h", false, "")
 	flags.Parse(args)
 
 	if len(flags.Args()) < 1 {
@@ -298,10 +314,16 @@ func applyShrinkGrowWide(client *Client, args []string, usage string, pType Puni
 	count := 0
 	for _, c := range toCurse {
 		c.AddPunishmentWithData(pType, duration, *reason, strconv.Itoa(offset))
-		c.SendServerMessage(fmt.Sprintf("📐 You have been %v'd. Your sprite offset is locked at %d.", pType.String(), offset))
+		if !*hidden {
+			c.SendServerMessage(fmt.Sprintf("📐 You have been %v'd. Your sprite offset is locked at %d.", pType.String(), offset))
+		}
 		count++
 	}
-	client.SendServerMessage(fmt.Sprintf("Applied %v to %d client(s) (offset %d).", pType.String(), count, offset))
+	summary := fmt.Sprintf("Applied %v to %d client(s) (offset %d).", pType.String(), count, offset)
+	if *hidden {
+		summary += " (hidden)"
+	}
+	client.SendServerMessage(summary)
 }
 
 // /shrink: lock the target into a negative vertical offset (default -25).

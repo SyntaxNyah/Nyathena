@@ -53,6 +53,8 @@ func cmdPunishment(client *Client, args []string, usage string, pType Punishment
 	flags.SetOutput(io.Discard)
 	reason := flags.String("r", "", "")
 	durationStr := flags.String("d", "10m", "")
+	// -h suppresses the per-target OOC notification so the punishment applies silently.
+	hidden := flags.Bool("h", false, "")
 	flags.Parse(args)
 
 	if len(flags.Args()) == 0 {
@@ -102,12 +104,18 @@ func cmdPunishment(client *Client, args []string, usage string, pType Punishment
 			if err := db.UpsertTextPunishmentBy(c.Ipid(), int(pType), expires, *reason, int(tier)); err != nil {
 				logger.LogErrorf("Failed to persist text punishment for %v: %v", c.Ipid(), err)
 			}
-			c.SendServerMessage(msg)
+			if !*hidden {
+				c.SendServerMessage(msg)
+			}
 			count++
 			report += fmt.Sprintf("%v, ", c.Uid())
 		})
 		report = strings.TrimSuffix(report, ", ")
-		client.SendServerMessage(fmt.Sprintf("Applied '%v' punishment globally to %v client(s) in area.", pType.String(), count))
+		summary := fmt.Sprintf("Applied '%v' punishment globally to %v client(s) in area.", pType.String(), count)
+		if *hidden {
+			summary += " (hidden)"
+		}
+		client.SendServerMessage(summary)
 		addToBuffer(client, "CMD", fmt.Sprintf("Applied '%v' punishment globally to %v.", pType.String(), report), false)
 		return
 	}
@@ -125,13 +133,19 @@ func cmdPunishment(client *Client, args []string, usage string, pType Punishment
 		if err := db.UpsertTextPunishmentBy(c.Ipid(), int(pType), expires, *reason, int(tier)); err != nil {
 			logger.LogErrorf("Failed to persist text punishment for %v: %v", c.Ipid(), err)
 		}
-		c.SendServerMessage(msg)
+		if !*hidden {
+			c.SendServerMessage(msg)
+		}
 		count++
 		report += fmt.Sprintf("%v, ", c.Uid())
 	}
 
 	report = strings.TrimSuffix(report, ", ")
-	client.SendServerMessage(fmt.Sprintf("Applied '%v' punishment to %v clients.", pType.String(), count))
+	summary := fmt.Sprintf("Applied '%v' punishment to %v clients.", pType.String(), count)
+	if *hidden {
+		summary += " (hidden)"
+	}
+	client.SendServerMessage(summary)
 	addToBuffer(client, "CMD", fmt.Sprintf("Applied '%v' punishment to %v.", pType.String(), report), false)
 }
 
@@ -786,6 +800,8 @@ func cmdStack(client *Client, args []string, usage string) {
 	flags.SetOutput(io.Discard)
 	reason := flags.String("r", "", "")
 	durationStr := flags.String("d", "10m", "")
+	// -h suppresses the per-target OOC notification so the stack applies silently.
+	hidden := flags.Bool("h", false, "")
 	flags.Parse(args)
 
 	if len(flags.Args()) < 2 {
@@ -861,14 +877,20 @@ func cmdStack(client *Client, args []string, usage string) {
 				logger.LogErrorf("Failed to persist stacked punishment for %v: %v", c.Ipid(), err)
 			}
 		}
-		c.SendServerMessage(msg)
+		if !*hidden {
+			c.SendServerMessage(msg)
+		}
 		count++
 		report += fmt.Sprintf("%v, ", c.Uid())
 	}
 
 	report = strings.TrimSuffix(report, ", ")
 	punishmentList := strings.Join(punishmentNamesList, ", ")
-	client.SendServerMessage(fmt.Sprintf("Applied stacked punishments [%v] to %v clients.", punishmentList, count))
+	summary := fmt.Sprintf("Applied stacked punishments [%v] to %v clients.", punishmentList, count)
+	if *hidden {
+		summary += " (hidden)"
+	}
+	client.SendServerMessage(summary)
 	addToBuffer(client, "CMD", fmt.Sprintf("Applied stacked punishments [%v] to %v.", punishmentList, report), false)
 }
 
@@ -890,6 +912,8 @@ func cmdLovebomb(client *Client, args []string, usage string) {
 	flags.SetOutput(io.Discard)
 	reason := flags.String("r", "", "")
 	durationStr := flags.String("d", "10m", "")
+	// -h suppresses the per-target OOC notification so the lovebomb applies silently.
+	hidden := flags.Bool("h", false, "")
 	flags.Parse(args)
 
 	// Parse duration
@@ -910,7 +934,9 @@ func cmdLovebomb(client *Client, args []string, usage string) {
 		if duration > 0 {
 			msg += fmt.Sprintf(" (for %v)", duration)
 		}
-		c.SendServerMessage(msg)
+		if !*hidden {
+			c.SendServerMessage(msg)
+		}
 		var expires int64
 		if duration > 0 {
 			expires = time.Now().UTC().Add(duration).Unix()
@@ -964,7 +990,11 @@ func cmdLovebomb(client *Client, args []string, usage string) {
 			report += fmt.Sprintf("%v, ", c.Uid())
 		})
 		report = strings.TrimSuffix(report, ", ")
-		client.SendServerMessage(fmt.Sprintf("Applied lovebomb to %v non-moderator clients in area.", count))
+		summary := fmt.Sprintf("Applied lovebomb to %v non-moderator clients in area.", count)
+		if *hidden {
+			summary += " (hidden)"
+		}
+		client.SendServerMessage(summary)
 		addToBuffer(client, "CMD", fmt.Sprintf("Applied area lovebomb to %v.", report), false)
 		return
 	}
@@ -1007,7 +1037,11 @@ func cmdLovebomb(client *Client, args []string, usage string) {
 	}
 
 	report = strings.TrimSuffix(report, ", ")
-	client.SendServerMessage(fmt.Sprintf("Applied lovebomb punishment to %v clients.", count))
+	summary := fmt.Sprintf("Applied lovebomb punishment to %v clients.", count)
+	if *hidden {
+		summary += " (hidden)"
+	}
+	client.SendServerMessage(summary)
 	addToBuffer(client, "CMD", fmt.Sprintf("Applied lovebomb punishment to %v.", report), false)
 }
 
@@ -1557,6 +1591,8 @@ func cmdTranslator(client *Client, args []string, usage string) {
 	flags.SetOutput(io.Discard)
 	reason := flags.String("r", "", "")
 	durationStr := flags.String("d", "10m", "")
+	// -h suppresses the per-target OOC notification so the curse applies silently.
+	hidden := flags.Bool("h", false, "")
 	flags.Parse(args)
 
 	positional := flags.Args()
@@ -1636,7 +1672,9 @@ func cmdTranslator(client *Client, args []string, usage string) {
 		if err := db.UpsertTextPunishment(c.Ipid(), int(PunishmentTranslator), expires, stored); err != nil {
 			logger.LogErrorf("Failed to persist translator punishment for %v: %v", c.Ipid(), err)
 		}
-		c.SendServerMessage(msg)
+		if !*hidden {
+			c.SendServerMessage(msg)
+		}
 		count++
 		report += fmt.Sprintf("%v, ", c.Uid())
 	}
@@ -1646,7 +1684,11 @@ func cmdTranslator(client *Client, args []string, usage string) {
 	if isGlobal {
 		scope = fmt.Sprintf("clients in area %q", client.Area().Name())
 	}
-	client.SendServerMessage(fmt.Sprintf("Applied translator (%v) punishment to %v %v.", language, count, scope))
+	summary := fmt.Sprintf("Applied translator (%v) punishment to %v %v.", language, count, scope)
+	if *hidden {
+		summary += " (hidden)"
+	}
+	client.SendServerMessage(summary)
 	addToBuffer(client, "CMD", fmt.Sprintf("Applied translator (%v) punishment to %v.", language, report), false)
 }
 
@@ -1710,6 +1752,9 @@ func cmdRandomPunishAll(client *Client, args []string, usage string) {
 	flags.SetOutput(io.Discard)
 	durationStr := flags.String("d", "10m", "")
 	reason := flags.String("r", "", "")
+	// -h suppresses the per-target OOC notification AND the area-wide
+	// "unleashed random chaos" announcement so mods can sneak-roll silently.
+	hidden := flags.Bool("h", false, "")
 	flags.Parse(args)
 
 	if !client.Area().RandomPunishEnabled() {
@@ -1761,13 +1806,21 @@ func cmdRandomPunishAll(client *Client, args []string, usage string) {
 		if err := db.UpsertTextPunishmentBy(c.Ipid(), int(pType), expires, *reason, int(tier)); err != nil {
 			logger.LogErrorf("Failed to persist randompunishall punishment for %v: %v", c.Ipid(), err)
 		}
-		c.SendServerMessage(fmt.Sprintf("%v (%v)", msg, pType.String()))
+		if !*hidden {
+			c.SendServerMessage(fmt.Sprintf("%v (%v)", msg, pType.String()))
+		}
 		report += fmt.Sprintf("%v(%v), ", c.Uid(), pType.String())
 	}
 
 	report = strings.TrimSuffix(report, ", ")
-	sendAreaServerMessage(client.Area(), fmt.Sprintf("🎲 %v has unleashed random chaos on the area!", client.OOCName()))
-	client.SendServerMessage(fmt.Sprintf("Applied random punishments to %v clients.", len(targets)))
+	if !*hidden {
+		sendAreaServerMessage(client.Area(), fmt.Sprintf("🎲 %v has unleashed random chaos on the area!", client.OOCName()))
+	}
+	summary := fmt.Sprintf("Applied random punishments to %v clients.", len(targets))
+	if *hidden {
+		summary += " (hidden)"
+	}
+	client.SendServerMessage(summary)
 	addToBuffer(client, "CMD", fmt.Sprintf("Applied randompunishall: %v.", report), false)
 }
 
@@ -1868,6 +1921,8 @@ func cmdICWarp(client *Client, args []string, usage string) {
 	flags.SetOutput(io.Discard)
 	reason := flags.String("r", "", "")
 	durationStr := flags.String("d", "10m", "")
+	// -h suppresses the per-target OOC notification so the warp applies silently.
+	hidden := flags.Bool("h", false, "")
 	flags.Parse(args) //nolint:errcheck
 
 	if len(flags.Args()) == 0 {
@@ -1901,13 +1956,19 @@ func cmdICWarp(client *Client, args []string, usage string) {
 
 	for _, c := range toPunish {
 		c.AddICWarpPunishment(targetArea, duration, *reason)
-		c.SendServerMessage(msg)
+		if !*hidden {
+			c.SendServerMessage(msg)
+		}
 		count++
 		report += fmt.Sprintf("%v, ", c.Uid())
 	}
 
 	report = strings.TrimSuffix(report, ", ")
-	client.SendServerMessage(fmt.Sprintf("Applied 'icwarp' punishment to %v clients.", count))
+	summary := fmt.Sprintf("Applied 'icwarp' punishment to %v clients.", count)
+	if *hidden {
+		summary += " (hidden)"
+	}
+	client.SendServerMessage(summary)
 	addToBuffer(client, "CMD", fmt.Sprintf("Applied 'icwarp' punishment to %v.", report), false)
 }
 
