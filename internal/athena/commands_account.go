@@ -30,6 +30,7 @@ import (
 	"github.com/MangosArentLiterature/Athena/internal/db"
 	"github.com/MangosArentLiterature/Athena/internal/logger"
 	"github.com/MangosArentLiterature/Athena/internal/permissions"
+	str2duration "github.com/xhit/go-str2duration/v2"
 	"golang.org/x/crypto/bcrypt"
 )
 
@@ -317,6 +318,12 @@ const playtimePageSize = 25
 // 26–50; and so on. Both player accounts and moderator accounts (including
 // shadow mods) are eligible — the leaderboard does not filter by permission.
 func cmdPlaytimeTop(client *Client, args []string, usage string) {
+	// Admin subcommand: /playtime add <username> <duration>
+	if len(args) > 0 && strings.EqualFold(args[0], "add") {
+		cmdPlaytimeAdd(client, args[1:])
+		return
+	}
+
 	page := 1
 	remaining := args
 
@@ -418,6 +425,82 @@ func cmdReloadPlaytime(client *Client, _ []string, _ string) {
 	client.SendServerMessage(fmt.Sprintf(
 		"Playtime reload complete. Re-linked %d/%d account(s). The leaderboard now reflects all merged playtime; new entries appear on the next /playtime top.",
 		relinked, len(rows)))
+}
+
+// cmdPlaytimeAdd handles the admin-only /playtime add <username> <duration>
+// subcommand. It increments the target account's stored playtime by the parsed
+// duration (e.g. "60h", "30m", "1h30m"). The duration is added to KNOWN_IPS.PLAYTIME
+// for the IPID linked to the account, so the leaderboard reflects it immediately.
+func cmdPlaytimeAdd(client *Client, args []string) {
+	const usage = "Usage: /playtime add <username> <duration>  (e.g. /playtime add alice 60h)"
+
+	if !permissions.HasPermission(client.Perms(), permissions.PermissionField["ADMIN"]) {
+		client.SendServerMessage("You do not have permission to use that command.")
+		return
+	}
+	if len(args) < 2 {
+		client.SendServerMessage(usage)
+		return
+	}
+
+	targetUser := args[0]
+	duration, err := str2duration.ParseDuration(args[1])
+	if err != nil {
+		client.SendServerMessage("Invalid duration format. Use values like 60h, 30m, or 1h30m.")
+		return
+	}
+	if duration <= 0 {
+		client.SendServerMessage("Duration must be greater than zero.")
+		return
+	}
+	addSeconds := int64(duration.Seconds())
+	if addSeconds <= 0 {
+		client.SendServerMessage("Duration must be at least one second.")
+		return
+	}
+
+	ipid, err := db.GetIPIDByUsername(targetUser)
+	if err != nil {
+		client.SendServerMessage("Failed to look up account: " + err.Error())
+		return
+	}
+	if ipid == "" {
+		client.SendServerMessage(fmt.Sprintf(
+			"Account '%v' was not found, or has never logged in (no IPID linked yet).\n"+
+				"Ask the player to /login at least once before granting playtime.",
+			targetUser))
+		return
+	}
+
+	// Ensure a KNOWN_IPS row exists so AddPlaytimeReturning's UPDATE can hit it.
+	// Registered, previously-connected accounts already have one, but be defensive.
+	if err := db.MarkIPKnown(ipid); err != nil {
+		client.SendServerMessage("Failed to update playtime: " + err.Error())
+		return
+	}
+
+	newTotal, err := db.AddPlaytimeReturning(ipid, addSeconds)
+	if err != nil {
+		client.SendServerMessage("Failed to update playtime: " + err.Error())
+		return
+	}
+
+	client.SendServerMessage(fmt.Sprintf(
+		"✅ Added %v of playtime to '%v'. New total: %v.",
+		formatPlaytime(addSeconds), targetUser, formatPlaytime(newTotal)))
+
+	// Notify the recipient if they are online right now.
+	clients.ForEach(func(c *Client) {
+		if c.ModName() == targetUser {
+			c.SendServerMessage(fmt.Sprintf(
+				"⏱ An admin granted you %v of playtime. New total: %v.",
+				formatPlaytime(addSeconds), formatPlaytime(newTotal)))
+		}
+	})
+
+	addToBuffer(client, "CMD",
+		fmt.Sprintf("Added %vs of playtime to '%v' (new total %vs).", addSeconds, targetUser, newTotal),
+		true)
 }
 
 // cmdProfile implements /profile [uid]. With no argument, shows the caller's
