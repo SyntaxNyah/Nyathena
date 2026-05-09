@@ -23,6 +23,7 @@ import (
 	"io"
 	"math"
 	"math/rand"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -687,6 +688,14 @@ func cmdPlayers(client *Client, args []string, _ string) {
 		}
 		ac.list = append(ac.list, c)
 	})
+
+	// Sort each area's player list by UID ascending so /ga and /gas render
+	// in a stable, scannable order instead of map-iteration order.
+	for _, ac := range grouped {
+		sort.Slice(ac.list, func(i, j int) bool {
+			return ac.list[i].Uid() < ac.list[j].Uid()
+		})
+	}
 
 	// writeEntry appends a single client's info to the builder.
 	// sameArea controls whether the showname is revealed: it is only shown
