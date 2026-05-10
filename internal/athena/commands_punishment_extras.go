@@ -167,12 +167,13 @@ func cmdMegamaso(client *Client, _ []string, _ string) {
 // field. The IC packet path consults HasPunishment(PunishmentSfxCurse) and
 // rewrites the SFX/SFXANIM fields when present.
 func cmdSfxCurse(client *Client, args []string, usage string) {
+	// -h suppresses the per-target OOC notification so the curse applies silently.
+	args, hidden := extractHiddenFlag(args)
+
 	flags := flag.NewFlagSet("", 0)
 	flags.SetOutput(io.Discard)
 	durationStr := flags.String("d", "1h", "")
 	reason := flags.String("r", "sfxcurse", "")
-	// -h suppresses the per-target OOC notification so the curse applies silently.
-	hidden := flags.Bool("h", false, "")
 	flags.Parse(args)
 
 	if len(flags.Args()) < 2 {
@@ -223,13 +224,13 @@ func cmdSfxCurse(client *Client, args []string, usage string) {
 				return
 			}
 			c.AddPunishmentWithData(PunishmentSfxCurse, duration, *reason, sfx)
-			if !*hidden {
+			if !hidden {
 				c.SendServerMessage(fmt.Sprintf("🔊 You are now SFX-cursed: every IC message will play %s", sfx))
 			}
 			count++
 		})
 		summary := fmt.Sprintf("Applied SFX curse to %d client(s) in the area.", count)
-		if *hidden {
+		if hidden {
 			summary += " (hidden)"
 		}
 		client.SendServerMessage(summary)
@@ -241,13 +242,13 @@ func cmdSfxCurse(client *Client, args []string, usage string) {
 	count := 0
 	for _, c := range toCurse {
 		c.AddPunishmentWithData(PunishmentSfxCurse, duration, *reason, sfx)
-		if !*hidden {
+		if !hidden {
 			c.SendServerMessage(fmt.Sprintf("🔊 You are now SFX-cursed: every IC message will play %s", sfx))
 		}
 		count++
 	}
 	summary := fmt.Sprintf("Applied SFX curse to %d client(s).", count)
-	if *hidden {
+	if hidden {
 		summary += " (hidden)"
 	}
 	client.SendServerMessage(summary)
@@ -274,12 +275,13 @@ func cmdUnSfx(client *Client, args []string, _ string) {
 // (capped at the AO2 protocol limit of ±100), and stores the offset as the
 // punishment's CustomData. The IC packet path applies the offset on send.
 func applyShrinkGrowWide(client *Client, args []string, usage string, pType PunishmentType, defaultOffset int) {
+	// -h suppresses the per-target OOC notification so the offset lock applies silently.
+	args, hidden := extractHiddenFlag(args)
+
 	flags := flag.NewFlagSet("", 0)
 	flags.SetOutput(io.Discard)
 	durationStr := flags.String("d", "1h", "")
 	reason := flags.String("r", pType.String(), "")
-	// -h suppresses the per-target OOC notification so the offset lock applies silently.
-	hidden := flags.Bool("h", false, "")
 	flags.Parse(args)
 
 	if len(flags.Args()) < 1 {
@@ -314,13 +316,13 @@ func applyShrinkGrowWide(client *Client, args []string, usage string, pType Puni
 	count := 0
 	for _, c := range toCurse {
 		c.AddPunishmentWithData(pType, duration, *reason, strconv.Itoa(offset))
-		if !*hidden {
+		if !hidden {
 			c.SendServerMessage(fmt.Sprintf("📐 You have been %v'd. Your sprite offset is locked at %d.", pType.String(), offset))
 		}
 		count++
 	}
 	summary := fmt.Sprintf("Applied %v to %d client(s) (offset %d).", pType.String(), count, offset)
-	if *hidden {
+	if hidden {
 		summary += " (hidden)"
 	}
 	client.SendServerMessage(summary)
