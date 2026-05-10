@@ -48,13 +48,46 @@ func issuerTierFor(client *Client) IssuerTier {
 	}
 }
 
+// extractHiddenFlag pulls "-h" tokens out of args from anywhere in the list
+// and returns the cleaned args plus whether -h was present. We preprocess
+// because Go's flag.Parse stops at the first non-flag positional, so a
+// trailing "-h" after the UID list (e.g. /tsundere 7 -h) would otherwise be
+// ignored. Values that follow -r or -d are preserved verbatim so a literal
+// "-h" used as the reason/duration value isn't accidentally extracted.
+func extractHiddenFlag(args []string) ([]string, bool) {
+	out := make([]string, 0, len(args))
+	hidden := false
+	for i := 0; i < len(args); i++ {
+		a := args[i]
+		switch a {
+		case "-h", "--h", "-h=true", "--h=true":
+			hidden = true
+			continue
+		case "-h=false", "--h=false":
+			continue
+		}
+		// Preserve "-r value" / "-d value" pairs intact.
+		if (a == "-r" || a == "-d" || a == "--r" || a == "--d") && i+1 < len(args) {
+			out = append(out, a, args[i+1])
+			i++
+			continue
+		}
+		out = append(out, a)
+	}
+	return out, hidden
+}
+
 func cmdPunishment(client *Client, args []string, usage string, pType PunishmentType) {
+	// -h suppresses the per-target OOC notification so the punishment applies
+	// silently. Extracted before flag.Parse because Go's flag package stops at
+	// the first positional, so trailing "-h" (e.g. "/tsundere 7 -h") would
+	// otherwise be ignored.
+	args, hidden := extractHiddenFlag(args)
+
 	flags := flag.NewFlagSet("", 0)
 	flags.SetOutput(io.Discard)
 	reason := flags.String("r", "", "")
 	durationStr := flags.String("d", "10m", "")
-	// -h suppresses the per-target OOC notification so the punishment applies silently.
-	hidden := flags.Bool("h", false, "")
 	flags.Parse(args)
 
 	if len(flags.Args()) == 0 {
@@ -104,7 +137,7 @@ func cmdPunishment(client *Client, args []string, usage string, pType Punishment
 			if err := db.UpsertTextPunishmentBy(c.Ipid(), int(pType), expires, *reason, int(tier)); err != nil {
 				logger.LogErrorf("Failed to persist text punishment for %v: %v", c.Ipid(), err)
 			}
-			if !*hidden {
+			if !hidden {
 				c.SendServerMessage(msg)
 			}
 			count++
@@ -112,7 +145,7 @@ func cmdPunishment(client *Client, args []string, usage string, pType Punishment
 		})
 		report = strings.TrimSuffix(report, ", ")
 		summary := fmt.Sprintf("Applied '%v' punishment globally to %v client(s) in area.", pType.String(), count)
-		if *hidden {
+		if hidden {
 			summary += " (hidden)"
 		}
 		client.SendServerMessage(summary)
@@ -133,7 +166,7 @@ func cmdPunishment(client *Client, args []string, usage string, pType Punishment
 		if err := db.UpsertTextPunishmentBy(c.Ipid(), int(pType), expires, *reason, int(tier)); err != nil {
 			logger.LogErrorf("Failed to persist text punishment for %v: %v", c.Ipid(), err)
 		}
-		if !*hidden {
+		if !hidden {
 			c.SendServerMessage(msg)
 		}
 		count++
@@ -142,7 +175,7 @@ func cmdPunishment(client *Client, args []string, usage string, pType Punishment
 
 	report = strings.TrimSuffix(report, ", ")
 	summary := fmt.Sprintf("Applied '%v' punishment to %v clients.", pType.String(), count)
-	if *hidden {
+	if hidden {
 		summary += " (hidden)"
 	}
 	client.SendServerMessage(summary)
@@ -796,12 +829,13 @@ func parsePunishmentType(s string) PunishmentType {
 
 // cmdStack applies multiple punishment effects to user(s) simultaneously
 func cmdStack(client *Client, args []string, usage string) {
+	// -h suppresses the per-target OOC notification so the stack applies silently.
+	args, hidden := extractHiddenFlag(args)
+
 	flags := flag.NewFlagSet("", 0)
 	flags.SetOutput(io.Discard)
 	reason := flags.String("r", "", "")
 	durationStr := flags.String("d", "10m", "")
-	// -h suppresses the per-target OOC notification so the stack applies silently.
-	hidden := flags.Bool("h", false, "")
 	flags.Parse(args)
 
 	if len(flags.Args()) < 2 {
@@ -877,7 +911,7 @@ func cmdStack(client *Client, args []string, usage string) {
 				logger.LogErrorf("Failed to persist stacked punishment for %v: %v", c.Ipid(), err)
 			}
 		}
-		if !*hidden {
+		if !hidden {
 			c.SendServerMessage(msg)
 		}
 		count++
@@ -887,7 +921,7 @@ func cmdStack(client *Client, args []string, usage string) {
 	report = strings.TrimSuffix(report, ", ")
 	punishmentList := strings.Join(punishmentNamesList, ", ")
 	summary := fmt.Sprintf("Applied stacked punishments [%v] to %v clients.", punishmentList, count)
-	if *hidden {
+	if hidden {
 		summary += " (hidden)"
 	}
 	client.SendServerMessage(summary)
@@ -908,12 +942,13 @@ func cmdStack(client *Client, args []string, usage string) {
 //
 // No arguments: displays usage information.
 func cmdLovebomb(client *Client, args []string, usage string) {
+	// -h suppresses the per-target OOC notification so the lovebomb applies silently.
+	args, hidden := extractHiddenFlag(args)
+
 	flags := flag.NewFlagSet("", 0)
 	flags.SetOutput(io.Discard)
 	reason := flags.String("r", "", "")
 	durationStr := flags.String("d", "10m", "")
-	// -h suppresses the per-target OOC notification so the lovebomb applies silently.
-	hidden := flags.Bool("h", false, "")
 	flags.Parse(args)
 
 	// Parse duration
@@ -934,7 +969,7 @@ func cmdLovebomb(client *Client, args []string, usage string) {
 		if duration > 0 {
 			msg += fmt.Sprintf(" (for %v)", duration)
 		}
-		if !*hidden {
+		if !hidden {
 			c.SendServerMessage(msg)
 		}
 		var expires int64
@@ -991,7 +1026,7 @@ func cmdLovebomb(client *Client, args []string, usage string) {
 		})
 		report = strings.TrimSuffix(report, ", ")
 		summary := fmt.Sprintf("Applied lovebomb to %v non-moderator clients in area.", count)
-		if *hidden {
+		if hidden {
 			summary += " (hidden)"
 		}
 		client.SendServerMessage(summary)
@@ -1038,7 +1073,7 @@ func cmdLovebomb(client *Client, args []string, usage string) {
 
 	report = strings.TrimSuffix(report, ", ")
 	summary := fmt.Sprintf("Applied lovebomb punishment to %v clients.", count)
-	if *hidden {
+	if hidden {
 		summary += " (hidden)"
 	}
 	client.SendServerMessage(summary)
@@ -1587,12 +1622,13 @@ func cmdTranslator(client *Client, args []string, usage string) {
 		return
 	}
 
+	// -h suppresses the per-target OOC notification so the curse applies silently.
+	args, hidden := extractHiddenFlag(args)
+
 	flags := flag.NewFlagSet("", 0)
 	flags.SetOutput(io.Discard)
 	reason := flags.String("r", "", "")
 	durationStr := flags.String("d", "10m", "")
-	// -h suppresses the per-target OOC notification so the curse applies silently.
-	hidden := flags.Bool("h", false, "")
 	flags.Parse(args)
 
 	positional := flags.Args()
@@ -1672,7 +1708,7 @@ func cmdTranslator(client *Client, args []string, usage string) {
 		if err := db.UpsertTextPunishment(c.Ipid(), int(PunishmentTranslator), expires, stored); err != nil {
 			logger.LogErrorf("Failed to persist translator punishment for %v: %v", c.Ipid(), err)
 		}
-		if !*hidden {
+		if !hidden {
 			c.SendServerMessage(msg)
 		}
 		count++
@@ -1685,7 +1721,7 @@ func cmdTranslator(client *Client, args []string, usage string) {
 		scope = fmt.Sprintf("clients in area %q", client.Area().Name())
 	}
 	summary := fmt.Sprintf("Applied translator (%v) punishment to %v %v.", language, count, scope)
-	if *hidden {
+	if hidden {
 		summary += " (hidden)"
 	}
 	client.SendServerMessage(summary)
@@ -1748,13 +1784,14 @@ var randompunishPool = rrPunishmentPool
 // Requires MUTE permission. Blocked if the area has disabled random punishment
 // via /togglerandompunish.
 func cmdRandomPunishAll(client *Client, args []string, usage string) {
+	// -h suppresses the per-target OOC notification AND the area-wide
+	// "unleashed random chaos" announcement so mods can sneak-roll silently.
+	args, hidden := extractHiddenFlag(args)
+
 	flags := flag.NewFlagSet("", 0)
 	flags.SetOutput(io.Discard)
 	durationStr := flags.String("d", "10m", "")
 	reason := flags.String("r", "", "")
-	// -h suppresses the per-target OOC notification AND the area-wide
-	// "unleashed random chaos" announcement so mods can sneak-roll silently.
-	hidden := flags.Bool("h", false, "")
 	flags.Parse(args)
 
 	if !client.Area().RandomPunishEnabled() {
@@ -1806,18 +1843,18 @@ func cmdRandomPunishAll(client *Client, args []string, usage string) {
 		if err := db.UpsertTextPunishmentBy(c.Ipid(), int(pType), expires, *reason, int(tier)); err != nil {
 			logger.LogErrorf("Failed to persist randompunishall punishment for %v: %v", c.Ipid(), err)
 		}
-		if !*hidden {
+		if !hidden {
 			c.SendServerMessage(fmt.Sprintf("%v (%v)", msg, pType.String()))
 		}
 		report += fmt.Sprintf("%v(%v), ", c.Uid(), pType.String())
 	}
 
 	report = strings.TrimSuffix(report, ", ")
-	if !*hidden {
+	if !hidden {
 		sendAreaServerMessage(client.Area(), fmt.Sprintf("🎲 %v has unleashed random chaos on the area!", client.OOCName()))
 	}
 	summary := fmt.Sprintf("Applied random punishments to %v clients.", len(targets))
-	if *hidden {
+	if hidden {
 		summary += " (hidden)"
 	}
 	client.SendServerMessage(summary)
@@ -1917,12 +1954,13 @@ func cmdICWarp(client *Client, args []string, usage string) {
 	}
 
 	// Per-user mode.
+	// -h suppresses the per-target OOC notification so the warp applies silently.
+	args, hidden := extractHiddenFlag(args)
+
 	flags := flag.NewFlagSet("", 0)
 	flags.SetOutput(io.Discard)
 	reason := flags.String("r", "", "")
 	durationStr := flags.String("d", "10m", "")
-	// -h suppresses the per-target OOC notification so the warp applies silently.
-	hidden := flags.Bool("h", false, "")
 	flags.Parse(args) //nolint:errcheck
 
 	if len(flags.Args()) == 0 {
@@ -1956,7 +1994,7 @@ func cmdICWarp(client *Client, args []string, usage string) {
 
 	for _, c := range toPunish {
 		c.AddICWarpPunishment(targetArea, duration, *reason)
-		if !*hidden {
+		if !hidden {
 			c.SendServerMessage(msg)
 		}
 		count++
@@ -1965,7 +2003,7 @@ func cmdICWarp(client *Client, args []string, usage string) {
 
 	report = strings.TrimSuffix(report, ", ")
 	summary := fmt.Sprintf("Applied 'icwarp' punishment to %v clients.", count)
-	if *hidden {
+	if hidden {
 		summary += " (hidden)"
 	}
 	client.SendServerMessage(summary)
