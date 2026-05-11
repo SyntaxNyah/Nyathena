@@ -153,24 +153,21 @@ type DiscordConfig struct {
 	ModRoleID string `toml:"mod_role_id"`
 }
 
-// VoiceConfig controls the optional WebRTC voice-chat relay.
-// The server never touches media payloads — it only forwards SDP/ICE
-// signalling between peers in the same area.  Disabled by default.
+// VoiceConfig controls the optional server-relayed voice-chat feature.
+// Every audio frame travels client → Athena → other clients in the same
+// area; no peer-to-peer path exists, so peers never learn each other's
+// IPs.  Disabled by default.
 type VoiceConfig struct {
-	EnableVoice              bool     `toml:"enable_voice"`
-	PTTOnly                  bool     `toml:"ptt_only"`
-	MaxPeersPerArea          int      `toml:"max_peers_per_area"`
-	STUNServers              []string `toml:"stun_servers"`
-	TURNServers              []string `toml:"turn_servers"`
-	TURNUsername             string   `toml:"turn_username"`
-	TURNCredential           string   `toml:"turn_credential"`
-	ForceRelay               bool     `toml:"force_relay"`
-	DefaultAreaVoiceAllowed  bool     `toml:"default_area_voice_allowed"`
-	JoinRateLimit            int      `toml:"join_rate_limit"`
-	JoinRateLimitWindow      int      `toml:"join_rate_limit_window"`
-	SigRateLimit             int      `toml:"sig_rate_limit"`
-	SigRateLimitWindow       int      `toml:"sig_rate_limit_window"`
-	NewIPIDVoiceCooldown     int      `toml:"new_ipid_voice_cooldown"`
+	EnableVoice             bool `toml:"enable_voice"`
+	PTTOnly                 bool `toml:"ptt_only"`
+	MaxPeersPerArea         int  `toml:"max_peers_per_area"`
+	MaxFrameBytes           int  `toml:"max_frame_bytes"`
+	DefaultAreaVoiceAllowed bool `toml:"default_area_voice_allowed"`
+	JoinRateLimit           int  `toml:"join_rate_limit"`
+	JoinRateLimitWindow     int  `toml:"join_rate_limit_window"`
+	FrameRateLimit          int  `toml:"frame_rate_limit"`
+	FrameRateLimitWindow    int  `toml:"frame_rate_limit_window"`
+	NewIPIDVoiceCooldown    int  `toml:"new_ipid_voice_cooldown"`
 }
 
 // Returns a default configuration.
@@ -263,16 +260,12 @@ func DefaultConfig() *Config {
 			EnableVoice:             false,
 			PTTOnly:                 true,
 			MaxPeersPerArea:         6,
-			STUNServers:             []string{"stun:stun.l.google.com:19302"},
-			TURNServers:             []string{},
-			TURNUsername:            "",
-			TURNCredential:          "",
-			ForceRelay:              false,
+			MaxFrameBytes:           4000,
 			DefaultAreaVoiceAllowed: true,
 			JoinRateLimit:           3,
 			JoinRateLimitWindow:     10,
-			SigRateLimit:            200,
-			SigRateLimitWindow:      10,
+			FrameRateLimit:          60,
+			FrameRateLimitWindow:    1,
 			NewIPIDVoiceCooldown:    30,
 		},
 	}

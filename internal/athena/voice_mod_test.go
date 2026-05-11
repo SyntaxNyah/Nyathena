@@ -16,7 +16,7 @@ func resetVoiceModState() {
 	voiceMutes = map[string]voiceRestriction{}
 	voiceBans = map[string]voiceRestriction{}
 	voiceJoinEvents = map[int][]time.Time{}
-	voiceSigEvents = map[int][]time.Time{}
+	voiceFrameEvents = map[int][]time.Time{}
 	voiceFirstSeen = map[string]time.Time{}
 	voiceModMu.Unlock()
 }
@@ -29,7 +29,7 @@ func newVoiceClientWithIPID(t *testing.T, uid int, ipid string, a *area.Area) (*
 	return c, conn
 }
 
-func TestPktVCJoinRespectsAreaVoiceAllowed(t *testing.T) {
+func TestPktVSJoinRespectsAreaVoiceAllowed(t *testing.T) {
 	origConfig := config
 	origClients := clients
 	t.Cleanup(func() {
@@ -49,7 +49,7 @@ func TestPktVCJoinRespectsAreaVoiceAllowed(t *testing.T) {
 	clients.AddClient(alice)
 	clients.RegisterUID(alice)
 
-	pktVCJoin(alice, &packet.Packet{Header: "VC_JOIN"})
+	pktVSJoin(alice, &packet.Packet{Header: "VS_JOIN"})
 
 	if inVoiceRoom(a, 1) {
 		t.Fatal("alice joined voice despite area voice_allowed = false")
@@ -59,7 +59,7 @@ func TestPktVCJoinRespectsAreaVoiceAllowed(t *testing.T) {
 	}
 }
 
-func TestPktVCJoinRejectsBannedIPID(t *testing.T) {
+func TestPktVSJoinRejectsBannedIPID(t *testing.T) {
 	origConfig := config
 	origClients := clients
 	t.Cleanup(func() {
@@ -81,7 +81,7 @@ func TestPktVCJoinRejectsBannedIPID(t *testing.T) {
 
 	SetVoiceBan("alice-ip", 0, "testing")
 
-	pktVCJoin(alice, &packet.Packet{Header: "VC_JOIN"})
+	pktVSJoin(alice, &packet.Packet{Header: "VS_JOIN"})
 
 	if inVoiceRoom(a, 1) {
 		t.Fatal("banned alice joined voice")
@@ -91,7 +91,7 @@ func TestPktVCJoinRejectsBannedIPID(t *testing.T) {
 	}
 }
 
-func TestPktVCJoinRespectsMute(t *testing.T) {
+func TestPktVSJoinRespectsMute(t *testing.T) {
 	origConfig := config
 	origClients := clients
 	t.Cleanup(func() {
@@ -113,7 +113,7 @@ func TestPktVCJoinRespectsMute(t *testing.T) {
 
 	SetVoiceMute("bob-ip", 60*time.Second, "rudeness")
 
-	pktVCJoin(bob, &packet.Packet{Header: "VC_JOIN"})
+	pktVSJoin(bob, &packet.Packet{Header: "VS_JOIN"})
 
 	if inVoiceRoom(a, 1) {
 		t.Fatal("muted bob joined voice")
@@ -146,14 +146,14 @@ func TestVoiceJoinRateLimitBlocksExcess(t *testing.T) {
 	clients.RegisterUID(c)
 
 	for i := 0; i < 2; i++ {
-		pktVCJoin(c, &packet.Packet{Header: "VC_JOIN"})
+		pktVSJoin(c, &packet.Packet{Header: "VS_JOIN"})
 		leaveVoiceForClient(c) // leave so we can re-join up to the limit
 	}
 	conn.buf.Reset()
-	pktVCJoin(c, &packet.Packet{Header: "VC_JOIN"})
+	pktVSJoin(c, &packet.Packet{Header: "VS_JOIN"})
 
 	if inVoiceRoom(a, 42) {
-		t.Fatal("third VC_JOIN admitted despite join_rate_limit = 2")
+		t.Fatal("third VS_JOIN admitted despite join_rate_limit = 2")
 	}
 	if !strings.Contains(conn.String(), "rate limit") {
 		t.Errorf("expected rate-limit notice, got: %q", conn.String())
@@ -182,7 +182,7 @@ func TestKickVoiceByIPIDEjectsAllMatchingClients(t *testing.T) {
 	for _, c := range []*Client{c1, c2, c3} {
 		clients.AddClient(c)
 		clients.RegisterUID(c)
-		pktVCJoin(c, &packet.Packet{Header: "VC_JOIN"})
+		pktVSJoin(c, &packet.Packet{Header: "VS_JOIN"})
 	}
 
 	got := kickVoiceByIPID("shared-ip")
@@ -218,7 +218,7 @@ func TestKickAllVoiceFromAreaEjectsEveryone(t *testing.T) {
 	for _, c := range []*Client{c1, c2} {
 		clients.AddClient(c)
 		clients.RegisterUID(c)
-		pktVCJoin(c, &packet.Packet{Header: "VC_JOIN"})
+		pktVSJoin(c, &packet.Packet{Header: "VS_JOIN"})
 	}
 
 	kickAllVoiceFromArea(a)

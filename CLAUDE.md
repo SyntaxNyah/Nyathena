@@ -414,6 +414,19 @@ Previously, `/lock` added every current occupant to the area's invite list, so a
 ### Recipe Step Variety
 `/recipe` rotates through Step 1 → Step 4 with **separate verb pools per step** (prep / combine / cook / plate). A stream of `/recipe` lines now reads like a real recipe instead of the same template.
 
+### Server-Relayed Voice Chat
+Opt-in voice chat. Every audio frame travels **client → Athena → other clients in the same area** — there is no peer-to-peer path, so peers cannot learn each other's IPs via packet sniffing (which is what TURN was previously used for in the now-removed WebRTC mode). Athena itself sees every peer's IP, exactly as it does for chat packets.
+
+Audio: 20 ms Opus frames at 48 kHz, base64-encoded on the wire. The server treats each frame as an opaque blob and just re-broadcasts it (one fan-out per joined peer). No Opus decode happens server-side, so the relay is codec-agnostic and CGO-free. A future voice-effects step (e.g. cartoon-pitch punishments) would slot into `pktVSFrame` between the rate-limit check and the broadcast call — currently a documented hook.
+
+Protocol (`internal/athena/voice.go`):
+- `VS_CAPS#<enabled>#<ptt>#<max_peers>#<codec>#<sample_rate>#<frame_ms>#<max_frame_bytes>#%` — S→C handshake
+- `VS_JOIN` / `VS_LEAVE` / `VS_PEERS` — room membership
+- `VS_FRAME` (C→S) / `VS_AUDIO#<from_uid>#<b64>#%` (S→C) — audio relay
+- `VS_SPEAK#<uid>#<on_off>#%` — speaking indicator
+
+Moderation: IPID-scoped `/vmute` and `/vban`, per-area `/voicearea on|off`, per-UID join and frame rate limits, new-IPID cooldown — all in `internal/athena/voice_mod.go` and `voice_commands.go`. Disabled by default; toggle with `enable_voice = true` under `[Voice]`.
+
 ### Other Features
 - Hot Potato area minigame
 - Quick Draw area minigame

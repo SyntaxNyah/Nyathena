@@ -66,26 +66,25 @@ func voiceTestConfig(enabled bool, maxPeers int) *settings.Config {
 	cfg.VoiceConfig.EnableVoice = enabled
 	cfg.VoiceConfig.PTTOnly = true
 	cfg.VoiceConfig.MaxPeersPerArea = maxPeers
+	cfg.VoiceConfig.MaxFrameBytes = 4000
 	return cfg
 }
 
-func TestSendVoiceCapsEmitsForceRelayField(t *testing.T) {
+func TestSendVoiceCapsEmitsAudioParameters(t *testing.T) {
 	origConfig := config
 	t.Cleanup(func() { config = origConfig })
 
 	cases := []struct {
 		name        string
 		enabled     bool
-		forceRelay  bool
 		wantInOrder []string
 	}{
-		// Disabled branch always emits zeroed-out caps with force_relay=0
-		// regardless of the configured value.
-		{"disabled", false, false, []string{"VC_CAPS#0#1#0#[]#0#%"}},
-		{"disabled_with_force_relay_set", false, true, []string{"VC_CAPS#0#1#0#[]#0#%"}},
-		// Enabled branch reflects ForceRelay as the 5th field.
-		{"enabled_no_relay", true, false, []string{"VC_CAPS#1#1#6#", "#0#%"}},
-		{"enabled_with_relay", true, true, []string{"VC_CAPS#1#1#6#", "#1#%"}},
+		// Disabled branch advertises enabled=0 with the same audio params,
+		// so a client can still display "voice unavailable" coherently.
+		{"disabled", false, []string{"VS_CAPS#0#1#0#opus#48000#20#4000#%"}},
+		// Enabled branch carries the configured max peers and the same
+		// codec/sample-rate/frame-ms triple.
+		{"enabled", true, []string{"VS_CAPS#1#1#6#opus#48000#20#4000#%"}},
 	}
 
 	a := area.NewArea(area.AreaData{}, 10, 10, area.EviAny)
@@ -93,7 +92,6 @@ func TestSendVoiceCapsEmitsForceRelayField(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			cfg := voiceTestConfig(tc.enabled, 6)
-			cfg.VoiceConfig.ForceRelay = tc.forceRelay
 			config = cfg
 
 			client, conn := newVoiceClient(t, 1, a)
@@ -116,7 +114,7 @@ func newVoiceClient(t *testing.T, uid int, a *area.Area) (*Client, *captureConn)
 	return c, conn
 }
 
-func TestPktVCJoinBroadcastsAndSendsPeerList(t *testing.T) {
+func TestPktVSJoinBroadcastsAndSendsPeerList(t *testing.T) {
 	origConfig := config
 	origClients := clients
 	t.Cleanup(func() {
@@ -138,31 +136,31 @@ func TestPktVCJoinBroadcastsAndSendsPeerList(t *testing.T) {
 	clients.AddClient(bob)
 	clients.RegisterUID(bob)
 
-	pktVCJoin(alice, &packet.Packet{Header: "VC_JOIN"})
-	pktVCJoin(bob, &packet.Packet{Header: "VC_JOIN"})
+	pktVSJoin(alice, &packet.Packet{Header: "VS_JOIN"})
+	pktVSJoin(bob, &packet.Packet{Header: "VS_JOIN"})
 
-	// Alice joined first — she gets an empty VC_PEERS and should then receive
-	// bob's VC_JOIN broadcast.
+	// Alice joined first — she gets an empty VS_PEERS and should then receive
+	// bob's VS_JOIN broadcast.
 	aliceOut := aliceConn.String()
-	if !strings.Contains(aliceOut, "VC_PEERS##%") {
-		t.Errorf("alice did not receive empty VC_PEERS, got: %q", aliceOut)
+	if !strings.Contains(aliceOut, "VS_PEERS##%") {
+		t.Errorf("alice did not receive empty VS_PEERS, got: %q", aliceOut)
 	}
-	if !strings.Contains(aliceOut, "VC_JOIN#2#%") {
-		t.Errorf("alice did not receive VC_JOIN for bob, got: %q", aliceOut)
+	if !strings.Contains(aliceOut, "VS_JOIN#2#%") {
+		t.Errorf("alice did not receive VS_JOIN for bob, got: %q", aliceOut)
 	}
 
-	// Bob joined second — his VC_PEERS should list alice, and he should NOT
-	// receive his own VC_JOIN broadcast.
+	// Bob joined second — his VS_PEERS should list alice, and he should NOT
+	// receive his own VS_JOIN broadcast.
 	bobOut := bobConn.String()
-	if !strings.Contains(bobOut, "VC_PEERS#1#%") {
-		t.Errorf("bob did not receive VC_PEERS with alice, got: %q", bobOut)
+	if !strings.Contains(bobOut, "VS_PEERS#1#%") {
+		t.Errorf("bob did not receive VS_PEERS with alice, got: %q", bobOut)
 	}
-	if strings.Contains(bobOut, "VC_JOIN#2#%") {
-		t.Errorf("bob received his own VC_JOIN broadcast: %q", bobOut)
+	if strings.Contains(bobOut, "VS_JOIN#2#%") {
+		t.Errorf("bob received his own VS_JOIN broadcast: %q", bobOut)
 	}
 }
 
-func TestPktVCJoinRejectsWhenVoiceDisabled(t *testing.T) {
+func TestPktVSJoinRejectsWhenVoiceDisabled(t *testing.T) {
 	origConfig := config
 	origClients := clients
 	t.Cleanup(func() {
@@ -180,13 +178,13 @@ func TestPktVCJoinRejectsWhenVoiceDisabled(t *testing.T) {
 	clients.AddClient(alice)
 	clients.RegisterUID(alice)
 
-	pktVCJoin(alice, &packet.Packet{Header: "VC_JOIN"})
+	pktVSJoin(alice, &packet.Packet{Header: "VS_JOIN"})
 	if inVoiceRoom(a, 1) {
 		t.Fatal("alice was added to voice room even though voice is disabled")
 	}
 }
 
-func TestPktVCJoinRejectsAtMaxPeers(t *testing.T) {
+func TestPktVSJoinRejectsAtMaxPeers(t *testing.T) {
 	origConfig := config
 	origClients := clients
 	t.Cleanup(func() {
@@ -208,9 +206,9 @@ func TestPktVCJoinRejectsAtMaxPeers(t *testing.T) {
 		clients.RegisterUID(c)
 	}
 
-	pktVCJoin(c1, &packet.Packet{Header: "VC_JOIN"})
-	pktVCJoin(c2, &packet.Packet{Header: "VC_JOIN"})
-	pktVCJoin(c3, &packet.Packet{Header: "VC_JOIN"})
+	pktVSJoin(c1, &packet.Packet{Header: "VS_JOIN"})
+	pktVSJoin(c2, &packet.Packet{Header: "VS_JOIN"})
+	pktVSJoin(c3, &packet.Packet{Header: "VS_JOIN"})
 
 	if inVoiceRoom(a, 3) {
 		t.Fatal("third peer was admitted past the configured max")
@@ -220,7 +218,7 @@ func TestPktVCJoinRejectsAtMaxPeers(t *testing.T) {
 	}
 }
 
-func TestPktVCSigRelaysToTargetOnly(t *testing.T) {
+func TestPktVSFrameBroadcastsToOtherPeersOnly(t *testing.T) {
 	origConfig := config
 	origClients := clients
 	t.Cleanup(func() {
@@ -242,29 +240,28 @@ func TestPktVCSigRelaysToTargetOnly(t *testing.T) {
 		clients.RegisterUID(c)
 	}
 
-	pktVCJoin(alice, &packet.Packet{Header: "VC_JOIN"})
-	pktVCJoin(bob, &packet.Packet{Header: "VC_JOIN"})
-	pktVCJoin(carol, &packet.Packet{Header: "VC_JOIN"})
+	pktVSJoin(alice, &packet.Packet{Header: "VS_JOIN"})
+	pktVSJoin(bob, &packet.Packet{Header: "VS_JOIN"})
+	pktVSJoin(carol, &packet.Packet{Header: "VS_JOIN"})
 
-	// Clear captured output so we can isolate the signalling relay.
 	aliceConn.buf.Reset()
 	bobConn.buf.Reset()
 	carolConn.buf.Reset()
 
-	pktVCSig(alice, &packet.Packet{Header: "VC_SIG", Body: []string{"2", "BASE64PAYLOAD"}})
+	pktVSFrame(alice, &packet.Packet{Header: "VS_FRAME", Body: []string{"OPUSPAYLOAD"}})
 
-	if !strings.Contains(bobConn.String(), "VC_SIG#1#BASE64PAYLOAD#%") {
-		t.Errorf("bob did not receive signalling, got: %q", bobConn.String())
+	if !strings.Contains(bobConn.String(), "VS_AUDIO#1#OPUSPAYLOAD#%") {
+		t.Errorf("bob did not receive relayed audio, got: %q", bobConn.String())
 	}
-	if strings.Contains(carolConn.String(), "VC_SIG") {
-		t.Errorf("carol should not have received unicast signalling, got: %q", carolConn.String())
+	if !strings.Contains(carolConn.String(), "VS_AUDIO#1#OPUSPAYLOAD#%") {
+		t.Errorf("carol did not receive relayed audio, got: %q", carolConn.String())
 	}
-	if strings.Contains(aliceConn.String(), "VC_SIG") {
-		t.Errorf("alice should not have received her own signalling, got: %q", aliceConn.String())
+	if strings.Contains(aliceConn.String(), "VS_AUDIO") {
+		t.Errorf("alice received her own audio echoed back, got: %q", aliceConn.String())
 	}
 }
 
-func TestPktVCSigIgnoresCrossAreaTarget(t *testing.T) {
+func TestPktVSFrameIgnoresCrossAreaTarget(t *testing.T) {
 	origConfig := config
 	origClients := clients
 	t.Cleanup(func() {
@@ -286,14 +283,48 @@ func TestPktVCSigIgnoresCrossAreaTarget(t *testing.T) {
 		clients.RegisterUID(c)
 	}
 
-	pktVCJoin(alice, &packet.Packet{Header: "VC_JOIN"})
-	pktVCJoin(bob, &packet.Packet{Header: "VC_JOIN"})
+	pktVSJoin(alice, &packet.Packet{Header: "VS_JOIN"})
+	pktVSJoin(bob, &packet.Packet{Header: "VS_JOIN"})
 
 	bobConn.buf.Reset()
-	pktVCSig(alice, &packet.Packet{Header: "VC_SIG", Body: []string{"2", "BASE64PAYLOAD"}})
+	pktVSFrame(alice, &packet.Packet{Header: "VS_FRAME", Body: []string{"OPUSPAYLOAD"}})
 
-	if strings.Contains(bobConn.String(), "VC_SIG") {
-		t.Errorf("bob in another area should not receive signalling, got: %q", bobConn.String())
+	if strings.Contains(bobConn.String(), "VS_AUDIO") {
+		t.Errorf("bob in another area should not receive audio, got: %q", bobConn.String())
+	}
+}
+
+func TestPktVSFrameDropsOversized(t *testing.T) {
+	origConfig := config
+	origClients := clients
+	t.Cleanup(func() {
+		config = origConfig
+		clients = origClients
+		resetVoiceRooms()
+	})
+	resetVoiceRooms()
+
+	config = voiceTestConfig(true, 6)
+	config.MaxFrameBytes = 16
+	clients = &ClientList{list: make(map[*Client]struct{}), uidIndex: make(map[int]*Client), ipidCounts: make(map[string]int)}
+
+	a := area.NewArea(area.AreaData{}, 10, 10, area.EviAny)
+	alice, _ := newVoiceClient(t, 1, a)
+	bob, bobConn := newVoiceClient(t, 2, a)
+	for _, c := range []*Client{alice, bob} {
+		clients.AddClient(c)
+		clients.RegisterUID(c)
+	}
+
+	pktVSJoin(alice, &packet.Packet{Header: "VS_JOIN"})
+	pktVSJoin(bob, &packet.Packet{Header: "VS_JOIN"})
+	bobConn.buf.Reset()
+
+	// 32 bytes — twice the 16-byte cap.
+	pktVSFrame(alice, &packet.Packet{Header: "VS_FRAME", Body: []string{strings.Repeat("A", 32)}})
+
+	if strings.Contains(bobConn.String(), "VS_AUDIO") {
+		t.Errorf("bob received an oversized frame that should have been dropped, got: %q", bobConn.String())
 	}
 }
 
@@ -318,8 +349,8 @@ func TestLeaveVoiceForClientBroadcastsLeave(t *testing.T) {
 		clients.RegisterUID(c)
 	}
 
-	pktVCJoin(alice, &packet.Packet{Header: "VC_JOIN"})
-	pktVCJoin(bob, &packet.Packet{Header: "VC_JOIN"})
+	pktVSJoin(alice, &packet.Packet{Header: "VS_JOIN"})
+	pktVSJoin(bob, &packet.Packet{Header: "VS_JOIN"})
 	bobConn.buf.Reset()
 
 	leaveVoiceForClient(alice)
@@ -327,7 +358,7 @@ func TestLeaveVoiceForClientBroadcastsLeave(t *testing.T) {
 	if inVoiceRoom(a, 1) {
 		t.Fatal("alice still in voice room after leaveVoiceForClient")
 	}
-	if !strings.Contains(bobConn.String(), "VC_LEAVE#1#%") {
-		t.Errorf("bob did not receive VC_LEAVE, got: %q", bobConn.String())
+	if !strings.Contains(bobConn.String(), "VS_LEAVE#1#%") {
+		t.Errorf("bob did not receive VS_LEAVE, got: %q", bobConn.String())
 	}
 }

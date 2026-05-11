@@ -189,8 +189,9 @@ func cmdVkick(client *Client, args []string, usage string) {
 
 // voiceClientRequirementHint is shown to mods/users who may wonder why the
 // voice room looks empty or silent.  Vanilla AO2 desktop clients do not speak
-// WebRTC — only WebAO builds that include the VC_* handlers can join voice.
-const voiceClientRequirementHint = "ℹ️ Voice chat requires a WebAO client built with WebRTC support. " +
+// the server-relayed voice protocol — only WebAO builds that include the
+// VS_* handlers can join voice.
+const voiceClientRequirementHint = "ℹ️ Voice chat requires a WebAO client built with server-relayed voice support. " +
 	"The classic AO2 desktop client cannot join voice — those players will appear connected for chat but " +
 	"will not be able to speak or hear in voice rooms."
 

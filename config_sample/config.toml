@@ -632,10 +632,16 @@ mod_role_id = ""
 
 [Voice]
 
-# Opt-in WebRTC voice-chat signalling.  When enabled, clients that support
-# voice (e.g. a patched webAO) can negotiate peer-to-peer audio calls with
-# others in the same area.  The server only relays SDP offers/answers and
-# ICE candidates — no audio ever passes through the server.
+# Opt-in server-relayed voice chat.  When enabled, clients that support
+# voice (e.g. a patched webAO) stream Opus audio frames over their existing
+# AO2 WebSocket connection; the server forwards each frame to every other
+# joined peer in the same area.
+#
+# Privacy: every frame travels client → Athena → other clients.  Peers
+# never connect to each other directly, so they cannot learn each other's
+# IPs (which is what TURN was used for in the previous WebRTC mode).
+# Athena itself sees every peer's IP, exactly as it does for chat packets.
+#
 # Disabled by default.  Set to true to allow voice clients to connect.
 enable_voice = false
 
@@ -645,29 +651,15 @@ enable_voice = false
 ptt_only = true
 
 # Maximum number of simultaneous voice peers allowed in a single area.
-# Mesh topology scales O(n^2); 6–8 is a practical cap for typical hardware.
+# Server-relay scales O(n) per sender (one fan-out per joined peer); the
+# hard limit is mostly about bandwidth and audibility, not CPU.
 max_peers_per_area = 6
 
-# STUN servers used by clients to discover their public IP for NAT traversal.
-# The default Google STUN server works for most users; add your own for
-# redundancy or privacy.
-stun_servers = [ "stun:stun.l.google.com:19302" ]
-
-# Optional TURN relay servers for clients behind symmetric NAT who cannot
-# reach each other peer-to-peer.  Leave empty unless you operate your own
-# TURN service (e.g. coturn) or have credentials for a hosted one.
-turn_servers = []
-turn_username = ""
-turn_credential = ""
-
-# When true, instructs clients to set RTCPeerConnection's iceTransportPolicy
-# to "relay", forcing all audio through your TURN servers and hiding peers'
-# IPs from each other.  Useful for privacy-conscious deployments.
-#
-# Requires at least one entry in turn_servers — with force_relay = true and
-# no TURN servers configured, no peer can connect at all.  A startup warning
-# is emitted in that case.
-force_relay = false
+# Maximum size in bytes of a single VS_FRAME payload (the base64-encoded
+# Opus packet).  4000 bytes comfortably fits a 20 ms Opus frame at any
+# bitrate up to the codec's 510 kbps ceiling.  Oversized frames are dropped
+# silently — a misbehaving client will simply not be heard.
+max_frame_bytes = 4000
 
 # Default voice-allowed setting for areas that don't set `voice_allowed`
 # explicitly in areas.toml.  When true (default), every area permits voice
@@ -675,16 +667,17 @@ force_relay = false
 # Moderators can hot-toggle any area at runtime with /voicearea on|off.
 default_area_voice_allowed = true
 
-# Per-UID rate limit on VC_JOIN packets.  Blunts join/leave spam.  Set
+# Per-UID rate limit on VS_JOIN packets.  Blunts join/leave spam.  Set
 # join_rate_limit = 0 to disable.
 join_rate_limit = 3
 join_rate_limit_window = 10
 
-# Per-UID rate limit on VC_SIG packets (SDP/ICE relay).  Signalling is
-# naturally bursty during connection setup, so the default is generous.
-# Set sig_rate_limit = 0 to disable.
-sig_rate_limit = 200
-sig_rate_limit_window = 10
+# Per-UID rate limit on VS_FRAME packets (relayed audio frames).  At 20 ms
+# frames the nominal rate is 50/sec; the default 60-per-1-second cap leaves
+# ~20% jitter headroom while catching flooders.  Set frame_rate_limit = 0
+# to disable, but be aware the relay then has no per-client throughput cap.
+frame_rate_limit = 60
+frame_rate_limit_window = 1
 
 # Grace period, in seconds, before a newly-seen IPID may join voice chat.
 # Mirrors new_ipid_ooc_cooldown but scoped to voice.  Blunts drive-by

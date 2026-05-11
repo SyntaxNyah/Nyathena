@@ -140,10 +140,10 @@ var PacketMap = map[string]pktMapValue{
 	"ZZ":      {0, true, pktModcall},
 	"SETCASE": {7, true, pktSetCase},
 	"CASEA":   {6, true, pktCaseAnn},
-	"VC_JOIN":  {0, true, pktVCJoin},
-	"VC_LEAVE": {0, true, pktVCLeave},
-	"VC_SIG":   {2, true, pktVCSig},
-	"VC_SPEAK": {1, true, pktVCSpeak},
+	"VS_JOIN":  {0, true, pktVSJoin},
+	"VS_LEAVE": {0, true, pktVSLeave},
+	"VS_FRAME": {1, true, pktVSFrame},
+	"VS_SPEAK": {1, true, pktVSSpeak},
 }
 
 // Handles HI#%
@@ -242,7 +242,7 @@ func pktReqDone(client *Client, _ *packet.Packet) {
 	// images to load against an unrendered viewport, leaving desks invisible
 	// on WebAO even when deskmod indicated they should be shown.
 	client.SendPacket("BN", areas[0].Background())
-	// Re-emit VC_CAPS at the end of the join handshake.  pktId already sends
+	// Re-emit VS_CAPS at the end of the join handshake.  pktId already sends
 	// it once during the early ID phase, but some clients (notably webAO,
 	// which builds its voice subsystem after SI/SC/SM/DONE) ignore packets
 	// that arrive before that subsystem exists.  Sending it again here, after
