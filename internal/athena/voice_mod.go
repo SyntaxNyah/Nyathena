@@ -17,7 +17,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>. */
 package athena
 
 // Voice moderation state: IPID-scoped voice mutes and bans, per-UID rate
-// limiters for VC_JOIN and VC_SIG, and the new-IPID voice cooldown tracker.
+// limiters for VS_JOIN and VS_FRAME, and the new-IPID voice cooldown tracker.
 //
 // All state is in-memory.  A zero expiry means "permanent until lifted".
 // Mutes, bans, and cooldown entries persist until the server restarts; when
@@ -44,8 +44,8 @@ var (
 	voiceBans  = map[string]voiceRestriction{}
 
 	// Per-UID rate-limit windows.  Keyed by UID.
-	voiceJoinEvents = map[int][]time.Time{}
-	voiceSigEvents  = map[int][]time.Time{}
+	voiceJoinEvents  = map[int][]time.Time{}
+	voiceFrameEvents = map[int][]time.Time{}
 
 	// Tracks the first time we've seen each IPID in any voice-related packet
 	// so the new-IPID cooldown applies even if an operator lowers it at
@@ -63,11 +63,11 @@ func voiceConfigJoinLimit() (int, time.Duration) {
 	return config.JoinRateLimit, time.Duration(config.JoinRateLimitWindow) * time.Second
 }
 
-func voiceConfigSigLimit() (int, time.Duration) {
-	if config == nil || config.SigRateLimit <= 0 || config.SigRateLimitWindow <= 0 {
+func voiceConfigFrameLimit() (int, time.Duration) {
+	if config == nil || config.FrameRateLimit <= 0 || config.FrameRateLimitWindow <= 0 {
 		return 0, 0
 	}
-	return config.SigRateLimit, time.Duration(config.SigRateLimitWindow) * time.Second
+	return config.FrameRateLimit, time.Duration(config.FrameRateLimitWindow) * time.Second
 }
 
 // checkVoiceRestriction returns (blocked, remainingSeconds, reason) for the
@@ -205,16 +205,18 @@ func allowRate(m map[int][]time.Time, uid int, limit int, window time.Duration) 
 	return true, 0
 }
 
-// allowVoiceJoin admits or rejects a VC_JOIN under the join rate limit.
+// allowVoiceJoin admits or rejects a VS_JOIN under the join rate limit.
 func allowVoiceJoin(uid int) (bool, int) {
 	limit, window := voiceConfigJoinLimit()
 	return allowRate(voiceJoinEvents, uid, limit, window)
 }
 
-// allowVoiceSig admits or rejects a VC_SIG under the signalling rate limit.
-func allowVoiceSig(uid int) (bool, int) {
-	limit, window := voiceConfigSigLimit()
-	return allowRate(voiceSigEvents, uid, limit, window)
+// allowVoiceFrame admits or rejects a VS_FRAME under the audio frame rate
+// limit.  Called on every relayed audio frame; the per-UID sliding window
+// keeps abusive clients from saturating the relay.
+func allowVoiceFrame(uid int) (bool, int) {
+	limit, window := voiceConfigFrameLimit()
+	return allowRate(voiceFrameEvents, uid, limit, window)
 }
 
 // touchVoiceFirstSeen records the first time we've observed this IPID in a
@@ -243,12 +245,12 @@ func touchVoiceFirstSeen(ipid string) int {
 func clearVoiceRateStateForUID(uid int) {
 	voiceModMu.Lock()
 	delete(voiceJoinEvents, uid)
-	delete(voiceSigEvents, uid)
+	delete(voiceFrameEvents, uid)
 	voiceModMu.Unlock()
 }
 
 // kickAllVoiceFromArea ejects every joined voice peer in the given area and
-// broadcasts VC_LEAVE for each.  Used by /voicearea off and /vmute/vban when
+// broadcasts VS_LEAVE for each.  Used by /voicearea off and /vmute/vban when
 // a currently-joined client is targeted.
 func kickAllVoiceFromArea(a *area.Area) {
 	if a == nil {

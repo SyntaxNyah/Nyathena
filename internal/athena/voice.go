@@ -16,25 +16,32 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>. */
 
 package athena
 
-// Voice chat relay.
+// Server-relayed voice chat.
 //
-// The server never handles media — it only forwards WebRTC signalling
-// (SDP offers/answers, ICE candidates) between peers in the same area.
-// Topology is full-mesh per area; peers negotiate directly.
+// Every audio frame travels client → Athena → other clients in the same
+// area.  No peer-to-peer path exists, which means peers never learn each
+// other's IPs — only Athena sees them, and Athena already sees them anyway
+// for every other AO2 packet.  This replaces the previous WebRTC-signalling
+// relay; TURN/STUN are not used and no ICE configuration is advertised.
+//
+// The server treats Opus frames as opaque base64 blobs and forwards them
+// unmodified.  No decode/encode is performed, so CPU cost is roughly one
+// memcpy per frame per receiver.  A future voice-effects step would slot
+// into relayFrame, between the rate-limit check and the broadcast call.
 //
 // Protocol:
-//   VC_CAPS#<enabled>#<ptt_only>#<max_peers>#<ice_json>#<force_relay>#%  (S→C, on handshake)
-//   VC_JOIN#<uid>#%                                         (C→S, then broadcast to area)
-//   VC_LEAVE#<uid>#%                                        (C→S or server-generated)
-//   VC_PEERS#<csv_uids>#%                                   (S→C, current voice peers in area)
-//   VC_SIG#<from_uid>#<to_uid>#<b64_payload>#%              (C→S→target; opaque blob)
-//   VC_SPEAK#<uid>#<on_off>#%                               (C→S→area; speaking indicator)
+//   VS_CAPS#<enabled>#<ptt_only>#<max_peers>#<codec>#<sample_rate>#<frame_ms>#<max_frame_bytes>#%   (S→C, handshake)
+//   VS_JOIN#<uid>#%                                       (C→S, then broadcast to area)
+//   VS_LEAVE#<uid>#%                                      (C→S or server-generated)
+//   VS_PEERS#<csv_uids>#%                                 (S→C, current voice peers in area)
+//   VS_FRAME#<b64_opus>#%                                 (C→S, audio frame for the area)
+//   VS_AUDIO#<from_uid>#<b64_opus>#%                      (S→C, relayed audio frame)
+//   VS_SPEAK#<uid>#<on_off>#%                             (C→S→area; speaking indicator)
 //
-// Only joined clients may send voice packets.  Muted or jailed clients
-// may not join voice or send signalling.
+// Only joined clients may send VS_FRAME or VS_SPEAK.  Muted or jailed
+// clients may not join voice.
 
 import (
-	"encoding/json"
 	"fmt"
 	"strconv"
 	"strings"
@@ -45,26 +52,29 @@ import (
 	"github.com/MangosArentLiterature/Athena/internal/packet"
 )
 
+// Protocol-fixed audio parameters.  Clients must use these exact values; the
+// server never decodes the payload but the parameters are advertised in
+// VS_CAPS so client codecs are configured consistently across deployments.
+const (
+	voiceCodec      = "opus"
+	voiceSampleRate = 48000
+	voiceFrameMs    = 20
+)
+
 // LogVoiceConfig prints the decoded [Voice] config at startup so operators
-// can see at a glance whether the section was loaded.  Called once from
-// NewServer, after `config` is wired to the package-level singleton.
+// can see at a glance whether the section was loaded.
 func LogVoiceConfig() {
 	if config == nil {
 		logger.LogInfo("voice: config is nil at startup (this is a bug)")
 		return
 	}
-	logger.LogInfof("voice: enable_voice=%v ptt_only=%v max_peers_per_area=%d stun_servers=%d turn_servers=%d force_relay=%v default_area_voice_allowed=%v",
+	logger.LogInfof("voice: enable_voice=%v ptt_only=%v max_peers_per_area=%d max_frame_bytes=%d default_area_voice_allowed=%v",
 		config.EnableVoice,
 		config.PTTOnly,
 		config.MaxPeersPerArea,
-		len(config.STUNServers),
-		len(config.TURNServers),
-		config.ForceRelay,
+		config.MaxFrameBytes,
 		config.DefaultAreaVoiceAllowed,
 	)
-	if config.EnableVoice && config.ForceRelay && len(config.TURNServers) == 0 {
-		logger.LogWarning("voice: force_relay=true but turn_servers is empty — clients will be unable to connect")
-	}
 }
 
 // voiceRooms tracks which UIDs are currently publishing voice in each area.
@@ -80,68 +90,34 @@ func voiceEnabled() bool {
 	return config != nil && config.EnableVoice
 }
 
-// voiceICEConfigJSON returns the JSON blob advertised to clients describing
-// the ICE servers they should use.  Clients pass this directly into
-// RTCPeerConnection's configuration.
-//
-// The `urls` field is emitted as a JSON STRING (one entry per server URL),
-// not an array.  RTCPeerConnection accepts both shapes per the spec, but
-// webAO's TypeScript handler strict-types `urls: string` and silently
-// rejects arrays — the symptom is a successful VC_CAPS receive followed
-// by no voice panel render.
-func voiceICEConfigJSON() string {
-	if !voiceEnabled() {
-		return "[]"
+// maxFrameBytes returns the configured per-frame byte cap, or a sane default
+// if the operator left it at zero.  4000 bytes comfortably fits a 20 ms Opus
+// frame at any bitrate up to 510 kbps (the codec's hard ceiling).
+func maxFrameBytes() int {
+	if config == nil || config.MaxFrameBytes <= 0 {
+		return 4000
 	}
-	type iceServer struct {
-		URLs       string `json:"urls"`
-		Username   string `json:"username,omitempty"`
-		Credential string `json:"credential,omitempty"`
-	}
-	var servers []iceServer
-	for _, s := range config.STUNServers {
-		if s = strings.TrimSpace(s); s != "" {
-			servers = append(servers, iceServer{URLs: s})
-		}
-	}
-	for _, s := range config.TURNServers {
-		if s = strings.TrimSpace(s); s != "" {
-			servers = append(servers, iceServer{
-				URLs:       s,
-				Username:   config.TURNUsername,
-				Credential: config.TURNCredential,
-			})
-		}
-	}
-	b, err := json.Marshal(servers)
-	if err != nil {
-		return "[]"
-	}
-	return string(b)
+	return config.MaxFrameBytes
 }
 
 // sendVoiceCaps informs the client whether voice is available and, if so,
-// the ICE configuration and PTT policy.  Safe to call with voice disabled;
-// in that case the client is told the feature is off and should not render
-// voice UI.
+// the audio parameters they should encode against.  Safe to call with voice
+// disabled; in that case the client is told the feature is off and should
+// not render voice UI.
 func sendVoiceCaps(client *Client) {
 	if !voiceEnabled() {
-		logger.LogInfof("voice: emitting VC_CAPS#0#1#0#[]#0#%% to UID %d (voice disabled)", client.Uid())
-		client.SendPacket("VC_CAPS", "0", "1", "0", "[]", "0")
+		logger.LogInfof("voice: emitting VS_CAPS#0 to UID %d (voice disabled)", client.Uid())
+		client.SendPacket("VS_CAPS", "0", "1", "0", voiceCodec, strconv.Itoa(voiceSampleRate), strconv.Itoa(voiceFrameMs), strconv.Itoa(maxFrameBytes()))
 		return
 	}
 	ptt := "0"
 	if config.PTTOnly {
 		ptt = "1"
 	}
-	forceRelay := "0"
-	if config.ForceRelay {
-		forceRelay = "1"
-	}
 	maxPeers := strconv.Itoa(config.MaxPeersPerArea)
-	iceJSON := voiceICEConfigJSON()
-	logger.LogInfof("voice: emitting VC_CAPS#1#%s#%s#%s#%s#%% to UID %d", ptt, maxPeers, iceJSON, forceRelay, client.Uid())
-	client.SendPacket("VC_CAPS", "1", ptt, maxPeers, iceJSON, forceRelay)
+	mfb := strconv.Itoa(maxFrameBytes())
+	logger.LogInfof("voice: emitting VS_CAPS#1#%s#%s#%s#%d#%d#%s to UID %d", ptt, maxPeers, voiceCodec, voiceSampleRate, voiceFrameMs, mfb, client.Uid())
+	client.SendPacket("VS_CAPS", "1", ptt, maxPeers, voiceCodec, strconv.Itoa(voiceSampleRate), strconv.Itoa(voiceFrameMs), mfb)
 }
 
 // currentVoicePeers returns the set of UIDs currently in voice in the given
@@ -217,7 +193,7 @@ func removeVoicePeer(a *area.Area, uid int) bool {
 }
 
 // leaveVoiceForClient removes the client from any voice room it's in and
-// broadcasts VC_LEAVE to the affected area.  Safe to call on disconnect or
+// broadcasts VS_LEAVE to the affected area.  Safe to call on disconnect or
 // area change whether or not the client was actually in voice.
 func leaveVoiceForClient(client *Client) {
 	if client == nil {
@@ -231,9 +207,7 @@ func leaveVoiceForClient(client *Client) {
 		return
 	}
 	uidStr := strconv.Itoa(client.Uid())
-	// Broadcast only to remaining voice-room peers — they're the ones with an
-	// open WebRTC connection to the leaving client that needs to be torn down.
-	writeToAreaVoice(a, client.Uid(), "VC_LEAVE", uidStr)
+	writeToAreaVoice(a, client.Uid(), "VS_LEAVE", uidStr)
 }
 
 // writeToAreaVoice sends a packet to every client in a's voice room, optionally
@@ -243,10 +217,8 @@ func writeToAreaVoice(a *area.Area, skipUID int, header string, contents ...stri
 	if len(peers) == 0 {
 		return
 	}
-	skip := make(map[int]struct{}, 1)
-	skip[skipUID] = struct{}{}
 	for _, uid := range peers {
-		if _, s := skip[uid]; s {
+		if uid == skipUID {
 			continue
 		}
 		c := clients.GetClientByUID(uid)
@@ -256,11 +228,11 @@ func writeToAreaVoice(a *area.Area, skipUID int, header string, contents ...stri
 	}
 }
 
-// Handles VC_JOIN#<uid>#%
+// Handles VS_JOIN#<uid>#%
 //
-// The uid argument is accepted for protocol symmetry with VC_LEAVE but is
+// The uid argument is accepted for protocol symmetry with VS_LEAVE but is
 // always overridden with client.Uid() to prevent spoofing.
-func pktVCJoin(client *Client, _ *packet.Packet) {
+func pktVSJoin(client *Client, _ *packet.Packet) {
 	if !voiceEnabled() {
 		client.SendServerMessage("Voice chat is disabled on this server.")
 		return
@@ -305,10 +277,9 @@ func pktVCJoin(client *Client, _ *packet.Packet) {
 	}
 	uid := client.Uid()
 	if inVoiceRoom(a, uid) {
-		// Client is retrying while already joined (e.g. WebRTC failed and client
-		// is attempting to re-initiate). Re-send the current peer list so they can
-		// re-initiate signalling without consuming a rate-limit slot or re-adding
-		// themselves to the room.
+		// Client is retrying while already joined.  Re-send the current peer
+		// list so they can re-render the panel without consuming a rate-limit
+		// slot or re-adding themselves to the room.
 		peers := currentVoicePeers(a)
 		peerStrs := make([]string, 0, len(peers))
 		for _, p := range peers {
@@ -317,7 +288,7 @@ func pktVCJoin(client *Client, _ *packet.Packet) {
 			}
 			peerStrs = append(peerStrs, strconv.Itoa(p))
 		}
-		client.SendPacket("VC_PEERS", strings.Join(peerStrs, ","))
+		client.SendPacket("VS_PEERS", strings.Join(peerStrs, ","))
 		return
 	}
 	if ok, retry := allowVoiceJoin(uid); !ok {
@@ -336,59 +307,54 @@ func pktVCJoin(client *Client, _ *packet.Packet) {
 		}
 		peerStrs = append(peerStrs, strconv.Itoa(p))
 	}
-	client.SendPacket("VC_PEERS", strings.Join(peerStrs, ","))
-	writeToAreaVoice(a, uid, "VC_JOIN", strconv.Itoa(uid))
+	client.SendPacket("VS_PEERS", strings.Join(peerStrs, ","))
+	writeToAreaVoice(a, uid, "VS_JOIN", strconv.Itoa(uid))
 }
 
-// Handles VC_LEAVE#%
-func pktVCLeave(client *Client, _ *packet.Packet) {
+// Handles VS_LEAVE#%
+func pktVSLeave(client *Client, _ *packet.Packet) {
 	if client.Area() == nil {
 		return
 	}
 	leaveVoiceForClient(client)
 }
 
-// Handles VC_SIG#<to_uid>#<payload>#%
+// Handles VS_FRAME#<b64_opus>#%
 //
-// Signalling is relayed to the target peer only if both sender and target are
-// in the same area's voice room.  The payload is an opaque base64 blob — the
-// server does not parse it.
-func pktVCSig(client *Client, p *packet.Packet) {
-	if !voiceEnabled() {
-		return
-	}
-	if len(p.Body) < 2 {
+// The payload is treated as an opaque base64 string.  The server enforces a
+// length cap and a per-UID frame rate limit, then broadcasts to every other
+// joined peer in the same area as VS_AUDIO#<from_uid>#<b64_opus>#%.
+//
+// A future voice-effects step (e.g. pitch-shift punishments) would decode
+// the Opus payload between the rate-limit check and the broadcast call.
+// That would introduce CGO and a per-frame DSP cost, so it's intentionally
+// out of scope here — the relay stays codec-agnostic.
+func pktVSFrame(client *Client, p *packet.Packet) {
+	if !voiceEnabled() || len(p.Body) < 1 {
 		return
 	}
 	a := client.Area()
 	if a == nil {
 		return
 	}
-	fromUID := client.Uid()
-	if !inVoiceRoom(a, fromUID) {
+	uid := client.Uid()
+	if !inVoiceRoom(a, uid) {
 		return
 	}
-	if ok, _ := allowVoiceSig(fromUID); !ok {
-		// Silently drop — signalling bursts are noisy and a message per drop
-		// would spam the sender.  A misbehaving client will see failed ICE.
+	if len(p.Body[0]) > maxFrameBytes() {
+		// Oversized frames are dropped silently — a chatty client may be
+		// trying to flood and we don't want to give it back-pressure
+		// signal.  Logged at debug-only level for the same reason.
 		return
 	}
-	toUID, err := strconv.Atoi(strings.TrimSpace(p.Body[0]))
-	if err != nil || toUID == fromUID {
+	if ok, _ := allowVoiceFrame(uid); !ok {
 		return
 	}
-	if !inVoiceRoom(a, toUID) {
-		return
-	}
-	target := clients.GetClientByUID(toUID)
-	if target == nil || target.Area() != a {
-		return
-	}
-	target.SendPacket("VC_SIG", strconv.Itoa(fromUID), p.Body[1])
+	writeToAreaVoice(a, uid, "VS_AUDIO", strconv.Itoa(uid), p.Body[0])
 }
 
-// Handles VC_SPEAK#<on_off>#%  (0 = stopped talking, 1 = started)
-func pktVCSpeak(client *Client, p *packet.Packet) {
+// Handles VS_SPEAK#<on_off>#%  (0 = stopped talking, 1 = started)
+func pktVSSpeak(client *Client, p *packet.Packet) {
 	if !voiceEnabled() || len(p.Body) < 1 {
 		return
 	}
@@ -400,5 +366,5 @@ func pktVCSpeak(client *Client, p *packet.Packet) {
 	if strings.TrimSpace(p.Body[0]) == "1" {
 		state = "1"
 	}
-	writeToAreaVoice(a, client.Uid(), "VC_SPEAK", strconv.Itoa(client.Uid()), state)
+	writeToAreaVoice(a, client.Uid(), "VS_SPEAK", strconv.Itoa(client.Uid()), state)
 }
