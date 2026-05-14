@@ -527,16 +527,43 @@ func (client *Client) HandleClient() {
 	}
 }
 
-// write sends the given message to the client's network socket.
-// Write errors are intentionally ignored: any underlying connection failure
-// will surface on the next read in HandleClient, which closes the connection.
+// write enqueues a pre-built packet string for asynchronous delivery via
+// runWriter. Callers use this for packets whose body is constructed once and
+// reused verbatim (e.g. the SM music-list packet built at server startup), so
+// re-encoding through SendPacket's header+contents API would be wasteful.
+//
+// All outbound writes MUST go through sendCh: the underlying nhooyr.io
+// WebSocket NetConn shares one writeContext across every Write call, so a
+// direct io.WriteString to client.conn races with runWriter and, on a slow
+// link, the shared 5s write deadline armed by runWriter can cancel an
+// in-flight direct write — surfacing on the client as a 1006 abnormal close.
+// Routing every send through the single writer goroutine eliminates the race.
 func (client *Client) write(message string) {
-	client.mu.Lock()
-	io.WriteString(client.conn, message) //nolint:errcheck
-	if logger.EnableNetworkLogging {
-		logger.WriteNetworkLog(client.ipid, client.hdid, "SEND", message)
+	// Tests construct *Client via struct literal, leaving sendCh nil. Fall
+	// back to the synchronous path so existing tests still observe the write
+	// on the underlying conn. Production paths always create clients via
+	// NewClient, so this branch is never taken in real connections.
+	if client.sendCh == nil {
+		client.mu.Lock()
+		io.WriteString(client.conn, message) //nolint:errcheck
+		if logger.EnableNetworkLogging {
+			logger.WriteNetworkLog(client.ipid, client.hdid, "SEND", message)
+		}
+		client.mu.Unlock()
+		return
 	}
-	client.mu.Unlock()
+	if client.closed.Load() {
+		return
+	}
+	buf := []byte(message)
+	select {
+	case client.sendCh <- buf:
+	default:
+		// sendCh full — drop. See SendPacket for the rationale: dropping a
+		// single packet is better than disconnecting a player whose writer
+		// is briefly behind. A truly stuck consumer is reaped by the ping
+		// timeout / rate limiter paths, which call conn.Close().
+	}
 }
 
 // SendPacket enqueues a packet for asynchronous delivery. The packet is built
