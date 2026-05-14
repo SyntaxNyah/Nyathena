@@ -694,6 +694,23 @@ func (s *Server) ListenWSS() {
 // Kept for backward compatibility; delegates to server.ListenWSS.
 func ListenWSS() { server.ListenWSS() }
 
+// webaoAcceptOptions returns the nhooyr AcceptOptions used for every WebAO
+// connection. Compression (permessage-deflate, RFC 7692) is explicitly
+// disabled: iPadOS / Safari WebKit ship a permessage-deflate decompressor
+// that aborts the connection on large compressed payloads (the AO2 SM music
+// list and CT MOTD packets are the consistent triggers in production), so
+// enabling it — which is nhooyr's default — guarantees a 1006 close partway
+// through the handshake for those clients. Disabling it makes the server
+// advertise no extensions, the browser skips its decompressor entirely, and
+// the wire-format hit (no deflate) is irrelevant because TCP already
+// segments large frames across MTU-sized packets.
+func webaoAcceptOptions() *websocket.AcceptOptions {
+	return &websocket.AcceptOptions{
+		OriginPatterns:  []string{config.WebAOAllowedOrigin},
+		CompressionMode: websocket.CompressionDisabled,
+	}
+}
+
 // HandleWS handles a websocket connection.
 func HandleWS(w http.ResponseWriter, r *http.Request) {
 	rawIP := getRealIP(r)
@@ -712,7 +729,7 @@ func HandleWS(w http.ResponseWriter, r *http.Request) {
 	if banned, _, err := db.IsBanned(db.IPID, ipid); err != nil {
 		logger.LogErrorf("Failed to check IP ban for %v: %v", ipid, err)
 	} else if banned {
-		c, wsErr := websocket.Accept(w, r, &websocket.AcceptOptions{OriginPatterns: []string{config.WebAOAllowedOrigin}})
+		c, wsErr := websocket.Accept(w, r, webaoAcceptOptions())
 		if wsErr != nil {
 			logger.LogError(wsErr.Error())
 			return
@@ -724,7 +741,7 @@ func HandleWS(w http.ResponseWriter, r *http.Request) {
 	if checkGlobalNewIPRateLimit(ipid) {
 		if lockdownReject := serverLockdownRejection(ipid); lockdownReject {
 			logger.LogInfof("Connection from new IP %v rejected (server lockdown active)", ipid)
-			c, wsErr := websocket.Accept(w, r, &websocket.AcceptOptions{OriginPatterns: []string{config.WebAOAllowedOrigin}})
+			c, wsErr := websocket.Accept(w, r, webaoAcceptOptions())
 			if wsErr != nil {
 				logger.LogError(wsErr.Error())
 				http.Error(w, lockdownJoinMsg, http.StatusServiceUnavailable)
@@ -752,7 +769,7 @@ func HandleWS(w http.ResponseWriter, r *http.Request) {
 			logger.LogErrorf("Failed to update known IP %s: %v", id, err)
 		}
 	}(ipid)
-	c, err := websocket.Accept(w, r, &websocket.AcceptOptions{OriginPatterns: []string{config.WebAOAllowedOrigin}})
+	c, err := websocket.Accept(w, r, webaoAcceptOptions())
 	if err != nil {
 		logger.LogError(err.Error())
 		return
