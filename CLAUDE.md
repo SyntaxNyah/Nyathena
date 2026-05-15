@@ -379,6 +379,9 @@ Mirrors the in-game security commands so moderators don't have to be logged in t
 ### `/charshuffle` and `/uncharshuffle`
 Mirrors `/nameshuffle` but operates on character IDs. Randomly permutes everyone's character (char 1 → char 2, char 2 → char 5, etc.) using Sattolo's algorithm so every player ends up on someone else's sprite. Originals are remembered per-client so `/uncharshuffle` puts everyone back exactly. Requires `MUTE`.
 
+### `/reversename` and `/unreversename`
+Flips the rune order of a player's showname (`Phoenix` → `xineohP`). `/reversename <uid>` (or a comma-separated UID list) targets specific players; `/reversename global` reverses every player in the caller's area. `/unreversename` restores with the same target forms. The forced showname in effect before the flip is remembered per client, so `/unreversename` restores it exactly — even when the reverse was stacked on top of a `/forcename`. Reverses by runes (multi-byte/accented characters survive) and re-encodes so AO2 escape sequences are never split. Requires `KICK`.
+
 ### `/getmusic`
 For every player. Prints the URL of the song currently playing in the area **and** re-sends the MC packet to just the requesting client. Useful when a client's audio handling glitched and the song never started — the user can either copy the URL or have the bot poke their player to restart playback locally.
 
