@@ -722,6 +722,22 @@ func initCommands() {
 			reqPerms: permissions.PermissionField["KICK"],
 			category: "moderation",
 		},
+		"reversename": {
+			handler:  cmdReverseName,
+			minArgs:  1,
+			usage:    "Usage: /reversename <uid[,uid...]> | global",
+			desc:     "Reverses a player's showname (Phoenix -> xineohP). Use \"global\" for the whole area; undo with /unreversename.",
+			reqPerms: permissions.PermissionField["KICK"],
+			category: "moderation",
+		},
+		"unreversename": {
+			handler:  cmdUnreverseName,
+			minArgs:  1,
+			usage:    "Usage: /unreversename <uid[,uid...]> | global",
+			desc:     "Restores a showname reversed by /reversename. Use \"global\" for the whole area.",
+			reqPerms: permissions.PermissionField["KICK"],
+			category: "moderation",
+		},
 		"tung": {
 			handler:  cmdTung,
 			minArgs:  1,

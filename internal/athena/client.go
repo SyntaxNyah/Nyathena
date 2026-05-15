@@ -302,6 +302,8 @@ type Client struct {
 	possessing          int          // UID of the client being possessed (-1 if not possessing anyone)
 	possessedPos        string       // Position of the possessed target (saved at time of possession)
 	forcedShowname      string       // Showname forced by a moderator ("" if none)
+	nameReversed        bool         // gates /reversename so it cannot double-apply
+	preReverseShowname  string       // forcedShowname before /reversename; restored by /unreversename
 	shuffledOrigCharID  int          // Original char ID before /charshuffle (-2 = not shuffled)
 	forcedIniswapChar   string       // Character name forced for iniswap-style IC output ("" = none)
 	forcedIniswapIDStr  string       // Pre-computed strconv.Itoa(charID) matching forcedIniswapChar ("" = none)
