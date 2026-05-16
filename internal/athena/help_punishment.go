@@ -87,6 +87,11 @@ var punishmentHelpGroups = []punishmentSubcategory{
 		cmds: []string{"sfxcurse", "unsfx"},
 	},
 	{
+		emoji: "🎙", title: "Voice chat",
+		desc: "Sabotage a player's server-relayed voice-chat audio — drop, gate, or stutter their Opus frames. Needs enable_voice. Supports 'global'.",
+		cmds: []string{"voicemute", "voicestatic", "voicegarble", "voicecutout", "voicestutter"},
+	},
+	{
 		emoji: "💥", title: "Stacking / chaos",
 		desc: "Combine multiple effects on a single target. /stack and /randompunishall support 'global'.",
 		cmds: []string{"stack", "torment", "roulette", "lovebomb", "degrade",

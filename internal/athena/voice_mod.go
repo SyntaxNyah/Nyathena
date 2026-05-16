@@ -247,6 +247,8 @@ func clearVoiceRateStateForUID(uid int) {
 	delete(voiceJoinEvents, uid)
 	delete(voiceFrameEvents, uid)
 	voiceModMu.Unlock()
+	// Drop any held /voicestutter frame for this UID (separate mutex).
+	clearVoiceStutterState(uid)
 }
 
 // kickAllVoiceFromArea ejects every joined voice peer in the given area and

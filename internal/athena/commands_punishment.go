@@ -822,6 +822,16 @@ func parsePunishmentType(s string) PunishmentType {
 		return PunishmentWide
 	case "fromsoftware":
 		return PunishmentFromSoftware
+	case "voicemute":
+		return PunishmentVoiceMute
+	case "voicestatic":
+		return PunishmentVoiceStatic
+	case "voicegarble":
+		return PunishmentVoiceGarble
+	case "voicecutout":
+		return PunishmentVoiceCutout
+	case "voicestutter":
+		return PunishmentVoiceStutter
 	default:
 		return PunishmentNone
 	}

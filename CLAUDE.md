@@ -200,6 +200,14 @@ The `-h` flag works on every applicator: single-effect commands (`/tsundere 7 -h
 - `/sfxcurse <uid> <sfx-url>` — forces an SFX file to play on every IC message; URL must be `http(s)://…` or under `/base/sounds/…`
 - `/unsfx <uid>` — lifts the SFX curse
 
+#### Voice Chat (5)
+Sabotage a player's server-relayed voice-chat audio. Require `enable_voice` and `MUTE`; support `-d`/`-r`/`-h`, comma-separated UIDs, `global`, `/stack`, `/unpunish` and DB persistence exactly like the text punishments. They act on the punished speaker's Opus frame *flow* in the documented `pktVSFrame` hook — the relay never decodes audio, so they stay CGO-free (no pitch-shift). Unlike `/vmute` (which ejects an IPID from voice entirely), these keep the target in the room and just corrupt what the room hears.
+- `/voicemute <uid>` — drops every one of the target's voice frames; silent to the room
+- `/voicestatic <uid>` — drops ~60% of frames; choppy, breaking up
+- `/voicegarble <uid>` — drops ~88% of frames; barely intelligible
+- `/voicecutout <uid>` — gates frames on a ~650 ms on/off cycle; walkie-talkie effect
+- `/voicestutter <uid>` — randomly replays the previous frame; a glitchy voice stutter
+
 #### Dere Archetypes (25)
 Original 10: `/tsundere`, `/yandere`, `/kuudere`, `/dandere`, `/deredere`, `/himedere`, `/kamidere`, `/undere`, `/bakadere`, `/mayadere`
 
@@ -420,7 +428,9 @@ Previously, `/lock` added every current occupant to the area's invite list, so a
 ### Server-Relayed Voice Chat
 Opt-in voice chat. Every audio frame travels **client → Athena → other clients in the same area** — there is no peer-to-peer path, so peers cannot learn each other's IPs via packet sniffing (which is what TURN was previously used for in the now-removed WebRTC mode). Athena itself sees every peer's IP, exactly as it does for chat packets.
 
-Audio: 20 ms Opus frames at 48 kHz, base64-encoded on the wire. The server treats each frame as an opaque blob and just re-broadcasts it (one fan-out per joined peer). No Opus decode happens server-side, so the relay is codec-agnostic and CGO-free. A future voice-effects step (e.g. cartoon-pitch punishments) would slot into `pktVSFrame` between the rate-limit check and the broadcast call — currently a documented hook.
+Audio: 20 ms Opus frames at 48 kHz, base64-encoded on the wire. The server treats each frame as an opaque blob and just re-broadcasts it (one fan-out per joined peer). No Opus decode happens server-side, so the relay is codec-agnostic and CGO-free.
+
+The `pktVSFrame` voice-effects hook (between the rate-limit check and the broadcast call) is now used by the **voice-chat punishments** — `/voicemute`, `/voicestatic`, `/voicegarble`, `/voicecutout`, `/voicestutter` — in `internal/athena/voice_punishments.go`. They drop, gate, or stale-repeat a punished speaker's frames; because the relay never decodes audio, they manipulate frame *flow* only. Codec-level DSP such as pitch-shifting would need an Opus decoder and CGO and stays out of scope. See **Voice Chat (5)** under the punishment list above.
 
 Protocol (`internal/athena/voice.go`):
 - `VS_CAPS#<enabled>#<ptt>#<max_peers>#<codec>#<sample_rate>#<frame_ms>#<max_frame_bytes>#%` — S→C handshake
