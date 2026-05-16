@@ -220,6 +220,17 @@ const (
 	PunishmentWide
 	// FromSoftware — replaces words that appear in config/fromsoft.txt with ***.
 	PunishmentFromSoftware
+	// Voice-chat punishments — applied in pktVSFrame (the documented voice
+	// relay hook), never in the IC text path. They manipulate the punished
+	// speaker's Opus frame flow — dropping, gating, or stale-repeating frames
+	// — so they cannot alter audio content (pitch-shift would need an Opus
+	// codec and CGO). Appended last so existing persisted SUBTYPE values keep
+	// their meaning. See voice_punishments.go.
+	PunishmentVoiceMute
+	PunishmentVoiceStatic
+	PunishmentVoiceGarble
+	PunishmentVoiceCutout
+	PunishmentVoiceStutter
 )
 
 // IssuerTier records the permission tier of the moderator who applied a
@@ -2462,6 +2473,16 @@ func (p PunishmentType) String() string {
 		return "wide"
 	case PunishmentFromSoftware:
 		return "fromsoftware"
+	case PunishmentVoiceMute:
+		return "voicemute"
+	case PunishmentVoiceStatic:
+		return "voicestatic"
+	case PunishmentVoiceGarble:
+		return "voicegarble"
+	case PunishmentVoiceCutout:
+		return "voicecutout"
+	case PunishmentVoiceStutter:
+		return "voicestutter"
 	default:
 		return "none"
 	}

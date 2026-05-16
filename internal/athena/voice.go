@@ -26,8 +26,12 @@ package athena
 //
 // The server treats Opus frames as opaque base64 blobs and forwards them
 // unmodified.  No decode/encode is performed, so CPU cost is roughly one
-// memcpy per frame per receiver.  A future voice-effects step would slot
-// into relayFrame, between the rate-limit check and the broadcast call.
+// memcpy per frame per receiver.  The voice-effects hook anticipated here is
+// now live: voice-chat punishments (voice_punishments.go) drop, gate, or
+// stale-repeat a punished speaker's frames in pktVSFrame, between the
+// rate-limit check and the broadcast call.  They act on the opaque blob, so
+// the relay stays codec-agnostic; codec-level DSP (e.g. pitch-shift) would
+// still need an Opus decoder and CGO and remains out of scope.
 //
 // Protocol:
 //   VS_CAPS#<enabled>#<ptt_only>#<max_peers>#<codec>#<sample_rate>#<frame_ms>#<max_frame_bytes>#%   (S→C, handshake)
@@ -325,10 +329,12 @@ func pktVSLeave(client *Client, _ *packet.Packet) {
 // length cap and a per-UID frame rate limit, then broadcasts to every other
 // joined peer in the same area as VS_AUDIO#<from_uid>#<b64_opus>#%.
 //
-// A future voice-effects step (e.g. pitch-shift punishments) would decode
-// the Opus payload between the rate-limit check and the broadcast call.
-// That would introduce CGO and a per-frame DSP cost, so it's intentionally
-// out of scope here — the relay stays codec-agnostic.
+// Voice-chat punishments hook in between the rate-limit check and the
+// broadcast call (see applyVoiceFramePunishments): a punished speaker's
+// frames may be dropped, gated, or swapped for a stale frame.  That works on
+// the opaque blob, so the relay stays codec-agnostic.  Codec-level DSP (e.g.
+// pitch-shift) would still need an Opus decoder and CGO and remains out of
+// scope.
 func pktVSFrame(client *Client, p *packet.Packet) {
 	if !voiceEnabled() || len(p.Body) < 1 {
 		return
@@ -350,7 +356,14 @@ func pktVSFrame(client *Client, p *packet.Packet) {
 	if ok, _ := allowVoiceFrame(uid); !ok {
 		return
 	}
-	writeToAreaVoice(a, uid, "VS_AUDIO", strconv.Itoa(uid), p.Body[0])
+	// Voice-chat punishment hook (see applyVoiceFramePunishments): a punished
+	// speaker's frame may be dropped, gated, or swapped for a stale frame
+	// before the relay fans it out. Untouched for an unpunished speaker.
+	payload, relay := applyVoiceFramePunishments(client, uid, p.Body[0])
+	if !relay {
+		return
+	}
+	writeToAreaVoice(a, uid, "VS_AUDIO", strconv.Itoa(uid), payload)
 }
 
 // Handles VS_SPEAK#<on_off>#%  (0 = stopped talking, 1 = started)
