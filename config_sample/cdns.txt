@@ -9,3 +9,6 @@ discordapp.net
 
 # Catbox
 catbox.moe
+
+# File garden
+file.garden
