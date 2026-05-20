@@ -22,9 +22,11 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/BurntSushi/toml"
 	"github.com/MangosArentLiterature/Athena/internal/area"
+	"github.com/MangosArentLiterature/Athena/internal/logger"
 	"github.com/MangosArentLiterature/Athena/internal/permissions"
 )
 
@@ -345,8 +347,26 @@ func LoadFile(file string) ([]string, error) {
 	}
 	defer f.Close()
 	in := bufio.NewScanner(f)
+	lineNo := 0
+	skipped := 0
 	for in.Scan() {
-		l = append(l, in.Text())
+		lineNo++
+		line := in.Text()
+		// AO2 list packets (SC, SM, etc.) are emitted on the WebSocket as text
+		// frames, which RFC 6455 requires to be valid UTF-8. A single Latin-1 /
+		// Shift-JIS / cp1252 byte anywhere in the list aborts the entire frame
+		// with a StatusProtocolError close from the browser — the symptom is
+		// "every WebAO client disconnects mid-handshake". Skip the bad line and
+		// log its number so the operator can fix the source file.
+		if !utf8.ValidString(line) {
+			logger.LogWarningf("settings: %v line %d contains invalid UTF-8, skipped: %q", file, lineNo, line)
+			skipped++
+			continue
+		}
+		l = append(l, line)
+	}
+	if skipped > 0 {
+		logger.LogWarningf("settings: %v had %d invalid-UTF-8 line(s) removed; re-save the file as UTF-8 to keep them", file, skipped)
 	}
 	return l, nil
 }
