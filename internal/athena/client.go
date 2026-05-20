@@ -502,14 +502,8 @@ func (client *Client) HandleClient() {
 	}
 	input.Split(splitfn) // Split input when a packet delimiter ('%') is found
 
-	logger.LogInfof("HS_TRACE addr=%v ipid=%v step=READ_LOOP_START", client.conn.RemoteAddr(), client.Ipid())
-	defer func() {
-		logger.LogInfof("HS_TRACE addr=%v ipid=%v step=READ_LOOP_EXIT scan_err=%v uid=%v joining=%v hdid_set=%v closed=%v",
-			client.conn.RemoteAddr(), client.Ipid(), input.Err(), client.Uid(), client.joining, client.Hdid() != "", client.closed.Load())
-	}()
 	for input.Scan() {
 		rawPacket := strings.TrimSpace(input.Text())
-		logger.LogInfof("HS_TRACE addr=%v ipid=%v step=RECV pkt=%q", client.conn.RemoteAddr(), client.Ipid(), rawPacket)
 		if logger.EnableNetworkLogging {
 			logger.WriteNetworkLog(client.ipid, client.Hdid(), "RECV", rawPacket)
 		}
