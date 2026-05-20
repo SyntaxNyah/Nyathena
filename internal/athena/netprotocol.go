@@ -148,6 +148,8 @@ var PacketMap = map[string]pktMapValue{
 
 // Handles HI#%
 func pktHdid(client *Client, p *packet.Packet) {
+	logger.LogInfof("HS_TRACE addr=%v ipid=%v step=HI body0=%q uid=%v hdid_set=%v",
+		client.conn.RemoteAddr(), client.Ipid(), p.Body[0], client.Uid(), client.Hdid() != "")
 	if strings.TrimSpace(p.Body[0]) == "" || client.Uid() != -1 || client.Hdid() != "" {
 		return
 	}
@@ -167,6 +169,7 @@ func pktHdid(client *Client, p *packet.Packet) {
 
 // Handles ID#%
 func pktId(client *Client, _ *packet.Packet) {
+	logger.LogInfof("HS_TRACE addr=%v ipid=%v step=ID uid=%v", client.conn.RemoteAddr(), client.Ipid(), client.Uid())
 	if client.Uid() != -1 {
 		return
 	}
@@ -183,6 +186,8 @@ func pktId(client *Client, _ *packet.Packet) {
 
 // Handles askchaa#%
 func pktResCount(client *Client, _ *packet.Packet) {
+	logger.LogInfof("HS_TRACE addr=%v ipid=%v step=askchaa uid=%v hdid_set=%v",
+		client.conn.RemoteAddr(), client.Ipid(), client.Uid(), client.Hdid() != "")
 	if client.Uid() != -1 || client.Hdid() == "" {
 		return
 	}
@@ -213,16 +218,26 @@ func pktResCount(client *Client, _ *packet.Packet) {
 
 // Handles RC#%
 func pktReqChar(client *Client, _ *packet.Packet) {
+	sz := len("SC") + 2
+	for _, c := range characters {
+		sz += 1 + len(c)
+	}
+	logger.LogInfof("HS_TRACE addr=%v ipid=%v step=RC sc_bytes=%v sc_count=%v",
+		client.conn.RemoteAddr(), client.Ipid(), sz, len(characters))
 	client.SendPacket("SC", characters...)
 }
 
 // Handles RM#%
 func pktReqAM(client *Client, _ *packet.Packet) {
+	logger.LogInfof("HS_TRACE addr=%v ipid=%v step=RM sm_bytes=%v",
+		client.conn.RemoteAddr(), client.Ipid(), len(smPacket))
 	client.write(smPacket)
 }
 
 // Handles RD#%
 func pktReqDone(client *Client, _ *packet.Packet) {
+	logger.LogInfof("HS_TRACE addr=%v ipid=%v step=RD uid=%v joining=%v hdid_set=%v",
+		client.conn.RemoteAddr(), client.Ipid(), client.Uid(), client.joining, client.Hdid() != "")
 	if client.Uid() != -1 || !client.joining || client.Hdid() == "" {
 		return
 	}
