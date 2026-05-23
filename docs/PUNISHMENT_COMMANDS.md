@@ -522,15 +522,27 @@ Remove with `/unpunish 42` or `/unpunish -t gordonramsay 42`. Stacks with
 
 ### `/maso`
 
-Any player (no moderator permissions required) can use `/maso` to self-apply a **random punishment** lasting **10 minutes**.
+Any player (no moderator permissions required) can use `/maso` to self-apply a **random punishment**. Duration defaults to **10 minutes** and can be set with `-d` (max 24 h).
 
 - Picks randomly from the full pool of stateless punishment effects.
-- Typing `/maso` again while a punishment is active **rerolls** it to a different random punishment (resetting the 10-minute timer).
-- The punishment expires automatically after 10 minutes.
+- Typing `/maso` again while a punishment is active **rerolls** it to a different random punishment (resetting the timer).
+- The punishment expires automatically after the duration elapses.
 
 ```
-/maso        # Apply a random punishment to yourself for 10 minutes
-/maso        # (again) Reroll to a different random punishment
+/maso              # Apply a random punishment for 10 minutes (default)
+/maso -d 30m       # Apply for 30 minutes
+/maso -d 2h        # Apply for 2 hours
+/maso              # (again while active) Reroll to a different random punishment
+```
+
+### `/megamaso`
+
+Like `/maso` but **stacking**: each call **adds** another random punishment to the pile instead of replacing. Duration defaults to **10 minutes** per stack layer and can be set with `-d` (max 24 h).
+
+```
+/megamaso           # Stack a random punishment for 10 minutes (default)
+/megamaso -d 1h     # Each stacked layer lasts 1 hour
+/megamaso           # (again) Add yet another effect to the pile
 ```
 
 ## Notes
