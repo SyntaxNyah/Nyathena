@@ -124,11 +124,26 @@ var megamasoStackPool = []PunishmentType{
 // Handles /megamaso
 //
 // Self-applied "max chaos" mode. First call rolls a random punishment and
-// applies it for 10 minutes. Each subsequent /megamaso while still under the
-// effect ADDs another random punishment to the stack (instead of resetting),
-// so the player can pile on as many as they like. Re-rolls only stop being
-// available when the stack expires.
-func cmdMegamaso(client *Client, _ []string, _ string) {
+// applies it for the chosen duration (default 10 m, max 24 h). Each
+// subsequent /megamaso while still under the effect ADDs another random
+// punishment to the stack (instead of resetting), so the player can pile on
+// as many as they like. Re-rolls only stop being available when the stack
+// expires.
+func cmdMegamaso(client *Client, args []string, _ string) {
+	flags := flag.NewFlagSet("", 0)
+	flags.SetOutput(io.Discard)
+	durationStr := flags.String("d", "10m", "")
+	flags.Parse(args)
+
+	duration, err := str2duration.ParseDuration(*durationStr)
+	if err != nil || duration <= 0 {
+		client.SendServerMessage("Invalid duration format. Use formats like: 10m, 1h, 30m, 2h30m")
+		return
+	}
+	if duration > 24*time.Hour {
+		duration = 24 * time.Hour
+	}
+
 	// Pick a random punishment that the player isn't already wearing, falling
 	// back to "any" if everything is somehow already applied.
 	var pick PunishmentType
@@ -143,8 +158,7 @@ func cmdMegamaso(client *Client, _ []string, _ string) {
 		pick = megamasoStackPool[rand.Intn(len(megamasoStackPool))]
 	}
 
-	const stackDuration = 10 * time.Minute
-	client.AddPunishment(pick, stackDuration, "megamaso stack")
+	client.AddPunishment(pick, duration, "megamaso stack")
 
 	// Count active megamaso-pool punishments so the player knows how big
 	// their personal pile-up is.
@@ -155,8 +169,8 @@ func cmdMegamaso(client *Client, _ []string, _ string) {
 		}
 	}
 	client.SendServerMessage(fmt.Sprintf(
-		"💥 /megamaso: stacked '%v' onto your punishment pile. Stack size now %d. Type /megamaso again to keep stacking — each adds a new random effect for 10 minutes.",
-		pick.String(), stackSize))
+		"💥 /megamaso: stacked '%v' onto your punishment pile. Stack size now %d. Type /megamaso again to keep stacking — each adds a new random effect for %v.",
+		pick.String(), stackSize, duration))
 	addToBuffer(client, "CMD", fmt.Sprintf("Megamaso stacked %v.", pick.String()), false)
 }
 

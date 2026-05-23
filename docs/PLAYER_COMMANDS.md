@@ -80,17 +80,18 @@ For moderator-only commands, see [`MOD_COMMANDS.md`](MOD_COMMANDS.md). For casin
 | `/rps <rock\|paper\|scissors>` | **PvP** rock-paper-scissors. The first call posts an open challenge with a hidden choice; the second player commits blind and the result is announced. 30s window per player. |
 | `/coinflip <heads\|tails>` | Area-scoped 30-second PvP coinflip — opposite sides only |
 | `/roll <n>d<m>` | Roll dice (e.g. `/roll 2d6`) |
-| `/maso` | Apply a random punishment to yourself for 10 minutes (re-roll allowed) |
-| `/megamaso` | Like `/maso` but **stacking**: each repeat adds another random punishment to the pile instead of replacing it. |
+| `/maso [-d duration]` | Apply a random punishment to yourself (default 10 min, max 24 h). Re-roll by typing it again. |
+| `/megamaso [-d duration]` | Like `/maso` but **stacking**: each repeat adds another random punishment to the pile (default 10 min per layer, max 24 h). |
 
 ---
 
-## Potions (self-applied 5-min effects)
+## Potions (self-applied effects)
 
 ```
-/potions             # menu
-/potion <name>       # drink one
-/potion off          # flush every active potion
+/potions                      # menu
+/potion <name>                # drink one (default 5 min)
+/potion -d <duration> <name>  # custom duration, e.g. /potion -d 30m drunk (max 24h)
+/potion off                   # flush every active potion
 ```
 
 | Potion | Effect |

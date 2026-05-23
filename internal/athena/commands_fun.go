@@ -30,6 +30,7 @@ import (
 
 	"github.com/MangosArentLiterature/Athena/internal/area"
 	"github.com/MangosArentLiterature/Athena/internal/packet"
+	str2duration "github.com/xhit/go-str2duration/v2"
 )
 
 func cmdPos(client *Client, args []string, _ string) {
@@ -829,11 +830,24 @@ client.SendPacketSync("KK", msg)
 client.conn.Close()
 }
 
-// cmdMaso lets any user self-apply a random punishment for 10 minutes.
-// Calling it again while a maso punishment is active removes the old one and
-// applies a new (different) random punishment, resetting the timer.
-func cmdMaso(client *Client, _ []string, _ string) {
-	const masoDuration = 10 * time.Minute
+// cmdMaso lets any user self-apply a random punishment for a configurable
+// duration (default 10 m, max 24 h). Calling it again while a maso punishment
+// is active removes the old one and applies a new (different) random
+// punishment, resetting the timer.
+func cmdMaso(client *Client, args []string, _ string) {
+	flags := flag.NewFlagSet("", 0)
+	flags.SetOutput(io.Discard)
+	durationStr := flags.String("d", "10m", "")
+	flags.Parse(args)
+
+	duration, err := str2duration.ParseDuration(*durationStr)
+	if err != nil || duration <= 0 {
+		client.SendServerMessage("Invalid duration format. Use formats like: 10m, 1h, 30m, 2h30m")
+		return
+	}
+	if duration > 24*time.Hour {
+		duration = 24 * time.Hour
+	}
 
 	client.mu.Lock()
 	prev := client.masoPunishment
@@ -852,7 +866,7 @@ func cmdMaso(client *Client, _ []string, _ string) {
 		}
 	}
 
-	client.AddPunishment(newType, masoDuration, "maso")
+	client.AddPunishment(newType, duration, "maso")
 
 	client.mu.Lock()
 	client.masoPunishment = newType
@@ -860,10 +874,10 @@ func cmdMaso(client *Client, _ []string, _ string) {
 
 	if prev != PunishmentNone {
 		client.SendServerMessage(fmt.Sprintf(
-			"Your maso punishment has been rerolled! New effect: '%v' (10 minutes).", newType.String()))
+			"Your maso punishment has been rerolled! New effect: '%v' (%v).", newType.String(), duration))
 	} else {
 		client.SendServerMessage(fmt.Sprintf(
-			"You've applied a random maso punishment to yourself: '%v' (10 minutes). Type /maso again to reroll.", newType.String()))
+			"You've applied a random maso punishment to yourself: '%v' (%v). Type /maso again to reroll.", newType.String(), duration))
 	}
 }
 

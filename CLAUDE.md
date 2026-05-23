@@ -228,10 +228,20 @@ Voluntary competitive mode where participants receive 2–3 random punishments; 
 ```
 
 #### `/megamaso` — Self-applied Stack Mode
-Self-applied "max chaos" mode. The first call rolls a random punishment for 10 minutes; each subsequent `/megamaso` while still under the effect **adds another random punishment to the stack** instead of replacing it. Lets a player pile on as many concurrent effects as they like.
+Self-applied "max chaos" mode. The first call rolls a random punishment; each subsequent `/megamaso` while still under the effect **adds another random punishment to the stack** instead of replacing it. Lets a player pile on as many concurrent effects as they like. Duration defaults to 10 minutes and can be set with `-d` (max 24 h).
 
 ```
-/megamaso       # any user
+/megamaso              # any user — default 10 min per layer
+/megamaso -d 1h        # each stacked layer lasts 1 hour
+```
+
+#### `/maso` — Self-applied Single Effect
+Rolls a random punishment from the pool and applies it to yourself. Typing `/maso` again rerolls to a different effect and resets the timer. Duration defaults to 10 minutes and can be set with `-d` (max 24 h).
+
+```
+/maso              # any user — default 10 min
+/maso -d 30m       # apply for 30 minutes
+/maso              # (again while active) reroll
 ```
 
 #### Coinflip Challenge
@@ -241,7 +251,7 @@ Area-scoped 30-second PvP challenge. Players must choose opposite sides.
 ```
 
 ### Potions System
-Self-applied 5-minute fun effects accessed via `/potion <name>`. `/potions` lists the cabinet; `/potion off` flushes every active potion.
+Self-applied fun effects accessed via `/potion <name>`. Duration defaults to **5 minutes** and can be set with `-d` (max 24 h): `/potion -d 30m drunk`. `/potions` lists the cabinet; `/potion off` flushes every active potion.
 
 | Potion | Effect |
 |--------|--------|
