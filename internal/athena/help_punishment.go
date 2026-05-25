@@ -48,7 +48,7 @@ var punishmentHelpGroups = []punishmentSubcategory{
 		emoji: "🎭", title: "Themed quote replacers",
 		desc: "Discard the player's text and substitute a themed line per message. Supports 'global'.",
 		cmds: []string{"recipe", "rickroll", "pickup", "brainrot", "gordonramsay", "biblebot",
-			"mime", "subtitles", "spotlight"},
+			"grounded", "mime", "subtitles", "spotlight"},
 	},
 	{
 		emoji: "🃏", title: "Persona / personality",
