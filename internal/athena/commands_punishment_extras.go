@@ -58,6 +58,11 @@ func cmdBiblebot(client *Client, args []string, usage string) {
 	cmdPunishment(client, args, usage, PunishmentBiblebot)
 }
 
+// /grounded
+func cmdGrounded(client *Client, args []string, usage string) {
+	cmdPunishment(client, args, usage, PunishmentGrounded)
+}
+
 // /smugdere etc.
 func cmdSmugdere(client *Client, args []string, usage string) {
 	cmdPunishment(client, args, usage, PunishmentSmugdere)

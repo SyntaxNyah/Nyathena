@@ -233,6 +233,8 @@ const (
 	PunishmentVoiceGarble
 	PunishmentVoiceCutout
 	PunishmentVoiceStutter
+	// Grounded — replaces every IC line with a GoAnimate "grounded" tirade.
+	PunishmentGrounded
 )
 
 // IssuerTier records the permission tier of the moderator who applied a
@@ -2487,6 +2489,8 @@ func (p PunishmentType) String() string {
 		return "voicecutout"
 	case PunishmentVoiceStutter:
 		return "voicestutter"
+	case PunishmentGrounded:
+		return "grounded"
 	default:
 		return "none"
 	}

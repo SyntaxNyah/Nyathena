@@ -2651,6 +2651,14 @@ func initCommands() {
 			reqPerms: permissions.PermissionField["MUTE"],
 			category: "punishment",
 		},
+		"grounded": {
+			handler:  cmdGrounded,
+			minArgs:  1,
+			usage:    "Usage: /grounded [-d duration] [-r reason] [-h] global | <uid1>,<uid2>...",
+			desc:     "Replaces every IC line with a GoAnimate-style 'YOU ARE GROUNDED' tirade.",
+			reqPerms: permissions.PermissionField["MUTE"],
+			category: "punishment",
+		},
 		"smugdere": {
 			handler:  cmdSmugdere,
 			minArgs:  1,
