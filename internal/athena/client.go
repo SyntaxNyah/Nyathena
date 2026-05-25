@@ -176,6 +176,8 @@ const (
 	PunishmentGordonRamsay
 	// Cherri punishment — Capitalizes Every Single Word like Cherri.
 	PunishmentCherri
+	// Al Bhed — transliterates every letter through the FFX Al Bhed cipher.
+	PunishmentAlbhed
 	// Clown / Jester / Joker / Mime — themed text transforms used as
 	// moderator gag commands.
 	PunishmentClown
@@ -2419,6 +2421,8 @@ func (p PunishmentType) String() string {
 		return "gordonramsay"
 	case PunishmentCherri:
 		return "cherri"
+	case PunishmentAlbhed:
+		return "albhed"
 	case PunishmentClown:
 		return "clown"
 	case PunishmentJester:

@@ -768,6 +768,8 @@ func parsePunishmentType(s string) PunishmentType {
 		return PunishmentGordonRamsay
 	case "cherri":
 		return PunishmentCherri
+	case "albhed":
+		return PunishmentAlbhed
 	case "clown":
 		return PunishmentClown
 	case "jester":

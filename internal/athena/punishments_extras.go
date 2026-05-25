@@ -38,6 +38,30 @@ func applyCherri(text string) string {
 	return truncateText(sb.String())
 }
 
+// albhedCipher maps every uppercase English letter to its Al Bhed counterpart.
+var albhedCipher = [26]rune{
+	'Y', 'P', 'L', 'T', 'A', 'V', 'K', 'R', 'E', 'Z', 'G', 'M', 'S',
+	'H', 'U', 'B', 'X', 'N', 'C', 'D', 'I', 'J', 'F', 'Q', 'O', 'W',
+}
+
+// applyAlbhed transliterates every ASCII letter through the Final Fantasy X
+// Al Bhed substitution cipher. Case is preserved; non-letter runes are kept.
+func applyAlbhed(text string) string {
+	var sb strings.Builder
+	sb.Grow(len(text))
+	for _, r := range text {
+		switch {
+		case r >= 'A' && r <= 'Z':
+			sb.WriteRune(albhedCipher[r-'A'])
+		case r >= 'a' && r <= 'z':
+			sb.WriteRune(unicode.ToLower(albhedCipher[r-'a']))
+		default:
+			sb.WriteRune(r)
+		}
+	}
+	return truncateText(sb.String())
+}
+
 var (
 	clownPfx = []string{
 		"🤡 HONK HONK! ",

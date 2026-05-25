@@ -1511,6 +1511,8 @@ func ApplyPunishmentToText(text string, pType PunishmentType) string {
 		return applyGordonRamsay(text)
 	case PunishmentCherri:
 		return applyCherri(text)
+	case PunishmentAlbhed:
+		return applyAlbhed(text)
 	case PunishmentClown:
 		return applyClown(text)
 	case PunishmentJester:
