@@ -38,7 +38,7 @@ var punishmentHelpGroups = []punishmentSubcategory{
 		cmds: []string{"whisper", "backward", "stutterstep", "elongate", "uppercase", "lowercase",
 			"robotic", "alternating", "fancy", "uwu", "pirate", "shakespearean", "caveman",
 			"censor", "fromsoftware", "confused", "paranoid", "drunk", "hiccup", "whistle", "mumble",
-			"slang", "cherri", "morse", "vowelhell", "upsidedown", "autospell",
+			"slang", "cherri", "albhed", "morse", "vowelhell", "upsidedown", "autospell",
 			"thesaurusoverload", "valleygirl", "babytalk", "thirdperson",
 			"unreliablenarrator", "uncannyvalley", "chef", "karen", "passiveaggressive",
 			"nervous", "sarcasm", "academic", "philosopher", "poet", "quote", "spaghetti",

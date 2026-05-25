@@ -2580,6 +2580,14 @@ func initCommands() {
 			reqPerms: permissions.PermissionField["MUTE"],
 			category: "punishment",
 		},
+		"albhed": {
+			handler:  cmdAlbhed,
+			minArgs:  1,
+			usage:    "Usage: /albhed [-d duration] [-r reason] [-h] global | <uid1>,<uid2>...",
+			desc:     "Transliterates the target's IC messages through the Al Bhed cipher (FFX).",
+			reqPerms: permissions.PermissionField["MUTE"],
+			category: "punishment",
+		},
 		"clown": {
 			handler:  cmdClown,
 			minArgs:  1,

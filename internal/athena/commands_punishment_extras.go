@@ -28,6 +28,11 @@ func cmdCherri(client *Client, args []string, usage string) {
 	cmdPunishment(client, args, usage, PunishmentCherri)
 }
 
+// /albhed
+func cmdAlbhed(client *Client, args []string, usage string) {
+	cmdPunishment(client, args, usage, PunishmentAlbhed)
+}
+
 // /clown
 func cmdClown(client *Client, args []string, usage string) {
 	cmdPunishment(client, args, usage, PunishmentClown)
