@@ -2,61 +2,41 @@
 
 # Nyathena
 
-**Nyathena** is a fork of [Athena](https://github.com/MangosArentLiterature/Athena) — a lightweight AO2 (Attorney Online 2) server written in Go — maintained by **SyntaxNyah**. Full credit for the original server goes to [MangosArentLiterature](https://github.com/MangosArentLiterature).
+**Nyathena** is a fork of [Athena](https://github.com/MangosArentLiterature/Athena) — a lightweight AO2 (Attorney Online 2) server written in Go — maintained by [SyntaxNyah](https://github.com/syntaxnyah). Full credit for the original server, its design, and everything it's built on goes to [MangosArentLiterature](https://github.com/MangosArentLiterature).
 
-Nyathena extends the upstream with a large suite of original features — the centrepiece being a **90+ command punishment system** built specifically to give moderators an embarrassing and ridiculous amount of creative control over players. Backwards text, dere archetypes, voice corruption, quote replacers, coinflip PvP challenges, forced haiku, tournament chaos — it's purposefully excessive. On top of that: a Discord bot, a casino with 10 games, a Mafia minigame, server-relayed voice chat, and much more — all while retaining the original's concurrency model, TOML configuration, and lightweight footprint.
+This started as a personal server project and kind of spiralled. Months of late nights, one idea leading to another, a punishment command becoming ten, a casino becoming eleven games — and the whole time it kept being *fun* to add things, which is not always how software development goes. That's entirely down to how well Athena is built. Adding a new feature rarely meant fighting the codebase. It usually just meant writing the thing.
+
+The centrepiece is a **90+ command punishment system** designed to give moderators a ridiculous, embarrassing amount of creative control over players — backwards text, forced haiku, dere archetypes, voice corruption, coinflip PvP challenges. It's purposefully excessive and a little sadistic, and that's the point. Beyond that: a Discord bot, a casino with 11 games, a full Mafia minigame, server-relayed voice chat, and a lot of smaller quality-of-life things that accumulated over time.
 
 ---
 
 ## What's Different From Upstream Athena
 
-### Discord Bot Integration
-A full Discord bot (`discordgo`) with slash commands, mod-bridge embeds, area/player listings, and security toggles — all manageable from Discord without being logged into the AO server.
-
-| Discord slash | Effect |
-|---------------|--------|
-| `/firewall on\|off` | Toggle IPHub VPN/proxy firewall |
-| `/lockdown on\|off` | Toggle server-wide new-IPID lockdown |
-| `/lockdown whitelist_all` | Whitelist all connected IPIDs for lockdown |
-
-### Casino System (`enable_casino = true`)
-Virtual currency (**Nyathena Chips**) backed by SQLite. New players start with 500 chips (cap 10,000,000).
-
-| Game | Command |
-|------|---------|
-| Blackjack (6-deck, split/double/insurance) | `/bj` |
-| Texas Hold'em (up to 9 players) | `/poker` |
-| Slots with area jackpot pool | `/slots` |
-| European Roulette | `/croulette` |
-| Baccarat | `/baccarat` |
-| Craps | `/craps` |
-| Crash multiplier | `/crash` |
-| Minesweeper grid | `/mines` |
-| Keno | `/keno` |
-| Prize wheel | `/wheel` |
-| Bar (33 drinks) | `/bar` |
-
-Economy commands: `/chips`, `/chips top`, `/chips give`, `/richest`. Earn without gambling via `/busker`, `/janitor`, `/paperboy`, `/clerk`, `/bailiffjob`. Unscramble events every 30 min–3 h.
-
-Shop (`/shop`): 30 cosmetic tags, job cooldown passes, reward bonus passes.
-
-### Mafia Social Deduction Minigame
-Full in-server Mafia (4–20+ players) with day/night phases, lynch voting, night actions, last wills, graveyard, and whisper.
-
-**Roles:** Villager, Detective, Doctor, Sheriff, Bodyguard, Vigilante, Mayor, Escort, Mafia, Shapeshifter, Godfather, Jester, Witch, Lawyer, Arsonist, Serial Killer, Survivor.
-
-See `MAFIA_COMMANDS.md` for the full reference.
-
 ### Punishment System (90+ Commands)
-All punishment commands support `-d <duration>`, `-r <reason>`, and `-h` (hidden — suppresses the per-target OOC notification). They accept comma-separated UIDs and auto-expire.
 
-**Categories:** text modification (15), visibility/cosmetic (5), timing effects (4), social chaos (4), text processing (7), complex effects (4), advanced (2), personality archetypes (10), dere archetypes (25), themed quote replacers (2), audio (2), voice chat (5).
+This is the main thing Nyathena exists for. All punishment commands support `-d <duration>`, `-r <reason>`, and `-h` (hidden — applies silently without notifying the target). They accept comma-separated UIDs, auto-expire, and stack freely.
 
-**Dere archetypes (25):** `/tsundere`, `/yandere`, `/kuudere`, `/dandere`, `/deredere`, `/himedere`, `/kamidere`, `/undere`, `/bakadere`, `/mayadere`, `/smugdere`, `/deretsun`, `/bokodere`, `/thugdere`, `/teasedere`, `/dorodere`, `/hinedere`, `/hajidere`, `/rindere`, `/utsudere`, `/darudere`, `/butsudere`, `/sdere`, `/mdere`, `/tsuyodere`, and `/omnidere` (random dere per message).
+**Text Modification (15):** `/whisper`, `/backward`, `/stutterstep`, `/elongate`, `/uppercase`, `/lowercase`, `/robotic`, `/alternating`, `/fancy`, `/uwu`, `/pirate`, `/shakespearean`, `/caveman`, `/slang`, `/cherri`
 
-**Self-applied:** `/maso` (random single effect, rerolls on repeat), `/megamaso` (stack-on-stack mode).
+**Visibility / Cosmetic (5):** `/emoji`, `/invisible`, `/shrink`, `/grow`, `/wide`
 
-**PvP:** `/coinflip <heads|tails>` — area-scoped 30-second challenge; players must pick opposite sides.
+**Timing Effects (4):** `/slowpoke`, `/fastspammer`, `/pause`, `/lag`
+
+**Social Chaos (4):** `/subtitles`, `/tourettes`, `/roulette`, `/spotlight`
+
+**Text Processing (7):** `/censor`, `/confused`, `/paranoid`, `/drunk`, `/hiccup`, `/whistle`, `/mumble`
+
+**Complex Effects (4):** `/spaghetti`, `/torment`, `/rng`, `/essay`
+
+**Advanced (2):** `/haiku`, `/autospell`
+
+**Personality Archetypes (10):** `/thesaurusoverload`, `/valleygirl`, `/babytalk`, `/thirdperson`, `/unreliablenarrator`, `/uncannyvalley`, `/clown`, `/jester`, `/joker`, `/mime`
+
+**Themed Quote Replacers (2):** `/gordonramsay` (60+ kitchen tirades), `/biblebot` (random Bible verse per IC message)
+
+**Audio (2):** `/sfxcurse <uid> <sfx-url>` (forces an SFX on every IC message), `/unsfx`
+
+**Dere Archetypes (25):** `/tsundere`, `/yandere`, `/kuudere`, `/dandere`, `/deredere`, `/himedere`, `/kamidere`, `/undere`, `/bakadere`, `/mayadere`, `/smugdere`, `/deretsun`, `/bokodere`, `/thugdere`, `/teasedere`, `/dorodere`, `/hinedere`, `/hajidere`, `/rindere`, `/utsudere`, `/darudere`, `/butsudere`, `/sdere`, `/mdere`, `/tsuyodere`, and `/omnidere` (random dere flavour on every single message — maximum tonal whiplash).
 
 **Stacking:**
 ```
@@ -65,39 +45,86 @@ All punishment commands support `-d <duration>`, `-r <reason>`, and `-h` (hidden
 
 **Tournament mode:** `/tournament start|status|stop` — volunteers get 2–3 random punishments; most IC messages sent wins.
 
-**Remove:** `/unpunish <uid>` (all) or `/unpunish -t <type> <uid>`. Admins and shadow mods cannot be unpunished by regular mods.
+**Self-applied:** `/maso` (random single effect, rerolls on repeat) and `/megamaso` (each call stacks another random punishment on top — you can pile on as many as you like).
+
+**PvP:** `/coinflip <heads|tails>` — area-scoped 30-second challenge where both players must pick opposite sides.
+
+**Remove:** `/unpunish <uid>` (all) or `/unpunish -t <type> <uid>`. Regular mods cannot lift punishments applied by an admin or shadow mod.
 
 ### Server-Relayed Voice Chat (`enable_voice = true`)
-Opt-in voice relay: client → Athena → area peers. No peer-to-peer paths — peers never learn each other's IPs. 20 ms Opus frames at 48 kHz, base64-encoded. Server treats frames as opaque blobs (no decode, CGO-free).
 
-Voice punishment commands (manipulate frame flow, not audio DSP):
-- `/voicemute` — drops all frames
-- `/voicestatic` — drops ~60% of frames
-- `/voicegarble` — drops ~88% of frames
-- `/voicecutout` — gates frames on ~650 ms on/off cycle
-- `/voicestutter` — randomly replays previous frame
+> **Compatible clients only.** Voice chat requires a WebSocket-capable AO2 client that implements the Nyathena voice protocol. The two known working clients are **[webao.miku.pizza](https://webao.miku.pizza)** (SyntaxNyah's hosted WebAO instance) and [**LemmyAO**](https://github.com/syntaxnyah/lemmyao), SyntaxNyah's fork of the AO2 desktop client. Standard AO2 and unmodified WebAO builds do not support voice and will simply not see the voice channel.
 
-Moderation: `/vmute`, `/vban`, `/voicearea on|off`.
+Audio travels client → Athena → area peers. There is no peer-to-peer path, so players never learn each other's IPs from the voice connection. The server relays 20 ms Opus frames at 48 kHz as opaque base64 blobs — it never decodes audio, so the relay is CGO-free and codec-agnostic.
+
+Voice punishment commands (manipulate the frame flow, not the audio signal itself):
+- `/voicemute` — drops every frame; silent to the room
+- `/voicestatic` — drops ~60% of frames; choppy and breaking up
+- `/voicegarble` — drops ~88% of frames; barely intelligible
+- `/voicecutout` — gates frames on a ~650 ms on/off cycle; walkie-talkie effect
+- `/voicestutter` — randomly replays the previous frame; glitchy voice stutter
+
+Moderation: `/vmute`, `/vban`, `/voicearea on|off`, per-area join and frame rate limits, new-IPID cooldown.
+
+### Casino System (`enable_casino = true`)
+
+Virtual currency (**Nyathena Chips**) stored in SQLite. New players start with 500 chips; cap is 10,000,000.
+
+| Game | Command |
+|------|---------|
+| Blackjack (6-deck, split/double/insurance, up to 6 players) | `/bj` |
+| Texas Hold'em (up to 9 players, 500-chip buy-in) | `/poker` |
+| Slots with area jackpot pool | `/slots` |
+| European Roulette (single-zero) | `/croulette` |
+| Baccarat (player / banker / tie) | `/baccarat` |
+| Craps (pass / don't-pass) | `/craps` |
+| Crash multiplier | `/crash` |
+| Minesweeper grid (1–24 mines, 5×5) | `/mines` |
+| Keno (pick 1–10 from 1–80) | `/keno` |
+| Prize wheel (~92.5% RTP) | `/wheel` |
+| Bar (33 drinks of wildly varying variance) | `/bar` |
+
+Economy: `/chips`, `/chips top`, `/chips give`, `/richest`. Earn passively via jobs (`/busker`, `/janitor`, `/paperboy`, `/clerk`, `/bailiffjob`) or win unscramble events that fire every 30 min–3 h.
+
+Shop (`/shop`): 30 cosmetic tags (1,000–10,000,000 chips), job cooldown reduction passes, job reward bonus passes.
+
+### Discord Bot Integration
+
+A full Discord bot with slash commands, mod-bridge embeds, area/player listings, and live security toggles — so moderators can respond to incidents without being logged into the AO server.
+
+| Discord slash | Effect |
+|---------------|--------|
+| `/firewall on\|off` | Toggle IPHub VPN/proxy firewall |
+| `/lockdown on\|off` | Toggle server-wide new-IPID lockdown |
+| `/lockdown whitelist_all` | Whitelist every currently-connected IPID |
+
+### Mafia Social Deduction Minigame
+
+Full in-server Mafia (4–20+ players) with automatic role pools, day/night phases, lynch voting, night actions, last wills, graveyard, whisper, and phase timers.
+
+**Town:** Villager, Detective, Doctor, Sheriff, Bodyguard, Vigilante, Mayor, Escort  
+**Mafia:** Mafia, Shapeshifter, Godfather  
+**Neutral:** Jester, Witch, Lawyer, Arsonist, Serial Killer, Survivor
+
+See `MAFIA_COMMANDS.md` for the full reference.
 
 ### Potions System
-Self-applied fun effects: `/potion <name>` (default 5 min, `-d` to override). `/potions` lists the cabinet; `/potion off` flushes all.
 
-Potions: `drunk`, `uwu`, `shy`, `dramatic`, `pirate`, `poet`, `caveman`, `fancy`, `chef`, `cherri`, `omnidere`, `character` (auto-rotates your sprite every 30 s).
+Self-applied fun effects via `/potion <name>` (default 5 min, `-d` to override). `/potions` lists the cabinet; `/potion off` flushes everything.
 
-### Persistent Pairing
-UID-based mutual pairing that survives area/character changes. Pair messages use the player's showname when set. `/unpair` is a full bidirectional reset.
-
-### Per-Area Logging
-Daily-rotating log files under `logs/<AreaName>/`. Format: `[HH:MM:SS] | ACTION | CHARACTER | IPID | HDID | SHOWNAME | OOC_NAME | MESSAGE`. Enable with `enable_area_logging = true`.
+Available potions: `drunk`, `uwu`, `shy`, `dramatic`, `pirate`, `poet`, `caveman`, `fancy`, `chef`, `cherri`, `omnidere`, `character` (auto-rotates your sprite every 30 seconds).
 
 ### AutoMod
+
 Word-list-based enforcement covering IC text, IC showname, OOC text, and OOC username. Actions: `ban`, `kick`, `mute`, or `torment`.
 
 ### IPHub VPN Firewall
-When `iphub_api_key` is set, `/firewall on|off` (in-game or Discord) checks new IPs against IPHub. Known IPs are cached and never re-checked (respects the 1,000 req/day free tier).
+
+When `iphub_api_key` is set, new connections are checked against IPHub. Known IPs are cached permanently so repeat visitors never cost an API call (respects the 1,000 req/day free tier). Toggle in-game or via Discord.
 
 ### Custom Tags (Admin)
-Admins mint cosmetic tags at runtime without rebuilding. Custom tags never appear in `/shop`.
+
+Admins create cosmetic tags at runtime without touching config files or rebuilding.
 
 ```
 /createtag <id> <display name>
@@ -107,24 +134,35 @@ Admins mint cosmetic tags at runtime without rebuilding. Custom tags never appea
 /listcustomtags
 ```
 
+Custom tags never appear in `/shop` and can only be granted by an admin.
+
+### Per-Area Logging
+
+Daily-rotating log files per area under `logs/<AreaName>/`. Format: `[HH:MM:SS] | ACTION | CHARACTER | IPID | HDID | SHOWNAME | OOC_NAME | MESSAGE`. Enable with `enable_area_logging = true`.
+
+### Persistent Pairing
+
+UID-based mutual pairing that survives area and character changes. Pair messages use each player's showname when set. `/unpair` does a full bidirectional reset — no stale pair state left on the peer.
+
 ### Other Additions
-- **Doki Area Effect** — literature-club-themed chaos per area (`doki_area = true`)
-- **Shadow Mod Visibility** — shadow mods hidden from `/gas`/`/players` for non-admins
-- **`/charshuffle` / `/uncharshuffle`** — Sattolo-permutes everyone's character; originals remembered
-- **`/reversename` / `/unreversename`** — flips showname rune order, stacks cleanly with `/forcename`
+
+- **Doki Area Effect** — literature-club-themed chaos per area (`doki_area = true` in `areas.toml`)
+- **Shadow Mod Visibility** — shadow mods are invisible in `/gas`/`/players` to non-admins
+- **`/charshuffle` / `/uncharshuffle`** — Sattolo-permutes everyone's character sprite; originals remembered
+- **`/reversename` / `/unreversename`** — flips showname rune order; stacks cleanly with `/forcename`
 - **`/charcurse <uid> <charname>`** — one-time forced character swap
 - **`/rps`** — PvP rock-paper-scissors with hidden simultaneous commitment
 - **`/randomsong`** tiered cooldown (user / DJ / mod)
-- **`/randomchar`** DJ/mod cooldown bypass
-- **`/getmusic`** — re-sends current music packet to the requester
+- **`/randomchar`** DJ and mod cooldown bypass
+- **`/getmusic`** — re-sends the current music packet to the requester's client
 - **`/8ball <question>`** — customisable response pool via `config/8ball.txt`
 - **`/resetusername`** — account rename (capped at 3 per account)
-- **`/playtime top`** pagination (25 per page)
-- **`/reloadplaytime`** — admin IPID re-link and orphan merge
-- **`/profile`** DJ insignia (💿)
-- **`/global`** tag display in prefix
-- **`/gas`** empty-area suppression
-- Locked-room kick lockout bug fix
+- **`/playtime top`** pagination (25 per page, pass a page number)
+- **`/reloadplaytime`** — admin IPID re-link and orphan playtime merge
+- **`/profile`** DJ insignia (💿 shown for players with the DJ permission bit)
+- **`/global`** shows the sender's tag in the prefix
+- **`/gas`** hides empty areas with a count at the bottom
+- Locked-room kick lockout bug fix (kicked players can no longer walk back in)
 - Hot Potato, Quick Draw, Chip Giveaway, Area Roulette minigames
 - Wardrobe management, `/possess`, in-place server restart via `syscall.Exec`
 
@@ -132,11 +170,9 @@ Admins mint cosmetic tags at runtime without rebuilding. Custom tags never appea
 
 ## Inherited Features (Upstream Athena)
 
-- WebAO (plain WebSocket) support
-- WebSocket Secure (WSS) via reverse proxy or direct TLS
+- WebAO (plain WebSocket) and WebSocket Secure (WSS) support
 - Concurrent client handling
-- Moderator user system with configurable TOML roles
-- Robust command system
+- Moderator user system with configurable TOML roles and permission bitfields
 - Privacy-oriented logging
 - Testimony recorder
 - CLI command parser (`mkusr`, etc.)
@@ -147,34 +183,27 @@ Admins mint cosmetic tags at runtime without rebuilding. Custom tags never appea
 ## Quick Start
 
 ```bash
-# Build
 make build
-
-# Copy sample config
 cp -r config_sample config
-
-# Edit config/config.toml, areas.toml, roles.toml, etc.
-
-# Run
+# edit config/config.toml, areas.toml, roles.toml, etc.
 ./bin/athena
-
-# Create first moderator account
-mkusr    # type in the CLI prompt
+# then in the CLI prompt:
+mkusr
 ```
 
-Binaries for common platforms are available on the [releases page](https://github.com/syntaxnyah/nyathena/releases).
-
 Pass `-c /path/to/config` for a custom config directory. Pass `-nocli` to disable stdin.
+
+Binaries for common platforms are on the [releases page](https://github.com/syntaxnyah/nyathena/releases).
 
 ---
 
 ## Configuration
 
-All configuration lives in `config/config.toml`. Key options beyond upstream defaults:
+Key options beyond upstream defaults (`config/config.toml`):
 
 | Key | Purpose |
 |-----|---------|
-| `enable_casino` | Enable casino and player account system |
+| `enable_casino` | Enable casino and player accounts |
 | `iphub_api_key` | IPHub key for VPN/proxy firewall |
 | `automod_enabled` / `automod_action` | AutoMod word enforcement |
 | `enable_voice` | Server-relayed voice chat |
@@ -187,11 +216,11 @@ See `CLAUDE.md` for the full configuration reference.
 
 ### WSS Setup
 
-**Via reverse proxy (recommended):**
+**Via reverse proxy (recommended for Cloudflare):**
 ```toml
 enable_webao_secure = true
 webao_secure_port   = 443
-# leave tls_cert_path / tls_key_path blank
+# leave tls_cert_path / tls_key_path empty
 ```
 
 **Direct TLS:**
@@ -206,13 +235,13 @@ tls_key_path        = "/path/to/key.key"
 
 ## Building From Source
 
-**Requirements:** Go 1.19+
+Go 1.19+ required.
 
 ```bash
 make build    # produces bin/athena
 make test     # go test -v -race ./...
 make all      # build + test
-make release  # goreleaser (requires goreleaser)
+make release  # goreleaser
 ```
 
 ---
@@ -227,15 +256,15 @@ GNU Affero General Public License v3.0, inherited from upstream Athena.
 
 ### Upstream — Athena by MangosArentLiterature
 
-Nyathena would not exist without **[Athena](https://github.com/MangosArentLiterature/Athena)** and the exceptional work of [MangosArentLiterature](https://github.com/MangosArentLiterature).
+None of this would exist without **[Athena](https://github.com/MangosArentLiterature/Athena)** and [MangosArentLiterature](https://github.com/MangosArentLiterature)'s work on it.
 
-Choosing Go for an AO2 server was a genuinely inspired decision. The language's concurrency model — goroutines, channels, the `sync` primitives — maps almost perfectly onto the "one goroutine per client" model that a game server needs, and the result is a codebase that is fast, readable, and a genuine pleasure to extend. The clean package layout (`athena`, `db`, `packet`, `permissions`, `settings`, …), the TOML-first configuration philosophy, the privacy-conscious logging design, and the no-nonsense CLI — all of it reflects careful thought about what a server should actually be.
+Picking Go for an AO2 server was genuinely one of the best decisions that could have been made. The concurrency model maps onto the problem almost perfectly — goroutines and channels handle the "one client, one loop" pattern with almost no ceremony, and the result is a codebase that stays readable under the kind of sprawl that Nyathena has become. Adding a new command never feels like archaeology. You find where things plug in, you write the new thing, it works. That's not an accident. That's what a well-designed base does for you.
 
-Everything in Nyathena is built on top of that foundation. The sqlite layer, the moderator role system, the packet parser, the testimony recorder, the WebSocket stack — every single one of Nyathena's 90+ punishment commands and casino games and Discord integrations hangs off work that MangosArentLiterature designed and wrote first. None of the Nyathena additions would have been nearly as clean or straightforward to implement without the quality of the base they sit on.
+Spending months adding feature after feature to Nyathena — and genuinely enjoying it the whole time — is a testament to how clean the original architecture is. The package layout is sensible. The TOML config is easy to extend. The permission system is flexible without being overengineered. Every time something new needed to slot in, it slotted in. The discord bot, the casino, the voice relay, the punishment system with its hundred moving parts — all of it hooks into structure that MangosArentLiterature laid down first, and all of it hangs together because that structure is solid.
 
-If you are running an AO2 server and you do not need the extra chaos, **please use upstream Athena** — it is a more focused, better-tested, and purpose-built project. Nyathena is a heavily opinionated fork that leans into moderator mischief; upstream Athena is the real thing.
+If you're running an AO2 server and don't need the chaos layer, **please use upstream Athena**. It's focused, well-tested, and exactly what it sets out to be. Nyathena is the opinionated fork that got away from its creator — upstream Athena is the real thing.
 
-Full, sincere credit and gratitude to MangosArentLiterature for building something worth forking.
+Genuine thanks and full credit to MangosArentLiterature for building something this good to start from.
 
 ---
 
