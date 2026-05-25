@@ -2,11 +2,11 @@
 
 # Nyathena
 
-**Nyathena** is a fork of [Athena](https://github.com/MangosArentLiterature/Athena) — a lightweight AO2 (Attorney Online 2) server written in Go — maintained by [SyntaxNyah](https://github.com/syntaxnyah). Full credit for the original server, its design, and everything it's built on goes to [MangosArentLiterature](https://github.com/MangosArentLiterature).
+**Nyathena** is a fork of [Athena](https://github.com/MangosArentLiterature/Athena)  a lightweight AO2 (Attorney Online 2) server written in Go —maintained by [SyntaxNyah](https://github.com/syntaxnyah). Full credit for the original server, its design, and everything it's built on goes to [MangosArentLiterature](https://github.com/MangosArentLiterature).
 
-This started as a personal server project and kind of spiralled. Months of late nights, one idea leading to another, a punishment command becoming ten, a casino becoming eleven games — and the whole time it kept being *fun* to add things, which is not always how software development goes. That's entirely down to how well Athena is built. Adding a new feature rarely meant fighting the codebase. It usually just meant writing the thing.
+This started as a personal server project and kind of spiralled. One punishment command becoming ten, a casino becoming eleven games and the whole time it kept being *fun* to add things, which is not always how software development goes. That's entirely down to how well Athena is built. Adding a new feature rarely meant fighting the codebase. It usually just meant writing the thing.
 
-The centrepiece is a **90+ command punishment system** designed to give moderators a ridiculous, embarrassing amount of creative control over players — backwards text, forced haiku, dere archetypes, voice corruption, coinflip PvP challenges. It's purposefully excessive and a little sadistic, and that's the point. Beyond that: a Discord bot, a casino with 11 games, a full Mafia minigame, server-relayed voice chat, and a lot of smaller quality-of-life things that accumulated over time.
+This fork is a **90+ command punishment system** designed to give moderators a ridiculous, embarrassing amount of creative control over players  backwards text, forced haiku, dere archetypes, voice corruption, coinflip PvP challenges. It's purposefully excessive and a little sadistic, and that's the point. Abuse players to your hearts content! Beyond that: a Discord bot, a casino with 11 games, a full Mafia minigame, server-relayed voice chat over websockets, and a lot of smaller quality-of-life things that accumulated over time.
 
 ---
 
@@ -254,15 +254,17 @@ GNU Affero General Public License v3.0, inherited from upstream Athena.
 
 ## Credits
 
-### Upstream — Athena by MangosArentLiterature
+### Upstream Athena by MangosArentLiterature
 
 None of this would exist without **[Athena](https://github.com/MangosArentLiterature/Athena)** and [MangosArentLiterature](https://github.com/MangosArentLiterature)'s work on it.
 
-Picking Go for an AO2 server was genuinely one of the best decisions that could have been made. The concurrency model maps onto the problem almost perfectly — goroutines and channels handle the "one client, one loop" pattern with almost no ceremony, and the result is a codebase that stays readable under the kind of sprawl that Nyathena has become. Adding a new command never feels like archaeology. You find where things plug in, you write the new thing, it works. That's not an accident. That's what a well-designed base does for you.
+Picking Go for an AO2 server was genuinely one of the best decisions that could have been made. The concurrency model maps onto the problem almost perfectly. The goroutines and channels handle the "one client, one loop" pattern with almost no ceremony, and the result is a codebase that stays readable under the kind of chaotic mess  that Nyathena has become. Adding a new command never feels like a chore its super simple and easy.
 
-Spending months adding feature after feature to Nyathena — and genuinely enjoying it the whole time — is a testament to how clean the original architecture is. The package layout is sensible. The TOML config is easy to extend. The permission system is flexible without being overengineered. Every time something new needed to slot in, it slotted in. The discord bot, the casino, the voice relay, the punishment system with its hundred moving parts — all of it hooks into structure that MangosArentLiterature laid down first, and all of it hangs together because that structure is solid.
+Spending months adding feature after feature to Nyathena and genuinely enjoying it the whole time  is a testament to how clean the original upstream base is is. 
 
-If you're running an AO2 server and don't need the chaos layer, **please use upstream Athena**. It's focused, well-tested, and exactly what it sets out to be. Nyathena is the opinionated fork that got away from its creator — upstream Athena is the real thing.
+The package layout makes alot of sense. The addition of using a TOML config is easy to extend. The permission system is flexible without being overengineered and I was able to extend it to things such as full on account systems. Every time something new needed to be integrated in, it went in without too much trouble. The discord bot, the casino, the voice relay, the punishment system with its considerly bloated amounts of code, all of it hooks into structure that MangosArentLiterature laid down first, and all of it hangs together because the base is solid.
+
+If you're running an AO2 server and don't need the chaos layer, **please use upstream Athena**. It's focused, well-tested, and exactly what it sets out to be. Nyathena is the chaotic abusive insanity fork that spiraled way way way further  away from upstream Athena. If you want a solid AO experience without any bloat, it's recommended to use the real thing.
 
 Genuine thanks and full credit to MangosArentLiterature for building something this good to start from.
 
