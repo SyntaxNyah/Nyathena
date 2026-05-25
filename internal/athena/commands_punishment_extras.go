@@ -135,6 +135,10 @@ var megamasoStackPool = []PunishmentType{
 // as many as they like. Re-rolls only stop being available when the stack
 // expires.
 func cmdMegamaso(client *Client, args []string, _ string) {
+	if isPunishmentBlocked(client.Ipid()) {
+		client.SendServerMessage("A moderator has disabled self-applied punishment commands for you.")
+		return
+	}
 	flags := flag.NewFlagSet("", 0)
 	flags.SetOutput(io.Discard)
 	durationStr := flags.String("d", "10m", "")

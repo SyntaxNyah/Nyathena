@@ -197,6 +197,10 @@ func cmdPotions(client *Client, _ []string, _ string) {
 // cmdPotion drinks a named potion or, with "off", clears all active potions.
 // Accepts an optional -d <duration> flag (default 5m, max 24h).
 func cmdPotion(client *Client, args []string, usage string) {
+	if isPunishmentBlocked(client.Ipid()) {
+		client.SendServerMessage("A moderator has disabled self-applied punishment commands for you.")
+		return
+	}
 	flags := flag.NewFlagSet("", 0)
 	flags.SetOutput(io.Discard)
 	durationStr := flags.String("d", "5m", "")

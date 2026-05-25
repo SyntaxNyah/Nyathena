@@ -572,6 +572,10 @@ func cmdRps(client *Client, args []string, _ string) {
 // Handles /coinflip
 
 func cmdCoinflip(client *Client, args []string, _ string) {
+	if isPunishmentBlocked(client.Ipid()) {
+		client.SendServerMessage("A moderator has disabled self-applied punishment commands for you.")
+		return
+	}
 	choice := strings.ToLower(args[0])
 	if choice != "heads" && choice != "tails" {
 		client.SendServerMessage("Invalid choice. Use: heads or tails.")
@@ -835,6 +839,10 @@ client.conn.Close()
 // is active removes the old one and applies a new (different) random
 // punishment, resetting the timer.
 func cmdMaso(client *Client, args []string, _ string) {
+	if isPunishmentBlocked(client.Ipid()) {
+		client.SendServerMessage("A moderator has disabled self-applied punishment commands for you.")
+		return
+	}
 	flags := flag.NewFlagSet("", 0)
 	flags.SetOutput(io.Discard)
 	durationStr := flags.String("d", "10m", "")
