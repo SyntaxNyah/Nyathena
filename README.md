@@ -2,7 +2,7 @@
 
 # Nyathena
 
-**Nyathena** is a fork of [Athena](https://github.com/MangosArentLiterature/Athena) a lightweight AO2 (Attorney Online 2) server written in Go —maintained by [SyntaxNyah](https://github.com/syntaxnyah). Full credit for the original server, its design, and everything it's built on goes to [MangosArentLiterature](https://github.com/MangosArentLiterature).
+**Nyathena** is a fork of [Athena](https://github.com/MangosArentLiterature/Athena) a lightweight AO2 (Attorney Online 2) server written in Go. It is maintained by [SyntaxNyah](https://github.com/syntaxnyah). Full credit for the original server, its design, and everything it's built on goes to [MangosArentLiterature](https://github.com/MangosArentLiterature).
 
 This started as a personal server project and kind of spiralled. One punishment command becoming ten, a casino system, tag system, account system, a bunch of mini games and the whole time it kept being *fun* to add things, which is not always how software development goes. That's entirely down to how well Athena is built. Adding a new feature rarely meant slow build times or having to debug for hours in the codebase. It usually just meant writing the thing.
 
