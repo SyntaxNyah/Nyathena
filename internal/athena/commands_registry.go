@@ -1944,6 +1944,29 @@ func initCommands() {
 			reqPerms: permissions.PermissionField["MUTE"],
 			category: "punishment",
 		},
+		"blockpunishment": {
+			handler: cmdBlockPunishment,
+			minArgs: 1,
+			usage: "Usage: /blockpunishment <uid1>,<uid2>,...\n" +
+				"Prevents the specified player(s) from using self-applied chaos commands:\n" +
+				"  /maso, /megamaso, /potion, /coinflip\n" +
+				"Moderator-issued punishments are unaffected — mods can still punish them normally.\n" +
+				"The block is IPID-based and does not persist across server restarts.\n" +
+				"Use /unblockpunishment to restore access.",
+			desc:     "Prevents a player from using self-applied punishment/chaos commands (/maso, /megamaso, /potion, /coinflip). Mod only.",
+			reqPerms: permissions.PermissionField["MUTE"],
+			category: "punishment",
+		},
+		"unblockpunishment": {
+			handler: cmdUnblockPunishment,
+			minArgs: 1,
+			usage: "Usage: /unblockpunishment <uid1>,<uid2>,...\n" +
+				"Restores access to self-applied chaos commands for the specified player(s).\n" +
+				"They will be able to use /maso, /megamaso, /potion, and /coinflip again.",
+			desc:     "Restores a player's ability to use self-applied chaos commands. Mod only.",
+			reqPerms: permissions.PermissionField["MUTE"],
+			category: "punishment",
+		},
 		"icwarp": {
 			handler: cmdICWarp,
 			minArgs: 1,

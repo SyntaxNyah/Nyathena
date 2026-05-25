@@ -107,6 +107,11 @@ var punishmentHelpGroups = []punishmentSubcategory{
 			"unslang", "unthesaurusoverload", "unthirdperson", "untranslator",
 			"ununcannyvalley", "ununreliablenarrator", "unupsidedown", "unvalleygirl"},
 	},
+	{
+		emoji: "🚫", title: "Self-chaos block",
+		desc: "Prevent a player from using self-applied chaos commands (/maso, /megamaso, /potion, /coinflip). Mods can still punish them normally.",
+		cmds: []string{"blockpunishment", "unblockpunishment"},
+	},
 }
 
 // renderPunishmentHelp produces the grouped /help punishment output.
