@@ -4,9 +4,9 @@
 
 **Nyathena** is a fork of [Athena](https://github.com/MangosArentLiterature/Athena)  a lightweight AO2 (Attorney Online 2) server written in Go —maintained by [SyntaxNyah](https://github.com/syntaxnyah). Full credit for the original server, its design, and everything it's built on goes to [MangosArentLiterature](https://github.com/MangosArentLiterature).
 
-This started as a personal server project and kind of spiralled. One punishment command becoming ten, a casino becoming eleven games and the whole time it kept being *fun* to add things, which is not always how software development goes. That's entirely down to how well Athena is built. Adding a new feature rarely meant fighting the codebase. It usually just meant writing the thing.
+This started as a personal server project and kind of spiralled. One punishment command becoming ten, a casino system, tag system, account system, a bunch of mini games and the whole time it kept being *fun* to add things, which is not always how software development goes. That's entirely down to how well Athena is built. Adding a new feature rarely meant slow build times or having to debug for hours in the codebase. It usually just meant writing the thing.
 
-This fork is a **90+ command punishment system** designed to give moderators a ridiculous, embarrassing amount of creative control over players  backwards text, forced haiku, dere archetypes, voice corruption, coinflip PvP challenges. It's purposefully excessive and a little sadistic, and that's the point. Abuse players to your hearts content! Beyond that: a Discord bot, a casino with 11 games, a full Mafia minigame, server-relayed voice chat over websockets, and a lot of smaller quality-of-life things that accumulated over time.
+This fork is a **90+ command punishment system** designed to give moderators a ridiculous, embarrassing amount of creative control over players to abuse as much as they want and mess with whether it be; backwards text, forced haiku, dere archetypes, voice corruption, coinflip PvP challenges. It's purposefully excessive and a little sadistic, and that's the point. Abuse players to your hearts content! Beyond that: a Discord bot, a casino with 11 games, a full Mafia minigame, server-relayed voice chat over websockets, and a lot of smaller quality-of-life things that accumulated over time.
 
 ---
 
