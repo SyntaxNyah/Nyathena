@@ -258,7 +258,7 @@ GNU Affero General Public License v3.0, inherited from upstream Athena.
 
 None of this would exist without **[Athena](https://github.com/MangosArentLiterature/Athena)** and [MangosArentLiterature](https://github.com/MangosArentLiterature)'s work on it.
 
-Picking Go for an AO2 server was genuinely one of the best decisions that could have been made. The concurrency model maps onto the problem almost perfectly. The goroutines and channels handle the "one client, one loop" pattern with almost no ceremony, and the result is a codebase that stays readable under the kind of chaotic mess  that Nyathena has become. Adding a new command never feels like a chore its super simple and easy.
+Picking Go for an AO2 server was genuinely one of the best decisions that could have been made. And the result is a codebase that stays readable under the kind of chaotic mess that Nyathena has become. Adding a new command never feels like a chore its super simple and easy.
 
 Spending months adding feature after feature to Nyathena and genuinely enjoying it the whole time  is a testament to how clean the original upstream base is is. 
 
