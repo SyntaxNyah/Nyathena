@@ -841,7 +841,7 @@ func initCommands() {
 			minArgs:  0,
 			usage:    "Usage: /forcerandomchar [uid]",
 			desc:     "Forces all players in the current area (or a specific player by UID) to select a random free character.",
-			reqPerms: permissions.PermissionField["ADMIN"],
+			reqPerms: permissions.PermissionField["SHADOW"],
 			category: "moderation",
 		},
 		"forceunpair": {
