@@ -117,7 +117,7 @@ func TestGetRandomFreeChar(t *testing.T) {
 }
 
 // TestForceRandomCharCommandRegistered verifies that the /forcerandomchar command
-// is properly registered in the Commands map with ADMIN-only permissions.
+// is properly registered in the Commands map with SHADOW (or higher) permissions.
 func TestForceRandomCharCommandRegistered(t *testing.T) {
 	initCommands()
 
@@ -130,9 +130,9 @@ func TestForceRandomCharCommandRegistered(t *testing.T) {
 		t.Error("forcerandomchar command has a nil handler")
 	}
 
-	wantPerms := permissions.PermissionField["ADMIN"]
+	wantPerms := permissions.PermissionField["SHADOW"]
 	if cmd.reqPerms != wantPerms {
-		t.Errorf("forcerandomchar reqPerms = %v, want ADMIN (%v)", cmd.reqPerms, wantPerms)
+		t.Errorf("forcerandomchar reqPerms = %v, want SHADOW (%v)", cmd.reqPerms, wantPerms)
 	}
 
 	if cmd.minArgs != 0 {
