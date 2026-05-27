@@ -147,7 +147,7 @@ func autoModCheck(client *Client, msg string) bool {
 
 	switch autoModAction {
 	case autoModActionKick:
-		client.SendPacketSync("KK", "Kicked for prohibited language.")
+		client.SendSync(&packet.KK{Reason: "Kicked for prohibited language."})
 		client.conn.Close()
 		logger.LogInfof("automod: kicked %v (uid %d) — matched word %q", client.Ipid(), client.Uid(), matched)
 		return true
@@ -178,7 +178,7 @@ func autoModCheck(client *Client, msg string) bool {
 			return false
 		}
 		forgetIP(client.Ipid())
-		client.SendPacketSync("KB", fmt.Sprintf("Banned for prohibited language.\nUntil: ∞\nID: %d", id))
+		client.SendSync(&packet.KB{Reason: fmt.Sprintf("Banned for prohibited language.\nUntil: ∞\nID: %d", id)})
 		client.conn.Close()
 		logger.LogInfof("automod: permanently banned %v (uid %d) — matched word %q", client.Ipid(), client.Uid(), matched)
 		return true
@@ -215,12 +215,12 @@ func startTormentDisconnect(client *Client) {
 // parked during the wait; the callback runs in a fresh goroutine only when the
 // timer fires.
 func handleTormentedIC(client *Client, ms *packet.MSPacket) {
-	// Encode once into wire-format args; reused for both the immediate echo
-	// and the deferred broadcast.
-	args := ms.ServerArgs()
+	// Encode once into wire-format args via the Outgoing contract; reused
+	// for both the immediate echo and the deferred broadcast.
+	header, args := ms.Header(), ms.Args()
 
 	// Echo to sender immediately so it looks like it went through.
-	client.SendPacket("MS", args...)
+	client.SendPacket(header, args...)
 
 	if tormentIntn(3) == 0 {
 		// Ghost: nobody else sees it, nothing is logged.
@@ -237,7 +237,7 @@ func handleTormentedIC(client *Client, ms *packet.MSPacket) {
 		// Deliver to everyone currently in the original area except the sender.
 		clients.ForEach(func(c *Client) {
 			if c.Area() == targetArea && c.Uid() != senderUID {
-				c.SendPacket("MS", args...)
+				c.SendPacket(header, args...)
 			}
 		})
 		addToBuffer(client, "IC", "\""+msgLabel+"\"", false)
@@ -247,8 +247,9 @@ func handleTormentedIC(client *Client, ms *packet.MSPacket) {
 // handleTormentedOOC applies the same ghost-or-delay logic as handleTormentedIC
 // for OOC (CT) messages from a tormented client.
 func handleTormentedOOC(client *Client, name, msg string) {
+	out := &packet.CTToClient{Name: name, Message: msg, IsFromServer: "0"}
 	// Echo to sender immediately.
-	client.SendPacket("CT", name, msg, "0")
+	client.Send(out)
 
 	if tormentIntn(3) == 0 {
 		// Ghost: silently dropped.
@@ -257,11 +258,12 @@ func handleTormentedOOC(client *Client, name, msg string) {
 
 	targetArea := client.Area()
 	senderUID := client.Uid()
+	header, args := out.Header(), out.Args()
 
 	time.AfterFunc(20*time.Second, func() {
 		clients.ForEach(func(c *Client) {
 			if c.Area() == targetArea && c.Uid() != senderUID {
-				c.SendPacket("CT", name, msg, "0")
+				c.SendPacket(header, args...)
 			}
 		})
 		addToBuffer(client, "OOC", "\""+msg+"\"", false)

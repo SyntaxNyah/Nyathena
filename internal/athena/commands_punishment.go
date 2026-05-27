@@ -27,6 +27,7 @@ import (
 
 	"github.com/MangosArentLiterature/Athena/internal/db"
 	"github.com/MangosArentLiterature/Athena/internal/logger"
+	"github.com/MangosArentLiterature/Athena/internal/packet"
 	"github.com/MangosArentLiterature/Athena/internal/permissions"
 	"github.com/xhit/go-str2duration/v2"
 )
@@ -1951,13 +1952,13 @@ func cmdICWarp(client *Client, args []string, usage string) {
 		switch strings.ToLower(args[1]) {
 		case "on":
 			client.Area().SetICWarpGlobal(true, client.Uid())
-			writeToArea(client.Area(), "CT", encode("Server"),
-				encode("[Global IC Warp is now ON — everyone's messages will replay their own past messages!]"), "1")
+			broadcastToArea(client.Area(), &packet.CTToClient{Name: encode("Server"),
+				Message: encode("[Global IC Warp is now ON — everyone's messages will replay their own past messages!]"), IsFromServer: "1"})
 			addToBuffer(client, "CMD", "Enabled global IC warp in area.", false)
 		case "off":
 			client.Area().SetICWarpGlobal(false, -1)
-			writeToArea(client.Area(), "CT", encode("Server"),
-				encode("[Global IC Warp is now OFF.]"), "1")
+			broadcastToArea(client.Area(), &packet.CTToClient{Name: encode("Server"),
+				Message: encode("[Global IC Warp is now OFF.]"), IsFromServer: "1"})
 			addToBuffer(client, "CMD", "Disabled global IC warp in area.", false)
 		default:
 			client.SendServerMessage("Invalid argument. Use: /icwarp global on|off")

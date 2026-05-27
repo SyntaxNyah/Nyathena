@@ -34,6 +34,8 @@ import (
 	"io"
 	"strings"
 	"time"
+
+	"github.com/MangosArentLiterature/Athena/internal/packet"
 )
 
 // parseCsvIpids splits a comma-separated argument into IPIDs, dropping empties.
@@ -280,13 +282,13 @@ func cmdVoiceArea(client *Client, args []string, usage string) {
 	case "on", "true", "1", "yes":
 		a.SetVoiceAllowed(true)
 		client.SendServerMessage("Voice chat enabled in this area.\n\n" + voiceClientRequirementHint)
-		writeToArea(a, "CT", "[SERVER]", "Voice chat has been enabled in this area.", "1")
+		broadcastToArea(a, &packet.CTToClient{Name: "[SERVER]", Message: "Voice chat has been enabled in this area.", IsFromServer: "1"})
 		addToBuffer(client, "CMD", "Enabled voice chat in area.", false)
 	case "off", "false", "0", "no":
 		a.SetVoiceAllowed(false)
 		kickAllVoiceFromArea(a)
 		client.SendServerMessage("Voice chat disabled in this area. All participants ejected.")
-		writeToArea(a, "CT", "[SERVER]", "Voice chat has been disabled in this area.", "1")
+		broadcastToArea(a, &packet.CTToClient{Name: "[SERVER]", Message: "Voice chat has been disabled in this area.", IsFromServer: "1"})
 		addToBuffer(client, "CMD", "Disabled voice chat in area.", false)
 	default:
 		client.SendServerMessage("Usage: " + usage)

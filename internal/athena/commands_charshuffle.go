@@ -17,7 +17,8 @@ package athena
 import (
 	"fmt"
 	"math/rand"
-	"strconv"
+
+	"github.com/MangosArentLiterature/Athena/internal/packet"
 )
 
 // shuffledOrigCharID accessors
@@ -106,15 +107,14 @@ func cmdCharShuffle(client *Client, _ []string, _ string) {
 			}
 		}
 		p.c.SetCharID(newID)
-		p.c.SendPacket("PV", "0", "CID", strconv.Itoa(newID))
+		p.c.Send(&packet.PV{PlayerID: 0, CharID: newID})
 		p.c.SendServerMessage("A moderator has shuffled characters in this area.")
 	}
 	// Single CharsCheck broadcast at the end is much cheaper than per-client.
-	writeToArea(targetArea, "CharsCheck", targetArea.Taken()...)
+	broadcastToArea(targetArea, &packet.CharsCheck{Entries: targetArea.Taken()})
 	// Push PU updates so other players see the new char names too.
 	for _, p := range participants {
-		uid := strconv.Itoa(p.c.Uid())
-		writeToAll("PU", uid, "1", p.c.CurrentCharacter())
+		broadcastToAll(&packet.PU{ID: p.c.Uid(), Type: 1, Data: p.c.CurrentCharacter()})
 	}
 
 	client.SendServerMessage(fmt.Sprintf("Shuffled characters of %d players in the area.", len(participants)))
@@ -158,23 +158,22 @@ func cmdUnCharShuffle(client *Client, _ []string, _ string) {
 	for _, p := range participants {
 		if p.origCID < 0 {
 			p.c.SetCharID(-1)
-			p.c.SendPacket("PV", "0", "CID", "-1")
+			p.c.Send(&packet.PV{PlayerID: 0, CharID: -1})
 		} else if targetArea.SwitchChar(-1, p.origCID) {
 			p.c.SetCharID(p.origCID)
-			p.c.SendPacket("PV", "0", "CID", strconv.Itoa(p.origCID))
+			p.c.Send(&packet.PV{PlayerID: 0, CharID: p.origCID})
 		} else {
 			// Original slot is somehow taken (shouldn't happen unless someone
 			// joined mid-shuffle). Fall back to charselect.
 			p.c.SetCharID(-1)
-			p.c.SendPacket("PV", "0", "CID", "-1")
+			p.c.Send(&packet.PV{PlayerID: 0, CharID: -1})
 		}
 		p.c.SetShuffledOrigCharID(-2)
 		p.c.SendServerMessage("A moderator has restored characters in this area.")
 	}
-	writeToArea(targetArea, "CharsCheck", targetArea.Taken()...)
+	broadcastToArea(targetArea, &packet.CharsCheck{Entries: targetArea.Taken()})
 	for _, p := range participants {
-		uid := strconv.Itoa(p.c.Uid())
-		writeToAll("PU", uid, "1", p.c.CurrentCharacter())
+		broadcastToAll(&packet.PU{ID: p.c.Uid(), Type: 1, Data: p.c.CurrentCharacter()})
 	}
 
 	client.SendServerMessage(fmt.Sprintf("Restored characters of %d players in the area.", len(participants)))
