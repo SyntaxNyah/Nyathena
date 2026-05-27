@@ -28,6 +28,7 @@ import (
 	"time"
 
 	"github.com/MangosArentLiterature/Athena/internal/area"
+	"github.com/MangosArentLiterature/Athena/internal/packet"
 	"github.com/MangosArentLiterature/Athena/internal/permissions"
 	"github.com/MangosArentLiterature/Athena/internal/sliceutil"
 )
@@ -145,7 +146,7 @@ func cmdBg(client *Client, args []string, _ string) {
 		return
 	}
 	client.Area().SetBackground(arg)
-	writeToArea(client.Area(), "BN", arg)
+	broadcastToArea(client.Area(), &packet.BN{Background: arg})
 	sendAreaServerMessage(client.Area(), fmt.Sprintf("%v set the background to %v.", client.OOCName(), arg))
 	addToBuffer(client, "CMD", fmt.Sprintf("Set BG to %v.", arg), false)
 }
@@ -163,7 +164,7 @@ func cmdCharSelect(client *Client, args []string, _ string) {
 			return
 		}
 		client.ChangeCharacter(-1)
-		client.SendPacket("DONE")
+		client.Send(&packet.DONE{})
 	} else {
 		if !client.HasCMPermission() {
 			client.SendServerMessage("You do not have permission to use that command.")
@@ -177,7 +178,7 @@ func cmdCharSelect(client *Client, args []string, _ string) {
 				continue
 			}
 			c.ChangeCharacter(-1)
-			c.SendPacket("DONE")
+			c.Send(&packet.DONE{})
 			c.SendServerMessage("You were moved back to character select.")
 			count++
 			report += fmt.Sprintf("%v, ", c.Uid())
@@ -246,7 +247,7 @@ func cmdRandomBg(client *Client, _ []string, _ string) {
 	}
 	bg := backgrounds[rand.Intn(len(backgrounds))]
 	a.SetBackground(bg)
-	writeToArea(a, "BN", bg)
+	broadcastToArea(a, &packet.BN{Background: bg})
 	sendAreaServerMessage(a, fmt.Sprintf("%v set the background to a random one (%v).", client.OOCName(), bg))
 	addToBuffer(client, "CMD", fmt.Sprintf("Set BG to random (%v).", bg), false)
 }
@@ -513,7 +514,7 @@ func cmdKickOther(client *Client, args []string, _ string) {
 		if c.Hdid() != callerHDID {
 			return
 		}
-		c.SendPacketSync("KK", "Ghost client kicked.")
+		c.SendSync(&packet.KK{Reason: "Ghost client kicked."})
 		c.conn.Close()
 		count++
 	})
@@ -796,7 +797,10 @@ func cmdPlay(client *Client, args []string, _ string) {
 			return
 		}
 	}
-	writeToArea(client.Area(), "MC", s, fmt.Sprint(client.CharID()), client.Showname(), "1", "0")
+	broadcastToArea(client.Area(), &packet.MCToClient{
+		Name: s, CharID: client.CharID(), Showname: client.Showname(),
+		Looping: "1", Channel: "0", Effects: "",
+	})
 }
 
 // Handles /randomsong
@@ -843,7 +847,10 @@ func cmdRandomSong(client *Client, _ []string, _ string) {
 		return
 	}
 	song := playable[rand.Intn(len(playable))]
-	writeToArea(client.Area(), "MC", song, fmt.Sprint(client.CharID()), client.Showname(), "1", "0")
+	broadcastToArea(client.Area(), &packet.MCToClient{
+		Name: song, CharID: client.CharID(), Showname: client.Showname(),
+		Looping: "1", Channel: "0", Effects: "",
+	})
 	addToBuffer(client, "CMD", fmt.Sprintf("Played random song (%v).", song), false)
 }
 
@@ -889,7 +896,7 @@ func cmdSwapEvi(client *Client, args []string, _ string) {
 	}
 	if client.Area().SwapEvidence(evi1, evi2) {
 		client.SendServerMessage("Evidence swapped.")
-		writeToArea(client.Area(), "LE", client.Area().Evidence()...)
+		broadcastToArea(client.Area(), &packet.LE{Items: client.Area().Evidence()})
 		addToBuffer(client, "CMD", fmt.Sprintf("Swapped posistions of evidence %v and %v.", evi1, evi2), false)
 	} else {
 		client.SendServerMessage("Invalid arguments.")
@@ -922,7 +929,7 @@ func cmdPause(client *Client, _ []string, _ string) {
 	client.Area().SetTstState(area.TRIdle)
 	client.SendServerMessage("Recorder stopped.")
 	client.Area().TstJump(0)
-	writeToArea(client.Area(), "RT", "testimony1#1")
+	broadcastToArea(client.Area(), &packet.RTPacket{Animation: "testimony1", Variant: "1"})
 }
 
 // Handles /examine
@@ -934,8 +941,8 @@ func cmdExamine(client *Client, _ []string, _ string) {
 	}
 	client.Area().SetTstState(area.TRPlayback)
 	client.SendServerMessage("Starting cross-examination.")
-	writeToArea(client.Area(), "RT", "testimony2")
-	writeToArea(client.Area(), "MS", client.Area().CurrentTstStatement())
+	broadcastToArea(client.Area(), &packet.RTPacket{Animation: "testimony2"})
+	broadcastToArea(client.Area(), packet.ParseMSServerString(client.Area().CurrentTstStatement()))
 }
 
 // Handles /update
@@ -1016,7 +1023,7 @@ func cmdTestimony(client *Client, args []string, _ string) {
 		client.Area().SetTstState(area.TRIdle)
 		client.SendServerMessage("Recorder stopped.")
 		client.Area().TstJump(0)
-		writeToArea(client.Area(), "RT", "testimony1#1")
+		broadcastToArea(client.Area(), &packet.RTPacket{Animation: "testimony1", Variant: "1"})
 	case "play":
 		if !client.Area().HasTestimony() {
 			client.SendServerMessage("No testimony recorded.")
@@ -1024,8 +1031,8 @@ func cmdTestimony(client *Client, args []string, _ string) {
 		}
 		client.Area().SetTstState(area.TRPlayback)
 		client.SendServerMessage("Playing testimony.")
-		writeToArea(client.Area(), "RT", "testimony2")
-		writeToArea(client.Area(), "MS", client.Area().CurrentTstStatement())
+		broadcastToArea(client.Area(), &packet.RTPacket{Animation: "testimony2"})
+		broadcastToArea(client.Area(), packet.ParseMSServerString(client.Area().CurrentTstStatement()))
 	case "update":
 		if client.Area().TstState() != area.TRPlayback {
 			client.SendServerMessage("The recorder is not active.")

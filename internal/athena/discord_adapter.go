@@ -29,6 +29,7 @@ import (
 	"github.com/MangosArentLiterature/Athena/internal/db"
 	"github.com/MangosArentLiterature/Athena/internal/discord/bot"
 	"github.com/MangosArentLiterature/Athena/internal/logger"
+	"github.com/MangosArentLiterature/Athena/internal/packet"
 	"github.com/MangosArentLiterature/Athena/internal/permissions"
 )
 
@@ -488,7 +489,7 @@ func (a *ServerAdapter) SetFirewall(on bool) error {
 		firewallActive.Store(true)
 		clients.ForEach(func(c *Client) {
 			if c.Uid() != -1 && permissions.HasPermission(c.Perms(), permissions.PermissionField["BAN"]) {
-				c.SendPacket("CT", "OOC", "🔥 VPN firewall enabled by a Discord moderator.", "1")
+				c.Send(&packet.CTToClient{Name: "OOC", Message: "🔥 VPN firewall enabled by a Discord moderator.", IsFromServer: "1"})
 			}
 		})
 		return nil
@@ -496,7 +497,7 @@ func (a *ServerAdapter) SetFirewall(on bool) error {
 	firewallActive.Store(false)
 	clients.ForEach(func(c *Client) {
 		if c.Uid() != -1 && permissions.HasPermission(c.Perms(), permissions.PermissionField["BAN"]) {
-			c.SendPacket("CT", "OOC", "🔓 VPN firewall disabled by a Discord moderator.", "1")
+			c.Send(&packet.CTToClient{Name: "OOC", Message: "🔓 VPN firewall disabled by a Discord moderator.", IsFromServer: "1"})
 		}
 	})
 	return nil
@@ -511,7 +512,7 @@ func (a *ServerAdapter) SetLockdown(on bool) error {
 	}
 	clients.ForEach(func(c *Client) {
 		if c.Uid() != -1 && permissions.IsModerator(c.Perms()) {
-			c.SendPacket("CT", "OOC", msg, "1")
+			c.Send(&packet.CTToClient{Name: "OOC", Message: msg, IsFromServer: "1"})
 		}
 	})
 	return nil

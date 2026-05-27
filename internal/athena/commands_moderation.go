@@ -31,6 +31,7 @@ import (
 	"github.com/MangosArentLiterature/Athena/internal/area"
 	"github.com/MangosArentLiterature/Athena/internal/db"
 	"github.com/MangosArentLiterature/Athena/internal/logger"
+	"github.com/MangosArentLiterature/Athena/internal/packet"
 	"github.com/MangosArentLiterature/Athena/internal/permissions"
 	"github.com/MangosArentLiterature/Athena/internal/webhook"
 	"github.com/xhit/go-str2duration/v2"
@@ -97,7 +98,7 @@ func cmdBan(client *Client, args []string, usage string) {
 				}
 				reportBuilder.WriteString(c.Ipid())
 			}
-			c.SendPacketSync("KB", fmt.Sprintf("%v\nUntil: %v\nID: %v", reason, untilS, id))
+			c.SendSync(&packet.KB{Reason: fmt.Sprintf("%v\nUntil: %v\nID: %v", reason, untilS, id)})
 			c.conn.Close()
 			forgetIP(c.Ipid())
 			deleteAccountForIPID(c.Ipid())
@@ -140,12 +141,12 @@ func cmdBan(client *Client, args []string, usage string) {
 				deleteAccountForIPID(ipid)
 				for _, c := range onlineClients {
 					if id, ok := banIDByHdid[c.Hdid()]; ok {
-						c.SendPacketSync("KB", fmt.Sprintf("%v\nUntil: %v\nID: %v", reason, untilS, id))
+						c.SendSync(&packet.KB{Reason: fmt.Sprintf("%v\nUntil: %v\nID: %v", reason, untilS, id)})
 						if err := webhook.PostBan(c.CurrentCharacter(), c.Showname(), c.OOCName(), ipid, c.Uid(), id, *duration, reason, client.DisplayModName()); err != nil {
 							logger.LogErrorf("while posting ban webhook: %v", err)
 						}
 					} else {
-						c.SendPacketSync("KB", fmt.Sprintf("%v\nUntil: %v", reason, untilS))
+						c.SendSync(&packet.KB{Reason: fmt.Sprintf("%v\nUntil: %v", reason, untilS)})
 					}
 					c.conn.Close()
 				}
@@ -327,7 +328,7 @@ func cmdGlobal(client *Client, args []string, _ string) {
 	if tag != "" {
 		tag += " "
 	}
-	writeToAll("CT", fmt.Sprintf("[GLOBAL] [UID %d] %s%v", client.Uid(), tag, client.OOCName()), strings.Join(args, " "), "1")
+	broadcastToAll(&packet.CTToClient{Name: fmt.Sprintf("[GLOBAL] [UID %d] %s%v", client.Uid(), tag, client.OOCName()), Message: strings.Join(args, " "), IsFromServer: "1"})
 }
 
 // Handles /hide
@@ -343,7 +344,7 @@ func cmdHide(client *Client, _ []string, _ string) {
 	} else {
 		client.Area().RemoveVisiblePlayer()
 		client.SetHidden(true)
-		writeToAll("PR", strconv.Itoa(client.Uid()), "1")
+		broadcastToAll(&packet.PR{ID: client.Uid(), Type: 1})
 		sendPlayerArup()
 		client.SendServerMessage("You are now hidden from the player list and room counts.")
 		addToBuffer(client, "CMD", "Enabled hide mode.", false)
@@ -384,7 +385,7 @@ func cmdKick(client *Client, args []string, usage string) {
 			reportBuilder.WriteString(", ")
 		}
 		reportBuilder.WriteString(c.Ipid())
-		c.SendPacketSync("KK", reason)
+		c.SendSync(&packet.KK{Reason: reason})
 		c.conn.Close()
 		count++
 		if err := webhook.PostKick(c.CurrentCharacter(), c.Showname(), c.OOCName(), c.Ipid(), reason, client.DisplayModName(), c.Uid()); err != nil {
@@ -443,7 +444,7 @@ func cmdLogin(client *Client, args []string, _ string) {
 			// AUTH#1 triggers the AO2 client's "Logged in as a moderator" popup.
 			// Only send it for actual moderators; player and DJ-only accounts get
 			// chat-based feedback instead so the client doesn't mislabel them.
-			client.SendPacket("AUTH", "1")
+			client.Send(&packet.AUTH{State: 1})
 		} else {
 			client.SendServerMessage("Logged in to your account.")
 		}
@@ -451,7 +452,7 @@ func cmdLogin(client *Client, args []string, _ string) {
 		addToBuffer(client, "AUTH", fmt.Sprintf("Logged in as %v.", args[0]), true)
 		return
 	}
-	client.SendPacket("AUTH", "0")
+	client.Send(&packet.AUTH{State: 0})
 	addToBuffer(client, "AUTH", fmt.Sprintf("Failed login as %v.", args[0]), true)
 }
 
@@ -506,9 +507,9 @@ func cmdMod(client *Client, args []string, usage string) {
 	}
 	msg := strings.Join(flags.Args(), " ")
 	if *global {
-		writeToAll("CT", fmt.Sprintf("[MOD] [GLOBAL] %v", client.OOCName()), msg, "1")
+		broadcastToAll(&packet.CTToClient{Name: fmt.Sprintf("[MOD] [GLOBAL] %v", client.OOCName()), Message: msg, IsFromServer: "1"})
 	} else {
-		writeToArea(client.Area(), "CT", fmt.Sprintf("[MOD] %v", client.OOCName()), msg, "1")
+		broadcastToArea(client.Area(), &packet.CTToClient{Name: fmt.Sprintf("[MOD] %v", client.OOCName()), Message: msg, IsFromServer: "1"})
 	}
 	addToBuffer(client, "OOC", msg, false)
 }
@@ -526,7 +527,7 @@ func cmdModChat(client *Client, args []string, _ string) {
 			if senderIsShadow && !permissions.IsAdmin(c.Perms()) {
 				senderLabel = "Moderator"
 			}
-			c.SendPacket("CT", fmt.Sprintf("[MODCHAT] %v", senderLabel), msg, "1")
+			c.Send(&packet.CTToClient{Name: fmt.Sprintf("[MODCHAT] %v", senderLabel), Message: msg, IsFromServer: "1"})
 		}
 	})
 }
@@ -807,12 +808,12 @@ func cmdPM(client *Client, args []string, _ string) {
 	toPM := getUidList(strings.Split(args[0], ","))
 	var recipientNames []string
 	for _, c := range toPM {
-		c.SendPacket("CT", fmt.Sprintf("[PM] [UID %d] %v", client.Uid(), client.OOCName()), msg, "1")
+		c.Send(&packet.CTToClient{Name: fmt.Sprintf("[PM] [UID %d] %v", client.Uid(), client.OOCName()), Message: msg, IsFromServer: "1"})
 		recipientNames = append(recipientNames, fmt.Sprintf("[%d] %v", c.Uid(), c.OOCName()))
 	}
 	// Echo the message back to the sender so they can see what they sent.
 	if len(recipientNames) > 0 {
-		client.SendPacket("CT", fmt.Sprintf("[PM → %v] %v", strings.Join(recipientNames, ", "), client.OOCName()), msg, "1")
+		client.Send(&packet.CTToClient{Name: fmt.Sprintf("[PM → %v] %v", strings.Join(recipientNames, ", "), client.OOCName()), Message: msg, IsFromServer: "1"})
 	}
 }
 
@@ -1110,7 +1111,7 @@ func cmdForceName(client *Client, args []string, _ string) {
 	// MSPacket.Showname field without an extra encode step on every message.
 	target.SetForcedShowname(encode(name))
 	// PU and in-server messages use the decoded (display) form.
-	writeToAll("PU", strconv.Itoa(target.Uid()), "2", name)
+	broadcastToAll(&packet.PU{ID: target.Uid(), Type: 2, Data: name})
 	target.SendServerMessage(fmt.Sprintf("A moderator has forced your showname to \"%s\".", name))
 	client.SendServerMessage(fmt.Sprintf("Forced UID %v's showname to \"%s\".", uid, name))
 	addToBuffer(client, "CMD", fmt.Sprintf("forced showname of UID %v to \"%s\"", uid, name), true)
@@ -1180,11 +1181,11 @@ func cmdNameShuffle(client *Client, _ []string, _ string) {
 	}
 
 	// Apply shuffled shownames, send per-player messages, and collect PU data.
-	uidStrs := make([]string, len(targets))
+	uids := make([]int, len(targets))
 	decodedNames := make([]string, len(targets))
 	for i, c := range targets {
 		c.SetForcedShowname(names[i])
-		uidStrs[i] = strconv.Itoa(c.Uid())
+		uids[i] = c.Uid()
 		decodedNames[i] = decode(names[i])
 		c.SendServerMessage("A moderator has shuffled the shownames in this area.")
 	}
@@ -1193,8 +1194,8 @@ func cmdNameShuffle(client *Client, _ []string, _ string) {
 		if c.Uid() == -1 {
 			return
 		}
-		for i, uid := range uidStrs {
-			c.SendPacket("PU", uid, "2", decodedNames[i])
+		for i, uid := range uids {
+			c.Send(&packet.PU{ID: uid, Type: 2, Data: decodedNames[i]})
 		}
 	})
 
@@ -1223,11 +1224,11 @@ func cmdUnnameShuffle(client *Client, _ []string, _ string) {
 	}
 
 	// Clear forced shownames, send per-player messages, and collect PU data.
-	uidStrs := make([]string, len(resetTargets))
+	uids := make([]int, len(resetTargets))
 	restoredNames := make([]string, len(resetTargets))
 	for i, c := range resetTargets {
 		c.SetForcedShowname("")
-		uidStrs[i] = strconv.Itoa(c.Uid())
+		uids[i] = c.Uid()
 		restoredNames[i] = decode(c.Showname())
 		c.SendServerMessage("A moderator has restored shownames in this area.")
 	}
@@ -1236,8 +1237,8 @@ func cmdUnnameShuffle(client *Client, _ []string, _ string) {
 		if c.Uid() == -1 {
 			return
 		}
-		for i, uid := range uidStrs {
-			c.SendPacket("PU", uid, "2", restoredNames[i])
+		for i, uid := range uids {
+			c.Send(&packet.PU{ID: uid, Type: 2, Data: restoredNames[i]})
 		}
 	})
 
@@ -1278,33 +1279,33 @@ func cmdTung(client *Client, args []string, usage string) {
 	// Phase 1: modify each area client's state in one ForEach pass and collect
 	// the per-client data needed for the PU broadcast.  PV is sent to each
 	// target here so they see their own panel update immediately.
-	uidStrs := make([]string, 0, capacity)
+	uids := make([]int, 0, capacity)
 	if disable {
 		charNames := make([]string, 0, capacity)
 		clients.ForEach(func(c *Client) {
 			if c.Uid() == -1 || c.Area() != targetArea {
 				return
 			}
-			origIDStr := c.CharIDStr()
+			origID := c.CharID()
 			c.SetForcedIniswapChar("", "")
-			uidStrs = append(uidStrs, strconv.Itoa(c.Uid()))
+			uids = append(uids, c.Uid())
 			charNames = append(charNames, c.CurrentCharacter())
 			// Restore the client's emote panel to their real character.
-			c.SendPacket("PV", "0", "CID", origIDStr)
+			c.Send(&packet.PV{PlayerID: 0, CharID: origID})
 		})
 		// Phase 2: broadcast all PU updates in a single pass over all clients,
 		// replacing the N separate writeToAll calls (each a full ForEach) with one.
-		if len(uidStrs) > 0 {
+		if len(uids) > 0 {
 			clients.ForEach(func(c *Client) {
 				if c.Uid() == -1 {
 					return
 				}
-				for i, uid := range uidStrs {
-					c.SendPacket("PU", uid, "1", charNames[i])
+				for i, uid := range uids {
+					c.Send(&packet.PU{ID: uid, Type: 1, Data: charNames[i]})
 				}
 			})
 		}
-		affected := len(uidStrs)
+		affected := len(uids)
 		client.SendServerMessage(fmt.Sprintf("Removed tung effect from %d client(s) in this area.", affected))
 		addToBuffer(client, "CMD", fmt.Sprintf("Removed tung effect from %d clients in area %v.", affected, targetArea.Name()), true)
 	} else {
@@ -1313,25 +1314,25 @@ func cmdTung(client *Client, args []string, usage string) {
 				return
 			}
 			c.SetForcedIniswapChar(tungForcedCharacterName, tungIDStr)
-			uidStrs = append(uidStrs, strconv.Itoa(c.Uid()))
+			uids = append(uids, c.Uid())
 			// Switch the client's emote panel to the tung character so
 			// their buttons and animations update on their own screen too.
 			if tungID >= 0 {
-				c.SendPacket("PV", "0", "CID", tungIDStr)
+				c.Send(&packet.PV{PlayerID: 0, CharID: tungID})
 			}
 		})
 		// Phase 2: broadcast all PU updates in a single pass over all clients.
-		if len(uidStrs) > 0 {
+		if len(uids) > 0 {
 			clients.ForEach(func(c *Client) {
 				if c.Uid() == -1 {
 					return
 				}
-				for _, uid := range uidStrs {
-					c.SendPacket("PU", uid, "1", tungForcedCharacterName)
+				for _, uid := range uids {
+					c.Send(&packet.PU{ID: uid, Type: 1, Data: tungForcedCharacterName})
 				}
 			})
 		}
-		affected := len(uidStrs)
+		affected := len(uids)
 		client.SendServerMessage(fmt.Sprintf("Applied tung effect to %d client(s) in this area.", affected))
 		addToBuffer(client, "CMD", fmt.Sprintf("Applied tung effect to %d clients in area %v.", affected, targetArea.Name()), true)
 	}
@@ -1362,31 +1363,31 @@ func cmdAreaIniswap(client *Client, args []string, usage string) {
 	if strings.EqualFold(args[0], "off") {
 		// Phase 1: clear forced iniswap state, collect per-client PU data, send PV.
 		capacity := targetArea.PlayerCount()
-		uidStrs := make([]string, 0, capacity)
+		uids := make([]int, 0, capacity)
 		charNames := make([]string, 0, capacity)
 		clients.ForEach(func(c *Client) {
 			if c.Uid() == -1 || c.Area() != targetArea {
 				return
 			}
-			origIDStr := c.CharIDStr()
+			origID := c.CharID()
 			c.SetForcedIniswapChar("", "")
-			uidStrs = append(uidStrs, strconv.Itoa(c.Uid()))
+			uids = append(uids, c.Uid())
 			charNames = append(charNames, c.CurrentCharacter())
-			c.SendPacket("PV", "0", "CID", origIDStr)
+			c.Send(&packet.PV{PlayerID: 0, CharID: origID})
 		})
 		// Phase 2: broadcast all PU updates in a single pass instead of one
 		// writeToAll call per affected client (each a full ForEach).
-		if len(uidStrs) > 0 {
+		if len(uids) > 0 {
 			clients.ForEach(func(c *Client) {
 				if c.Uid() == -1 {
 					return
 				}
-				for i, uid := range uidStrs {
-					c.SendPacket("PU", uid, "1", charNames[i])
+				for i, uid := range uids {
+					c.Send(&packet.PU{ID: uid, Type: 1, Data: charNames[i]})
 				}
 			})
 		}
-		affected := len(uidStrs)
+		affected := len(uids)
 		client.SendServerMessage(fmt.Sprintf("Removed area iniswap effect from %d client(s).", affected))
 		addToBuffer(client, "CMD", fmt.Sprintf("Removed area iniswap effect from %d clients in area %v.", affected, targetArea.Name()), true)
 		return
@@ -1403,27 +1404,27 @@ func cmdAreaIniswap(client *Client, args []string, usage string) {
 
 	// Phase 1: apply forced iniswap state, collect affected UIDs, send PV to each target.
 	capacity := targetArea.PlayerCount()
-	uidStrs := make([]string, 0, capacity)
+	uids := make([]int, 0, capacity)
 	clients.ForEach(func(c *Client) {
 		if c.Uid() == -1 || c.Area() != targetArea {
 			return
 		}
 		c.SetForcedIniswapChar(charName, charIDStr)
-		uidStrs = append(uidStrs, strconv.Itoa(c.Uid()))
-		c.SendPacket("PV", "0", "CID", charIDStr)
+		uids = append(uids, c.Uid())
+		c.Send(&packet.PV{PlayerID: 0, CharID: charID})
 	})
 	// Phase 2: broadcast all PU updates in a single pass.
-	if len(uidStrs) > 0 {
+	if len(uids) > 0 {
 		clients.ForEach(func(c *Client) {
 			if c.Uid() == -1 {
 				return
 			}
-			for _, uid := range uidStrs {
-				c.SendPacket("PU", uid, "1", charName)
+			for _, uid := range uids {
+				c.Send(&packet.PU{ID: uid, Type: 1, Data: charName})
 			}
 		})
 	}
-	affected := len(uidStrs)
+	affected := len(uids)
 	client.SendServerMessage(fmt.Sprintf("Applied area iniswap as %q to %d client(s).", charName, affected))
 	addToBuffer(client, "CMD", fmt.Sprintf("Applied area iniswap as %q to %d clients in area %v.", charName, affected, targetArea.Name()), true)
 }
@@ -1508,7 +1509,7 @@ func cmdLockdown(client *Client, args []string, usage string) {
 	if active {
 		clients.ForEach(func(c *Client) {
 			if c.Uid() != -1 && permissions.IsModerator(c.Perms()) {
-				c.SendPacket("CT", "OOC", "🔒 Server lockdown is now ACTIVE. New connections are restricted to known players.", "1")
+				c.Send(&packet.CTToClient{Name: "OOC", Message: "🔒 Server lockdown is now ACTIVE. New connections are restricted to known players.", IsFromServer: "1"})
 			}
 		})
 		client.SendServerMessage("Lockdown enabled. New IPIDs will be rejected.")
@@ -1516,7 +1517,7 @@ func cmdLockdown(client *Client, args []string, usage string) {
 	} else {
 		clients.ForEach(func(c *Client) {
 			if c.Uid() != -1 && permissions.IsModerator(c.Perms()) {
-				c.SendPacket("CT", "OOC", "🔓 Server lockdown has been LIFTED. New connections are now allowed.", "1")
+				c.Send(&packet.CTToClient{Name: "OOC", Message: "🔓 Server lockdown has been LIFTED. New connections are now allowed.", IsFromServer: "1"})
 			}
 		})
 		client.SendServerMessage("Lockdown disabled. New IPIDs are now allowed.")
@@ -1547,7 +1548,7 @@ func cmdFirewall(client *Client, args []string, usage string) {
 		firewallActive.Store(true)
 		clients.ForEach(func(c *Client) {
 			if c.Uid() != -1 && permissions.HasPermission(c.Perms(), permissions.PermissionField["BAN"]) {
-				c.SendPacket("CT", "OOC", "🔥 VPN firewall is now ACTIVE. New connections will be screened against IPHub.", "1")
+				c.Send(&packet.CTToClient{Name: "OOC", Message: "🔥 VPN firewall is now ACTIVE. New connections will be screened against IPHub.", IsFromServer: "1"})
 			}
 		})
 		client.SendServerMessage("Firewall enabled. New IPs will be checked via IPHub.")
@@ -1556,7 +1557,7 @@ func cmdFirewall(client *Client, args []string, usage string) {
 		firewallActive.Store(false)
 		clients.ForEach(func(c *Client) {
 			if c.Uid() != -1 && permissions.HasPermission(c.Perms(), permissions.PermissionField["BAN"]) {
-				c.SendPacket("CT", "OOC", "🔓 VPN firewall has been DISABLED. New connections are no longer screened.", "1")
+				c.Send(&packet.CTToClient{Name: "OOC", Message: "🔓 VPN firewall has been DISABLED. New connections are no longer screened.", IsFromServer: "1"})
 			}
 		})
 		client.SendServerMessage("Firewall disabled.")
@@ -1602,7 +1603,7 @@ func cmdBotBan(client *Client, _ []string, _ string) {
 			logger.LogErrorf("botban: failed to ban IPID %v: %v", c.Ipid(), err)
 			return
 		}
-		c.SendPacketSync("KB", fmt.Sprintf("Botban: spectator with insufficient playtime.\nUntil: ∞\nID: %v", id))
+		c.SendSync(&packet.KB{Reason: fmt.Sprintf("Botban: spectator with insufficient playtime.\nUntil: ∞\nID: %v", id)})
 		c.conn.Close()
 		forgetIP(c.Ipid())
 		count++

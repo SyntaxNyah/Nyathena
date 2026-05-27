@@ -14,8 +14,9 @@ package athena
 
 import (
 	"fmt"
-	"strconv"
 	"strings"
+
+	"github.com/MangosArentLiterature/Athena/internal/packet"
 )
 
 // ReverseShowname flips the rune order of the client's effective showname and
@@ -100,7 +101,7 @@ func cmdReverseName(client *Client, args []string, _ string) {
 		if !changed {
 			continue
 		}
-		writeToAll("PU", strconv.Itoa(c.Uid()), "2", reversed)
+		broadcastToAll(&packet.PU{ID: c.Uid(), Type: 2, Data: reversed})
 		c.SendServerMessage("A moderator has reversed your showname.")
 		count++
 		if report.Len() > 0 {
@@ -132,7 +133,7 @@ func cmdUnreverseName(client *Client, args []string, _ string) {
 		if !changed {
 			continue
 		}
-		writeToAll("PU", strconv.Itoa(c.Uid()), "2", restored)
+		broadcastToAll(&packet.PU{ID: c.Uid(), Type: 2, Data: restored})
 		c.SendServerMessage("A moderator has restored your showname.")
 		count++
 		if report.Len() > 0 {

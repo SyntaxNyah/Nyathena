@@ -475,7 +475,7 @@ func (client *Client) HandleClient() {
 	}
 
 	if config.MCLimit != 0 && clients.CountByIPID(client.Ipid()) >= config.MCLimit {
-		client.SendPacketSync("BD", "Too many connections from your IP. Please disconnect your other clients. If you have no other clients open, wait 1-2 minutes and try again.")
+		client.SendSync(&packet.BD{Reason: "Too many connections from your IP. Please disconnect your other clients. If you have no other clients open, wait 1-2 minutes and try again."})
 		client.conn.Close()
 		return
 	}
@@ -489,7 +489,7 @@ func (client *Client) HandleClient() {
 
 	go timeout(client)
 
-	client.SendPacket("decryptor", "NOENCRYPT") // Relic of FantaCrypt. AO2 requires a server to send this to proceed with the handshake.
+	client.Send(&packet.Decryptor{}) // Relic of FantaCrypt. AO2 requires a server to send this to proceed with the handshake.
 	input := bufio.NewScanner(client.conn)
 
 	splitfn := func(data []byte, atEOF bool) (advance int, token []byte, err error) {
@@ -641,6 +641,21 @@ func (client *Client) SendPacketSync(header string, contents ...string) {
 	packetBufPool.Put(b)
 }
 
+// Send enqueues a typed Outgoing packet for asynchronous delivery. The
+// packet's Args() is invoked exactly once per Send call. This is the
+// canonical send path — SendPacket(header, args...) is now a low-level
+// escape hatch reserved for the FantaCrypt "decryptor" relic and the
+// hot-path MS broadcast helper.
+func (client *Client) Send(p packet.Outgoing) {
+	client.SendPacket(p.Header(), p.Args()...)
+}
+
+// SendSync writes a typed Outgoing packet directly to the socket,
+// bypassing the outbound queue. See SendPacketSync for when to use this.
+func (client *Client) SendSync(p packet.Outgoing) {
+	client.SendPacketSync(p.Header(), p.Args()...)
+}
+
 // clientLogSnapshot holds the subset of client fields read by addToBuffer.
 // All fields are captured under a single mutex acquisition in logSnapshot,
 // eliminating the 6+ separate lock/unlock cycles that calling individual
@@ -748,7 +763,7 @@ func (client *Client) clientCleanup() {
 		if !client.Hidden() {
 			client.Area().RemoveVisiblePlayer()
 		}
-		writeToAll("PR", strconv.Itoa(client.Uid()), "1")
+		broadcastToAll(&packet.PR{ID: client.Uid(), Type: 1})
 		sendPlayerArup()
 	}
 	handleCasinoDisconnect(client)
@@ -759,7 +774,7 @@ func (client *Client) clientCleanup() {
 
 // SendServerMessage sends a server OOC message to the client.
 func (client *Client) SendServerMessage(message string) {
-	client.SendPacket("CT", encodedServerName, encode(message), "1")
+	client.Send(&packet.CTToClient{Name: encodedServerName, Message: encode(message), IsFromServer: "1"})
 }
 
 // SendMotd sends the MOTD to the client as a single OOC message. Embedded
@@ -1117,7 +1132,7 @@ func (client *Client) RemoveAuth() {
 	client.authenticated, client.perms, client.mod_name = false, 0, ""
 	client.mu.Unlock()
 	client.SendServerMessage("Logged out as moderator.")
-	client.SendPacket("AUTH", "-1")
+	client.Send(&packet.AUTH{State: -1})
 }
 
 // RemoveAccountAuth logs a client out of a player account (no moderator badge change needed).
@@ -1217,7 +1232,7 @@ func (client *Client) CheckBanned(by db.BanLookup) bool {
 		} else {
 			duration = time.Unix(baninfo.Duration, 0).UTC().Format("02 Jan 2006 15:04 MST")
 		}
-		client.SendPacketSync("BD", fmt.Sprintf("%v\nUntil: %v\nID: %v", baninfo.Reason, duration, baninfo.Id))
+		client.SendSync(&packet.BD{Reason: fmt.Sprintf("%v\nUntil: %v\nID: %v", baninfo.Reason, duration, baninfo.Id)})
 		client.conn.Close()
 		return true
 	}
@@ -1232,10 +1247,10 @@ func (client *Client) JoinArea(area *area.Area) {
 		area.AddVisiblePlayer()
 	}
 	def, pro := area.HP()
-	client.SendPacket("LE", areas[0].Evidence()...)
-	client.SendPacket("CharsCheck", area.Taken()...)
-	client.SendPacket("HP", "1", strconv.Itoa(def))
-	client.SendPacket("HP", "2", strconv.Itoa(pro))
+	client.Send(&packet.LE{Items: areas[0].Evidence()})
+	client.Send(&packet.CharsCheck{Entries: area.Taken()})
+	client.Send(&packet.HPPacket{Bar: 1, Value: def})
+	client.Send(&packet.HPPacket{Bar: 2, Value: pro})
 	if desc := area.Description(); desc != "" {
 		client.SendServerMessage("📍 " + desc)
 	}
@@ -1302,18 +1317,18 @@ func (client *Client) ChangeArea(a *area.Area) bool {
 		client.SetCharID(-1)
 	}
 	client.JoinArea(a)
-	writeToAll("PU", strconv.Itoa(client.Uid()), "3", strconv.Itoa(getAreaIndex(a)))
+	broadcastToAll(&packet.PU{ID: client.Uid(), Type: 3, Data: strconv.Itoa(getAreaIndex(a))})
 	if client.CharID() == -1 {
 		// Send DONE before BN so WebAO's character-select viewport is
 		// initialized before the bench-overlay image loads fire.  This
 		// mirrors pktReqDone's ordering and matches Akashi's behaviour.
-		client.SendPacket("DONE")
+		client.Send(&packet.DONE{})
 	} else {
-		writeToArea(a, "CharsCheck", a.Taken()...)
+		broadcastToArea(a, &packet.CharsCheck{Entries: a.Taken()})
 	}
 	// BN always last — after any DONE — so desk-overlay images never load
 	// against an unrendered viewport on WebAO (same fix as initial join).
-	client.SendPacket("BN", a.Background())
+	client.Send(&packet.BN{Background: a.Background()})
 	addToBuffer(client, "AREA", "Joined area.", false)
 	return true
 }
@@ -1488,12 +1503,11 @@ func (client *Client) ChangeCharacter(id int) {
 		// Do not reset showname here; it is set from IC messages so the
 		// player's display name (e.g. "Adachi") persists across character
 		// changes and is used correctly by possession commands.
-		client.SendPacket("PV", "0", "CID", strconv.Itoa(id))
-		writeToArea(client.Area(), "CharsCheck", client.Area().Taken()...)
+		client.Send(&packet.PV{PlayerID: 0, CharID: id})
+		broadcastToArea(client.Area(), &packet.CharsCheck{Entries: client.Area().Taken()})
 		if client.Uid() != -1 {
-			uid := strconv.Itoa(client.Uid())
-			writeToAll("PU", uid, "1", client.CurrentCharacter())
-			writeToAll("PU", uid, "2", decode(client.Showname()))
+			broadcastToAll(&packet.PU{ID: client.Uid(), Type: 1, Data: client.CurrentCharacter()})
+			broadcastToAll(&packet.PU{ID: client.Uid(), Type: 2, Data: decode(client.Showname())})
 		}
 	}
 }
@@ -1732,16 +1746,16 @@ func (client *Client) forceChangeArea(a *area.Area) {
 		client.SetCharID(-1)
 	}
 	client.JoinArea(a)
-	writeToAll("PU", strconv.Itoa(client.Uid()), "3", strconv.Itoa(getAreaIndex(a)))
+	broadcastToAll(&packet.PU{ID: client.Uid(), Type: 3, Data: strconv.Itoa(getAreaIndex(a))})
 	if client.CharID() == -1 {
 		// Send DONE before BN for the same reason as ChangeArea: WebAO
 		// must initialize the viewport before desk-overlay images load.
-		client.SendPacket("DONE")
+		client.Send(&packet.DONE{})
 	} else {
-		writeToArea(a, "CharsCheck", a.Taken()...)
+		broadcastToArea(a, &packet.CharsCheck{Entries: a.Taken()})
 	}
 	// BN always after any DONE so desk overlays load correctly on WebAO.
-	client.SendPacket("BN", a.Background())
+	client.Send(&packet.BN{Background: a.Background()})
 	addToBuffer(client, "AREA", "Joined area.", false)
 }
 

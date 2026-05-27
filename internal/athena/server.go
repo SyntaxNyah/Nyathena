@@ -36,6 +36,7 @@ import (
 	discordbot "github.com/MangosArentLiterature/Athena/internal/discord/bot"
 	"github.com/MangosArentLiterature/Athena/internal/logger"
 	"github.com/MangosArentLiterature/Athena/internal/ms"
+	"github.com/MangosArentLiterature/Athena/internal/packet"
 	"github.com/MangosArentLiterature/Athena/internal/permissions"
 	"github.com/MangosArentLiterature/Athena/internal/playercount"
 	"github.com/MangosArentLiterature/Athena/internal/settings"
@@ -583,7 +584,7 @@ func (s *Server) ListenTCP() {
 		if checkGlobalNewIPRateLimit(ipid) {
 			if lockdownReject := serverLockdownRejection(ipid); lockdownReject {
 				logger.LogInfof("Connection from new IP %v rejected (server lockdown active)", ipid)
-				NewClient(conn, ipid).SendPacketSync("BD", lockdownJoinMsg)
+				NewClient(conn, ipid).SendSync(&packet.BD{Reason: lockdownJoinMsg})
 			} else {
 				logger.LogInfof("Connection from new IP %v rejected (global new IP rate limit exceeded)", ipid)
 			}
@@ -748,7 +749,7 @@ func HandleWS(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 			client := NewClient(websocket.NetConn(r.Context(), c, websocket.MessageText), ipid)
-			client.SendPacketSync("BD", lockdownJoinMsg)
+			client.SendSync(&packet.BD{Reason: lockdownJoinMsg})
 			client.conn.Close()
 		} else {
 			logger.LogInfof("Connection from new IP %v rejected (global new IP rate limit exceeded)", ipid)
@@ -833,6 +834,48 @@ func writeToAllClients(header string, contents ...string) {
 	})
 }
 
+// broadcastToAll fans a typed packet to every UID-registered client.
+// Args() is invoked exactly once and the resulting slice is reused for
+// every recipient.
+func broadcastToAll(p packet.Outgoing) {
+	header, args := p.Header(), p.Args()
+	clients.ForEach(func(client *Client) {
+		if client.Uid() != -1 {
+			client.SendPacket(header, args...)
+		}
+	})
+}
+
+// broadcastToArea fans a typed packet to every client in the given area.
+func broadcastToArea(area *area.Area, p packet.Outgoing) {
+	header, args := p.Header(), p.Args()
+	clients.ForEach(func(client *Client) {
+		if client.Area() == area {
+			client.SendPacket(header, args...)
+		}
+	})
+}
+
+// broadcastToAreaFrom fans a typed packet to an area, honoring per-recipient
+// ignore lists unless the sender is a moderator.
+func broadcastToAreaFrom(senderIPID string, senderIsMod bool, area *area.Area, p packet.Outgoing) {
+	header, args := p.Header(), p.Args()
+	clients.ForEach(func(client *Client) {
+		if client.Area() == area && (senderIsMod || !client.IgnoresIPID(senderIPID)) {
+			client.SendPacket(header, args...)
+		}
+	})
+}
+
+// broadcastToAllClients fans a typed packet to every connected client,
+// including those that haven't yet been assigned a UID.
+func broadcastToAllClients(p packet.Outgoing) {
+	header, args := p.Header(), p.Args()
+	clients.ForEach(func(client *Client) {
+		client.SendPacket(header, args...)
+	})
+}
+
 // logBufPool provides reusable *strings.Builder instances for addToBuffer,
 // avoiding a builder allocation on every logged message (every IC, OOC, etc.).
 var logBufPool = sync.Pool{
@@ -911,14 +954,14 @@ func sendPlayerListToClient(newClient *Client) {
 		if c.Uid() == -1 || c == newClient || c.Hidden() {
 			return
 		}
-		uid := strconv.Itoa(c.Uid())
-		newClient.SendPacket("PR", uid, "0")
+		uid := c.Uid()
+		newClient.Send(&packet.PR{ID: uid, Type: 0})
 		if c.OOCName() != "" {
-			newClient.SendPacket("PU", uid, "0", c.OOCName())
+			newClient.Send(&packet.PU{ID: uid, Type: 0, Data: c.OOCName()})
 		}
-		newClient.SendPacket("PU", uid, "1", c.CurrentCharacter())
-		newClient.SendPacket("PU", uid, "2", decode(c.Showname()))
-		newClient.SendPacket("PU", uid, "3", strconv.Itoa(getAreaIndex(c.Area())))
+		newClient.Send(&packet.PU{ID: uid, Type: 1, Data: c.CurrentCharacter()})
+		newClient.Send(&packet.PU{ID: uid, Type: 2, Data: decode(c.Showname())})
+		newClient.Send(&packet.PU{ID: uid, Type: 3, Data: strconv.Itoa(getAreaIndex(c.Area()))})
 	})
 }
 
@@ -928,31 +971,29 @@ func broadcastPlayerJoin(client *Client) {
 	if client.Hidden() {
 		return
 	}
-	uid := strconv.Itoa(client.Uid())
-	writeToAll("PR", uid, "0")
+	uid := client.Uid()
+	broadcastToAll(&packet.PR{ID: uid, Type: 0})
 	if client.OOCName() != "" {
-		writeToAll("PU", uid, "0", client.OOCName())
+		broadcastToAll(&packet.PU{ID: uid, Type: 0, Data: client.OOCName()})
 	}
-	writeToAll("PU", uid, "1", client.CurrentCharacter())
-	writeToAll("PU", uid, "2", decode(client.Showname()))
-	writeToAll("PU", uid, "3", strconv.Itoa(getAreaIndex(client.Area())))
+	broadcastToAll(&packet.PU{ID: uid, Type: 1, Data: client.CurrentCharacter()})
+	broadcastToAll(&packet.PU{ID: uid, Type: 2, Data: decode(client.Showname())})
+	broadcastToAll(&packet.PU{ID: uid, Type: 3, Data: strconv.Itoa(getAreaIndex(client.Area()))})
 }
 
 // sendPlayerArup sends a player ARUP to all connected clients.
 // Visible (non-hidden) player counts are read from each area's pre-maintained counter.
 func sendPlayerArup() {
-	plCounts := make([]string, 1, 1+len(areas))
-	plCounts[0] = "0"
+	plCounts := make([]string, 0, len(areas))
 	for _, a := range areas {
 		plCounts = append(plCounts, strconv.Itoa(a.VisiblePlayerCount()))
 	}
-	writeToAll("ARUP", plCounts...)
+	broadcastToAll(&packet.ARUP{Type: packet.ARUPPlayerCounts, Data: plCounts})
 }
 
 // sendCMArup sends a CM ARUP to all connected clients.
 func sendCMArup() {
-	returnL := make([]string, 1, 1+len(areas))
-	returnL[0] = "2"
+	returnL := make([]string, 0, len(areas))
 	for _, a := range areas {
 		cmUIDs := a.CMs()
 		if len(cmUIDs) == 0 {
@@ -969,27 +1010,25 @@ func sendCMArup() {
 		}
 		returnL = append(returnL, strings.Join(cms, ", "))
 	}
-	writeToAll("ARUP", returnL...)
+	broadcastToAll(&packet.ARUP{Type: packet.ARUPCMs, Data: returnL})
 }
 
 // sendStatusArup sends a status ARUP to all connected clients.
 func sendStatusArup() {
-	statuses := make([]string, 1, 1+len(areas))
-	statuses[0] = "1"
+	statuses := make([]string, 0, len(areas))
 	for _, a := range areas {
 		statuses = append(statuses, a.Status().String())
 	}
-	writeToAll("ARUP", statuses...)
+	broadcastToAll(&packet.ARUP{Type: packet.ARUPStatuses, Data: statuses})
 }
 
 // sendLockArup sends a lock ARUP to all connected clients.
 func sendLockArup() {
-	locks := make([]string, 1, 1+len(areas))
-	locks[0] = "3"
+	locks := make([]string, 0, len(areas))
 	for _, a := range areas {
 		locks = append(locks, a.Lock().String())
 	}
-	writeToAll("ARUP", locks...)
+	broadcastToAll(&packet.ARUP{Type: packet.ARUPLocks, Data: locks})
 }
 
 // getRole returns the role with the corresponding name, or an error if the role does not exist.
@@ -1017,23 +1056,24 @@ func getClientsByIpid(ipid string) []*Client {
 
 // sendAreaServerMessage sends a server OOC message to all clients in an area.
 func sendAreaServerMessage(area *area.Area, message string) {
-	writeToArea(area, "CT", encodedServerName, encode(message), "1")
+	broadcastToArea(area, &packet.CTToClient{Name: encodedServerName, Message: encode(message), IsFromServer: "1"})
 }
 
 // sendAreaGamblingMessage sends a gambling-result OOC message to all clients
 // in an area who have not opted out of gambling broadcasts via /gamble hide.
 func sendAreaGamblingMessage(a *area.Area, message string) {
-	encoded := encode(message)
+	out := &packet.CTToClient{Name: encodedServerName, Message: encode(message), IsFromServer: "1"}
+	header, args := out.Header(), out.Args()
 	clients.ForEach(func(client *Client) {
 		if client.Area() == a && !client.GambleHide() {
-			client.SendPacket("CT", encodedServerName, encoded, "1")
+			client.SendPacket(header, args...)
 		}
 	})
 }
 
 // sendGlobalServerMessage broadcasts a server OOC message to every joined client.
 func sendGlobalServerMessage(message string) {
-	writeToAll("CT", encodedServerName, encode(message), "1")
+	broadcastToAll(&packet.CTToClient{Name: encodedServerName, Message: encode(message), IsFromServer: "1"})
 }
 
 // getRealIP extracts the real client IP address from an HTTP request.

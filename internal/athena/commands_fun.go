@@ -367,7 +367,7 @@ func cmdPossess(client *Client, args []string, _ string) {
 	}
 
 	// Send the IC message to the target's area
-	writeToArea(target.Area(), "MS", ms.ServerArgs()...)
+	broadcastToArea(target.Area(), ms)
 
 	// Log the possession (use original message for readability in logs)
 	addToBuffer(client, "CMD", fmt.Sprintf("Possessed UID %v to say: \"%v\"", uid, msg), true)
@@ -830,7 +830,7 @@ var erpMessages = []string{
 
 func cmdErp(client *Client, _ []string, _ string) {
 msg := erpMessages[rand.Intn(len(erpMessages))]
-client.SendPacketSync("KK", msg)
+client.SendSync(&packet.KK{Reason: msg})
 client.conn.Close()
 }
 
@@ -936,7 +936,8 @@ func cmdGetMusic(client *Client, _ []string, _ string) {
 	if cidStr == "" {
 		cidStr = "0"
 	}
-	client.SendPacket("MC", song, cidStr, "Server", "1", "0", "0")
+	cid, _ := strconv.Atoi(cidStr)
+	client.Send(&packet.MCToClient{Name: song, CharID: cid, Showname: "Server", Looping: "1", Channel: "0", Effects: "0"})
 }
 
 // Handles /8ball

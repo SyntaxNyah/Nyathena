@@ -22,6 +22,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/MangosArentLiterature/Athena/internal/packet"
 )
 
 // ── Timing constants ─────────────────────────────────────────────────────────
@@ -402,7 +404,7 @@ func hotPotatoResolve(carrierUID int, participantUIDs []int) {
 		uids := make([]string, len(affected))
 		for i, c := range affected {
 			uids[i] = fmt.Sprintf("%d", c.Uid())
-			c.SendPacketSync("KK", "Hot Potato: caught in the same area as a moderator carrying the Hot Potato!")
+			c.SendSync(&packet.KK{Reason: "Hot Potato: caught in the same area as a moderator carrying the Hot Potato!"})
 			c.conn.Close()
 		}
 		sendGlobalServerMessage(fmt.Sprintf(

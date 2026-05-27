@@ -48,7 +48,6 @@ package athena
 import (
 	"fmt"
 	"strconv"
-	"strings"
 	"sync"
 
 	"github.com/MangosArentLiterature/Athena/internal/area"
@@ -111,7 +110,10 @@ func maxFrameBytes() int {
 func sendVoiceCaps(client *Client) {
 	if !voiceEnabled() {
 		logger.LogInfof("voice: emitting VS_CAPS#0 to UID %d (voice disabled)", client.Uid())
-		client.SendPacket("VS_CAPS", "0", "1", "0", voiceCodec, strconv.Itoa(voiceSampleRate), strconv.Itoa(voiceFrameMs), strconv.Itoa(maxFrameBytes()))
+		client.Send(&packet.VSCaps{
+			Enabled: "0", PTT: "1", MaxPeers: "0", Codec: voiceCodec,
+			SampleRate: voiceSampleRate, FrameMs: voiceFrameMs, MaxFrameBytes: maxFrameBytes(),
+		})
 		return
 	}
 	ptt := "0"
@@ -119,9 +121,12 @@ func sendVoiceCaps(client *Client) {
 		ptt = "1"
 	}
 	maxPeers := strconv.Itoa(config.MaxPeersPerArea)
-	mfb := strconv.Itoa(maxFrameBytes())
-	logger.LogInfof("voice: emitting VS_CAPS#1#%s#%s#%s#%d#%d#%s to UID %d", ptt, maxPeers, voiceCodec, voiceSampleRate, voiceFrameMs, mfb, client.Uid())
-	client.SendPacket("VS_CAPS", "1", ptt, maxPeers, voiceCodec, strconv.Itoa(voiceSampleRate), strconv.Itoa(voiceFrameMs), mfb)
+	logger.LogInfof("voice: emitting VS_CAPS#1#%s#%s#%s#%d#%d#%d to UID %d",
+		ptt, maxPeers, voiceCodec, voiceSampleRate, voiceFrameMs, maxFrameBytes(), client.Uid())
+	client.Send(&packet.VSCaps{
+		Enabled: "1", PTT: ptt, MaxPeers: maxPeers, Codec: voiceCodec,
+		SampleRate: voiceSampleRate, FrameMs: voiceFrameMs, MaxFrameBytes: maxFrameBytes(),
+	})
 }
 
 // currentVoicePeers returns the set of UIDs currently in voice in the given
@@ -210,8 +215,7 @@ func leaveVoiceForClient(client *Client) {
 	if !removeVoicePeer(a, client.Uid()) {
 		return
 	}
-	uidStr := strconv.Itoa(client.Uid())
-	writeToAreaVoice(a, client.Uid(), "VS_LEAVE", uidStr)
+	broadcastToAreaVoice(a, client.Uid(), &packet.VSLeaveOut{UID: client.Uid()})
 }
 
 // writeToAreaVoice sends a packet to every client in a's voice room, optionally
@@ -228,6 +232,25 @@ func writeToAreaVoice(a *area.Area, skipUID int, header string, contents ...stri
 		c := clients.GetClientByUID(uid)
 		if c != nil {
 			c.SendPacket(header, contents...)
+		}
+	}
+}
+
+// broadcastToAreaVoice fans a typed packet to every peer in a's voice room,
+// optionally skipping the sender. Args() is invoked exactly once.
+func broadcastToAreaVoice(a *area.Area, skipUID int, p packet.Outgoing) {
+	peers := currentVoicePeers(a)
+	if len(peers) == 0 {
+		return
+	}
+	header, args := p.Header(), p.Args()
+	for _, uid := range peers {
+		if uid == skipUID {
+			continue
+		}
+		c := clients.GetClientByUID(uid)
+		if c != nil {
+			c.SendPacket(header, args...)
 		}
 	}
 }
@@ -285,14 +308,14 @@ func pktVSJoin(client *Client, _ *packet.Packet) {
 		// list so they can re-render the panel without consuming a rate-limit
 		// slot or re-adding themselves to the room.
 		peers := currentVoicePeers(a)
-		peerStrs := make([]string, 0, len(peers))
+		others := make([]int, 0, len(peers))
 		for _, p := range peers {
 			if p == uid {
 				continue
 			}
-			peerStrs = append(peerStrs, strconv.Itoa(p))
+			others = append(others, p)
 		}
-		client.SendPacket("VS_PEERS", strings.Join(peerStrs, ","))
+		client.Send(&packet.VSPeers{UIDs: others})
 		return
 	}
 	if ok, retry := allowVoiceJoin(uid); !ok {
@@ -304,15 +327,15 @@ func pktVSJoin(client *Client, _ *packet.Packet) {
 		return
 	}
 	peers := currentVoicePeers(a)
-	peerStrs := make([]string, 0, len(peers))
+	others := make([]int, 0, len(peers))
 	for _, p := range peers {
 		if p == uid {
 			continue
 		}
-		peerStrs = append(peerStrs, strconv.Itoa(p))
+		others = append(others, p)
 	}
-	client.SendPacket("VS_PEERS", strings.Join(peerStrs, ","))
-	writeToAreaVoice(a, uid, "VS_JOIN", strconv.Itoa(uid))
+	client.Send(&packet.VSPeers{UIDs: others})
+	broadcastToAreaVoice(a, uid, &packet.VSJoinOut{UID: uid})
 }
 
 // Handles VS_LEAVE#%
@@ -336,7 +359,11 @@ func pktVSLeave(client *Client, _ *packet.Packet) {
 // pitch-shift) would still need an Opus decoder and CGO and remains out of
 // scope.
 func pktVSFrame(client *Client, p *packet.Packet) {
-	if !voiceEnabled() || len(p.Body) < 1 {
+	if !voiceEnabled() {
+		return
+	}
+	vf, err := packet.ParseVSFrame(p.Body)
+	if err != nil {
 		return
 	}
 	a := client.Area()
@@ -347,7 +374,7 @@ func pktVSFrame(client *Client, p *packet.Packet) {
 	if !inVoiceRoom(a, uid) {
 		return
 	}
-	if len(p.Body[0]) > maxFrameBytes() {
+	if len(vf.Payload) > maxFrameBytes() {
 		// Oversized frames are dropped silently — a chatty client may be
 		// trying to flood and we don't want to give it back-pressure
 		// signal.  Logged at debug-only level for the same reason.
@@ -359,16 +386,20 @@ func pktVSFrame(client *Client, p *packet.Packet) {
 	// Voice-chat punishment hook (see applyVoiceFramePunishments): a punished
 	// speaker's frame may be dropped, gated, or swapped for a stale frame
 	// before the relay fans it out. Untouched for an unpunished speaker.
-	payload, relay := applyVoiceFramePunishments(client, uid, p.Body[0])
+	payload, relay := applyVoiceFramePunishments(client, uid, vf.Payload)
 	if !relay {
 		return
 	}
-	writeToAreaVoice(a, uid, "VS_AUDIO", strconv.Itoa(uid), payload)
+	broadcastToAreaVoice(a, uid, &packet.VSAudio{FromUID: uid, Payload: payload})
 }
 
 // Handles VS_SPEAK#<on_off>#%  (0 = stopped talking, 1 = started)
 func pktVSSpeak(client *Client, p *packet.Packet) {
-	if !voiceEnabled() || len(p.Body) < 1 {
+	if !voiceEnabled() {
+		return
+	}
+	vs, err := packet.ParseVSSpeak(p.Body)
+	if err != nil {
 		return
 	}
 	a := client.Area()
@@ -376,8 +407,8 @@ func pktVSSpeak(client *Client, p *packet.Packet) {
 		return
 	}
 	state := "0"
-	if strings.TrimSpace(p.Body[0]) == "1" {
+	if vs.On {
 		state = "1"
 	}
-	writeToAreaVoice(a, client.Uid(), "VS_SPEAK", strconv.Itoa(client.Uid()), state)
+	broadcastToAreaVoice(a, client.Uid(), &packet.VSSpeakOut{UID: client.Uid(), On: state})
 }
