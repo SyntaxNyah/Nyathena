@@ -1,7 +1,12 @@
 {
   "permissions": {
     "allow": [
-      "Bash(go build:*)"
+      "Bash(go build:*)",
+      "Bash(grep:*)",
+      "Bash(sed 's/\"\"\"\".*//')",
+      "Bash(/tmp/punish_analysis.txt:*)",
+      "Read(//tmp/**)",
+      "Bash(go test:*)"
     ]
   }
 }

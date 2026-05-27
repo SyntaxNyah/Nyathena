@@ -2661,6 +2661,7 @@ var areaRandomPunishments = []PunishmentType{
 	PunishmentNervous,
 	PunishmentDreamSequence,
 	PunishmentGordonRamsay,
+	PunishmentGrounded,
 }
 
 // pickAreaRandomPunishment returns a random punishment type from the pool.

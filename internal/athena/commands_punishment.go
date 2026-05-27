@@ -850,6 +850,10 @@ func parsePunishmentType(s string) PunishmentType {
 		return PunishmentVoiceCutout
 	case "voicestutter":
 		return PunishmentVoiceStutter
+	case "emoticon":
+		return PunishmentEmoticon
+	case "grounded":
+		return PunishmentGrounded
 	default:
 		return PunishmentNone
 	}

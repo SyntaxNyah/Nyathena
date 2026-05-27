@@ -129,6 +129,7 @@ var megamasoStackPool = []PunishmentType{
 	PunishmentClown, PunishmentJester, PunishmentJoker, PunishmentSmugdere,
 	PunishmentDeretsun, PunishmentThugdere, PunishmentTeasedere, PunishmentRindere,
 	PunishmentDarudere, PunishmentTsuyodere, PunishmentCherri,
+	PunishmentGrounded, PunishmentEmoticon,
 }
 
 // Handles /megamaso

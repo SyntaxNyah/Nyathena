@@ -123,6 +123,7 @@ var rrPunishmentPool = []PunishmentType{
 	PunishmentInvisible,
 	PunishmentWhistle,
 	PunishmentWhisper,
+	PunishmentGrounded,
 }
 
 // rrCursePunishmentPool is a lighter pool used for survivor curses.
