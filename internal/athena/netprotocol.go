@@ -748,7 +748,7 @@ func pktIC(client *Client, p *packet.Packet) {
 		return
 	case ms.Realization != "0" && ms.Realization != "1":
 		return
-	case text < 0 || text > 8: // 0-8 per AO2 protocol
+	case text < 0 || text > 9: // 0-9 per AO2 protocol (9 = rainbow)
 		return
 	case len(ms.Showname) > maxShownameLength:
 		client.SendServerMessage("Your showname is too long!")
