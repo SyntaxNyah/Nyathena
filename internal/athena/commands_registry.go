@@ -970,7 +970,7 @@ func initCommands() {
 			usage:    "Usage: /maso [-d duration]\nOptional -d sets how long the effect lasts (default 10m, max 24h). Examples: /maso -d 1h, /maso -d 30m",
 			desc:     "Self-apply a random punishment (default 10 min, max 24 h via -d). Type again to reroll to a different punishment.",
 			reqPerms: permissions.PermissionField["NONE"],
-			category: "general",
+			category: "punishment",
 		},
 		"cvote": {
 			handler: cmdCvote,
@@ -1306,7 +1306,7 @@ func initCommands() {
 		"roulette": {
 			handler:  cmdRoulette,
 			minArgs:  0,
-			usage:    "Usage: /roulette join | /roulette [-d duration] [-r reason] global | <uid1>,<uid2>...",
+			usage:    "Usage: /roulette join | /roulette [-d duration] [-r reason] [-h] global | <uid1>,<uid2>...",
 			desc:     "Join Russian Roulette game, or apply roulette punishment to user(s) (requires MUTE permission).",
 			reqPerms: permissions.PermissionField["NONE"],
 			category: "minigames",
@@ -3070,7 +3070,11 @@ func ParseCommand(client *Client, command string, args []string) {
 		return
 	}
 	if clientCanUseCommand(client, cmd) {
-		if sliceutil.ContainsString(args, "-h") {
+		// Show usage when the user passes -h, UNLESS the command's own
+		// usage string documents [-h] as a supported flag (punishment
+		// commands use -h for "hidden" — suppress the per-target
+		// notification).  In that case, let the handler receive -h.
+		if sliceutil.ContainsString(args, "-h") && !strings.Contains(cmd.usage, "[-h]") {
 			client.SendServerMessage(cmd.usage)
 			return
 		} else if len(args) < cmd.minArgs {

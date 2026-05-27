@@ -1,554 +1,380 @@
 # Punishment Commands Documentation
 
-Athena now includes 41 fun, non-harmful punishment commands for moderators to use on players. These commands temporarily modify how player messages appear or behave, adding entertainment value while maintaining server control.
+Nyathena includes 90+ punishment commands for moderators. These commands temporarily modify how player messages appear or behave, stack freely, auto-expire, and persist across area changes.
 
-## Overview
+## Common Flags
 
-All punishment commands:
-- **Require MUTE permission** (moderator-only)
-- Support `-d <duration>` flag (default: 10m, max: 24h)
-- Support `-r <reason>` flag for logging
-- Accept multiple UIDs: `<uid1>,<uid2>,...`
-- Are thread-safe and automatically expire
-- Can be removed with `/unpunish`
+Every punishment command that targets UIDs supports these flags:
 
-## Usage Pattern
+| Flag | Default | Description |
+|------|---------|-------------|
+| `-d <duration>` | `10m` | How long the effect lasts (max 24h). Formats: `30s`, `5m`, `2h`, `1h30m`. |
+| `-r <reason>` | (none) | Optional reason recorded in the log. |
+| `-h` | (off) | **Hidden mode** — suppresses the per-target OOC notification so the punishment applies silently. The issuer's summary appends `(hidden)` so they can confirm. |
+
+## Targeting
+
+All commands accept:
+- **Single UID:** `/tsundere 7`
+- **Comma-separated UIDs:** `/tsundere 7,12,15`
+- **`global` keyword:** `/tsundere global` — applies to every non-moderator in your current area.
 
 ```
-/<command> [-d duration] [-r reason] <uid1>,<uid2>,...
+/<command> [-d duration] [-r reason] [-h] global | <uid1>,<uid2>,...
 ```
 
 **Examples:**
 ```
 /uppercase -d 5m -r "shouting contest" 123
 /uwu -d 1h 45,67,89
-/backward -d 30m -r "talking backwards day" 12
+/tsundere global -h              # Silently tsundere the whole area
+/backward -d 30m -r "backwards day" 12
 ```
 
 ## Removing Punishments
 
+### `/unpunish`
+
+The universal removal command. Clears **all** punishment types including lag.
+
 ```
-/unpunish <uid1>,<uid2>,...              # Remove all punishments
-/unpunish -t <type> <uid1>,<uid2>,...    # Remove specific punishment
+/unpunish <uid1>,<uid2>,...              # Remove ALL punishments from target(s)
+/unpunish -t <type> <uid1>,<uid2>,...    # Remove a specific punishment type
+/unpunish all                            # Remove all punishments from every player in your area
 ```
+
+`/unpunish all` also clears `/lag` (the torment list). `/unpunish -t lag <uid>` removes lag from a specific target.
 
 **Examples:**
 ```
-/unpunish 123                    # Remove all punishments from UID 123
-/unpunish -t uppercase 45        # Remove only uppercase punishment
+/unpunish 123                    # Remove everything from UID 123
+/unpunish -t uppercase 45        # Remove only uppercase
+/unpunish -t lag 7               # Remove lag from UID 7
+/unpunish all                    # Wipe the entire area clean
 ```
 
 ### Self-Removal Protection
 
-A regular moderator **cannot** use `/unpunish` to lift a punishment that was
-applied to themselves by an admin or a shadow mod. The check covers both
-forms:
+A regular moderator **cannot** `/unpunish` a punishment that an admin or shadow mod placed on them. All three forms are gated:
 
-- `/unpunish <own-uid>` — refused if any of the caller's punishments were
-  issued by a shadow/admin.
-- `/unpunish -t <type> <own-uid>` — refused if that specific punishment was
-  issued by a shadow/admin.
-- `/unpunish all` — runs against everyone in the area but silently skips the
-  caller's own protected punishments and reports a one-line notice.
+- `/unpunish <own-uid>` — refused if any punishment was issued by shadow/admin.
+- `/unpunish -t <type> <own-uid>` — refused for that specific effect.
+- `/unpunish all` — silently skips the caller's protected punishments.
 
-Admins and shadow mods are exempt from the gate (they outrank the issuer or
-are the issuer's peer). The protection persists across server restarts
-because the issuer tier is recorded in the `PUNISHMENTS` table
-(`ISSUER_TIER` column, added in DB migration 18).
+Admins and shadow mods bypass the gate. The issuer tier persists across restarts via `PUNISHMENTS.ISSUER_TIER` (DB migration 18).
 
-## Text Modification Commands (14)
+### Per-Effect Removal Commands
 
-### `/whisper`
-Makes messages only visible to mods and CMs. Players can still send messages, but only staff can see them.
+Some punishments have dedicated removal commands as a convenience:
 
-### `/backward`
-Reverses character order in messages.
-- Input: "Hello world"
-- Output: "dlrow olleH"
+| Remove | Lifts |
+|--------|-------|
+| `/unlag <uid>` | `/lag` |
+| `/unsfx <uid>` | `/sfxcurse` |
+| `/unshrink <uid>` | `/shrink` |
+| `/ungrow <uid>` | `/grow` |
+| `/unwide <uid>` | `/wide` |
+| `/unicwarp <uid>` | `/icwarp` |
+| `/unlovebomb <uid>` | `/lovebomb` |
+| `/undegrade <uid>` | `/degrade` |
+| `/unslang <uid>` | `/slang` |
+| `/unthesaurusoverload <uid>` | `/thesaurusoverload` |
+| `/unvalleygirl <uid>` | `/valleygirl` |
+| `/unbabytalk <uid>` | `/babytalk` |
+| `/unthirdperson <uid>` | `/thirdperson` |
+| `/ununreliablenarrator <uid>` | `/unreliablenarrator` |
+| `/ununcannyvalley <uid>` | `/uncannyvalley` |
+| `/un51 <uid>` | `/51` |
+| `/unphilosopher <uid>` | `/philosopher` |
+| `/unpoet <uid>` | `/poet` |
+| `/unupsidedown <uid>` | `/upsidedown` |
+| `/unsarcasm <uid>` | `/sarcasm` |
+| `/unacademic <uid>` | `/academic` |
+| `/unrecipe <uid>` | `/recipe` |
+| `/unquote <uid>` | `/quote` |
+| `/untranslator curse <uid>` | `/translator` |
 
-### `/stutterstep`
-Doubles every word in the message.
-- Input: "Hello world"
-- Output: "Hello Hello world world"
+All of these can also be removed with `/unpunish -t <type> <uid>` or `/unpunish <uid>` (removes all).
 
-### `/elongate`
-Repeats vowels in messages.
-- Input: "Hello"
-- Output: "Heeeelllooo"
+---
 
-### `/uppercase`
-Forces all messages to UPPERCASE.
-- Input: "Hello world"
-- Output: "HELLO WORLD"
+## Text Effects (46)
 
-### `/lowercase`
-Forces all messages to lowercase.
-- Input: "HELLO WORLD"
-- Output: "hello world"
+Rewrite the target's IC text — light to heavy transformations. All support `global` and `-h`.
 
-### `/robotic`
-Replaces words with robotic sounds.
-- Input: "Hello world"
-- Output: "[BEEP] [BOOP]"
+### Basic Transformations
+| Command | Effect |
+|---------|--------|
+| `/whisper` | Messages only visible to mods and CMs |
+| `/backward` | Reverses character order (`Hello` → `olleH`) |
+| `/stutterstep` | Doubles every word (`Hello world` → `Hello Hello world world`) |
+| `/elongate` | Repeats vowels (`Hello` → `Heeeelllooo`) |
+| `/uppercase` | Forces UPPERCASE |
+| `/lowercase` | Forces lowercase |
+| `/robotic` | Replaces words with `[BEEP] [BOOP]` |
+| `/alternating` | Creates `AlTeRnAtInG cAsE` |
+| `/fancy` | Unicode fancy characters (`Hello` → `𝐇𝐞𝐥𝐥𝐨`) |
+| `/uwu` | UwU speak (`Hello world` → `Hewwo worwd uwu`) |
+| `/pirate` | Pirate speech (`ahoy me friend, arr!`) |
+| `/shakespearean` | Shakespearean English (`Hark! Where art thou`) |
+| `/caveman` | Caveman grunts (`UGH GRUNT`) |
+| `/censor` | Randomly replaces words with `[CENSORED]` |
+| `/fromsoftware` | Censors words from `fromsoft.txt` with asterisks |
+| `/confused` | Randomly reorders words |
+| `/paranoid` | Adds paranoid text (`they're watching`) |
+| `/drunk` | Slurs, repeats, adds `*hic*` |
+| `/hiccup` | Interrupts with `*hic*` |
+| `/whistle` | Replaces letters with musical whistles (`♪♫~♬♪`) |
+| `/mumble` | Obscures text, keeps first/last letters (`H***o w***d`) |
+| `/slang` | Internet slang (`I don't know` → `idk`) |
+| `/cherri` | Capitalizes Every Word |
+| `/albhed` | Al Bhed cipher from FFX |
+| `/morse` | Converts to Morse code dots and dashes |
+| `/vowelhell` | Replaces every consonant with a random vowel |
+| `/upsidedown` | Flips text using Unicode upside-down characters |
+| `/autospell` | Intentionally "autocorrects" wrong (`the` → `teh`) |
 
-### `/alternating`
-Creates AlTeRnAtInG cAsE.
-- Input: "hello"
-- Output: "HeLlO"
+### Personality Overlays
+| Command | Effect |
+|---------|--------|
+| `/thesaurusoverload` | Comically pompous synonyms and smug parentheticals |
+| `/valleygirl` | Valley-girl filler, vowel stretching, dramatic tone |
+| `/babytalk` | Toddler phonetics and stage directions (`*tiny stomp*`) |
+| `/thirdperson` | Third-person narration with mood tags |
+| `/unreliablenarrator` | Hedges, contradictions, self-doubting commentary |
+| `/uncannyvalley` | Glitchy system notes, subtly mutated display name |
+| `/chef` | Swedish-Chef filter — bork bork bork! |
+| `/karen` | Escalating complaints and manager demands |
+| `/passiveaggressive` | Chilly, performatively-polite framings. It's fine. Really. |
+| `/nervous` | Stuttering, um/uh fillers, trailing apologies |
+| `/sarcasm` | Sarcastic parenthetical commentary |
+| `/academic` | Overly formal academic language |
+| `/philosopher` | Appends deep philosophical questions |
+| `/poet` | Lyrical poetic flourishes |
+| `/quote` | Wraps messages in quotation marks (50% chance) |
+| `/spaghetti` | Combines 2-3 random effects together |
+| `/essay` | Requires minimum 50 characters per message |
+| `/haiku` | Requires 5-7-5 syllable format |
+| `/dreamsequence` | Rewrites as surreal, dreamlike fragments |
+| `/timewarp` | Shuffles word order |
+| `/rng` | Random effect from pool each message |
 
-### `/fancy`
-Converts to Unicode fancy characters (mathematical bold).
-- Input: "Hello"
-- Output: "𝐇𝐞𝐥𝐥𝐨"
+---
 
-### `/uwu`
-Converts to UwU speak.
-- Input: "Hello world"
-- Output: "Hewwo worwd uwu"
+## Themed Quote Replacers (8)
 
-### `/pirate`
-Converts to pirate speech.
-- Input: "Hello my friend"
-- Output: "ahoy me friend, arr!"
+Discard the player's text and substitute a themed line per message. All support `global` and `-h`.
 
-### `/shakespearean`
-Converts to Shakespearean English.
-- Input: "Where are you going"
-- Output: "Hark! Where art thou going"
+| Command | Effect |
+|---------|--------|
+| `/gordonramsay` | Gordon Ramsay kitchen tirades (60+ quotes) |
+| `/biblebot` | Random Bible verses |
+| `/grounded` | GoAnimate-style "YOU ARE GROUNDED" tirades |
+| `/mime` | Silent mime actions (*gestures wordlessly*) |
+| `/subtitles` | Confusing subtitle annotations (`[ominous music playing]`) |
+| `/spotlight` | Announces all actions publicly (`📣 EVERYONE LOOK:`) |
+| `/recipe` | Reformats as cooking recipe steps (4-step verb rotation) |
+| `/rickroll` | Meme-styled lyric-adjacent stand-in lines |
+| `/pickup` | Catastrophically cheesy pickup lines |
+| `/brainrot` | Maximum skibidi sigma brainrot energy |
 
-### `/caveman`
-Converts to caveman grunts.
-- Input: "Hello world test"
-- Output: "UGH GRUNT"
+---
 
-### `/slang`
-Converts messages to internet slang abbreviations.
-- Input: "I don't know, got to go"
-- Output: "idk, gtg"
-- Input: "be right back, talk to you later"
-- Output: "brb, ttyl"
-- Remove with: `/unslang <uid1>,<uid2>,...`
+## Persona / Personality (5)
 
-## Visibility/Cosmetic Commands (2)
+Wraps every line in a persona's prefix/suffix flavour. Supports `global` and `-h`.
 
-### `/emoji`
-Replaces player's name with random emoji each message.
-- Effect: Name appears as 😀, 🎃, 🦄, etc.
+| Command | Effect |
+|---------|--------|
+| `/clown` | Clown honks and circus filler |
+| `/jester` | Theatrical jester flourishes and bell-jingle text |
+| `/joker` | Chaotic laughter throughout every message. HAHAHA! |
+| `/tourettes` | Random outbursts: swearing, objects, nonsense, animal sounds |
+| `/translator` | Translates IC messages to another language via DeepL API |
 
-### `/invisible`
-Prevents player from seeing other players' messages (isolation punishment).
+### `/translator` usage
 
-## Timing Effects Commands (4)
+Requires `enable_translator_punishment = true` and `translator_api_key` set in config.
 
-### `/slowpoke`
-Delays messages before sending them.
-
-### `/fastspammer`
-Heavily rate limits messages (anti-spam punishment).
-
-### `/pause`
-Forces wait time between messages.
-
-### `/lag`
-Batches and delays messages to simulate lag.
-
-## Social Chaos Commands (3)
-
-### `/subtitles`
-Adds confusing subtitle annotations.
-- Input: "Hello"
-- Output: "Hello [ominous music playing]"
-
-### `/tourettes`
-Randomly inserts loud outburst words in the middle of messages. Picks from several variant categories each time for unpredictable results:
-- **Swearing** – censored-style expletives (SHIT, DAMN, BALLS, etc.)
-- **Random objects** – everyday nouns shouted out of nowhere (REFRIGERATOR, PICKLE, FLAMINGO, etc.)
-- **Nonsense exclamations** – absurd outbursts (BLARGH!, GADZOOKS!, KERFUFFLE!, etc.)
-- **Animal sounds** – sudden creature noises (SQUAWK, COCK-A-DOODLE-DOO, RIBBIT, etc.)
-- Input: "I think we should go"
-- Output: "I BLARGH! think REFRIGERATOR we should DAMN go"
-
-### `/roulette`
-Random chance that each message doesn't send (message lottery).
-
-### `/spotlight`
-Announces all actions publicly with attention-grabbing prefix.
-- Input: "Hello"
-- Output: "📣 EVERYONE LOOK: Hello"
-
-## Text Processing Commands (7)
-
-### `/censor`
-Randomly replaces words with [CENSORED].
-- Input: "Hello world test"
-- Output: "Hello [CENSORED] test"
-
-### `/confused`
-Randomly reorders words in messages.
-- Input: "one two three"
-- Output: "three one two"
-
-### `/paranoid`
-Adds paranoid text to messages.
-- Input: "Hello"
-- Output: "Hello (they're watching)"
-
-### `/drunk`
-Slurs and repeats words with random hiccups.
-- Input: "Hello world"
-- Output: "Heello hello worrld *hic*"
-
-### `/hiccup`
-Interrupts words with "hic".
-- Input: "Hello world"
-- Output: "Hello *hic* world"
-
-### `/whistle`
-Replaces letters with musical whistles.
-- Input: "Hello"
-- Output: "♪♫~♬♪"
-
-### `/mumble`
-Obscures message text (keeps first/last letters).
-- Input: "Hello world"
-- Output: "H***o w***d"
-
-## Complex Effects Commands (3)
-
-### `/spaghetti`
-Combines 2-3 random effects together for chaotic results.
-
-### `/torment`
-Cycles through different effects each message (uppercase → backward → uwu → robotic → confused).
-
-### `/rng`
-Applies a random effect from a pool each message.
-
-### `/essay`
-Requires minimum 50 characters per message.
-- Shorter messages get a warning appended
-
-## Advanced Commands (2)
-
-### `/haiku`
-Requires 5-7-5 syllable format (validation note added).
-
-### `/autospell`
-Intentionally "autocorrects" words incorrectly.
-- "the" → "teh"
-- "you" → "u"
-- "there" → "their"
-
-## Fun Personality Commands (6)
-
-### `/thesaurusoverload`
-Replaces ordinary words with comically pompous synonyms and adds smug parenthetical notes.
-- Input: `"i want to go now"`
-- Output: `"I desire to peregrinate forthwith (ergo, QED)."`
-- Input: `"stop following me"`
-- Output: `"Desist following me (per se)."`
-- Remove with: `/unthesaurusoverload <uid1>,<uid2>...`
-
-**Usage:** `/thesaurusoverload [-d duration] [-r reason] <uid1>,<uid2>...`
-
-**Example:**
 ```
-/thesaurusoverload 12 -d 10m -r "Stop typing like a normal person"
+/translator curse [-d duration] [-r reason] [-h] <uid> <language>
+/translator curse global random        # Per-word random language
+/untranslator curse <uid>              # Remove
+/untranslator curse global             # Remove from everyone
+```
+
+Languages: English names (`french`), ISO codes (`fr`), or `random` for per-word chaos.
+
+---
+
+## Dere Archetypes (26)
+
+Anime-style relationship-trope flavour. All support `global` and `-h`.
+
+| Original 10 | Nyathena Additions (15) | Special |
+|-------------|------------------------|---------|
+| `/tsundere` `/yandere` `/kuudere` `/dandere` `/deredere` `/himedere` `/kamidere` `/undere` `/bakadere` `/mayadere` | `/smugdere` `/deretsun` `/bokodere` `/thugdere` `/teasedere` `/dorodere` `/hinedere` `/hajidere` `/rindere` `/utsudere` `/darudere` `/butsudere` `/sdere` `/mdere` `/tsuyodere` | `/omnidere` — picks a random dere flavour for **every** IC message |
+
+---
+
+## Animal Filters (12)
+
+Replace text with animal sounds. All support `global` and `-h`.
+
+| Command | Sound |
+|---------|-------|
+| `/monkey` | ook, eek, ooh ooh |
+| `/snake` | hissss, ssssnake |
+| `/dog` | woof, arf, grr, bork |
+| `/cat` | meow, purrr~, mrrrow |
+| `/bird` | tweet, chirp, squawk |
+| `/cow` | moo, mooo, MOOO |
+| `/frog` | ribbit, croak |
+| `/duck` | quack, QUACK |
+| `/horse` | neigh, whinny, snort |
+| `/lion` | ROAR, grrr, rawr |
+| `/bunny` | *thump*, *binky!*, *flops* |
+| `/zoo` | Random animal sound per message |
+
+---
+
+## Visibility / Cosmetic (6)
+
+| Command | Effect |
+|---------|--------|
+| `/emoji` | Replaces player's name with random emojis each message |
+| `/invisible` | Prevents player from seeing other players' messages |
+| `/shrink [offset]` | Locks vertical sprite offset negative (default -25) |
+| `/grow [offset]` | Locks vertical sprite offset positive (default +25) |
+| `/wide [offset]` | Locks horizontal sprite offset (default +50) |
+| `/areainiswap <char>` | Forces everyone in area to display as a chosen character (KICK perm) |
+
+Remove offset locks with `/unshrink`, `/ungrow`, `/unwide`, or `/areainiswap off`.
+
+---
+
+## Timing & Throughput (3)
+
+| Command | Effect |
+|---------|--------|
+| `/slowpoke` | Delays messages before sending |
+| `/fastspammer` | Heavily rate limits messages |
+| `/lag` | Adds IPID to torment list (ghost/delayed messages, silent disconnect timer) |
+
+**`/lag` note:** This is IPID-scoped (affects all sessions from the same IP). Remove with `/unlag <uid>`, `/unpunish -t lag <uid>`, or `/unpunish <uid>`.
+
+---
+
+## Audio / SFX (2)
+
+| Command | Description |
+|---------|-------------|
+| `/sfxcurse <uid> <sfx-url>` | Forces an SFX file on every IC message. Accepts http(s) URLs or `/base/sounds/` paths. |
+| `/unsfx <uid>` | Lifts the SFX curse |
+
+```
+/sfxcurse 12 https://example.com/boom.opus
+/sfxcurse 12 /base/sounds/general/meow.opus
+/sfxcurse global https://example.com/honk.opus    # SFX curse the whole area
+```
+
+External URLs must be on a whitelisted CDN (see `config/cdns.txt`).
+
+---
+
+## Voice Chat Punishments (5)
+
+Sabotage a player's server-relayed voice-chat audio. Requires `enable_voice = true` and `MUTE` permission. All support `-d`, `-r`, `-h`, comma-separated UIDs, `global`, `/stack`, and `/unpunish`.
+
+| Command | Effect |
+|---------|--------|
+| `/voicemute` | Drops every frame — silent to the room |
+| `/voicestatic` | Drops ~60% of frames — choppy, breaking up |
+| `/voicegarble` | Drops ~88% of frames — barely intelligible |
+| `/voicecutout` | Gates frames on ~650ms on/off cycle — walkie-talkie |
+| `/voicestutter` | Randomly replays stale frames — glitchy stutter |
+
+These manipulate frame *flow* only (no Opus decode), so they're CGO-free.
+
+---
+
+## Stacking / Chaos (11)
+
+| Command | Description |
+|---------|-------------|
+| `/stack <type1> <type2> [...] <uid\|global>` | Apply multiple effects simultaneously. Supports `global` and `-h`. |
+| `/torment` | Cycles through different effects each message |
+| `/lovebomb` | Replaces IC messages with silly love declarations. Supports `global` and `-h`. |
+| `/degrade` | Replaces IC messages with degrading self-insults |
+| `/emoticon` | Forces speech in emoticons only (:P, :D, :3) |
+| `/51` | Replaces each message with a random line from the 51-messages story |
+| `/icwarp` | Replaces IC messages with random past messages from the same area |
+| `/megamaso` | Self-applied stacking chaos (any player, no permissions required) |
+| `/maso` | Self-applied single random punishment (any player) |
+| `/randompunishall` | Random punishment on every player in the area. `-h` also suppresses the area announcement. |
+| `/togglerandompunish` | Enable/disable `/randompunishall` for this area (CM perm) |
+| `/tournament start\|stop\|status` | Punishment tournament mode |
+
+### `/stack` example
+```
+/stack backward uwu pirate -d 15m -r "triple chaos" 7
+/stack tsundere yandere global -h          # Silent stack on entire area
+```
+
+### `/icwarp` usage
+```
+/icwarp 42                    # Per-user warp
+/icwarp global on             # Area-wide warp (you're exempt)
+/icwarp global off            # Turn off area-wide warp
+/unicwarp 42                  # Remove per-user warp
+```
+
+### Self-Applied Commands (no permissions required)
+
+**`/maso`** — Rolls a random punishment. Typing again rerolls. Default 10 min.
+```
+/maso              # Random punishment for 10 min
+/maso -d 30m       # 30 minutes
+```
+
+**`/megamaso`** — Each call ADDS another random punishment to the stack.
+```
+/megamaso           # Stack a random effect (10 min)
+/megamaso -d 1h     # Each layer lasts 1 hour
+/megamaso           # Keep stacking
 ```
 
 ---
 
-### `/valleygirl`
-Injects valley-girl filler words, stretches vowels, and adds dramatic tone.
-- Input: `"stop following me"`
-- Output: `"Okay sooo like… literally stop following meee?? I can't even."`
-- Input: `"no"`
-- Output: `"like, nooo?? I literally can't."`
-- Remove with: `/unvalleygirl <uid1>,<uid2>...`
+## Self-Chaos Block (2)
 
-**Usage:** `/valleygirl [-d duration] [-r reason] <uid1>,<uid2>...`
-
-**Example:**
-```
-/valleygirl 5 -d 30m -r "Take a deep breath"
-```
-
----
-
-### `/babytalk`
-Converts messages to toddler-style speech with phonetic substitutions and stage directions (distinct from `/uwu`).
-- Input: `"give me my evidence back right now"`
-- Output: `"gib me my ev-idence bac wight now!! *tiny stomp*"`
-- Input: `"please be careful"`
-- Output: `"pwease be caweful *bottom lip wobbles*"`
-- Remove with: `/unbabytalk <uid1>,<uid2>...`
-
-**Usage:** `/babytalk [-d duration] [-r reason] <uid1>,<uid2>...`
-
-**Example:**
-```
-/babytalk 19 -d 15m -r "No more grown-up words for you"
-```
-
----
-
-### `/thirdperson`
-Forces messages into third-person narration using the player's display name. Adds mood tags based on punctuation and capitalisation.
-- Input: `"hello everyone"` (player: Phoenix)
-- Output: `"Phoenix announces to the room: \"hello everyone\""`
-- Input: `"WHAT??"` (player: Phoenix)
-- Output: `"Phoenix demands: \"WHAT??\" [feral][confused]"`
-- Remove with: `/unthirdperson <uid1>,<uid2>...`
-
-**Usage:** `/thirdperson [-d duration] [-r reason] <uid1>,<uid2>...`
-
-**Example:**
-```
-/thirdperson 3 -d 1h -r "Narration arc"
-```
-
----
-
-### `/unreliablenarrator`
-Makes the speaker sound like an untrustworthy narrator by adding hedges, contradictions, and suspicious commentary.
-- Input: `"i didn't do it"`
-- Output: `"I allegedly didn't do it (…or so I recall.)"`
-- Input: `"i saw them vent"`
-- Output: `"I supposedly saw them vent (citation: vibes)"`
-- Remove with: `/ununreliablenarrator <uid1>,<uid2>...`
-
-**Usage:** `/unreliablenarrator [-d duration] [-r reason] <uid1>,<uid2>...`
-
-**Example:**
-```
-/unreliablenarrator 8 -d 20m -r "Stop gaslighting the courtroom"
-```
-
----
-
-### `/uncannyvalley`
-Makes the player's identity feel slightly wrong by:
-- Subtly mutating their displayed name each message (safe character swaps, vowel homoglyphs, transpositions — no true impersonation)
-- Appending glitchy system notes to messages
-
-Name mutations cycle through: vowel homoglyphs (`a→α`, `e→ε`, `o→ο`), trailing underscores, character transpositions, and duplications.
-
-**Easter egg:** If they say "I'm fine", it gets an unsettling `:)` appended.
-
-- Display name over time: `Phoenix` → `Phœnix` → `Pheonix` → `Phoenix_` → `Phoønix`
-- Input: `"im fine"` → Output: `"im fine :) [checksum mismatch]"`
-- Input: `"hello"` → Output: `"hello [signal distortion detected]"`
-- Remove with: `/ununcannyvalley <uid1>,<uid2>...`
-
-**Usage:** `/uncannyvalley [-d duration] [-r reason] <uid1>,<uid2>...`
-
-**Example:**
-```
-/uncannyvalley 14 -d 45m -r "Become slightly incorrect"
-```
-
-## Area/Character Effect Commands (1)
-
-### `/areainiswap`
-Forces everyone in the current area to display as a chosen character from the server character list (same effect as `/tung` but with any character you specify). Everyone's IC sprite and emote panel switches to the target character instantly. Targets cannot change characters while the effect is active.
-
-- `/areainiswap <character name>` — apply to the whole area
-- `/areainiswap off` — remove the effect from the whole area
-
-**Permission:** KICK
-
-**Example:**
-```
-/areainiswap Maya Fey         # Force everyone in the area to display as Maya Fey
-/areainiswap off              # Clear the effect for everyone in the area
-```
-
-> **Note:** The character name must match an entry in the server's character list. The name is case-insensitive. This is an area-scoped command — only players in your current area are affected.
+| Command | Description |
+|---------|-------------|
+| `/blockpunishment <uid>` | Prevent a player from using `/maso`, `/megamaso`, `/potion`, `/coinflip` |
+| `/unblockpunishment <uid>` | Restore access |
 
 ---
 
 ## Safety Features
-- **Maximum duration:** 24 hours
-- **No stacking:** Same punishment type overwrites previous
-- **Text length limit:** 2000 characters maximum
-- **Thread-safe:** Proper mutex locking
-- **Auto-expiry:** Punishments automatically remove when time expires
-- **Validation:** All inputs validated, no DoS vectors
-- **Logging:** All punishment actions logged with moderator name and reason
 
-## Technical Details
+- **Maximum duration:** 24 hours (auto-capped)
+- **Auto-expiry:** Punishments remove automatically when time expires
+- **Thread-safe:** Proper mutex locking
+- **Text length limit:** 2000 characters maximum
+- **Logging:** All punishment actions logged with moderator name and reason
+- **Persist across area changes** — punishments follow the player
+- **DB persistence** — punishments survive server restarts (except `/icwarp`)
+
+## Technical Notes
 
 ### Duration Format
-Durations support these formats:
-- `30s` - 30 seconds
-- `5m` - 5 minutes
-- `2h` - 2 hours
-- `1h30m` - 1 hour 30 minutes
+`30s` (seconds), `5m` (minutes), `2h` (hours), `1h30m` (combined).
 
 ### Permission Required
-All punishment commands require the `MUTE` permission. This is typically assigned to moderators and admins.
-
-### State Tracking
-Each punishment tracks:
-- Type
-- Expiration time
-- Reason
-- Message count (for cycling effects)
-- Last message time (for timing effects)
+Most punishment commands require `MUTE` permission. Exceptions:
+- `/maso`, `/megamaso` — no permission (self-applied)
+- `/areainiswap` — requires `KICK`
+- `/togglerandompunish` — requires `CM`
 
 ### Multiple Punishments
-A player can have multiple different punishment types active simultaneously. Text modifications are applied in the order they were added.
-
-## Best Practices
-
-1. **Use reasonable durations** - Start with 5-10 minutes for first-time punishments
-2. **Provide clear reasons** - Use `-r` flag to document why the punishment was applied
-3. **Monitor effectiveness** - Some combinations can be overwhelming
-4. **Remove early if needed** - Use `/unpunish` if a punishment is too harsh
-5. **Be creative but fair** - These are meant to be fun, not genuinely harmful
-
-## Examples of Effective Use
-
-### Light Teasing
-```
-/uwu -d 5m -r "being too serious" 123
-/pirate -d 10m -r "talk like a pirate day" 45,67
-```
-
-### Moderate Disruption
-```
-/stutterstep -d 15m -r "spamming" 123
-/confused -d 20m -r "trolling in IC" 45
-```
-
-### Creative Combinations
-```
-/emoji -d 1h 123                    # Mystery player
-/spaghetti -d 10m -r "chaos" 67    # Pure chaos
-```
-
-### Temporary Isolation
-```
-/invisible -d 30m -r "timeout" 123  # Can't see others
-/whisper -d 15m -r "quiet time" 45  # Others can't see them
-```
-
-## Troubleshooting
-
-**Q: Punishment doesn't seem to apply?**
-- Verify you have MUTE permission
-- Check if the UID is correct and player is connected
-- Ensure duration format is valid
-
-**Q: Can't remove a punishment?**
-- Use `/unpunish <uid>` to remove all punishments
-- Use `/unpunish -t <type> <uid>` for specific type
-
-**Q: Player complains punishment is too harsh?**
-- Remove it early with `/unpunish`
-- Adjust duration for future use
-
-**Q: Multiple punishments conflict?**
-- Text modifications stack in application order
-- Some combinations may be overwhelming - use `/unpunish` to reset
-
-## IC Warp Commands
-
-### `/icwarp [-d duration] [-r reason] <uid1>,<uid2>,...`
-Punishes the target player(s) so that every IC message they send is replaced
-with a **random past IC message** they themselves sent in the **same area**
-(looking back up to 24 hours of history for that IPID in that area).
-
-- The effect **only applies while the target is in the area where the punishment was applied**. Moving to a different area lets their messages through normally.
-- If the target has no message history yet in that area, their current message is passed through unchanged.
-- Standard `-d` and `-r` flags work as usual (default duration: 10 m, max: 24 h).
-
-**Examples:**
-```
-/icwarp 42                        # Apply to UID 42 for default 10 min
-/icwarp -d 1h -r "backlog chaos" 42,57
-```
-
-### `/icwarp global on`
-Enables global IC warp for the **current area**. Every player in the area
-**except the moderator who issued the command** will have their IC messages
-replaced with a random past message they sent in that area.
-
-> This only affects the area the command is used in — it does **not** spread to other areas.
-
-### `/icwarp global off`
-Disables the area-wide IC warp effect.
-
-**Example workflow:**
-```
-/icwarp global on     # Everyone in Lobby gets warp (you're exempt)
-# ... chaos ensues ...
-/icwarp global off    # Turn it off
-```
-
-### `/unicwarp <uid1>,<uid2>,...`
-Removes the **per-user** icwarp punishment from the specified player(s).
-
-```
-/unicwarp 42          # Remove icwarp from UID 42
-/unicwarp 42,57       # Remove from multiple UIDs
-```
-
-You can also use the general `/unpunish` command:
-```
-/unpunish -t icwarp 42
-```
-
-## Themed Quote Punishments
-
-### `/gordonramsay [-d duration] [-r reason] <uid1>,<uid2>,...`
-
-Replaces every IC line the target sends with a randomly-picked Gordon Ramsay
-kitchen tirade. The original message is discarded; the speaker is effectively
-swapped out for the chef. 60+ quotes in the pool.
-
-**Permission required:** `MUTE`
-
-```
-/gordonramsay 42                       # Permanent until removed
-/gordonramsay -d 10m 42                # 10-minute Ramsay takeover
-/gordonramsay -d 1h -r "sauce" 42,57
-```
-
-Remove with `/unpunish 42` or `/unpunish -t gordonramsay 42`. Stacks with
-`/stack` and is included in the random `/maso` and `punishment_area` pool.
-
-## Self-Punishment (User Commands)
-
-### `/maso`
-
-Any player (no moderator permissions required) can use `/maso` to self-apply a **random punishment**. Duration defaults to **10 minutes** and can be set with `-d` (max 24 h).
-
-- Picks randomly from the full pool of stateless punishment effects.
-- Typing `/maso` again while a punishment is active **rerolls** it to a different random punishment (resetting the timer).
-- The punishment expires automatically after the duration elapses.
-
-```
-/maso              # Apply a random punishment for 10 minutes (default)
-/maso -d 30m       # Apply for 30 minutes
-/maso -d 2h        # Apply for 2 hours
-/maso              # (again while active) Reroll to a different random punishment
-```
-
-### `/megamaso`
-
-Like `/maso` but **stacking**: each call **adds** another random punishment to the pile instead of replacing. Duration defaults to **10 minutes** per stack layer and can be set with `-d` (max 24 h).
-
-```
-/megamaso           # Stack a random punishment for 10 minutes (default)
-/megamaso -d 1h     # Each stacked layer lasts 1 hour
-/megamaso           # (again) Add yet another effect to the pile
-```
-
-## Notes
-
-- Punishments persist across area changes
-- Punishments are lost on disconnect
-- All punishment actions are logged in the server buffer
-- Expired punishments are automatically cleaned up when messages are sent
-- **icwarp** is area-specific: it only activates in the area where the punishment was applied, and does not persist across server restarts
+A player can have multiple punishment types active simultaneously. Text modifications apply in the order they were added.

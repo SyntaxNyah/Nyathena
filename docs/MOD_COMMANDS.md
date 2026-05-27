@@ -112,30 +112,39 @@ Permission bits are configured in `config/roles.toml`. Multiple bits are granted
 
 ## Punishments — Quick Index
 
-> All punishments share these flags: `-d <duration>` (max 24h), `-r <reason>`, comma-separated UIDs. Multiple punishments stack. Use `/help punishment` in-game for the **subcategorized** browser. Per-effect docs live in `PUNISHMENT_COMMANDS.md`.
+> All punishments share these flags: `-d <duration>` (max 24h), `-r <reason>`, `-h` (hidden — apply silently), comma-separated UIDs, and `global` (apply to every non-mod in your area). Multiple punishments stack. Use `/help punishment` in-game for the **subcategorized** browser. Per-effect docs live in `PUNISHMENT_COMMANDS.md`.
 
 | Group | Commands |
 |-------|----------|
-| Text effects | `/whisper /backward /stutterstep /elongate /uppercase /lowercase /robotic /alternating /fancy /uwu /pirate /shakespearean /caveman /slang /cherri` |
-| Visibility | `/emoji /invisible` |
-| Sprite offset | `/shrink /grow /wide` (and `/unshrink /ungrow /unwide`) |
-| Timing | `/slowpoke /fastspammer /pause /lag` |
-| Social chaos | `/subtitles /tourettes /roulette /spotlight` |
-| Text processing | `/censor /confused /paranoid /drunk /hiccup /whistle /mumble` |
-| Complex effects | `/spaghetti /torment /rng /essay` |
-| Advanced | `/haiku /autospell` |
-| Personalities | `/thesaurusoverload /valleygirl /babytalk /thirdperson /unreliablenarrator /uncannyvalley /clown /jester /joker /mime` |
-| Themed quote replacers | `/gordonramsay /biblebot /recipe /rickroll /pickup /brainrot` |
+| Text effects (46) | `/whisper /backward /stutterstep /elongate /uppercase /lowercase /robotic /alternating /fancy /uwu /pirate /shakespearean /caveman /censor /fromsoftware /confused /paranoid /drunk /hiccup /whistle /mumble /slang /cherri /albhed /morse /vowelhell /upsidedown /autospell /thesaurusoverload /valleygirl /babytalk /thirdperson /unreliablenarrator /uncannyvalley /chef /karen /passiveaggressive /nervous /sarcasm /academic /philosopher /poet /quote /spaghetti /essay /rng /haiku /dreamsequence /timewarp` |
+| Themed quote replacers | `/gordonramsay /biblebot /grounded /mime /subtitles /spotlight /recipe /rickroll /pickup /brainrot` |
+| Persona / personality | `/clown /jester /joker /tourettes /translator` |
+| Dere archetypes (26) | `/tsundere /yandere /kuudere /dandere /deredere /himedere /kamidere /undere /bakadere /mayadere /smugdere /deretsun /bokodere /thugdere /teasedere /dorodere /hinedere /hajidere /rindere /utsudere /darudere /butsudere /sdere /mdere /tsuyodere /omnidere` |
+| Animal filters (12) | `/monkey /snake /dog /cat /bird /cow /frog /duck /horse /lion /zoo /bunny` |
+| Visibility / cosmetic | `/emoji /invisible /shrink /grow /wide /areainiswap` (and `/unshrink /ungrow /unwide`) |
+| Timing | `/slowpoke /fastspammer /lag` |
 | Audio | `/sfxcurse <uid> <sfx-url>` and `/unsfx` |
-| Dere archetypes (25) | `/tsundere /yandere /kuudere /dandere /deredere /himedere /kamidere /undere /bakadere /mayadere /smugdere /deretsun /bokodere /thugdere /teasedere /dorodere /hinedere /hajidere /rindere /utsudere /darudere /butsudere /sdere /mdere /tsuyodere` |
-| Combiners | `/omnidere` (random dere per line), `/stack <type1> <type2> ...` |
-| Removal | `/unpunish <uid>`, `/unpunish -t <type> <uid>` |
+| Voice chat (5) | `/voicemute /voicestatic /voicegarble /voicecutout /voicestutter` |
+| Stacking / chaos | `/stack /torment /lovebomb /degrade /emoticon /51 /icwarp /megamaso /maso /randompunishall /togglerandompunish /tournament` |
+| Removal | `/unpunish <uid>`, `/unpunish -t <type> <uid>`, `/unpunish all`, `/unlag`, plus per-effect `un-` commands |
+| Self-chaos block | `/blockpunishment /unblockpunishment` |
+
+### Hidden flag (`-h`)
+
+Appending `-h` to any punishment command suppresses the OOC notification to the target — the punishment applies silently. The issuer's summary appends `(hidden)` for confirmation. Works on all applicators: single-effect, `/stack`, `/lovebomb`, `/sfxcurse`, `/shrink`/`/grow`/`/wide`, `/randompunishall` (also hides the area-wide announcement), `/translator curse`, and `/icwarp`.
+
+```
+/tsundere 7 -h                    # Silent tsundere
+/stack backward uwu global -h     # Silent stack on entire area
+/randompunishall -h                # No area announcement
+```
 
 ### `/sfxcurse` example
 
 ```
 /sfxcurse 12 https://miku.pizza/base/sounds/general/meow.opus
 /sfxcurse 12 https://cdn.discordapp.com/attachments/123456789/987654321/boom.opus
+/sfxcurse global https://example.com/honk.opus
 ```
 The target's IC packet's SFX field is overwritten with the URL on every line until `/unsfx 12`.
 
@@ -143,9 +152,17 @@ The target's IC packet's SFX field is overwritten with the URL on every line unt
 - URLs that contain `/base/sounds/` (standard AO2 asset-server paths) have their filename stem extracted and sent to clients, which resolve it locally or via the configured asset URL.
 - All other `http(s)://` URLs (Discord CDN, custom hosting, etc.) are forwarded as-is so that clients supporting URL-based audio can stream the file directly.
 
+### `/unpunish` — Full Coverage
+
+`/unpunish` now covers **every** active punishment including `/lag` (the torment list). Forms:
+
+- `/unpunish <uid>` — removes all punishments, mute, jail, and lag from a specific target.
+- `/unpunish -t lag <uid>` — removes only lag.
+- `/unpunish all` — wipes all punishments from every player in your current area.
+
 ### `/unpunish` Self-Removal Protection
 
-The DB now records the issuing tier of every punishment in `PUNISHMENTS.ISSUER_TIER`. A regular moderator **cannot** lift a punishment that an admin or shadow mod placed on them — `/unpunish self`, `/unpunish -t <type> self`, and the self-target slice of `/unpunish all` are all gated. Admins and shadow mods bypass the gate.
+The DB records the issuing tier of every punishment in `PUNISHMENTS.ISSUER_TIER`. A regular moderator **cannot** lift a punishment that an admin or shadow mod placed on them — `/unpunish self`, `/unpunish -t <type> self`, and the self-target slice of `/unpunish all` are all gated. Admins and shadow mods bypass the gate.
 
 ---
 

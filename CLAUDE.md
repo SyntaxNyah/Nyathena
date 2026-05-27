@@ -160,41 +160,28 @@ Copy `config_sample/` to `config/` before first run.
 
 ### Punishment System (90+ Commands)
 
-All punishment commands require `MUTE` permission unless noted. They support `-d <duration>` (max 24 h), `-r <reason>`, and `-h` (hidden — suppresses the per-target OOC notification so the punishment applies silently; the issuer summary appends `(hidden)` so the mod can confirm). They accept comma-separated UIDs and auto-expire. Multiple types stack on a single player.
+All punishment commands require `MUTE` permission unless noted. They support `-d <duration>` (max 24 h), `-r <reason>`, `-h` (hidden — suppresses the per-target OOC notification so the punishment applies silently; the issuer summary appends `(hidden)` so the mod can confirm), comma-separated UIDs, and the `global` keyword (applies to every non-moderator in the issuer's area). Multiple types stack on a single player.
 
 The `-h` flag works on every applicator: single-effect commands (`/tsundere 7 -h`, `/tsundere global -h`), `/stack`, `/lovebomb`, `/sfxcurse`, `/shrink` / `/grow` / `/wide`, `/randompunishall` (also suppresses the area-wide "unleashed random chaos" announcement), `/translator curse`, and `/icwarp <uid>`. Self-applied effects (`/megamaso`, `/maso`) and the PvP `/coinflip` mini-game are unaffected since they aren't moderator-issued.
 
-`/help punishment` is now grouped by sub-theme (text effects / dere archetypes / animal filters / themed quotes / audio / timing / stacking) so the long list is finally scannable.
+`/help punishment` is grouped by sub-theme (text effects / dere archetypes / animal filters / themed quotes / persona / audio / voice / timing / stacking / removal) so the long list is scannable.
 
-**Remove:** `/unpunish <uid>` (all) or `/unpunish -t <type> <uid>` (specific). Self-removal is gated for staff-issued punishments — see "/unpunish Self-Removal Protection" below.
+**Remove:** `/unpunish <uid>` (all including lag) or `/unpunish -t <type> <uid>` (specific — works with `/unpunish -t lag <uid>`). `/unpunish all` clears every player in the area including lag. Self-removal is gated for staff-issued punishments — see "/unpunish Self-Removal Protection" below.
 
-#### Text Modification (15)
-`/whisper`, `/backward`, `/stutterstep`, `/elongate`, `/uppercase`, `/lowercase`, `/robotic`, `/alternating`, `/fancy`, `/uwu`, `/pirate`, `/shakespearean`, `/caveman`, `/slang`, `/cherri` (Capitalizes Every Word)
+#### Text Effects (46)
+`/whisper`, `/backward`, `/stutterstep`, `/elongate`, `/uppercase`, `/lowercase`, `/robotic`, `/alternating`, `/fancy`, `/uwu`, `/pirate`, `/shakespearean`, `/caveman`, `/censor`, `/fromsoftware`, `/confused`, `/paranoid`, `/drunk`, `/hiccup`, `/whistle`, `/mumble`, `/slang`, `/cherri`, `/albhed`, `/morse`, `/vowelhell`, `/upsidedown`, `/autospell`, `/thesaurusoverload`, `/valleygirl`, `/babytalk`, `/thirdperson`, `/unreliablenarrator`, `/uncannyvalley`, `/chef`, `/karen`, `/passiveaggressive`, `/nervous`, `/sarcasm`, `/academic`, `/philosopher`, `/poet`, `/quote`, `/spaghetti`, `/essay`, `/rng`, `/haiku`, `/dreamsequence`, `/timewarp`
 
-#### Visibility / Cosmetic (5)
-`/emoji`, `/invisible`, `/shrink`, `/grow`, `/wide` (vertical/horizontal sprite-offset locks; reverse with `/unshrink` / `/ungrow` / `/unwide`)
+#### Themed Quote Replacers (10)
+`/gordonramsay`, `/biblebot`, `/grounded`, `/mime`, `/subtitles`, `/spotlight`, `/recipe`, `/rickroll`, `/pickup`, `/brainrot`
 
-#### Timing Effects (4)
-`/slowpoke`, `/fastspammer`, `/pause`, `/lag`
+#### Persona / Personality (5)
+`/clown`, `/jester`, `/joker`, `/tourettes`, `/translator`
 
-#### Social Chaos (4)
-`/subtitles`, `/tourettes`, `/roulette`, `/spotlight`
+#### Visibility / Cosmetic (6)
+`/emoji`, `/invisible`, `/shrink`, `/grow`, `/wide`, `/areainiswap` (vertical/horizontal sprite-offset locks; reverse with `/unshrink` / `/ungrow` / `/unwide`)
 
-#### Text Processing (7)
-`/censor`, `/confused`, `/paranoid`, `/drunk`, `/hiccup`, `/whistle`, `/mumble`
-
-#### Complex Effects (4)
-`/spaghetti`, `/torment`, `/rng`, `/essay`
-
-#### Advanced (2)
-`/haiku`, `/autospell`
-
-#### Fun Personality (10)
-`/thesaurusoverload`, `/valleygirl`, `/babytalk`, `/thirdperson`, `/unreliablenarrator`, `/uncannyvalley`, `/clown`, `/jester`, `/joker`, `/mime`
-
-#### Themed Quote Replacers (2)
-- `/gordonramsay` — replaces every IC line with a Gordon Ramsay kitchen tirade (60+ quotes)
-- `/biblebot` — replaces every IC line with a random Bible verse
+#### Timing Effects (3)
+`/slowpoke`, `/fastspammer`, `/lag`
 
 #### Audio (2)
 - `/sfxcurse <uid> <sfx-url>` — forces an SFX file to play on every IC message; URL must be `http(s)://…` or under `/base/sounds/…`
@@ -217,7 +204,7 @@ Nyathena additions: `/smugdere`, `/deretsun`, `/bokodere`, `/thugdere`, `/teased
 
 #### Punishment Stacking
 ```
-/stack <type1> <type2> [...] [-d duration] [-r reason] <uid1>,<uid2>,...
+/stack <type1> <type2> [...] [-d duration] [-r reason] [-h] global | <uid1>,<uid2>,...
 ```
 
 #### Punishment Tournament Mode

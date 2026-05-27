@@ -512,6 +512,10 @@ func cmdUnpunish(client *Client, args []string, usage string) {
 			c.SetMuted(Unmuted)
 			c.SetUnmuteTime(time.Time{})
 			c.SetJailedUntil(time.Time{})
+			// Also clear lag (torment list) — it lives outside the
+			// punishment slice but moderators expect /unpunish all to
+			// cover every active punishment including /lag.
+			removeTormentedIP(c.Ipid())
 			if err := db.DeleteAllPunishments(c.Ipid()); err != nil {
 				logger.LogErrorf("Failed to remove persistent punishments for %v: %v", c.Ipid(), err)
 			}
@@ -552,11 +556,12 @@ func cmdUnpunish(client *Client, args []string, usage string) {
 		}
 
 		if *punishmentType == "" {
-			// Remove all punishments (text, mute, and jail) from memory and DB.
+			// Remove all punishments (text, mute, jail, and lag) from memory and DB.
 			c.RemoveAllPunishments()
 			c.SetMuted(Unmuted)
 			c.SetUnmuteTime(time.Time{})
 			c.SetJailedUntil(time.Time{})
+			removeTormentedIP(c.Ipid())
 			if err := db.DeleteAllPunishments(c.Ipid()); err != nil {
 				logger.LogErrorf("Failed to remove persistent punishments for %v: %v", c.Ipid(), err)
 			}
@@ -568,14 +573,24 @@ func cmdUnpunish(client *Client, args []string, usage string) {
 				client.SendServerMessage(fmt.Sprintf("Unknown punishment type: %v", *punishmentType))
 				continue
 			}
-			if !c.HasPunishment(pType) {
-				continue
+			// Special case: /unpunish -t lag clears the torment list
+			// since /lag lives outside the punishment slice.
+			if pType == PunishmentLag {
+				if !isIPIDTormented(c.Ipid()) {
+					continue
+				}
+				removeTormentedIP(c.Ipid())
+				c.SendServerMessage("Lag punishment has been removed.")
+			} else {
+				if !c.HasPunishment(pType) {
+					continue
+				}
+				c.RemovePunishment(pType)
+				if err := db.DeleteTextPunishment(c.Ipid(), int(pType)); err != nil {
+					logger.LogErrorf("Failed to remove persistent punishment for %v: %v", c.Ipid(), err)
+				}
+				c.SendServerMessage(fmt.Sprintf("Punishment '%v' has been removed.", pType.String()))
 			}
-			c.RemovePunishment(pType)
-			if err := db.DeleteTextPunishment(c.Ipid(), int(pType)); err != nil {
-				logger.LogErrorf("Failed to remove persistent punishment for %v: %v", c.Ipid(), err)
-			}
-			c.SendServerMessage(fmt.Sprintf("Punishment '%v' has been removed.", pType.String()))
 		}
 		count++
 		report += fmt.Sprintf("%v, ", c.Uid())
@@ -877,7 +892,7 @@ func cmdStack(client *Client, args []string, usage string) {
 		return
 	}
 
-	// Last argument is the UID list
+	// Last argument is the UID list (or "global").
 	uidStr := flagArgs[len(flagArgs)-1]
 	punishmentNames := flagArgs[:len(flagArgs)-1]
 
@@ -891,11 +906,6 @@ func cmdStack(client *Client, args []string, usage string) {
 		}
 		punishmentTypes = append(punishmentTypes, pType)
 	}
-
-	// Apply punishments to users
-	toPunish := getUidList(strings.Split(uidStr, ","))
-	var count int
-	var report string
 
 	msg := fmt.Sprintf("You have been punished with stacked effects: ")
 	punishmentNamesList := []string{}
@@ -912,8 +922,9 @@ func cmdStack(client *Client, args []string, usage string) {
 	}
 
 	tier := issuerTierFor(client)
-	for _, c := range toPunish {
-		// Apply each punishment
+
+	// Shared helper: apply the stacked punishments to one client.
+	applyStack := func(c *Client) {
 		for _, pType := range punishmentTypes {
 			c.AddPunishmentBy(pType, duration, *reason, tier)
 			var expires int64
@@ -927,8 +938,29 @@ func cmdStack(client *Client, args []string, usage string) {
 		if !hidden {
 			c.SendServerMessage(msg)
 		}
-		count++
-		report += fmt.Sprintf("%v, ", c.Uid())
+	}
+
+	var count int
+	var report string
+
+	// "global" applies the stack to every non-moderator in the issuer's area.
+	if strings.EqualFold(uidStr, "global") {
+		targetArea := client.Area()
+		issuerUID := client.Uid()
+		clients.ForEach(func(c *Client) {
+			if c.Area() != targetArea || c.Uid() == issuerUID || permissions.IsModerator(c.Perms()) {
+				return
+			}
+			applyStack(c)
+			count++
+			report += fmt.Sprintf("%v, ", c.Uid())
+		})
+	} else {
+		for _, c := range getUidList(strings.Split(uidStr, ",")) {
+			applyStack(c)
+			count++
+			report += fmt.Sprintf("%v, ", c.Uid())
+		}
 	}
 
 	report = strings.TrimSuffix(report, ", ")
