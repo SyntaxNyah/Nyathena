@@ -264,4 +264,4 @@ Genuine thanks and full credit to MangosArentLiterature for building something t
 
 ---
 
-**Nyathena** fork and all additions by [SyntaxNyah](https://github.com/syntaxnyah) with support, extra additions, bug fixes and cleanup from [OmniTroid](https://github.com/OmniTroid).
+**Nyathena** fork and most additions by [SyntaxNyah](https://github.com/syntaxnyah) with support, extra additions, bug fixes and cleanup from [OmniTroid](https://github.com/OmniTroid).
