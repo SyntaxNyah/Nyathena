@@ -14,33 +14,27 @@ This fork is a **90+ command punishment system** designed to give moderators a r
 
 ### Punishment System (90+ Commands)
 
-This is the main thing Nyathena exists for. All punishment commands support `-d <duration>`, `-r <reason>`, and `-h` (hidden — applies silently without notifying the target). They accept comma-separated UIDs, auto-expire, and stack freely.
+This is the main thing Nyathena exists for. All punishment commands support `-d <duration>`, `-r <reason>`, `-h` (hidden — applies silently without notifying the target), and the `global` keyword (applies to every non-moderator in the area). They accept comma-separated UIDs, auto-expire, and stack freely.
 
-**Text Modification (15):** `/whisper`, `/backward`, `/stutterstep`, `/elongate`, `/uppercase`, `/lowercase`, `/robotic`, `/alternating`, `/fancy`, `/uwu`, `/pirate`, `/shakespearean`, `/caveman`, `/slang`, `/cherri`
+**Text Effects (46):** `/whisper`, `/backward`, `/stutterstep`, `/elongate`, `/uppercase`, `/lowercase`, `/robotic`, `/alternating`, `/fancy`, `/uwu`, `/pirate`, `/shakespearean`, `/caveman`, `/censor`, `/fromsoftware`, `/confused`, `/paranoid`, `/drunk`, `/hiccup`, `/whistle`, `/mumble`, `/slang`, `/cherri`, `/albhed`, `/morse`, `/vowelhell`, `/upsidedown`, `/autospell`, `/thesaurusoverload`, `/valleygirl`, `/babytalk`, `/thirdperson`, `/unreliablenarrator`, `/uncannyvalley`, `/chef`, `/karen`, `/passiveaggressive`, `/nervous`, `/sarcasm`, `/academic`, `/philosopher`, `/poet`, `/quote`, `/spaghetti`, `/essay`, `/rng`, `/haiku`, `/dreamsequence`, `/timewarp`
 
-**Visibility / Cosmetic (5):** `/emoji`, `/invisible`, `/shrink`, `/grow`, `/wide`
+**Themed Quote Replacers (10):** `/gordonramsay` (60+ kitchen tirades), `/biblebot`, `/grounded`, `/mime`, `/subtitles`, `/spotlight`, `/recipe`, `/rickroll`, `/pickup`, `/brainrot`
 
-**Timing Effects (4):** `/slowpoke`, `/fastspammer`, `/pause`, `/lag`
+**Persona / Personality (5):** `/clown`, `/jester`, `/joker`, `/tourettes`, `/translator` (via DeepL API)
 
-**Social Chaos (4):** `/subtitles`, `/tourettes`, `/roulette`, `/spotlight`
+**Dere Archetypes (26):** `/tsundere`, `/yandere`, `/kuudere`, `/dandere`, `/deredere`, `/himedere`, `/kamidere`, `/undere`, `/bakadere`, `/mayadere`, `/smugdere`, `/deretsun`, `/bokodere`, `/thugdere`, `/teasedere`, `/dorodere`, `/hinedere`, `/hajidere`, `/rindere`, `/utsudere`, `/darudere`, `/butsudere`, `/sdere`, `/mdere`, `/tsuyodere`, and `/omnidere` (random dere flavour on every single message — maximum tonal whiplash).
 
-**Text Processing (7):** `/censor`, `/confused`, `/paranoid`, `/drunk`, `/hiccup`, `/whistle`, `/mumble`
+**Animal Filters (12):** `/monkey`, `/snake`, `/dog`, `/cat`, `/bird`, `/cow`, `/frog`, `/duck`, `/horse`, `/lion`, `/zoo`, `/bunny`
 
-**Complex Effects (4):** `/spaghetti`, `/torment`, `/rng`, `/essay`
+**Visibility / Cosmetic (6):** `/emoji`, `/invisible`, `/shrink`, `/grow`, `/wide`, `/areainiswap`
 
-**Advanced (2):** `/haiku`, `/autospell`
-
-**Personality Archetypes (10):** `/thesaurusoverload`, `/valleygirl`, `/babytalk`, `/thirdperson`, `/unreliablenarrator`, `/uncannyvalley`, `/clown`, `/jester`, `/joker`, `/mime`
-
-**Themed Quote Replacers (2):** `/gordonramsay` (60+ kitchen tirades), `/biblebot` (random Bible verse per IC message)
+**Timing (3):** `/slowpoke`, `/fastspammer`, `/lag`
 
 **Audio (2):** `/sfxcurse <uid> <sfx-url>` (forces an SFX on every IC message), `/unsfx`
 
-**Dere Archetypes (25):** `/tsundere`, `/yandere`, `/kuudere`, `/dandere`, `/deredere`, `/himedere`, `/kamidere`, `/undere`, `/bakadere`, `/mayadere`, `/smugdere`, `/deretsun`, `/bokodere`, `/thugdere`, `/teasedere`, `/dorodere`, `/hinedere`, `/hajidere`, `/rindere`, `/utsudere`, `/darudere`, `/butsudere`, `/sdere`, `/mdere`, `/tsuyodere`, and `/omnidere` (random dere flavour on every single message — maximum tonal whiplash).
-
-**Stacking:**
+**Stacking / Chaos:** `/stack` (supports `global`), `/torment`, `/lovebomb`, `/degrade`, `/emoticon`, `/51`, `/icwarp`, `/randompunishall`, `/togglerandompunish`
 ```
-/stack <type1> <type2> [...] [-d duration] [-r reason] <uid>
+/stack <type1> <type2> [...] [-d duration] [-r reason] [-h] global | <uid>
 ```
 
 **Tournament mode:** `/tournament start|status|stop` — volunteers get 2–3 random punishments; most IC messages sent wins.
@@ -49,7 +43,7 @@ This is the main thing Nyathena exists for. All punishment commands support `-d 
 
 **PvP:** `/coinflip <heads|tails>` — area-scoped 30-second challenge where both players must pick opposite sides.
 
-**Remove:** `/unpunish <uid>` (all) or `/unpunish -t <type> <uid>`. Regular mods cannot lift punishments applied by an admin or shadow mod.
+**Remove:** `/unpunish <uid>` (everything including lag), `/unpunish -t <type> <uid>` (specific), or `/unpunish all` (entire area). Regular mods cannot lift punishments applied by an admin or shadow mod.
 
 ### Server-Relayed Voice Chat (`enable_voice = true`)
 
