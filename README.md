@@ -12,7 +12,7 @@ This fork is a **90+ command punishment system** designed to give moderators a r
 
 ## What's Different From Upstream Athena
 
-### Punishment System (90+ Commands)
+### Punishment System (100+ Commands)
 
 This is the main thing Nyathena exists for. All punishment commands support `-d <duration>`, `-r <reason>`, `-h` (hidden — applies silently without notifying the target), and the `global` keyword (applies to every non-moderator in the area). They accept comma-separated UIDs, auto-expire, and stack freely.
 
