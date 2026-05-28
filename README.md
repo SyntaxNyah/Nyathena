@@ -32,7 +32,7 @@ This is the main thing Nyathena exists for. All punishment commands support `-d 
 
 **Audio (2):** `/sfxcurse <uid> <sfx-url>` (forces an SFX on every IC message), `/unsfx`
 
-**Stacking / Chaos:** `/stack` (supports `global`), `/torment`, `/lovebomb`, `/degrade`, `/emoticon`, `/51`, `/icwarp`, `/randompunishall`, `/togglerandompunish`
+**Stacking / Chaos:** `/stack` (supports many punishments examples including but not limited to;  `global`), `/torment`, `/lovebomb`, `/degrade`, `/emoticon`, `/51`, `/icwarp`, `/randompunishall`, `/togglerandompunish`
 ```
 /stack <type1> <type2> [...] [-d duration] [-r reason] [-h] global | <uid>
 ```
