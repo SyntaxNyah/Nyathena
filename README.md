@@ -164,7 +164,7 @@ UID-based mutual pairing that survives area and character changes. Pair messages
 
 ## Inherited Features (Upstream Athena)
 
-- WebAO (plain WebSocket) and WebSocket Secure (WSS) support
+- WebAO (plain WebSocket)
 - Concurrent client handling
 - Moderator user system with configurable TOML roles and permission bitfields
 - Privacy-oriented logging
