@@ -767,9 +767,14 @@ func (p *VSSpeakOut) Args() []string { return []string{itoa(p.UID), p.On} }
 // ============================================================================
 
 // Decryptor is the FantaCrypt-era "decryptor" packet sent at the very
-// start of the handshake. AO2 keeps the header for backward compatibility
-// but the encryption layer is dead — the value is always "NOENCRYPT".
+// start of the handshake. The encryption layer it once gated is dead, but
+// the header is still useful as a server-capability signal: the payload
+// "JSON" advertises that the server understands JSON-encoded packets.
+// Clients that recognise it switch to JSON; older clients ignore the value
+// and continue in classic FantaCode, exactly as if the relic still read
+// "NOENCRYPT". The per-client decision is made in HandleClient based on
+// whether the first inbound packet starts with '{'.
 type Decryptor struct{}
 
 func (p *Decryptor) Header() string { return "decryptor" }
-func (p *Decryptor) Args() []string { return []string{"NOENCRYPT"} }
+func (p *Decryptor) Args() []string { return []string{"JSON"} }

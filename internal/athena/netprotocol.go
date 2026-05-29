@@ -233,6 +233,24 @@ func pktReqChar(client *Client, _ *packet.Packet) {
 
 // Handles RM#%
 func pktReqAM(client *Client, _ *packet.Packet) {
+	// smPacket is a pre-built FantaCode blob (avoids a strings.Join per
+	// connection in the common case). JSON-mode clients can't read it, so
+	// fall back to the typed-Outgoing path, which goes through BuildJSON.
+	// Music names are AO2-escape-encoded here for symmetry with the
+	// FantaCode path (buildSMPacket) — every other outbound string the
+	// server emits is already encoded, and the encoded form round-trips
+	// fine through a JSON string field.
+	if client.JSONMode() {
+		items := make([]string, 0, len(areas)+len(music))
+		for _, a := range areas {
+			items = append(items, a.Name())
+		}
+		for _, m := range music {
+			items = append(items, encode(m))
+		}
+		client.Send(&packet.SM{Items: items})
+		return
+	}
 	client.write(smPacket)
 }
 
@@ -1386,10 +1404,19 @@ func pktCaseAnn(client *Client, p *packet.Packet) {
 		return
 	}
 	// Build the announcement title; the needs fields are forwarded verbatim.
-	// The trailing "1" preserves the old-client extra-arg workaround.
+	// The trailing "1" in the FantaCode form preserves the old-client extra-
+	// arg workaround. JSON-mode clients don't need that workaround and
+	// receive the typed-Outgoing form (which encodes the 6 documented
+	// CASEA fields via BuildJSON).
+	title := fmt.Sprintf("CASE ANNOUNCEMENT: %v in %v needs players for %v",
+		client.CurrentCharacter(), client.Area().Name(), ca.CaseTitle)
 	needs := strings.Join([]string{ca.NeedDef, ca.NeedPro, ca.NeedJudge, ca.NeedJury, ca.NeedSteno}, "#")
-	newPacket := fmt.Sprintf("CASEA#CASE ANNOUNCEMENT: %v in %v needs players for %v#%v#1#%%",
-		client.CurrentCharacter(), client.Area().Name(), ca.CaseTitle, needs)
+	fantaCodePacket := fmt.Sprintf("CASEA#%v#%v#1#%%", title, needs)
+	typedPacket := &packet.CASEA{
+		CaseTitle: title,
+		NeedDef:   ca.NeedDef, NeedPro: ca.NeedPro,
+		NeedJudge: ca.NeedJudge, NeedJury: ca.NeedJury, NeedSteno: ca.NeedSteno,
+	}
 
 	// Pre-parse the requested role flags once so we don't re-parse per recipient.
 	var alertRoles [4]bool
@@ -1407,7 +1434,11 @@ func pktCaseAnn(client *Client, p *packet.Packet) {
 		}
 		for i := 0; i < 4; i++ {
 			if alertRoles[i] && c.AlertRole(i) {
-				c.write(newPacket)
+				if c.JSONMode() {
+					c.Send(typedPacket)
+				} else {
+					c.write(fantaCodePacket)
+				}
 				break
 			}
 		}
