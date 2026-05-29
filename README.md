@@ -12,7 +12,7 @@ This fork is a **90+ command punishment system** designed to give moderators a r
 
 ## What's Different From Upstream Athena
 
-### Punishment System (90+ Commands)
+### Punishment System (100+ Commands)
 
 This is the main thing Nyathena exists for. All punishment commands support `-d <duration>`, `-r <reason>`, `-h` (hidden — applies silently without notifying the target), and the `global` keyword (applies to every non-moderator in the area). They accept comma-separated UIDs, auto-expire, and stack freely.
 
@@ -32,7 +32,7 @@ This is the main thing Nyathena exists for. All punishment commands support `-d 
 
 **Audio (2):** `/sfxcurse <uid> <sfx-url>` (forces an SFX on every IC message), `/unsfx`
 
-**Stacking / Chaos:** `/stack` (supports `global`), `/torment`, `/lovebomb`, `/degrade`, `/emoticon`, `/51`, `/icwarp`, `/randompunishall`, `/togglerandompunish`
+**Stacking / Chaos:** `/stack` (supports many punishments examples including but not limited to;  `global`), `/torment`, `/lovebomb`, `/degrade`, `/emoticon`, `/51`, `/icwarp`, `/randompunishall`, `/togglerandompunish`
 ```
 /stack <type1> <type2> [...] [-d duration] [-r reason] [-h] global | <uid>
 ```
@@ -164,7 +164,7 @@ UID-based mutual pairing that survives area and character changes. Pair messages
 
 ## Inherited Features (Upstream Athena)
 
-- WebAO (plain WebSocket) and WebSocket Secure (WSS) support
+- WebAO (plain WebSocket)
 - Concurrent client handling
 - Moderator user system with configurable TOML roles and permission bitfields
 - Privacy-oriented logging
