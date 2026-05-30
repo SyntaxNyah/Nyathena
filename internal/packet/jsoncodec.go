@@ -118,9 +118,9 @@ func (s jsonSchema) isPair(name string) bool {
 // (RC, RM, RD, askchaa, CH, VS_JOIN, VS_LEAVE) are listed explicitly so an
 // unknown-header path is reserved for genuinely unrecognised packets.
 var inboundSchemas = map[string]jsonSchema{
-	"HI":      {fields: []string{"hdid"}},
-	"ID":      {fields: []string{"software", "version"}},
-	"CC":      {fields: []string{fieldSkip, "char_id", "char_pw"}},
+	"HI": {fields: []string{"hdid"}},
+	"ID": {fields: []string{"software", "version"}},
+	"CC": {fields: []string{fieldSkip, "char_id", "char_pw"}},
 	"MS": {fields: []string{
 		"desk_modifier", "preanim", "character", "emote", "message",
 		"side", "sfx_name", "emote_modifier", "char_id", "sfx_delay",
@@ -189,16 +189,33 @@ var outboundSchemas = map[string]jsonSchema{
 	"HP":         {fields: []string{"bar", "value"}},
 	"RT":         {fields: []string{"animation", "variant"}},
 	"ZZ":         {fields: []string{"reason"}},
-	"MS": {fields: []string{
-		"desk_modifier", "preanim", "character", "emote", "message",
-		"side", "sfx_name", "emote_modifier", "char_id", "sfx_delay",
-		"shout_modifier", "evidence_id", "flip", "realization", "text_color",
-		"showname", "paired_charid", "paired_name", "paired_emote",
-		"offset", "paired_offset", "paired_flip",
-		"noninterrupting_preanim", "sfx_looping", "screenshake",
-		"frames_shake", "frames_realization", "frames_sfx",
-		"additive", "effect", "blips",
-	}},
+	// Field order matches MSPacket.ServerArgs (the positional wire body). The
+	// numeric/boolean/pair classifications make BuildJSON emit the typed JSON
+	// that MSBroadcast.schema.json requires ("no type nonsense"). "blips" is
+	// intentionally absent: it is not part of the MSBroadcast schema, so it is
+	// never emitted in JSON mode (FantaCode clients still receive it).
+	"MS": {
+		fields: []string{
+			"desk_modifier", "preanim", "character", "emote", "message",
+			"side", "sfx_name", "emote_modifier", "char_id", "sfx_delay",
+			"shout_modifier", "evidence_id", "flip", "realization", "text_color",
+			"showname", "paired_charid", "paired_name", "paired_emote",
+			"offset", "paired_offset", "paired_flip",
+			"noninterrupting_preanim", "sfx_looping", "screenshake",
+			"frames_shake", "frames_realization", "frames_sfx",
+			"additive", "effect",
+		},
+		numericFields: []string{
+			"desk_modifier", "emote_modifier", "char_id", "sfx_delay",
+			"shout_modifier", "evidence_id", "flip", "text_color",
+			"paired_charid", "paired_flip",
+		},
+		booleanFields: []string{
+			"realization", "noninterrupting_preanim", "sfx_looping",
+			"screenshake", "additive",
+		},
+		pairFields: []string{"offset", "paired_offset"},
+	},
 	"VS_CAPS":  {fields: []string{"enabled", "ptt", "max_peers", "codec", "sample_rate", "frame_ms", "max_frame_bytes"}, booleanFields: []string{"enabled"}},
 	"VS_PEERS": {fields: []string{"uids"}},
 	"VS_JOIN":  {fields: []string{"uid"}},
@@ -244,6 +261,16 @@ func ParseJSON(raw string) (*Packet, error) {
 	}
 	if strings.TrimSpace(header) == "" {
 		return nil, fmt.Errorf("packet header cannot be empty")
+	}
+
+	// Enforce the MS request schema before flattening into the positional body.
+	// An invalid in-character packet is rejected here (caller logs and drops) so
+	// type nonsense never reaches the MS handler. Validation is a no-op until
+	// the schemas are compiled at startup.
+	if header == "MS" {
+		if err := ValidateMSRequest([]byte(raw)); err != nil {
+			return nil, fmt.Errorf("MS request schema validation failed: %w", err)
+		}
 	}
 
 	schema, known := inboundSchemas[header]
@@ -316,27 +343,45 @@ func BuildJSON(header string, args []string) []byte {
 		if name == fieldSkip || i >= len(args) {
 			continue
 		}
+		val := args[i]
 		if name == "sides" && schema.splitOnStar {
-			obj[name] = splitNonEmpty(args[i], "*")
+			obj[name] = splitNonEmpty(val, "*")
+			continue
+		}
+		if schema.isPair(name) {
+			// "x&y" → {"x":..,"y":..}. An empty/unparseable value is omitted so
+			// the schema default applies rather than emitting a malformed pair.
+			if p, ok := encodePairField(val); ok {
+				obj[name] = p
+			}
 			continue
 		}
 		if schema.isNumeric(name) {
-			if n, err := strconv.Atoi(args[i]); err == nil {
+			if val == "" {
+				continue // omit optional empty numeric → schema default applies
+			}
+			if n, err := strconv.Atoi(val); err == nil {
 				obj[name] = n
 				continue
 			}
+			// Non-empty but non-numeric: emit as-is so a validator surfaces it.
+			obj[name] = val
+			continue
 		}
 		if schema.isBoolean(name) {
-			switch args[i] {
+			switch val {
 			case "1", "true":
 				obj[name] = true
-				continue
 			case "0", "false":
 				obj[name] = false
-				continue
+			case "":
+				// omit optional empty boolean → schema default applies
+			default:
+				obj[name] = val
 			}
+			continue
 		}
-		obj[name] = args[i]
+		obj[name] = val
 	}
 
 	if schema.tailKey != "" {
@@ -449,6 +494,31 @@ func decodePairField(raw json.RawMessage) string {
 		}
 	}
 	return jsonValueToString(raw)
+}
+
+// encodePairField inverts decodePairField for the outbound direction: it turns
+// the internal "x&y" coordinate string into the {"x":n,"y":n} object the MS
+// schema requires. ok is false when the value is empty or its x component is
+// not an integer, signalling the caller to omit the field (the schema default
+// then applies). A missing y component defaults to 0.
+func encodePairField(s string) (map[string]int, bool) {
+	if strings.TrimSpace(s) == "" {
+		return nil, false
+	}
+	parts := strings.SplitN(s, "&", 2)
+	x, err := strconv.Atoi(strings.TrimSpace(parts[0]))
+	if err != nil {
+		return nil, false
+	}
+	y := 0
+	if len(parts) == 2 && strings.TrimSpace(parts[1]) != "" {
+		yy, err := strconv.Atoi(strings.TrimSpace(parts[1]))
+		if err != nil {
+			return nil, false
+		}
+		y = yy
+	}
+	return map[string]int{"x": x, "y": y}, true
 }
 
 // splitTailObject inverts decodeTailObject for encode.

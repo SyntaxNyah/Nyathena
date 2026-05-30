@@ -303,42 +303,42 @@ type Client struct {
 	jailedUntil         time.Time
 	lastRpsTime         time.Time
 	punishments         []PunishmentState
-	msgTimestamps       []time.Time  // Tracks message timestamps for rate limiting
-	oocMsgTimestamps    []time.Time  // Tracks OOC message timestamps for OOC rate limiting
-	rawPktCount         int          // Packet count in the current raw-rate-limit window
-	rawPktWindowStart   time.Time    // Start time of the current raw-rate-limit window
-	lastModcallTime     time.Time    // Tracks last modcall time for cooldown
-	lastBarDrinkTime    time.Time    // Tracks last /bar buy time for cooldown
-	lastRandomCharTime  time.Time    // Tracks last /randomchar time for cooldown
-	lastRandomBgTime    time.Time    // Tracks last /randombg time for cooldown
-	lastDJBgTime        time.Time    // Tracks last /bg time for DJ rate limit (1 min)
-	lastRandomSongTime  time.Time    // Tracks last /randomsong time for cooldown
-	lastTranslateTime   time.Time    // Tracks last /translate time for cooldown
-	forcePairUID        int          // UID of the client this client is force-paired with (-1 if none)
-	possessing          int          // UID of the client being possessed (-1 if not possessing anyone)
-	possessedPos        string       // Position of the possessed target (saved at time of possession)
-	forcedShowname      string       // Showname forced by a moderator ("" if none)
-	nameReversed        bool         // gates /reversename so it cannot double-apply
-	preReverseShowname  string       // forcedShowname before /reversename; restored by /unreversename
-	shuffledOrigCharID  int          // Original char ID before /charshuffle (-2 = not shuffled)
-	forcedIniswapChar   string       // Character name forced for iniswap-style IC output ("" = none)
-	forcedIniswapIDStr  string       // Pre-computed strconv.Itoa(charID) matching forcedIniswapChar ("" = none)
-	connectedAt         time.Time    // Time the client joined the server (uid assigned); zero if not yet joined
-	jailAreaID          int          // Area index where this client is jailed; -1 = no specific jail area
-	emergencyBypassArea *area.Area   // Locked area the client most recently tried to enter as a mod; nil = no pending bypass
-	emergencyBypassAt   time.Time    // Time of the first locked-area attempt; used with emergencyBypassArea to confirm an emergency override
-	hidden              bool         // Whether the client is hidden from the player list and area counts
-	charStuckUntil      time.Time    // Time when the character-stuck restriction expires; zero = not stuck
-	charStuckCharID     int          // Character ID the client is locked to; -1 = not stuck
-	dancing             bool         // Whether the client has dance mode active (flips sprite every message)
-	danceFlipped        bool         // Current flip state for dance mode; toggles each IC message
-	gambleHide          bool         // Whether the client has opted out of seeing gambling broadcast messages
-	pendingRegUser      string       // Username from a pending /register that is awaiting captcha confirmation
-	pendingRegPass      []byte       // bcrypt hash from a pending /register that is awaiting captcha confirmation
-	pendingRegCaptcha   string       // Expected captcha token for the pending registration
-	sessionChipsAwarded int64        // Chips already awarded mid-session (hourly ticker); subtracted at disconnect to avoid double-counting
-	ignoredIPIDs        sync.Map     // Set of IPIDs permanently ignored by this client. Key: IPID string, Value: struct{}. Lock-free reads.
-	lastPingNano        atomic.Int64 // Unix nanosecond timestamp of the last CH packet; 0 until seeded on join.
+	msgTimestamps       []time.Time    // Tracks message timestamps for rate limiting
+	oocMsgTimestamps    []time.Time    // Tracks OOC message timestamps for OOC rate limiting
+	rawPktCount         int            // Packet count in the current raw-rate-limit window
+	rawPktWindowStart   time.Time      // Start time of the current raw-rate-limit window
+	lastModcallTime     time.Time      // Tracks last modcall time for cooldown
+	lastBarDrinkTime    time.Time      // Tracks last /bar buy time for cooldown
+	lastRandomCharTime  time.Time      // Tracks last /randomchar time for cooldown
+	lastRandomBgTime    time.Time      // Tracks last /randombg time for cooldown
+	lastDJBgTime        time.Time      // Tracks last /bg time for DJ rate limit (1 min)
+	lastRandomSongTime  time.Time      // Tracks last /randomsong time for cooldown
+	lastTranslateTime   time.Time      // Tracks last /translate time for cooldown
+	forcePairUID        int            // UID of the client this client is force-paired with (-1 if none)
+	possessing          int            // UID of the client being possessed (-1 if not possessing anyone)
+	possessedPos        string         // Position of the possessed target (saved at time of possession)
+	forcedShowname      string         // Showname forced by a moderator ("" if none)
+	nameReversed        bool           // gates /reversename so it cannot double-apply
+	preReverseShowname  string         // forcedShowname before /reversename; restored by /unreversename
+	shuffledOrigCharID  int            // Original char ID before /charshuffle (-2 = not shuffled)
+	forcedIniswapChar   string         // Character name forced for iniswap-style IC output ("" = none)
+	forcedIniswapIDStr  string         // Pre-computed strconv.Itoa(charID) matching forcedIniswapChar ("" = none)
+	connectedAt         time.Time      // Time the client joined the server (uid assigned); zero if not yet joined
+	jailAreaID          int            // Area index where this client is jailed; -1 = no specific jail area
+	emergencyBypassArea *area.Area     // Locked area the client most recently tried to enter as a mod; nil = no pending bypass
+	emergencyBypassAt   time.Time      // Time of the first locked-area attempt; used with emergencyBypassArea to confirm an emergency override
+	hidden              bool           // Whether the client is hidden from the player list and area counts
+	charStuckUntil      time.Time      // Time when the character-stuck restriction expires; zero = not stuck
+	charStuckCharID     int            // Character ID the client is locked to; -1 = not stuck
+	dancing             bool           // Whether the client has dance mode active (flips sprite every message)
+	danceFlipped        bool           // Current flip state for dance mode; toggles each IC message
+	gambleHide          bool           // Whether the client has opted out of seeing gambling broadcast messages
+	pendingRegUser      string         // Username from a pending /register that is awaiting captcha confirmation
+	pendingRegPass      []byte         // bcrypt hash from a pending /register that is awaiting captcha confirmation
+	pendingRegCaptcha   string         // Expected captcha token for the pending registration
+	sessionChipsAwarded int64          // Chips already awarded mid-session (hourly ticker); subtracted at disconnect to avoid double-counting
+	ignoredIPIDs        sync.Map       // Set of IPIDs permanently ignored by this client. Key: IPID string, Value: struct{}. Lock-free reads.
+	lastPingNano        atomic.Int64   // Unix nanosecond timestamp of the last CH packet; 0 until seeded on join.
 	masoPunishment      PunishmentType // Active self-applied maso punishment type; PunishmentNone if inactive.
 
 	// Outbound packet queue. SendPacket enqueues here non-blockingly; a
@@ -666,6 +666,15 @@ func (client *Client) SendPacket(header string, contents ...string) {
 		if buf == nil {
 			return
 		}
+		// Enforce the MS broadcast schema on the JSON-mode wire form. A
+		// server-side violation is dropped (not sent) and logged so the bug
+		// surfaces rather than reaching a client as malformed type nonsense.
+		if header == "MS" {
+			if err := packet.ValidateMSBroadcast(buf); err != nil {
+				logger.LogWarningf("dropped outbound MS to IPID:%v UID:%v — MSBroadcast schema validation failed: %v; json=%s", client.Ipid(), client.Uid(), err, buf)
+				return
+			}
+		}
 	} else {
 		// Pre-size the FantaCode buffer in a single allocation:
 		// header + ('#' + content)*N + "#%".
@@ -714,6 +723,13 @@ func (client *Client) SendPacketSync(header string, contents ...string) {
 		if jb == nil {
 			packetBufPool.Put(b)
 			return
+		}
+		if header == "MS" {
+			if err := packet.ValidateMSBroadcast(jb); err != nil {
+				logger.LogWarningf("dropped outbound MS to IPID:%v UID:%v — MSBroadcast schema validation failed: %v; json=%s", client.Ipid(), client.Uid(), err, jb)
+				packetBufPool.Put(b)
+				return
+			}
 		}
 		b.Write(jb)
 	} else {
