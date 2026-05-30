@@ -284,7 +284,7 @@ func ParseZZ(body []string) (*ZZ, error) {
 
 // Header / Args make ZZ an Outgoing.
 func (p *ZZ) Header() string { return "ZZ" }
-func (p *ZZ) Args() []string  { return []string{p.Reason} }
+func (p *ZZ) Args() []string { return []string{p.Reason} }
 
 // SETCASE indicates which case roles the player is willing to fill.
 // Wire: SETCASE#{caselist}#{cm}#{def}#{pro}#{judge}#{jury}#{steno}#%.
@@ -411,7 +411,9 @@ type SI struct {
 }
 
 func (p *SI) Header() string { return "SI" }
-func (p *SI) Args() []string { return []string{itoa(p.CharCount), itoa(p.EvidenceCount), itoa(p.MusicCount)} }
+func (p *SI) Args() []string {
+	return []string{itoa(p.CharCount), itoa(p.EvidenceCount), itoa(p.MusicCount)}
+}
 
 // SC sends the character list. Each entry is already pre-joined as
 // "name&desc&evidence". Wire: SC#{entry1}#{entry2}#...#%.
@@ -544,7 +546,22 @@ type MCToClient struct {
 
 func (p *MCToClient) Header() string { return "MC" }
 func (p *MCToClient) Args() []string {
-	return []string{p.Name, itoa(p.CharID), p.Showname, p.Looping, p.Channel, p.Effects}
+	// Looping, Channel and Effects are numeric fields on the wire. AO2 clients
+	// fail to parse the MC packet when any of them is empty (it renders as a
+	// bare "##", e.g. "MC#url#1##1#0##%"), and the music change is dropped
+	// silently. Default the empty form to "0" here — the single serialization
+	// point — so no caller can emit a malformed packet.
+	looping, channel, effects := p.Looping, p.Channel, p.Effects
+	if looping == "" {
+		looping = "0"
+	}
+	if channel == "" {
+		channel = "0"
+	}
+	if effects == "" {
+		effects = "0"
+	}
+	return []string{p.Name, itoa(p.CharID), p.Showname, looping, channel, effects}
 }
 
 // KK is the kick packet. Wire: KK#{reason}#%.

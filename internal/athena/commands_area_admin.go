@@ -14,7 +14,6 @@ GNU Affero General Public License for more details.
 You should have received a copy of the GNU Affero General Public License
 along with this program.  If not, see <https://www.gnu.org/licenses/>. */
 
-
 package athena
 
 import (
@@ -690,7 +689,7 @@ func cmdSummon(client *Client, args []string, usage string) {
 		client.SendServerMessage("Not enough arguments:\n" + usage)
 		return
 	}
-	
+
 	areaID, err := strconv.Atoi(args[0])
 	if err != nil || areaID < 0 || areaID > len(areas)-1 {
 		client.SendServerMessage("Invalid area.")
@@ -721,7 +720,7 @@ func cmdSummon(client *Client, args []string, usage string) {
 		reportBuilder.WriteString(fmt.Sprintf("%v", c.Uid()))
 		count++
 	})
-	
+
 	report := reportBuilder.String()
 	if count > 0 {
 		addToBuffer(client, "CMD", fmt.Sprintf("Summoned %v user(s) (%v) to %v.", count, report, wantedArea.Name()), false)
@@ -799,7 +798,7 @@ func cmdPlay(client *Client, args []string, _ string) {
 	}
 	broadcastToArea(client.Area(), &packet.MCToClient{
 		Name: s, CharID: client.CharID(), Showname: client.Showname(),
-		Looping: "1", Channel: "0", Effects: "",
+		Looping: "1", Channel: "0", Effects: "0",
 	})
 }
 
@@ -849,7 +848,7 @@ func cmdRandomSong(client *Client, _ []string, _ string) {
 	song := playable[rand.Intn(len(playable))]
 	broadcastToArea(client.Area(), &packet.MCToClient{
 		Name: song, CharID: client.CharID(), Showname: client.Showname(),
-		Looping: "1", Channel: "0", Effects: "",
+		Looping: "1", Channel: "0", Effects: "0",
 	})
 	addToBuffer(client, "CMD", fmt.Sprintf("Played random song (%v).", song), false)
 }

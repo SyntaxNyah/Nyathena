@@ -260,8 +260,15 @@ func TestBuildJSON_MS_ServerDirection(t *testing.T) {
 	if got["paired_name"] != "Edgeworth" {
 		t.Fatalf("paired_name missing: %v", got)
 	}
-	if got["paired_emote"] != "normal" || got["paired_flip"] != "0" {
-		t.Fatalf("paired_* missing: %v", got)
+	// paired_flip is a numeric field, so it is now emitted as a JSON number
+	// (decoded as float64), matching the MSBroadcast schema's integer type.
+	if got["paired_emote"] != "normal" || got["paired_flip"] != float64(0) {
+		t.Fatalf("paired_* wrong: %v", got)
+	}
+	// offset / paired_offset are emitted as {x,y} objects, not "0&0" strings.
+	off, ok := got["offset"].(map[string]any)
+	if !ok || off["x"] != float64(0) || off["y"] != float64(0) {
+		t.Fatalf("offset should be an {x,y} object, got %v", got["offset"])
 	}
 }
 

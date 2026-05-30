@@ -121,25 +121,25 @@ type pktMapValue struct {
 }
 
 var PacketMap = map[string]pktMapValue{
-	"HI":      {1, false, pktHdid},
-	"ID":      {2, false, pktId},
-	"askchaa": {0, false, pktResCount},
-	"RC":      {0, false, pktReqChar},
-	"RM":      {0, false, pktReqAM},
-	"RD":      {0, false, pktReqDone},
-	"CC":      {2, true, pktChangeChar},
-	"MS":      {15, true, pktIC},
-	"MC":      {2, true, pktAM},
-	"HP":      {2, true, pktHP},
-	"RT":      {1, true, pktWTCE},
-	"CT":      {2, true, pktOOC},
-	"PE":      {3, true, pktAddEvi},
-	"DE":      {1, true, pktRemoveEvi},
-	"EE":      {4, true, pktEditEvi},
-	"CH":      {0, false, pktPing},
-	"ZZ":      {0, true, pktModcall},
-	"SETCASE": {7, true, pktSetCase},
-	"CASEA":   {6, true, pktCaseAnn},
+	"HI":       {1, false, pktHdid},
+	"ID":       {2, false, pktId},
+	"askchaa":  {0, false, pktResCount},
+	"RC":       {0, false, pktReqChar},
+	"RM":       {0, false, pktReqAM},
+	"RD":       {0, false, pktReqDone},
+	"CC":       {2, true, pktChangeChar},
+	"MS":       {15, true, pktIC},
+	"MC":       {2, true, pktAM},
+	"HP":       {2, true, pktHP},
+	"RT":       {1, true, pktWTCE},
+	"CT":       {2, true, pktOOC},
+	"PE":       {3, true, pktAddEvi},
+	"DE":       {1, true, pktRemoveEvi},
+	"EE":       {4, true, pktEditEvi},
+	"CH":       {0, false, pktPing},
+	"ZZ":       {0, true, pktModcall},
+	"SETCASE":  {7, true, pktSetCase},
+	"CASEA":    {6, true, pktCaseAnn},
 	"VS_JOIN":  {0, true, pktVSJoin},
 	"VS_LEAVE": {0, true, pktVSLeave},
 	"VS_FRAME": {1, true, pktVSFrame},
@@ -1075,6 +1075,40 @@ func pktAM(client *Client, p *packet.Packet) {
 	}
 
 	decodedSong := decode(mc.Name)
+	if isMusicURL(decodedSong) {
+		// A client (typically WebAO) can request a streaming track by sending
+		// a raw http(s) URL in the MC packet's song slot. Such a URL is never
+		// in the jukebox list, so it must be handled before the music-list and
+		// area-name checks below.
+		if !client.CanChangeMusic() {
+			client.SendServerMessage("You are not allowed to change the music in this area.")
+			return
+		}
+		// Gate on the CDN whitelist exactly like /play does. An un-whitelisted
+		// host is rejected with an OOC notice rather than silently dropped.
+		if !isAllowedCDN(decodedSong) {
+			client.SendServerMessage("Illegal origin: that URL's host is not whitelisted. Add the domain to config/cdns.txt to allow it.")
+			return
+		}
+		name := client.Showname()
+		if mc.Showname != "" {
+			name = mc.Showname
+		}
+		effects := "0"
+		if mc.Effects != "" {
+			effects = mc.Effects
+		}
+		// Re-broadcast the URL byte-for-byte as it arrived (mc.Name, still in
+		// AO2 wire form) so the server never mangles it — recipients decode it
+		// back to the exact URL the sender chose.
+		client.Area().SetCurrentSong(mc.Name)
+		addToBuffer(client, "MUSIC", fmt.Sprintf("Changed music to %v.", decodedSong), false)
+		broadcastToArea(client.Area(), &packet.MCToClient{
+			Name: mc.Name, CharID: mc.CharID, Showname: name,
+			Looping: "1", Channel: "0", Effects: effects,
+		})
+		return
+	}
 	if sliceutil.ContainsString(music, decodedSong) {
 		if !client.CanChangeMusic() {
 			client.SendServerMessage("You are not allowed to change the music in this area.")
@@ -1461,6 +1495,13 @@ func decode(s string) string {
 // encode returns a decoded string in AO2-encoded form.
 func encode(s string) string {
 	return encoder.Replace(s)
+}
+
+// isMusicURL reports whether a music-change name is a streaming http(s) URL
+// rather than a jukebox entry or an area name. Detection is by scheme prefix
+// only, matching how WebAO submits a custom track in the MC packet's song slot.
+func isMusicURL(s string) bool {
+	return strings.HasPrefix(s, "http://") || strings.HasPrefix(s, "https://")
 }
 
 // isExternalSfxURL reports whether sfx is an external http(s) URL (i.e. not a

@@ -437,6 +437,18 @@ Protocol (`internal/athena/voice.go`):
 
 Moderation: IPID-scoped `/vmute` and `/vban`, per-area `/voicearea on|off`, per-UID join and frame rate limits, new-IPID cooldown — all in `internal/athena/voice_mod.go` and `voice_commands.go`. Disabled by default; toggle with `enable_voice = true` under `[Voice]`.
 
+### Streaming Music URLs
+Both the `/play <url>` command and a client-sent **MC** packet carrying a raw `http(s)://` URL (e.g. WebAO typing a custom track) play streaming audio. The URL's host must be in `config/cdns.txt`; an un-whitelisted host is rejected with an OOC **"Illegal origin"** notice rather than being silently dropped. The URL is re-broadcast byte-for-byte — the server never mangles it.
+
+The outgoing `MC` packet's numeric fields (`looping`/`channel`/`effects`) always default to `"0"` at the single serialization point (`packet.MCToClient.Args`). This fixes the regression where `/play` and `/randomsong` emitted an empty effects field (`…##%`), which AO2 clients fail to parse as a number and drop silently.
+
+### MS JSON-Schema Validation
+JSON-mode connections have their **MS** (in-character) packets validated against draft-07 JSON schemas vendored in the top-level `schemas/` folder (from [OmniTroid/aolib-schemas](https://github.com/OmniTroid/aolib-schemas)):
+- **Inbound** MS is validated against `MSRequest.schema.json` in `packet.ParseJSON`; an invalid packet is rejected and dropped (logged).
+- **Outbound** MS is validated against `MSBroadcast.schema.json` in `Client.SendPacket`; a packet that fails the schema is dropped (logged) before reaching a JSON-mode client.
+
+To satisfy the schemas, the JSON-mode MS encoder emits proper types (numbers, booleans, and `{x,y}` offset objects) rather than strings. Schemas are embedded via `//go:embed` in `athena.go` and compiled once at startup (`packet.CompileMSSchemas`). FantaCode (classic desktop AO2) traffic is never validated and is unaffected; if the schemas fail to load, validation is silently disabled. Library: `github.com/santhosh-tekuri/jsonschema/v5`.
+
 ### Other Features
 - Hot Potato area minigame
 - Quick Draw area minigame
