@@ -19,6 +19,7 @@ package athena
 import (
 	"bufio"
 	"bytes"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -360,6 +361,15 @@ type Client struct {
 	done          chan struct{}
 	closeDoneOnce sync.Once
 	closed        atomic.Bool
+
+	// jsonMode is set the first time this client sends a JSON-encoded packet
+	// (object starting with '{'). Once set, every subsequent inbound packet
+	// from this client is parsed as JSON and every outbound packet is encoded
+	// as JSON. The flag is one-way — switching back to FantaCode mid-session
+	// is not supported because a single client genuinely doesn't need to.
+	// Reads from the writer goroutine and the SendPacket fan-out are
+	// lock-free via atomic.Bool.
+	jsonMode atomic.Bool
 }
 
 // sendQueueSize bounds the per-client outbound packet backlog. Sized to
@@ -489,28 +499,61 @@ func (client *Client) HandleClient() {
 
 	go timeout(client)
 
-	client.Send(&packet.Decryptor{}) // Relic of FantaCrypt. AO2 requires a server to send this to proceed with the handshake.
-	input := bufio.NewScanner(client.conn)
+	// FantaCrypt relic. The payload is now "JSON" — a soft capability signal:
+	// JSON-aware clients respond with a '{'-prefixed packet and we switch this
+	// client to JSON encoding for the rest of the session; older clients
+	// ignore the value and stay in classic FantaCode.
+	client.Send(&packet.Decryptor{})
 
-	splitfn := func(data []byte, atEOF bool) (advance int, token []byte, err error) {
-		if atEOF && len(data) == 0 {
-			return 0, nil, nil
-		}
-		if i := bytes.IndexByte(data, '%'); i >= 0 {
-			return i + 1, data[:i], nil
-		}
-		if atEOF {
-			return len(data), data, nil
-		}
-		return 0, nil, nil
-	}
-	input.Split(splitfn) // Split input when a packet delimiter ('%') is found
+	// Reading both wire formats off the same connection means we can't use a
+	// pure json.Decoder loop (which would eat FantaCode bytes thinking they
+	// were a malformed JSON value). Instead: peek the next non-whitespace
+	// byte each iteration. If it's '{', drive json.Decoder for that packet
+	// and latch jsonMode on; otherwise bufio.ReadString to the next '%'.
+	// The same *bufio.Reader backs both code paths, and the json.Decoder is
+	// reused after first creation so it can carry its internal buffer
+	// forward across consecutive JSON packets.
+	br := bufio.NewReader(client.conn)
+	var jsonDec *json.Decoder
 
-	for input.Scan() {
-		rawPacket := strings.TrimSpace(input.Text())
+	for {
+		// Skip ASCII whitespace between packets (web clients sometimes flush
+		// a stray "\n" between messages). EOF here means the peer hung up.
+		if err := skipNetWhitespace(br); err != nil {
+			return
+		}
+		lead, err := br.Peek(1)
+		if err != nil {
+			return
+		}
+
+		var rawPacket string
+		if lead[0] == '{' {
+			client.jsonMode.Store(true)
+			if jsonDec == nil {
+				jsonDec = json.NewDecoder(br)
+			}
+			var msg json.RawMessage
+			if err := jsonDec.Decode(&msg); err != nil {
+				return
+			}
+			rawPacket = string(msg)
+		} else {
+			line, err := br.ReadString('%')
+			if err != nil {
+				return
+			}
+			rawPacket = strings.TrimSuffix(line, "%")
+		}
+		rawPacket = strings.TrimSpace(rawPacket)
+		if rawPacket == "" {
+			continue
+		}
+
 		if logger.EnableNetworkLogging {
 			logger.WriteNetworkLog(client.ipid, client.Hdid(), "RECV", rawPacket)
 		}
+
 		// Raw packet rate limit: ban bots/flooders that send far more packets per second
 		// than any legitimate client ever would. The ban is committed synchronously before
 		// the connection closes so the flooder cannot immediately reconnect.
@@ -530,16 +573,50 @@ func (client *Client) HandleClient() {
 			client.conn.Close()
 			return
 		}
-		packet, err := packet.NewPacket(rawPacket)
-		if err != nil {
-			continue // Discard invalid packets
+
+		var pkt *packet.Packet
+		if rawPacket[0] == '{' {
+			pkt, err = packet.ParseJSON(rawPacket)
+		} else {
+			pkt, err = packet.NewPacket(rawPacket)
 		}
-		v := PacketMap[packet.Header] // Check if this is a known packet.
-		if v.Func != nil && len(packet.Body) >= v.Args {
-			if v.MustJoin && client.Uid() == -1 {
-				continue
+		if err != nil {
+			logger.LogWarningf("dropped packet from IPID:%v UID:%v — parse error: %v; raw=%q", client.Ipid(), client.Uid(), err, rawPacket)
+			continue
+		}
+		v, known := PacketMap[pkt.Header]
+		if !known || v.Func == nil {
+			logger.LogWarningf("dropped packet from IPID:%v UID:%v — unknown header %q; body=%v", client.Ipid(), client.Uid(), pkt.Header, pkt.Body)
+			continue
+		}
+		if len(pkt.Body) < v.Args {
+			logger.LogWarningf("dropped %s packet from IPID:%v UID:%v — %d body fields, need %d; body=%v", pkt.Header, client.Ipid(), client.Uid(), len(pkt.Body), v.Args, pkt.Body)
+			continue
+		}
+		if v.MustJoin && client.Uid() == -1 {
+			logger.LogWarningf("dropped %s packet from IPID:%v — client has not completed handshake (UID=-1)", pkt.Header, client.Ipid())
+			continue
+		}
+		v.Func(client, pkt)
+	}
+}
+
+// skipNetWhitespace discards ASCII whitespace bytes at the head of br so the
+// caller can peek the first meaningful byte of the next packet. Returns the
+// underlying read error (typically io.EOF) on disconnect.
+func skipNetWhitespace(br *bufio.Reader) error {
+	for {
+		b, err := br.Peek(1)
+		if err != nil {
+			return err
+		}
+		switch b[0] {
+		case ' ', '\t', '\r', '\n':
+			if _, err := br.Discard(1); err != nil {
+				return err
 			}
-			v.Func(client, packet)
+		default:
+			return nil
 		}
 	}
 }
@@ -583,18 +660,27 @@ func (client *Client) SendPacket(header string, contents ...string) {
 		return
 	}
 
-	// Pre-size the buffer in a single allocation: header + ('#' + content)*N + "#%".
-	n := len(header) + 2
-	for _, c := range contents {
-		n += 1 + len(c)
+	var buf []byte
+	if client.jsonMode.Load() {
+		buf = packet.BuildJSON(header, contents)
+		if buf == nil {
+			return
+		}
+	} else {
+		// Pre-size the FantaCode buffer in a single allocation:
+		// header + ('#' + content)*N + "#%".
+		n := len(header) + 2
+		for _, c := range contents {
+			n += 1 + len(c)
+		}
+		buf = make([]byte, 0, n)
+		buf = append(buf, header...)
+		for _, c := range contents {
+			buf = append(buf, '#')
+			buf = append(buf, c...)
+		}
+		buf = append(buf, '#', '%')
 	}
-	buf := make([]byte, 0, n)
-	buf = append(buf, header...)
-	for _, c := range contents {
-		buf = append(buf, '#')
-		buf = append(buf, c...)
-	}
-	buf = append(buf, '#', '%')
 
 	select {
 	case client.sendCh <- buf:
@@ -619,12 +705,25 @@ func (client *Client) SendPacketSync(header string, contents ...string) {
 	}
 	b := packetBufPool.Get().(*bytes.Buffer)
 	b.Reset()
-	b.WriteString(header)
-	for _, c := range contents {
-		b.WriteByte('#')
-		b.WriteString(c)
+	if client.jsonMode.Load() {
+		// JSON path: BuildJSON allocates a fresh []byte already; copy it into
+		// the pooled buffer so the same SetWriteDeadline / Write code path is
+		// reused. The extra copy is negligible because Sync is only used on
+		// rare rejection paths (lockdown / ban / MC limit), not the hot loop.
+		jb := packet.BuildJSON(header, contents)
+		if jb == nil {
+			packetBufPool.Put(b)
+			return
+		}
+		b.Write(jb)
+	} else {
+		b.WriteString(header)
+		for _, c := range contents {
+			b.WriteByte('#')
+			b.WriteString(c)
+		}
+		b.WriteString("#%")
 	}
-	b.WriteString("#%")
 
 	client.mu.Lock()
 	client.conn.SetWriteDeadline(time.Now().Add(5 * time.Second)) //nolint:errcheck
@@ -654,6 +753,15 @@ func (client *Client) Send(p packet.Outgoing) {
 // bypassing the outbound queue. See SendPacketSync for when to use this.
 func (client *Client) SendSync(p packet.Outgoing) {
 	client.SendPacketSync(p.Header(), p.Args()...)
+}
+
+// JSONMode reports whether this client has opted into JSON-encoded packets
+// (true after the first inbound '{'-prefixed packet has been seen on this
+// connection). Callers on the rare raw-write code paths — the pre-built
+// FantaCode SM blob and the hand-formatted CASEA broadcast — branch on
+// this so JSON-mode peers get the correctly encoded form.
+func (client *Client) JSONMode() bool {
+	return client.jsonMode.Load()
 }
 
 // clientLogSnapshot holds the subset of client fields read by addToBuffer.
