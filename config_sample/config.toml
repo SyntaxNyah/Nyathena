@@ -155,6 +155,43 @@ multiclient_limit = 16
 # The URL should include the protocol (e.g., "https://example.com/assets").
 asset_url = ""
 
+# --- /play <youtube-link> integration (optional, disabled by default) ---
+#
+# When youtube_play_prefix is non-empty AND starts with "http", users with the
+# DJ permission can pass a YouTube URL to /play. Supported URL forms:
+#   - https://www.youtube.com/watch?v=<id>
+#   - https://youtu.be/<id>
+#   - https://www.youtube.com/shorts/<id>
+#   - https://music.youtube.com/watch?v=<id>
+#
+# The token {ASSET_URL} expands to whatever asset_url is set to above. Example:
+#   youtube_play_prefix = "{ASSET_URL}/yt/"
+#
+# Flow:
+#   1. If <destination>/<videoID>.mp3 already exists, the area plays the URL
+#      <youtube_play_prefix><videoID>.mp3 immediately.
+#   2. Otherwise yt-dlp probes the video length; if it exceeds
+#      youtube_max_duration_seconds the request is rejected.
+#   3. yt-dlp downloads the audio as mp3 into the destination directory; once
+#      the file lands, the area is told to play it automatically.
+#
+# Leave blank to keep the feature off. yt-dlp must be on PATH when enabled.
+youtube_play_prefix = ""
+
+# Where downloaded mp3s land. Only file:// (local filesystem) is supported at
+# the moment, e.g. "file:///var/lib/athena/yt". The directory must exist.
+youtube_download_destination = ""
+
+# Reject videos longer than this many seconds. Defaults to 600 (10 minutes).
+youtube_max_duration_seconds = 600
+
+# Optional path to a Netscape-format cookies.txt for yt-dlp. When set, it is
+# passed as `--cookies <path>` to both the duration probe and the download.
+# Use this to bypass YouTube's bot-detection wall by presenting a logged-in
+# session. Generate with a browser extension like "Get cookies.txt LOCALLY".
+# Leave blank to skip the flag entirely.
+youtube_cookies_path = ""
+
 # Sets the URL for the server's Discord webhook.
 # If this is blank, the discord webhook will be disabled.
 # To setup the webhook, follow the instructions here (https://support.discord.com/hc/en-us/articles/228383668-Intro-to-Webhooks)

@@ -791,6 +791,12 @@ func cmdPlay(client *Client, args []string, _ string) {
 			client.SendServerMessage("Error parsing URL.")
 			return
 		}
+		// YouTube short-circuit: if the URL is a recognized YouTube link and
+		// the feature is configured, hand off to the yt-dlp pipeline. The
+		// handler emits its own MC packet (or OOC error) so we stop here.
+		if tryYouTubePlay(client, s) {
+			return
+		}
 		if !isAllowedCDN(s) {
 			client.SendServerMessage("That URL is not from a whitelisted CDN. Add the domain to cdns.txt to allow it.")
 			return
