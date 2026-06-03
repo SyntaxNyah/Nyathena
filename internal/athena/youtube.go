@@ -152,8 +152,29 @@ func ytDlpCookieArgs() []string {
 	return []string{"--cookies", path}
 }
 
+// shellQuote produces a copy-pasteable representation of an argv slice for
+// log lines. Not safe for actual shell execution — diagnostic only.
+func shellQuote(args []string) string {
+	var b strings.Builder
+	for i, a := range args {
+		if i > 0 {
+			b.WriteByte(' ')
+		}
+		if a == "" || strings.ContainsAny(a, " \t\"'\\$`*?#&|<>(){}[];") {
+			b.WriteByte('\'')
+			b.WriteString(strings.ReplaceAll(a, "'", `'\''`))
+			b.WriteByte('\'')
+		} else {
+			b.WriteString(a)
+		}
+	}
+	return b.String()
+}
+
 // probeYouTubeDuration shells out to `yt-dlp --print duration --skip-download`
-// and returns the video length in seconds (rounded).
+// and returns the video length in seconds (rounded). On failure the returned
+// error embeds the full argv and the tail of yt-dlp's stderr so the log line
+// can be reproduced by hand.
 func probeYouTubeDuration(ctx context.Context, rawURL string) (int, error) {
 	args := []string{
 		"--print", "duration",
@@ -165,11 +186,20 @@ func probeYouTubeDuration(ctx context.Context, rawURL string) (int, error) {
 	cmd := exec.CommandContext(ctx, "yt-dlp", args...)
 	out, err := cmd.Output()
 	if err != nil {
-		return 0, err
+		var stderr string
+		var exitErr *exec.ExitError
+		if errors.As(err, &exitErr) {
+			stderr = strings.TrimSpace(string(exitErr.Stderr))
+		}
+		cmdline := "yt-dlp " + shellQuote(args)
+		if stderr != "" {
+			return 0, fmt.Errorf("%w (cmd: %s) (stderr: %s)", err, cmdline, stderr)
+		}
+		return 0, fmt.Errorf("%w (cmd: %s)", err, cmdline)
 	}
 	s := strings.TrimSpace(string(out))
 	if s == "" {
-		return 0, errors.New("yt-dlp returned empty duration")
+		return 0, fmt.Errorf("yt-dlp returned empty duration (cmd: yt-dlp %s)", shellQuote(args))
 	}
 	f, err := strconv.ParseFloat(s, 64)
 	if err != nil {
@@ -194,7 +224,8 @@ func downloadYouTubeMP3(ctx context.Context, rawURL, id, destDir string) error {
 	args = append(args, "--", rawURL)
 	cmd := exec.CommandContext(ctx, "yt-dlp", args...)
 	if out, err := cmd.CombinedOutput(); err != nil {
-		return fmt.Errorf("yt-dlp: %v: %s", err, strings.TrimSpace(string(out)))
+		return fmt.Errorf("yt-dlp: %v (cmd: yt-dlp %s) (output: %s)",
+			err, shellQuote(args), strings.TrimSpace(string(out)))
 	}
 	return nil
 }
