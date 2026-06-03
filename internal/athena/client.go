@@ -1502,7 +1502,7 @@ func (client *Client) CanChangeMusic() bool {
 	switch {
 	case client.CharID() == -1:
 		return false
-	case client.Area().MusicFrozen() && !permissions.IsModerator(client.Perms()) && !client.HasCMPermission():
+	case client.Area().MusicFrozen() && !permissions.IsModerator(client.Perms()) && !client.HasCMPermission() && !permissions.HasPermission(client.Perms(), permissions.PermissionField["DJ"]):
 		return false
 	case client.Area().LockMusic() && !client.HasCMPermission():
 		return false

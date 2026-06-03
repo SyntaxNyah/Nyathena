@@ -587,29 +587,28 @@ func cmdLockMusic(client *Client, args []string, _ string) {
 	addToBuffer(client, "CMD", fmt.Sprintf("Set CM-only music list to %v.", args[0]), false)
 }
 
-// Handles /musiclock - hard music freeze: blocks regular players and DJs from changing music.
-// Moderators (including shadow mods) and CMs are exempt and can still change music.
+// Handles /musiclock - locks music so only moderators, DJs, and CMs can change it.
 
 func cmdMusicLock(client *Client, _ []string, _ string) {
 	if client.Area().MusicFrozen() {
-		client.SendServerMessage("Music is already frozen in this area. Use /musicunlock to lift it.")
+		client.SendServerMessage("Music is already locked in this area. Use /musicunlock to lift it.")
 		return
 	}
 	client.Area().SetMusicFrozen(true)
-	sendAreaServerMessage(client.Area(), fmt.Sprintf("🔒 %v has frozen the music - no one can change it until /musicunlock.", client.OOCName()))
-	addToBuffer(client, "CMD", "Music frozen.", false)
+	sendAreaServerMessage(client.Area(), fmt.Sprintf("🔒 %v has locked the music — only moderators and DJs can change it until /musicunlock.", client.OOCName()))
+	addToBuffer(client, "CMD", "Music locked.", false)
 }
 
-// Handles /musicunlock - lifts the hard music freeze.
+// Handles /musicunlock - lifts the music lock set by /musiclock.
 
 func cmdMusicUnlock(client *Client, _ []string, _ string) {
 	if !client.Area().MusicFrozen() {
-		client.SendServerMessage("Music is not currently frozen in this area.")
+		client.SendServerMessage("Music is not currently locked in this area.")
 		return
 	}
 	client.Area().SetMusicFrozen(false)
-	sendAreaServerMessage(client.Area(), fmt.Sprintf("🔓 %v has unfrozen the music - anyone can change it again.", client.OOCName()))
-	addToBuffer(client, "CMD", "Music unfrozen.", false)
+	sendAreaServerMessage(client.Area(), fmt.Sprintf("🔓 %v has unlocked the music — anyone can change it again.", client.OOCName()))
+	addToBuffer(client, "CMD", "Music unlocked.", false)
 }
 
 // Handles /log
@@ -774,7 +773,7 @@ func isAllowedCDN(rawURL string) bool {
 // Handles /play
 
 func cmdPlay(client *Client, args []string, _ string) {
-	if client.Area().MusicFrozen() && !permissions.IsModerator(client.Perms()) && !client.HasCMPermission() {
+	if client.Area().MusicFrozen() && !permissions.IsModerator(client.Perms()) && !client.HasCMPermission() && !permissions.HasPermission(client.Perms(), permissions.PermissionField["DJ"]) {
 		client.SendServerMessage("Music is locked in this area - no changes allowed.")
 		return
 	}
