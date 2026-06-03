@@ -278,6 +278,7 @@ func tryYouTubePlay(client *Client, rawURL string) bool {
 		client.SendServerMessage("YouTube /play is misconfigured: " + err.Error())
 		return true
 	}
+	client.SendServerMessage("YouTube link recognised — processing now…")
 	targetArea := client.Area()
 	charID := client.CharID()
 	showname := client.Showname()
