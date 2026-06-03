@@ -207,6 +207,22 @@ func (p *RTPacket) Args() []string {
 	return []string{p.Animation}
 }
 
+// TTPacket sets the testimony title overlay. Bi-directional. Wire: TT#{type}#{title}#%.
+type TTPacket struct {
+	Type  string
+	Title string
+}
+
+func ParseTT(body []string) (*TTPacket, error) {
+	if len(body) < 2 {
+		return nil, fmt.Errorf("TT: need at least 2 fields")
+	}
+	return &TTPacket{Type: body[0], Title: body[1]}, nil
+}
+
+func (p *TTPacket) Header() string { return "TT" }
+func (p *TTPacket) Args() []string { return []string{p.Type, p.Title} }
+
 // CTFromClient is the OOC chat / command packet sent by a client.
 // Wire: CT#{name}#{message}#%.
 type CTFromClient struct {
