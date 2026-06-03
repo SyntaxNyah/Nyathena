@@ -168,12 +168,16 @@ asset_url = ""
 #   youtube_play_prefix = "{ASSET_URL}/yt/"
 #
 # Flow:
-#   1. If <destination>/<videoID>.mp3 already exists, the area plays the URL
-#      <youtube_play_prefix><videoID>.mp3 immediately.
+#   1. If <destination>/<videoID>.opus (preferred) or <videoID>.mp3 already
+#      exists, the area plays the URL <youtube_play_prefix><videoID>.<ext>
+#      immediately.
 #   2. Otherwise yt-dlp probes the video length; if it exceeds
 #      youtube_max_duration_seconds the request is rejected.
-#   3. yt-dlp downloads the audio as mp3 into the destination directory; once
-#      the file lands, the area is told to play it automatically.
+#   3. yt-dlp extracts the audio as Opus (.opus) into the destination
+#      directory; once the file lands, the area is told to play it
+#      automatically. Opus is YouTube's native audio codec so the extraction
+#      is fast and lossless (no transcoding); .mp3 is only kept as a
+#      backward-compatible fallback for older caches.
 #
 # Leave blank to keep the feature off. yt-dlp must be on PATH when enabled.
 youtube_play_prefix = ""

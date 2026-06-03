@@ -1,6 +1,8 @@
 package athena
 
 import (
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/MangosArentLiterature/Athena/internal/settings"
@@ -146,7 +148,33 @@ func TestYouTubePlayURL(t *testing.T) {
 		AssetURL:          "https://cdn.example.com/assets",
 		YouTubePlayPrefix: "{ASSET_URL}/yt/",
 	}}
-	if got := youTubePlayURL("dQw4w9WgXcQ"); got != "https://cdn.example.com/assets/yt/dQw4w9WgXcQ.mp3" {
-		t.Errorf("youTubePlayURL = %q", got)
+	if got := youTubePlayURL("dQw4w9WgXcQ", ".opus"); got != "https://cdn.example.com/assets/yt/dQw4w9WgXcQ.opus" {
+		t.Errorf("youTubePlayURL .opus = %q", got)
+	}
+	if got := youTubePlayURL("dQw4w9WgXcQ", ".mp3"); got != "https://cdn.example.com/assets/yt/dQw4w9WgXcQ.mp3" {
+		t.Errorf("youTubePlayURL .mp3 = %q", got)
+	}
+}
+
+func TestYouTubeCacheLookup(t *testing.T) {
+	dir := t.TempDir()
+	id := "dQw4w9WgXcQ"
+
+	if got := youTubeCacheLookup(dir, id); got != "" {
+		t.Errorf("empty dir: expected \"\", got %q", got)
+	}
+
+	if err := os.WriteFile(filepath.Join(dir, id+".mp3"), []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if got := youTubeCacheLookup(dir, id); got != ".mp3" {
+		t.Errorf("mp3 only: expected .mp3, got %q", got)
+	}
+
+	if err := os.WriteFile(filepath.Join(dir, id+".opus"), []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if got := youTubeCacheLookup(dir, id); got != ".opus" {
+		t.Errorf("both present: expected .opus preferred, got %q", got)
 	}
 }
