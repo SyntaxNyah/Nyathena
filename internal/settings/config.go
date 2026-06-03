@@ -112,6 +112,23 @@ type ServerConfig struct {
 	EnableNewspaper            bool     `toml:"enable_newspaper"`
 	NewspaperInterval          string   `toml:"newspaper_interval"`
 	NewspaperSections          []string `toml:"newspaper_sections"`
+	// YouTubePlayPrefix, when non-empty and starting with "http", turns on the
+	// /play <youtube-link> integration. The prefix is the URL stem that
+	// clients fetch the downloaded MP3 from (e.g. "https://cdn.example.com/yt/").
+	// The literal token "{ASSET_URL}" is expanded to ServerConfig.AssetURL at
+	// use time so operators don't have to repeat the asset host.
+	YouTubePlayPrefix          string   `toml:"youtube_play_prefix"`
+	// YouTubeDownloadDestination is the destination URI for downloaded mp3s.
+	// Only file:// (local filesystem) is supported right now — e.g.
+	// "file:///var/lib/athena/yt".
+	YouTubeDownloadDestination string   `toml:"youtube_download_destination"`
+	// YouTubeMaxDurationSeconds rejects videos longer than this when probed.
+	// 0 falls back to 600 (10 minutes).
+	YouTubeMaxDurationSeconds  int      `toml:"youtube_max_duration_seconds"`
+	// YouTubeCookiesPath, when non-empty, is passed to yt-dlp as
+	// --cookies <path>. Used to bypass YouTube's bot-detection / age-gate
+	// walls by presenting a logged-in session.
+	YouTubeCookiesPath         string   `toml:"youtube_cookies_path"`
 	// MaxConnectionGoroutines caps the number of concurrent connection-handling
 	// goroutines.  When the pool is full, new connections wait until a slot
 	// becomes available rather than spinning up an unbounded number of goroutines.
@@ -242,6 +259,10 @@ func DefaultConfig() *Config {
 			VoteDuration:               120,
 			VoteActions:                []string{"kick"},
 			VoteMuteDuration:           300,
+			YouTubePlayPrefix:          "",
+			YouTubeDownloadDestination: "",
+			YouTubeMaxDurationSeconds:  600,
+			YouTubeCookiesPath:         "",
 		},
 		LogConfig{
 			BufSize:              150,
