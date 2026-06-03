@@ -1899,9 +1899,6 @@ func cmdIgnore(client *Client, args []string, usage string) {
 		logger.LogErrorf("Failed to persist ignore for %v -> %v: %v", client.Ipid(), targetIPID, err)
 	}
 
-	// Warn the target without revealing the ignorer's IPID.
-	target.SendServerMessage("⚠️ Warning: You have been permanently ignored by another user. This will persist across your reconnections.")
-
 	client.SendServerMessage(fmt.Sprintf("You are now permanently ignoring user [%d]. This will persist across their reconnections. Use /ignore list to view your full ignore list.", uid))
 	addToBuffer(client, "CMD", fmt.Sprintf("permanently ignored UID %d (IPID: %v)", uid, targetIPID), false)
 }
