@@ -126,9 +126,26 @@ func youTubeDestDir() (string, error) {
 	return filepath.Clean(u.Path), nil
 }
 
-func youTubePlayURL(id string) string {
+// youTubeCacheExtensions is the on-disk lookup order. New downloads always
+// land as .opus; .mp3 is kept as a fallback so caches from older versions of
+// the integration still serve.
+var youTubeCacheExtensions = []string{".opus", ".mp3"}
+
+// youTubeCacheLookup returns the extension (".opus" or ".mp3") of an existing
+// cached file for the given video ID, or "" if neither is on disk. Preference
+// order matches youTubeCacheExtensions.
+func youTubeCacheLookup(destDir, id string) string {
+	for _, ext := range youTubeCacheExtensions {
+		if _, err := os.Stat(filepath.Join(destDir, id+ext)); err == nil {
+			return ext
+		}
+	}
+	return ""
+}
+
+func youTubePlayURL(id, ext string) string {
 	prefix := expandAssetURLMacro(strings.TrimSpace(config.YouTubePlayPrefix))
-	return prefix + id + ".mp3"
+	return prefix + id + ext
 }
 
 func youTubeMaxDurationSeconds() int {
@@ -208,15 +225,18 @@ func probeYouTubeDuration(ctx context.Context, rawURL string) (int, error) {
 	return int(f + 0.5), nil
 }
 
-// downloadYouTubeMP3 invokes yt-dlp to extract MP3 audio into destDir/<id>.mp3.
-func downloadYouTubeMP3(ctx context.Context, rawURL, id, destDir string) error {
+// downloadYouTubeAudio invokes yt-dlp to extract Opus audio into
+// destDir/<id>.opus. Opus is YouTube's native audio codec, so yt-dlp can
+// passthrough the stream instead of transcoding when the source is already
+// opus (most YouTube videos), keeping the download fast and lossless.
+func downloadYouTubeAudio(ctx context.Context, rawURL, id, destDir string) error {
 	if !youtubeIDRegex.MatchString(id) {
 		return errors.New("invalid youtube video id")
 	}
 	outTmpl := filepath.Join(destDir, id+".%(ext)s")
 	args := []string{
 		"-x",
-		"--audio-format", "mp3",
+		"--audio-format", "opus",
 		"--no-playlist",
 		"-o", outTmpl,
 	}
@@ -232,10 +252,11 @@ func downloadYouTubeMP3(ctx context.Context, rawURL, id, destDir string) error {
 
 // broadcastYouTubeReady fans the MC packet to the area the request originated
 // in. Captured at request time so an area-hopping requester doesn't drag the
-// song with them.
-func broadcastYouTubeReady(targetArea *area.Area, id string, charID int, showname string) {
+// song with them. ext is the on-disk extension (".opus" or ".mp3") of the
+// cached file the area will fetch.
+func broadcastYouTubeReady(targetArea *area.Area, id, ext string, charID int, showname string) {
 	broadcastToArea(targetArea, &packet.MCToClient{
-		Name: youTubePlayURL(id), CharID: charID, Showname: showname,
+		Name: youTubePlayURL(id, ext), CharID: charID, Showname: showname,
 		Looping: "1", Channel: "0", Effects: "0",
 	})
 }
@@ -257,14 +278,13 @@ func tryYouTubePlay(client *Client, rawURL string) bool {
 		client.SendServerMessage("YouTube /play is misconfigured: " + err.Error())
 		return true
 	}
-	mp3Path := filepath.Join(destDir, id+".mp3")
 	targetArea := client.Area()
 	charID := client.CharID()
 	showname := client.Showname()
 
-	// Already on disk — play immediately.
-	if _, err := os.Stat(mp3Path); err == nil {
-		broadcastYouTubeReady(targetArea, id, charID, showname)
+	// Already on disk — play immediately (preferring .opus over .mp3).
+	if ext := youTubeCacheLookup(destDir, id); ext != "" {
+		broadcastYouTubeReady(targetArea, id, ext, charID, showname)
 		return true
 	}
 
@@ -275,18 +295,18 @@ func tryYouTubePlay(client *Client, rawURL string) bool {
 		client.SendServerMessage("That YouTube video is already being downloaded — it'll play here when it's ready.")
 		go func() {
 			<-existing.(chan struct{})
-			if _, err := os.Stat(mp3Path); err == nil {
-				broadcastYouTubeReady(targetArea, id, charID, showname)
+			if ext := youTubeCacheLookup(destDir, id); ext != "" {
+				broadcastYouTubeReady(targetArea, id, ext, charID, showname)
 			}
 		}()
 		return true
 	}
 
-	go runYouTubeDownload(client, rawURL, id, destDir, mp3Path, targetArea, charID, showname, newCh)
+	go runYouTubeDownload(client, rawURL, id, destDir, targetArea, charID, showname, newCh)
 	return true
 }
 
-func runYouTubeDownload(client *Client, rawURL, id, destDir, mp3Path string, targetArea *area.Area, charID int, showname string, done chan struct{}) {
+func runYouTubeDownload(client *Client, rawURL, id, destDir string, targetArea *area.Area, charID int, showname string, done chan struct{}) {
 	defer func() {
 		close(done)
 		ytDownloadsInFlight.Delete(id)
@@ -309,15 +329,16 @@ func runYouTubeDownload(client *Client, rawURL, id, destDir, mp3Path string, tar
 
 	dlCtx, dlCancel := context.WithTimeout(context.Background(), 10*time.Minute)
 	defer dlCancel()
-	if err := downloadYouTubeMP3(dlCtx, rawURL, id, destDir); err != nil {
+	if err := downloadYouTubeAudio(dlCtx, rawURL, id, destDir); err != nil {
 		logger.LogErrorf("youtube: download failed for %s: %v", id, err)
 		client.SendServerMessage("YouTube download failed.")
 		return
 	}
-	if _, err := os.Stat(mp3Path); err != nil {
-		logger.LogErrorf("youtube: expected file missing after download: %s", mp3Path)
+	ext := youTubeCacheLookup(destDir, id)
+	if ext == "" {
+		logger.LogErrorf("youtube: expected .opus/.mp3 file missing after download in %s for %s", destDir, id)
 		client.SendServerMessage("YouTube download finished but the file is missing.")
 		return
 	}
-	broadcastYouTubeReady(targetArea, id, charID, showname)
+	broadcastYouTubeReady(targetArea, id, ext, charID, showname)
 }
