@@ -672,6 +672,7 @@ func pktIC(client *Client, p *packet.Packet) {
 	// EmoteModifier 4 crashes old clients, remap to PREANIM_ZOOM; only {0,1,2,5,6} are valid (matches Akashi).
 	emote_mod, err := strconv.Atoi(ms.EmoteModifier)
 	if err != nil {
+		logger.LogWarningf("dropped MS from IPID:%v UID:%v — EmoteModifier not an integer; value=%q", client.Ipid(), client.Uid(), ms.EmoteModifier)
 		return
 	}
 	if emote_mod == 4 {
@@ -679,19 +680,23 @@ func pktIC(client *Client, p *packet.Packet) {
 		ms.EmoteModifier = "6"
 	}
 	if emote_mod != 0 && emote_mod != 1 && emote_mod != 2 && emote_mod != 5 && emote_mod != 6 {
+		logger.LogWarningf("dropped MS from IPID:%v UID:%v — EmoteModifier not in {0,1,2,5,6}; value=%d", client.Ipid(), client.Uid(), emote_mod)
 		return
 	}
 	objStr, _, _ := strings.Cut(ms.ShoutModifier, "&")
 	objection, err := strconv.Atoi(objStr)
 	if err != nil {
+		logger.LogWarningf("dropped MS from IPID:%v UID:%v — ShoutModifier not an integer; value=%q (raw=%q)", client.Ipid(), client.Uid(), objStr, ms.ShoutModifier)
 		return
 	}
 	evi, err := strconv.Atoi(ms.Evidence)
 	if err != nil {
+		logger.LogWarningf("dropped MS from IPID:%v UID:%v — Evidence not an integer; value=%q", client.Ipid(), client.Uid(), ms.Evidence)
 		return
 	}
 	text, err := strconv.Atoi(ms.TextColor)
 	if err != nil {
+		logger.LogWarningf("dropped MS from IPID:%v UID:%v — TextColor not an integer; value=%q", client.Ipid(), client.Uid(), ms.TextColor)
 		return
 	}
 
@@ -746,6 +751,7 @@ func pktIC(client *Client, p *packet.Packet) {
 
 	switch {
 	case !sliceutil.ContainsString(validDeskMods, ms.DeskMod):
+		logger.LogWarningf("dropped MS from IPID:%v UID:%v — DeskMod not in validDeskMods; value=%q", client.Ipid(), client.Uid(), ms.DeskMod)
 		return
 	case !isPossessing && !hasForcedIniswap && !strings.EqualFold(characters[client.CharID()], ms.Character) && !client.Area().IniswapAllowed(): // character name (skip check when possessing or forced iniswap)
 		client.SendServerMessage("Iniswapping is not allowed in this area.")
@@ -757,29 +763,40 @@ func pktIC(client *Client, p *packet.Packet) {
 		client.SendServerMessage("Your message exceeds the maximum message length!")
 		return
 	case ms.Message == client.LastMsg():
+		logger.LogWarningf("dropped MS from IPID:%v UID:%v — duplicate of LastMsg", client.Ipid(), client.Uid())
 		return
 	case !isPossessing && !hasForcedIniswap && ms.CharID != client.CharIDStr(): // skip check when possessing or forced iniswap
+		logger.LogWarningf("dropped MS from IPID:%v UID:%v — CharID mismatch; packet=%q client=%q", client.Ipid(), client.Uid(), ms.CharID, client.CharIDStr())
 		return
 	case objection < 0 || objection > 4:
+		logger.LogWarningf("dropped MS from IPID:%v UID:%v — ShoutModifier out of [0,4]; value=%d", client.Ipid(), client.Uid(), objection)
 		return
 	case evi < 0 || evi > len(client.Area().Evidence()):
+		logger.LogWarningf("dropped MS from IPID:%v UID:%v — Evidence id out of range; value=%d max=%d", client.Ipid(), client.Uid(), evi, len(client.Area().Evidence()))
 		return
 	case ms.Flip != "0" && ms.Flip != "1":
+		logger.LogWarningf("dropped MS from IPID:%v UID:%v — Flip not \"0\"/\"1\"; value=%q", client.Ipid(), client.Uid(), ms.Flip)
 		return
 	case ms.Realization != "0" && ms.Realization != "1":
+		logger.LogWarningf("dropped MS from IPID:%v UID:%v — Realization not \"0\"/\"1\"; value=%q", client.Ipid(), client.Uid(), ms.Realization)
 		return
 	case text < 0 || text > 9: // 0-9 per AO2 protocol (9 = rainbow)
+		logger.LogWarningf("dropped MS from IPID:%v UID:%v — TextColor out of [0,9]; value=%d", client.Ipid(), client.Uid(), text)
 		return
 	case len(ms.Showname) > maxShownameLength:
 		client.SendServerMessage("Your showname is too long!")
 		return
 	case ms.NonInterruptingPreAnim != "0" && ms.NonInterruptingPreAnim != "1":
+		logger.LogWarningf("dropped MS from IPID:%v UID:%v — NonInterruptingPreAnim not \"0\"/\"1\"; value=%q", client.Ipid(), client.Uid(), ms.NonInterruptingPreAnim)
 		return
 	case ms.SfxLooping != "0" && ms.SfxLooping != "1":
+		logger.LogWarningf("dropped MS from IPID:%v UID:%v — SfxLooping not \"0\"/\"1\"; value=%q", client.Ipid(), client.Uid(), ms.SfxLooping)
 		return
 	case ms.Screenshake != "0" && ms.Screenshake != "1":
+		logger.LogWarningf("dropped MS from IPID:%v UID:%v — Screenshake not \"0\"/\"1\"; value=%q", client.Ipid(), client.Uid(), ms.Screenshake)
 		return
 	case ms.Additive != "0" && ms.Additive != "1":
+		logger.LogWarningf("dropped MS from IPID:%v UID:%v — Additive not \"0\"/\"1\"; value=%q", client.Ipid(), client.Uid(), ms.Additive)
 		return
 	}
 
