@@ -132,10 +132,12 @@ var PacketMap = map[string]pktMapValue{
 	"MC":       {2, true, pktAM},
 	"HP":       {2, true, pktHP},
 	"RT":       {1, true, pktWTCE},
+	"TT":       {2, true, pktTT},
 	"CT":       {2, true, pktOOC},
 	"PE":       {3, true, pktAddEvi},
 	"DE":       {1, true, pktRemoveEvi},
 	"EE":       {4, true, pktEditEvi},
+	"PW":       {0, true, pktPW},
 	"CH":       {0, false, pktPing},
 	"ZZ":       {0, true, pktModcall},
 	"SETCASE":  {7, true, pktSetCase},
@@ -1196,6 +1198,20 @@ func pktWTCE(client *Client, p *packet.Packet) {
 	addToBuffer(client, "JUD", "Played WT/CE animation.", false)
 }
 
+// Handles TT#%
+func pktTT(client *Client, p *packet.Packet) {
+	if client.CharID() == -1 || !client.CanJud() {
+		client.SendServerMessage("You are not allowed to set testimony titles in this area.")
+		return
+	}
+	tt, err := packet.ParseTT(p.Body)
+	if err != nil {
+		return
+	}
+	broadcastToArea(client.Area(), tt)
+	addToBuffer(client, "JUD", "Set testimony title.", false)
+}
+
 // Handles CT#%
 func pktOOC(client *Client, p *packet.Packet) {
 	// Check rate limit first
@@ -1358,6 +1374,9 @@ func pktEditEvi(client *Client, p *packet.Packet) {
 }
 
 // Handles CH#%
+// Handles PW#% — area password (not used; server uses invite lists)
+func pktPW(_ *Client, _ *packet.Packet) {}
+
 func pktPing(client *Client, _ *packet.Packet) {
 	if checkIPPingRateLimit(client.Ipid()) {
 		return
