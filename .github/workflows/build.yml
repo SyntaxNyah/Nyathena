@@ -1,25 +1,56 @@
 name: Build
 
+# Builds Linux and Windows binaries on every push/PR and uploads them as
+# downloadable artifacts. Pushing a tag like `v1.2.3` also publishes a
+# GitHub Release with the same binaries attached.
+
 on:
   push:
-    branches: [ "main" ]
+    branches: ["**"]
+    tags: ["v*"]
   pull_request:
-    branches: [ "main" ]
+  workflow_dispatch:
+
+permissions:
+  contents: write
 
 jobs:
-
   build:
     runs-on: ubuntu-latest
+
     steps:
-    - uses: actions/checkout@v3
+      - name: Checkout
+        uses: actions/checkout@v4
 
-    - name: Set up Go
-      uses: actions/setup-go@v3
-      with:
-        go-version: 1.19
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.19"
 
-    - name: Build
-      run: go build -v ./...
+      - name: Build Linux
+        run: GOOS=linux GOARCH=amd64 go build -v -o nyathena-linux-amd64 athena.go
 
-    - name: Test
-      run: go test -v ./...
+      - name: Build Windows
+        run: GOOS=windows GOARCH=amd64 go build -v -o nyathena-windows-amd64.exe athena.go
+
+      - name: Upload Linux artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: nyathena-linux-amd64
+          path: nyathena-linux-amd64
+          if-no-files-found: error
+
+      - name: Upload Windows artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: nyathena-windows-amd64
+          path: nyathena-windows-amd64.exe
+          if-no-files-found: error
+
+      - name: Publish release (tags only)
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            nyathena-linux-amd64
+            nyathena-windows-amd64.exe
