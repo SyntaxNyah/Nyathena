@@ -140,6 +140,7 @@ var PacketMap = map[string]pktMapValue{
 	"PW":       {0, true, pktPW},
 	"CH":       {0, false, pktPing},
 	"ZZ":       {0, true, pktModcall},
+	"MA":       {3, true, pktMA},
 	"SETCASE":  {7, true, pktSetCase},
 	"CASEA":    {6, true, pktCaseAnn},
 	"VS_JOIN":  {0, true, pktVSJoin},
@@ -1529,6 +1530,110 @@ func pktCaseAnn(client *Client, p *packet.Packet) {
 			}
 		}
 	})
+}
+
+// Handles MA#<uid>#<duration_minutes>#<reason>#%
+// Sent by the AO2 client when a moderator clicks the Ban or Kick button in the
+// player-list UI. duration == 0 means kick; -1 means permanent ban; any positive
+// value is a timed ban in minutes.
+func pktMA(client *Client, p *packet.Packet) {
+	if !client.Authenticated() {
+		client.SendServerMessage("You are not logged in.")
+		return
+	}
+
+	targetUID, err := strconv.Atoi(p.Body[0])
+	if err != nil {
+		return
+	}
+	durationMins, err := strconv.Atoi(p.Body[1])
+	if err != nil {
+		return
+	}
+	if durationMins < -1 {
+		durationMins = -1
+	}
+	reason := strings.TrimSpace(p.Body[2])
+	if reason == "" {
+		reason = "No reason given."
+	}
+
+	isKick := durationMins == 0
+	if isKick {
+		if !permissions.HasPermission(client.Perms(), permissions.PermissionField["KICK"]) {
+			client.SendServerMessage("You do not have permission to kick.")
+			return
+		}
+	} else {
+		if !permissions.HasPermission(client.Perms(), permissions.PermissionField["BAN"]) {
+			client.SendServerMessage("You do not have permission to ban.")
+			return
+		}
+	}
+
+	target, err := getClientByUid(targetUID)
+	if err != nil {
+		client.SendServerMessage("User not found.")
+		return
+	}
+
+	targetIPID := target.Ipid()
+	targets := getClientsByIpid(targetIPID)
+
+	if isKick {
+		for _, c := range targets {
+			c.SendSync(&packet.KK{Reason: reason})
+			c.conn.Close()
+			if err := webhook.PostKick(c.CurrentCharacter(), c.Showname(), c.OOCName(), c.Ipid(), reason, client.DisplayModName(), c.Uid()); err != nil {
+				logger.LogErrorf("while posting kick webhook: %v", err)
+			}
+		}
+		client.SendServerMessage(fmt.Sprintf("Kicked %d client(s).", len(targets)))
+		sendPlayerArup()
+		addToBuffer(client, "CMD", fmt.Sprintf("Kicked %v from server for reason: %v.", targetIPID, reason), true)
+		return
+	}
+
+	// Ban path.
+	banTime := time.Now().UTC().Unix()
+	var until int64
+	var untilS, durationStr string
+	if durationMins == -1 {
+		until = -1
+		untilS = "∞"
+		durationStr = "perma"
+	} else {
+		until = time.Now().UTC().Add(time.Duration(durationMins) * time.Minute).Unix()
+		untilS = time.Unix(until, 0).UTC().Format("02 Jan 2006 15:04 MST")
+		durationStr = fmt.Sprintf("%dm", durationMins)
+	}
+
+	banIDByHdid := make(map[string]int)
+	for _, c := range targets {
+		if _, done := banIDByHdid[c.Hdid()]; done {
+			continue
+		}
+		id, err := db.AddBan(c.Ipid(), c.Hdid(), banTime, until, reason, client.StoredModName())
+		if err == nil {
+			banIDByHdid[c.Hdid()] = id
+		}
+	}
+	forgetIP(targetIPID)
+	deleteAccountForIPID(targetIPID)
+	for _, c := range targets {
+		if id, ok := banIDByHdid[c.Hdid()]; ok {
+			c.SendSync(&packet.KB{Reason: fmt.Sprintf("%v\nUntil: %v\nID: %v", reason, untilS, id)})
+			if err := webhook.PostBan(c.CurrentCharacter(), c.Showname(), c.OOCName(), targetIPID, c.Uid(), id, durationStr, reason, client.DisplayModName()); err != nil {
+				logger.LogErrorf("while posting ban webhook: %v", err)
+			}
+		} else {
+			c.SendSync(&packet.KB{Reason: fmt.Sprintf("%v\nUntil: %v", reason, untilS)})
+		}
+		c.conn.Close()
+	}
+	client.SendServerMessage(fmt.Sprintf("Banned %d client(s).", len(targets)))
+	sendPlayerArup()
+	addToBuffer(client, "CMD", fmt.Sprintf("Banned %v from server for %v: %v.", targetIPID, durationStr, reason), true)
 }
 
 // decoder and encoder are package-level, pre-compiled replacers for the AO2 percent-encoding scheme.
