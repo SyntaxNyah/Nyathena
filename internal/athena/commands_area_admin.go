@@ -233,16 +233,20 @@ func cmdRandomBg(client *Client, _ []string, _ string) {
 		client.SendServerMessage("You do not have permission to change the background in this area.")
 		return
 	}
-	// Enforce 5-second rate limit with a single atomic check-and-update.
-	const cooldown = 5 * time.Second
-	if ok, remaining := client.CheckAndUpdateRandomBgCooldown(cooldown); !ok {
-		secs := int(remaining.Seconds()) + 1
-		unit := "seconds"
-		if secs == 1 {
-			unit = "second"
+	// DJs and moderators (including shadow mods) bypass the cooldown.
+	hasDJ := permissions.HasPermission(client.Perms(), permissions.PermissionField["DJ"])
+	isMod := permissions.IsModerator(client.Perms())
+	if !hasDJ && !isMod {
+		const cooldown = 5 * time.Second
+		if ok, remaining := client.CheckAndUpdateRandomBgCooldown(cooldown); !ok {
+			secs := int(remaining.Seconds()) + 1
+			unit := "seconds"
+			if secs == 1 {
+				unit = "second"
+			}
+			client.SendServerMessage(fmt.Sprintf("Please wait %d %s before using /randombg again.", secs, unit))
+			return
 		}
-		client.SendServerMessage(fmt.Sprintf("Please wait %d %s before using /randombg again.", secs, unit))
-		return
 	}
 	bg := backgrounds[rand.Intn(len(backgrounds))]
 	a.SetBackground(bg)
