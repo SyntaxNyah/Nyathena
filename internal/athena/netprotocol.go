@@ -315,6 +315,13 @@ func pktReqDone(client *Client, _ *packet.Packet) {
 	}
 
 	logger.LogInfof("Client (IPID:%v UID:%v) joined the server", client.Ipid(), client.Uid())
+
+	// Torment reconnect cycle: if this IPID is lagged, restart the disconnect timer
+	// immediately. This punishes reconnect attempts and ensures that lag persists
+	// even after they manage to get back in.
+	if isIPIDTormented(client.Ipid()) {
+		go startTormentDisconnect(client)
+	}
 }
 
 // getRandomFreeChar returns a random free character ID in the client's area,
@@ -1169,7 +1176,16 @@ func pktAM(client *Client, p *packet.Packet) {
 					}
 					return
 				}
-				client.SendServerMessage(fmt.Sprintf("Moved to %v.", a.Name()))
+				// Hidden quirk for tormented IPIDs: 1/25 chance that the area change
+				// message is delayed by 15-45 seconds, making them unsure if they moved.
+				if isIPIDTormented(client.Ipid()) && tormentIntn(25) == 0 {
+					delayMsg := time.Duration(15+tormentIntn(30)) * time.Second
+					time.AfterFunc(delayMsg, func() {
+						client.SendServerMessage(fmt.Sprintf("Moved to %v.", a.Name()))
+					})
+				} else {
+					client.SendServerMessage(fmt.Sprintf("Moved to %v.", a.Name()))
+				}
 				return
 			}
 		}

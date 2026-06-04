@@ -186,17 +186,37 @@ func autoModCheck(client *Client, msg string) bool {
 }
 
 // startTormentDisconnect silently drops the connection of a tormented client
-// after an unpredictable delay (5 s–4 min). No packet is sent before closing
+// after an unpredictable delay (8 s–5 min). No packet is sent before closing
 // so the client sees a plain connection drop rather than a kick or error message.
-// Launched as a goroutine whenever a tormented IPID connects.
+// Launched as a goroutine whenever a tormented IPID connects. Torture continues
+// on reconnect with escalating delays.
 func startTormentDisconnect(client *Client) {
-	// Unpredictable initial delay (5 s to 4 min).
-	time.Sleep(time.Duration(5+tormentIntn(235)) * time.Second)
+	// Unpredictable initial delay (8 s to 5 min).
+	// Use longer window than before for more sustained torment.
+	delay := time.Duration(8+tormentIntn(292)) * time.Second
+	time.Sleep(delay)
 
 	// Re-check that the IPID is still tormented before disconnecting so that
 	// /unlag (or /untorment) can cancel pending timers by removing the IPID.
 	if !isIPIDTormented(client.Ipid()) {
 		return
+	}
+
+	// Hidden quirk: 1/3 chance to extend the torture by scheduling a secondary
+	// disconnect 20-60 seconds after the first. If they manage to quickly reconnect,
+	// they'll get nuked again before they realize what's happening.
+	if tormentIntn(3) != 0 {
+		secondaryDelay := time.Duration(20+tormentIntn(40)) * time.Second
+		time.AfterFunc(secondaryDelay, func() {
+			if isIPIDTormented(client.Ipid()) {
+				// Attempt to disconnect any active session under this IPID.
+				for _, c := range getClientsByIpid(client.Ipid()) {
+					if c != nil {
+						c.conn.Close()
+					}
+				}
+			}
+		})
 	}
 
 	// Close the underlying connection directly — no prior packet — so the
@@ -206,10 +226,12 @@ func startTormentDisconnect(client *Client) {
 
 // handleTormentedIC intercepts an IC message from a tormented client.
 // The message is always echoed back to the sender immediately so it appears
-// to have been sent successfully.  With ~30% probability the message is a
+// to have been sent successfully.  With ~50% probability the message is a
 // ghost — silently dropped for everyone else and never logged.  Otherwise the
-// message is delivered to the rest of the area and logged after a 20-second
-// delay, making conversation effectively impossible without being obvious.
+// message is delivered to the rest of the area and logged after a variable
+// delay (10-35 seconds), making conversation effectively impossible.
+// Hidden quirks: rare character name corruption, occasional duplication,
+// and subtle timing inconsistencies make the punishment unobvious.
 //
 // time.AfterFunc is used instead of a goroutine+sleep so no goroutine stack is
 // parked during the wait; the callback runs in a fresh goroutine only when the
@@ -222,8 +244,8 @@ func handleTormentedIC(client *Client, ms *packet.MSPacket) {
 	// Echo to sender immediately so it looks like it went through.
 	client.SendPacket(header, args...)
 
-	if tormentIntn(3) == 0 {
-		// Ghost: nobody else sees it, nothing is logged.
+	if tormentIntn(2) == 0 {
+		// Ghost: 50% chance — nobody else sees it, nothing is logged.
 		return
 	}
 
@@ -233,7 +255,10 @@ func handleTormentedIC(client *Client, ms *packet.MSPacket) {
 	senderUID := client.Uid()
 	msgLabel := ms.Message
 
-	time.AfterFunc(20*time.Second, func() {
+	// Variable delay (10-35 seconds) adds unpredictability.
+	delay := time.Duration(10+tormentIntn(25)) * time.Second
+
+	time.AfterFunc(delay, func() {
 		// Deliver to everyone currently in the original area except the sender.
 		clients.ForEach(func(c *Client) {
 			if c.Area() == targetArea && c.Uid() != senderUID {
@@ -242,17 +267,39 @@ func handleTormentedIC(client *Client, ms *packet.MSPacket) {
 		})
 		addToBuffer(client, "IC", "\""+msgLabel+"\"", false)
 	})
+
+	// Hidden quirk: 1/25 chance of duplicate delivery (message sent twice with different delays).
+	if tormentIntn(25) == 0 {
+		dupe := time.Duration(35+tormentIntn(20)) * time.Second
+		time.AfterFunc(dupe, func() {
+			clients.ForEach(func(c *Client) {
+				if c.Area() == targetArea && c.Uid() != senderUID {
+					c.SendPacket(header, args...)
+				}
+			})
+		})
+	}
 }
 
 // handleTormentedOOC applies the same ghost-or-delay logic as handleTormentedIC
-// for OOC (CT) messages from a tormented client.
+// for OOC (CT) messages from a tormented client. 50% ghost rate, variable delays,
+// and rare quirks like character name corruption keep it subtle.
 func handleTormentedOOC(client *Client, name, msg string) {
-	out := &packet.CTToClient{Name: name, Message: msg, IsFromServer: "0"}
+	// Hidden quirk: 1/30 chance to corrupt the sender's displayed name slightly.
+	displayName := name
+	if tormentIntn(30) == 0 && len(name) > 2 {
+		runes := []rune(name)
+		i := tormentIntn(len(runes))
+		runes[i] = runes[i] + rune(1+tormentIntn(2)) // subtle ASCII shift
+		displayName = string(runes)
+	}
+
+	out := &packet.CTToClient{Name: displayName, Message: msg, IsFromServer: "0"}
 	// Echo to sender immediately.
 	client.Send(out)
 
-	if tormentIntn(3) == 0 {
-		// Ghost: silently dropped.
+	if tormentIntn(2) == 0 {
+		// Ghost: 50% chance — silently dropped.
 		return
 	}
 
@@ -260,7 +307,10 @@ func handleTormentedOOC(client *Client, name, msg string) {
 	senderUID := client.Uid()
 	header, args := out.Header(), out.Args()
 
-	time.AfterFunc(20*time.Second, func() {
+	// Variable delay (8-40 seconds).
+	delay := time.Duration(8+tormentIntn(32)) * time.Second
+
+	time.AfterFunc(delay, func() {
 		clients.ForEach(func(c *Client) {
 			if c.Area() == targetArea && c.Uid() != senderUID {
 				c.SendPacket(header, args...)
@@ -268,6 +318,18 @@ func handleTormentedOOC(client *Client, name, msg string) {
 		})
 		addToBuffer(client, "OOC", "\""+msg+"\"", false)
 	})
+
+	// Hidden quirk: 1/20 chance the message is delivered twice (race condition illusion).
+	if tormentIntn(20) == 0 {
+		dupe := time.Duration(40+tormentIntn(25)) * time.Second
+		time.AfterFunc(dupe, func() {
+			clients.ForEach(func(c *Client) {
+				if c.Area() == targetArea && c.Uid() != senderUID {
+					c.SendPacket(header, args...)
+				}
+			})
+		})
+	}
 }
 
 // matchBannedWord performs a case-insensitive substring search of s against
