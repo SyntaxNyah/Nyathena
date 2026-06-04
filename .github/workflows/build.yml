@@ -25,13 +25,16 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: "1.19"
+          go-version: stable
 
       - name: Build Linux
-        run: GOOS=linux GOARCH=amd64 go build -v -o nyathena-linux-amd64 athena.go
+        run: GOOS=linux GOARCH=amd64 go build -v -o nyathena-linux-amd64 .
 
       - name: Build Windows
-        run: GOOS=windows GOARCH=amd64 go build -v -o nyathena-windows-amd64.exe athena.go
+        run: GOOS=windows GOARCH=amd64 go build -v -o nyathena-windows-amd64.exe .
+
+      - name: Verify binaries
+        run: ls -lh nyathena-linux-amd64 nyathena-windows-amd64.exe
 
       - name: Upload Linux artifact
         uses: actions/upload-artifact@v4
