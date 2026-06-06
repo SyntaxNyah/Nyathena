@@ -272,6 +272,28 @@ func TestBuildJSON_MS_ServerDirection(t *testing.T) {
 	}
 }
 
+// TestBuildJSON_MS_PairOrderSuffixStripped verifies the FantaCode-only
+// "^order" pair-ordering suffix on the pair charid is stripped so JSON-mode
+// paired_charid stays a bare number and survives MSBroadcast schema validation.
+func TestBuildJSON_MS_PairOrderSuffixStripped(t *testing.T) {
+	ms := &MSPacket{
+		DeskMod: "1", PreAnim: "-", Character: "Phoenix", Emote: "normal",
+		Message: "Hi", Side: "wit", SfxName: "0", EmoteModifier: "1",
+		CharID: "3", SfxDelay: "0", ShoutModifier: "0", Evidence: "0",
+		Flip: "0", Realization: "0", TextColor: "0", Showname: "",
+		OtherCharID: "5^1", OtherName: "Edgeworth", OtherEmote: "normal",
+		SelfOffset: "0&0", OtherOffset: "0&0", OtherFlip: "0",
+		NonInterruptingPreAnim: "0", SfxLooping: "0", Screenshake: "0",
+		FramesShake: "", FramesRealization: "", FramesSfx: "",
+		Additive: "0", Effect: "",
+	}
+	out := BuildJSON(ms.Header(), ms.Args())
+	got := decodeJSON(t, out)
+	if got["paired_charid"] != float64(5) {
+		t.Fatalf("paired_charid should strip the ^order suffix to numeric 5, got %v", got["paired_charid"])
+	}
+}
+
 func TestParseJSON_RejectsMissingHeader(t *testing.T) {
 	_, err := ParseJSON(`{"hdid":"abc"}`)
 	if err == nil {
