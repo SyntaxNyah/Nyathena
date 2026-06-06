@@ -360,11 +360,7 @@ func BuildJSON(header string, args []string) []byte {
 			if val == "" {
 				continue // omit optional empty numeric → schema default applies
 			}
-			// Some wire fields (notably paired_charid) carry a FantaCode-only
-			// "^order" pair-ordering suffix, e.g. "5^1". JSON has no pair-order
-			// field, so take the numeric base before the caret.
-			numVal, _, _ := strings.Cut(val, "^")
-			if n, err := strconv.Atoi(numVal); err == nil {
+			if n, err := strconv.Atoi(val); err == nil {
 				obj[name] = n
 				continue
 			}

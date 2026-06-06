@@ -873,22 +873,13 @@ func pktIC(client *Client, p *packet.Packet) {
 			ms.OtherCharID = "-1^"
 			ms.OtherName = ""
 			ms.OtherEmote = ""
-		} else {
-			// Encode the sender's pair-order preference using AO2's native
-			// "<charid>^<order>" suffix on the pair charid (the value is read by
-			// the client's display_pair_character):
-			//   0 = sender rendered in FRONT of the partner (default)
-			//   1 = sender rendered BEHIND the partner
-			// This is the attribution-safe mechanism. The previous approach
-			// swapped CharID/offset/flip between self and other, which made
-			// clients misattribute message ownership (the sender's textbox
-			// failing to clear, and clearing on the PARTNER's messages) and
-			// shifted the speaker to the partner's offset.
-			order := "0"
-			if client.PairOrderBack() {
-				order = "1"
-			}
-			ms.OtherCharID = strconv.Itoa(pid) + "^" + order
+		} else if client.PairOrderBack() {
+			// Swap self and other so the sender's character renders behind the partner.
+			ms.Character, ms.OtherName = ms.OtherName, ms.Character
+			ms.Emote, ms.OtherEmote = ms.OtherEmote, ms.Emote
+			ms.CharID, ms.OtherCharID = ms.OtherCharID, ms.CharID
+			ms.SelfOffset, ms.OtherOffset = ms.OtherOffset, ms.SelfOffset
+			ms.Flip, ms.OtherFlip = ms.OtherFlip, ms.Flip
 		}
 	} else {
 		// No pair attempted: ensure OtherName/OtherEmote are empty.
