@@ -39,8 +39,8 @@ import (
 // Documentation for AO2's network protocol can be found here:
 // https://github.com/AttorneyOnline/docs/blob/master/docs/development/network.md
 
-// commandRegex matches valid command names (e.g., /join, /join-tournament, /pair_order, /51), case-insensitively.
-var commandRegex = regexp.MustCompile(`(?i)^/[a-z0-9]+([_-][a-z0-9]+)*`)
+// commandRegex matches valid command names (e.g., /join, /join-tournament, /51), case-insensitively.
+var commandRegex = regexp.MustCompile(`(?i)^/[a-z0-9]+(-[a-z0-9]+)*`)
 
 // tstNavRegex matches testimony navigation controls (<, >, >N) in IC messages.
 // Compiled once at package init to avoid repeated allocation during testimony playback.
@@ -368,34 +368,6 @@ func pktChangeChar(client *Client, p *packet.Packet) {
 		return
 	}
 	client.ChangeCharacter(newid)
-}
-
-// applyPairOrderBack rewrites a matched-pair MS packet so the sending client
-// renders BEHIND their pair partner (the /pair_order back preference).
-//
-// It swaps ONLY the visual pair fields — the character name, emote, offset and
-// flip of "self" with those of "other". AO2 clients draw the speaker's sprite
-// from CHAR_NAME (field 2) into the front viewport (ui_vp_player_char) and the
-// partner's from OTHER_NAME (field 17) into the back viewport
-// (ui_vp_sideplayer_char); their offsets/flips follow the same self/other
-// split. Swapping these four pairs therefore puts the partner's sprite in front
-// and the sender's behind — exactly the desired "appear behind" effect.
-//
-// Crucially it does NOT swap CHAR_ID / OTHER_CHARID. The client uses CHAR_ID
-// (field 8) to decide "is this my own message" (CHAR_ID == m_cid) for clearing
-// the IC input box. The original implementation swapped CHAR_ID too, which made
-// the sender's own message echo back under the partner's id (so the textbox
-// never cleared on send) and made the partner's messages echo back under the
-// sender's id (wiping the sender's in-progress text). Sprite loading keys off
-// the name fields, never CHAR_ID, so leaving CHAR_ID untouched fixes the textbox
-// while producing an identical render order. This also avoids the AO2 "^order"
-// pair-ordering suffix, which is not understood by every client and broke IC
-// entirely for clients that couldn't parse it.
-func applyPairOrderBack(ms *packet.MSPacket) {
-	ms.Character, ms.OtherName = ms.OtherName, ms.Character
-	ms.Emote, ms.OtherEmote = ms.OtherEmote, ms.Emote
-	ms.SelfOffset, ms.OtherOffset = ms.OtherOffset, ms.SelfOffset
-	ms.Flip, ms.OtherFlip = ms.OtherFlip, ms.Flip
 }
 
 // Handles MS#%
@@ -860,12 +832,6 @@ func pktIC(client *Client, p *packet.Packet) {
 		ms.OtherCharID = strconv.Itoa(client.PairWantedID())
 	}
 
-	// pairOrderBackActive is set inside the pairing block if a live pair exists and
-	// the sender wants to render behind their partner. The actual field swap is
-	// deferred to just before broadcastToAreaFrom so that SetPairInfo (line ~993)
-	// reads the true self-offset/flip — not the already-swapped partner values.
-	pairOrderBackActive := false
-
 	// Pairing validation
 	if ms.OtherCharID != "" && ms.OtherCharID != "-1" {
 		pidStr, _, _ := strings.Cut(ms.OtherCharID, "^")
@@ -908,7 +874,6 @@ func pktIC(client *Client, p *packet.Packet) {
 			ms.OtherName = ""
 			ms.OtherEmote = ""
 		}
-		pairOrderBackActive = pairing && client.PairOrderBack()
 	} else {
 		// No pair attempted: ensure OtherName/OtherEmote are empty.
 		ms.OtherName = ""
@@ -1081,13 +1046,6 @@ func pktIC(client *Client, p *packet.Packet) {
 			client.Area().SetBackground(bg)
 			broadcastToArea(client.Area(), &packet.BN{Background: bg})
 		}
-	}
-
-	// Apply pair-order-back visual swap here — after SetPairInfo has already
-	// captured the sender's true self-offset/flip — so the partner's stored
-	// pair info is never corrupted with swapped values.
-	if pairOrderBackActive {
-		applyPairOrderBack(ms)
 	}
 
 	// Encode the structured packet back into wire format exactly once and

@@ -711,14 +711,6 @@ func initCommands() {
 			reqPerms: permissions.PermissionField["NONE"],
 			category: "general",
 		},
-		"pair_order": {
-			handler:  cmdPairOrder,
-			minArgs:  1,
-			usage:    "Usage: /pair_order <front|back>",
-			desc:     "Sets your pair order preference. 'front' places your character in front of your partner (default); 'back' places you behind them. Takes effect on your next IC message while paired.",
-			reqPerms: permissions.PermissionField["NONE"],
-			category: "general",
-		},
 		"forcepair": {
 			handler:  cmdForcePair,
 			minArgs:  2,

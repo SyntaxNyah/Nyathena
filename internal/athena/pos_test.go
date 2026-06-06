@@ -104,8 +104,6 @@ func TestCommandRegexCaseInsensitive(t *testing.T) {
 		// contradicted the regex contract and was failing on every run.
 		{"/8ball", "8ball", true},
 		{"/51", "51", true},
-		{"/pair_order", "pair_order", true},
-		{"/PAIR_ORDER", "pair_order", true},
 	}
 
 	for _, tt := range tests {
