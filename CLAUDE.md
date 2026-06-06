@@ -266,6 +266,12 @@ UID-based mutual pairing surviving area/character changes. Dissolves on disconne
 /unpair
 ```
 
+**`/pair_order front|back`** lets any paired player choose whether their character renders in front of (default) or behind their partner, taking effect on their next IC message. It works by swapping only the *visual* pair fields (character name, emote, offset, flip) between self and other — AO2 draws the speaker's sprite from `CHAR_NAME` and the partner's from `OTHER_NAME`, so swapping those flips the render order. It deliberately does **not** swap `CHAR_ID`: the client keys "is this my own message" (textbox clearing) off `CHAR_ID == m_cid`, so swapping it made the sender's textbox fail to clear and let the partner's messages wipe the sender's in-progress text. It also avoids the AO2 `^order` pair-order suffix, which some clients can't parse (it broke IC entirely for them).
+```
+/pair_order front   # default — appear in front of your partner
+/pair_order back    # appear behind your partner
+```
+
 ### Character Curse
 One-time forced character swap (requires KICK). Target may freely change afterwards.
 ```
