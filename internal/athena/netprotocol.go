@@ -860,6 +860,12 @@ func pktIC(client *Client, p *packet.Packet) {
 		ms.OtherCharID = strconv.Itoa(client.PairWantedID())
 	}
 
+	// pairOrderBackActive is set inside the pairing block if a live pair exists and
+	// the sender wants to render behind their partner. The actual field swap is
+	// deferred to just before broadcastToAreaFrom so that SetPairInfo (line ~993)
+	// reads the true self-offset/flip — not the already-swapped partner values.
+	pairOrderBackActive := false
+
 	// Pairing validation
 	if ms.OtherCharID != "" && ms.OtherCharID != "-1" {
 		pidStr, _, _ := strings.Cut(ms.OtherCharID, "^")
@@ -901,9 +907,8 @@ func pktIC(client *Client, p *packet.Packet) {
 			ms.OtherCharID = "-1^"
 			ms.OtherName = ""
 			ms.OtherEmote = ""
-		} else if client.PairOrderBack() {
-			applyPairOrderBack(ms)
 		}
+		pairOrderBackActive = pairing && client.PairOrderBack()
 	} else {
 		// No pair attempted: ensure OtherName/OtherEmote are empty.
 		ms.OtherName = ""
@@ -1076,6 +1081,13 @@ func pktIC(client *Client, p *packet.Packet) {
 			client.Area().SetBackground(bg)
 			broadcastToArea(client.Area(), &packet.BN{Background: bg})
 		}
+	}
+
+	// Apply pair-order-back visual swap here — after SetPairInfo has already
+	// captured the sender's true self-offset/flip — so the partner's stored
+	// pair info is never corrupted with swapped values.
+	if pairOrderBackActive {
+		applyPairOrderBack(ms)
 	}
 
 	// Encode the structured packet back into wire format exactly once and
