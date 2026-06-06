@@ -62,21 +62,6 @@ func pairDisplayName(c *Client) string {
 	return c.OOCName()
 }
 
-// Handles /pair_order
-
-func cmdPairOrder(client *Client, args []string, _ string) {
-	switch strings.ToLower(args[0]) {
-	case "front":
-		client.SetPairOrderBack(false)
-		client.SendServerMessage("Pair order set to front. You will appear in front of your partner.")
-	case "back":
-		client.SetPairOrderBack(true)
-		client.SendServerMessage("Pair order set to back. You will appear behind your partner.")
-	default:
-		client.SendServerMessage("Usage: /pair_order <front|back>")
-	}
-}
-
 // Handles /pair
 
 func cmdPair(client *Client, args []string, _ string) {

@@ -315,7 +315,6 @@ type Client struct {
 	lastRandomSongTime  time.Time      // Tracks last /randomsong time for cooldown
 	lastTranslateTime   time.Time      // Tracks last /translate time for cooldown
 	forcePairUID        int            // UID of the client this client is force-paired with (-1 if none)
-	pairOrderBack       bool           // true = appear behind partner when speaking; false = in front (default)
 	possessing          int            // UID of the client being possessed (-1 if not possessing anyone)
 	possessedPos        string         // Position of the possessed target (saved at time of possession)
 	forcedShowname      string         // Showname forced by a moderator ("" if none)
@@ -1249,20 +1248,6 @@ func (client *Client) SetForcePairUID(uid int) {
 	client.mu.Lock()
 	defer client.mu.Unlock()
 	client.forcePairUID = uid
-}
-
-// PairOrderBack reports whether this client has chosen to appear behind their pair partner.
-func (client *Client) PairOrderBack() bool {
-	client.mu.Lock()
-	defer client.mu.Unlock()
-	return client.pairOrderBack
-}
-
-// SetPairOrderBack sets the client's pair order preference.
-func (client *Client) SetPairOrderBack(back bool) {
-	client.mu.Lock()
-	defer client.mu.Unlock()
-	client.pairOrderBack = back
 }
 
 // RemoveAuth logs a client out as moderator.
