@@ -140,3 +140,48 @@ func TestParseMSClientToServerExpands(t *testing.T) {
 		t.Errorf("server slot 22 (NonInterruptingPreAnim) = %q, want \"0\"", args[22])
 	}
 }
+
+// TestApplyPairOrderBackSwapsVisualsOnly verifies the /pair_order back rewrite:
+// the visual pair fields (character name, emote, offset, flip) are swapped so
+// the sender renders behind the partner, while the identity fields CHAR_ID and
+// OTHER_CHARID are left untouched. Swapping CHAR_ID is what broke the IC textbox
+// (the client keys "is this my own message" off CHAR_ID == m_cid), so this test
+// pins the contract that CHAR_ID must survive the rewrite.
+func TestApplyPairOrderBackSwapsVisualsOnly(t *testing.T) {
+	ms := &packet.MSPacket{
+		Character:   "Phoenix", // self (sender)
+		Emote:       "point",
+		CharID:      "3",
+		SelfOffset:  "10&0",
+		Flip:        "0",
+		OtherCharID: "5", // partner
+		OtherName:   "Edgeworth",
+		OtherEmote:  "desk_slam",
+		OtherOffset: "-10&0",
+		OtherFlip:   "1",
+	}
+
+	applyPairOrderBack(ms)
+
+	// Visual fields must be swapped (partner now drawn in the front viewport).
+	if ms.Character != "Edgeworth" || ms.OtherName != "Phoenix" {
+		t.Errorf("character/othername not swapped: Character=%q OtherName=%q", ms.Character, ms.OtherName)
+	}
+	if ms.Emote != "desk_slam" || ms.OtherEmote != "point" {
+		t.Errorf("emote/otheremote not swapped: Emote=%q OtherEmote=%q", ms.Emote, ms.OtherEmote)
+	}
+	if ms.SelfOffset != "-10&0" || ms.OtherOffset != "10&0" {
+		t.Errorf("offsets not swapped: SelfOffset=%q OtherOffset=%q", ms.SelfOffset, ms.OtherOffset)
+	}
+	if ms.Flip != "1" || ms.OtherFlip != "0" {
+		t.Errorf("flips not swapped: Flip=%q OtherFlip=%q", ms.Flip, ms.OtherFlip)
+	}
+
+	// Identity fields MUST be preserved so attribution / textbox clearing works.
+	if ms.CharID != "3" {
+		t.Errorf("CharID must NOT be swapped (broke textbox); got %q, want \"3\"", ms.CharID)
+	}
+	if ms.OtherCharID != "5" {
+		t.Errorf("OtherCharID must NOT be swapped; got %q, want \"5\"", ms.OtherCharID)
+	}
+}
