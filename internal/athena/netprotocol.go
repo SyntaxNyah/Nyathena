@@ -873,6 +873,13 @@ func pktIC(client *Client, p *packet.Packet) {
 			ms.OtherCharID = "-1^"
 			ms.OtherName = ""
 			ms.OtherEmote = ""
+		} else if client.PairOrderBack() {
+			// Swap self and other so the sender's character renders behind the partner.
+			ms.Character, ms.OtherName = ms.OtherName, ms.Character
+			ms.Emote, ms.OtherEmote = ms.OtherEmote, ms.Emote
+			ms.CharID, ms.OtherCharID = ms.OtherCharID, ms.CharID
+			ms.SelfOffset, ms.OtherOffset = ms.OtherOffset, ms.SelfOffset
+			ms.Flip, ms.OtherFlip = ms.OtherFlip, ms.Flip
 		}
 	} else {
 		// No pair attempted: ensure OtherName/OtherEmote are empty.
