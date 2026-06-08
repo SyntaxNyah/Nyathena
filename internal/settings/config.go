@@ -384,6 +384,16 @@ func LoadFile(file string) ([]string, error) {
 			skipped++
 			continue
 		}
+		// AO2 packets use '#' as the field delimiter and '#%' as the packet
+		// terminator. A '#' inside any list entry (character name, music filename,
+		// etc.) splits it into two protocol fields, injecting a phantom entry and
+		// shifting every subsequent ID by one — the symptom is character-selection
+		// failures and dropped IC messages for all characters after the bad entry.
+		if strings.ContainsRune(line, '#') {
+			logger.LogWarningf("settings: %v line %d contains '#' which breaks AO2 protocol packets, skipped: %q", file, lineNo, line)
+			skipped++
+			continue
+		}
 		l = append(l, line)
 	}
 	if skipped > 0 {
