@@ -134,16 +134,21 @@ func main() {
 		go athena.ListenInput()
 	}
 
-	// SIGHUP triggers a whitelist-only config reload (Motd / Desc). Never swaps
-	// anything that affects listeners, rate limits, area state, or cached
-	// packets; everything else still requires a full restart.
+	// SIGHUP triggers a full hot-reload of characters.txt (append-only),
+	// music.txt, cdns.txt, backgrounds.txt, parrot.txt, 8ball.txt,
+	// banned_words.txt and the config.toml motd/desc fields. Anything that
+	// affects listeners, rate limits, area state or cached packets still
+	// requires a full restart.
 	hup := make(chan os.Signal, 1)
 	signal.Notify(hup, syscall.SIGHUP)
 	go func() {
 		for range hup {
-			if _, err := athena.ReloadHotConfig(); err != nil {
+			summary, err := athena.ReloadConfig()
+			if err != nil {
 				logger.LogErrorf("SIGHUP reload failed: %v", err)
+				continue
 			}
+			logger.LogInfof("SIGHUP reload ok: %s", summary)
 		}
 	}()
 

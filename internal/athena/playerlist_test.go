@@ -26,8 +26,8 @@ import (
 func makeTestArea(name string) *area.Area {
 	return area.NewArea(
 		area.AreaData{Name: name, Bg: "default"},
-		1,   // charlen
-		10,  // bufsize
+		1,  // charlen
+		10, // bufsize
 		area.EviCMs,
 	)
 }
@@ -61,9 +61,9 @@ func TestGetAreaIndex(t *testing.T) {
 	defer cleanup()
 
 	tests := []struct {
-		name     string
-		area     *area.Area
-		wantIdx  int
+		name    string
+		area    *area.Area
+		wantIdx int
 	}{
 		{"first area", a0, 0},
 		{"middle area", a1, 1},
@@ -129,11 +129,10 @@ func TestAreaIndexMapConsistency(t *testing.T) {
 // character selected reports "Spectator" as their character — the value that
 // would be included in a PU CHARACTER packet.
 func TestPlayerlistCurrentCharacterSpectator(t *testing.T) {
-	origChars := characters
-	defer func() { characters = origChars }()
+	origChars := getCharacters()
+	defer func() { setCharacters(origChars) }()
 
-	characters = []string{"Phoenix Wright", "Miles Edgeworth"}
-
+	setCharacters([]string{"Phoenix Wright", "Miles Edgeworth"})
 	client := &Client{char: -1}
 	if got := client.CurrentCharacter(); got != "Spectator" {
 		t.Errorf("CurrentCharacter() with char=-1 = %q, want %q", got, "Spectator")
@@ -143,11 +142,10 @@ func TestPlayerlistCurrentCharacterSpectator(t *testing.T) {
 // TestPlayerlistCurrentCharacterNamed verifies that a client with a character
 // chosen returns the correct name from the characters slice.
 func TestPlayerlistCurrentCharacterNamed(t *testing.T) {
-	origChars := characters
-	defer func() { characters = origChars }()
+	origChars := getCharacters()
+	defer func() { setCharacters(origChars) }()
 
-	characters = []string{"Phoenix Wright", "Miles Edgeworth"}
-
+	setCharacters([]string{"Phoenix Wright", "Miles Edgeworth"})
 	tests := []struct {
 		charID int
 		want   string

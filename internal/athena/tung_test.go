@@ -10,16 +10,15 @@ import (
 )
 
 func TestTungGlobalSetsForcedIniswapToEachClientCharID(t *testing.T) {
-	origChars := characters
-	t.Cleanup(func() { characters = origChars })
-	characters = []string{"Phoenix Wright", "Miles Edgeworth", "Maya Fey", "Franziska von Karma"}
-
+	origChars := getCharacters()
+	t.Cleanup(func() { setCharacters(origChars) })
+	setCharacters([]string{"Phoenix Wright", "Miles Edgeworth", "Maya Fey", "Franziska von Karma"})
 	origClients := clients
 	t.Cleanup(func() { clients = origClients })
 	clients = &ClientList{list: make(map[*Client]struct{}), uidIndex: make(map[int]*Client), ipidCounts: make(map[string]int)}
 
-	adminArea := area.NewArea(area.AreaData{}, len(characters), 10, area.EviAny)
-	otherArea := area.NewArea(area.AreaData{}, len(characters), 10, area.EviAny)
+	adminArea := area.NewArea(area.AreaData{}, len(getCharacters()), 10, area.EviAny)
+	otherArea := area.NewArea(area.AreaData{}, len(getCharacters()), 10, area.EviAny)
 
 	admin := &Client{conn: &testConn{}, uid: 10, pair: ClientPairInfo{wanted_id: -1}}
 	admin.SetCharID(0)
@@ -60,10 +59,9 @@ func TestTungGlobalSetsForcedIniswapToEachClientCharID(t *testing.T) {
 // characters via pktChangeChar (the CC packet), and that the lock is lifted
 // once /tung global off is applied.
 func TestTungLocksCharacterChange(t *testing.T) {
-	origChars := characters
-	t.Cleanup(func() { characters = origChars })
-	characters = []string{"Phoenix Wright", tungForcedCharacterName, "Maya Fey"}
-
+	origChars := getCharacters()
+	t.Cleanup(func() { setCharacters(origChars) })
+	setCharacters([]string{"Phoenix Wright", tungForcedCharacterName, "Maya Fey"})
 	origClients := clients
 	t.Cleanup(func() { clients = origClients })
 	clients = &ClientList{list: make(map[*Client]struct{}), uidIndex: make(map[int]*Client), ipidCounts: make(map[string]int)}
@@ -73,7 +71,7 @@ func TestTungLocksCharacterChange(t *testing.T) {
 	t.Cleanup(func() { config = origCfg })
 	config = &settings.Config{}
 
-	a := area.NewArea(area.AreaData{}, len(characters), 10, area.EviAny)
+	a := area.NewArea(area.AreaData{}, len(getCharacters()), 10, area.EviAny)
 
 	admin := &Client{conn: &testConn{}, uid: 1, pair: ClientPairInfo{wanted_id: -1}}
 	admin.SetCharID(0)
@@ -119,16 +117,15 @@ func TestTungLocksCharacterChange(t *testing.T) {
 }
 
 func TestAreaIniswapAppliesAndClearsInCurrentArea(t *testing.T) {
-	origChars := characters
-	t.Cleanup(func() { characters = origChars })
-	characters = []string{"Phoenix Wright", "Miles Edgeworth", "Maya Fey"}
-
+	origChars := getCharacters()
+	t.Cleanup(func() { setCharacters(origChars) })
+	setCharacters([]string{"Phoenix Wright", "Miles Edgeworth", "Maya Fey"})
 	origClients := clients
 	t.Cleanup(func() { clients = origClients })
 	clients = &ClientList{list: make(map[*Client]struct{}), uidIndex: make(map[int]*Client), ipidCounts: make(map[string]int)}
 
-	adminArea := area.NewArea(area.AreaData{}, len(characters), 10, area.EviAny)
-	otherArea := area.NewArea(area.AreaData{}, len(characters), 10, area.EviAny)
+	adminArea := area.NewArea(area.AreaData{}, len(getCharacters()), 10, area.EviAny)
+	otherArea := area.NewArea(area.AreaData{}, len(getCharacters()), 10, area.EviAny)
 
 	admin := &Client{conn: &testConn{}, uid: 1, pair: ClientPairInfo{wanted_id: -1}}
 	admin.SetCharID(0)

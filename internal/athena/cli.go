@@ -34,12 +34,15 @@ func ListenInput() {
 		case "help":
 			logger.LogInfo("Recognized commands: help, mkusr, rmusr, players, getlog, say, reload.")
 		case "reload":
-			n, err := ReloadHotConfig()
+			// Full hot-reload: characters.txt (append-only), music.txt, cdns.txt,
+			// backgrounds.txt, parrot.txt, 8ball.txt, banned_words.txt and the
+			// config.toml motd/desc fields. See ReloadConfig in livereload.go.
+			summary, err := ReloadConfig()
 			if err != nil {
 				logger.LogErrorf("reload failed: %v", err)
 				break
 			}
-			logger.LogInfof("reload ok: %d whitelisted field(s) changed.", n)
+			logger.LogInfof("reload ok: %s", summary)
 		case "mkusr":
 			if len(cmd) < 4 {
 				logger.LogInfo("Not enough arguments for command mkusr. Usage: mkusr <username> <password> <role>.")

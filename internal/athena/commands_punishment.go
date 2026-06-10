@@ -854,6 +854,10 @@ func parsePunishmentType(s string) PunishmentType {
 		return PunishmentEmoticon
 	case "grounded":
 		return PunishmentGrounded
+	case "hidedisplay":
+		return PunishmentHideDisplay
+	case "forcedisplay":
+		return PunishmentForceDisplay
 	default:
 		return PunishmentNone
 	}

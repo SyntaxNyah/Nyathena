@@ -136,7 +136,7 @@ const MaxChipBalance = 10_000_000
 
 // Database version.
 // This should be incremented whenever changes are made to the DB that require existing databases to upgrade.
-const ver = 21
+const ver = 22
 
 // MaxFavourites is the maximum number of favourite characters a player can save.
 const MaxFavourites = 100
@@ -323,6 +323,15 @@ func Open() error {
 		NAME       TEXT    NOT NULL,
 		CREATED_BY TEXT    NOT NULL DEFAULT '',
 		CREATED_AT INTEGER NOT NULL DEFAULT 0
+	)`)
+	if err != nil {
+		return err
+	}
+	_, err = db.Exec(`CREATE TABLE IF NOT EXISTS MUSIC_BANS(
+		IPID      TEXT    PRIMARY KEY,
+		REASON    TEXT    NOT NULL DEFAULT '',
+		BANNED_BY TEXT    NOT NULL DEFAULT '',
+		BANNED_AT INTEGER NOT NULL DEFAULT 0
 	)`)
 	if err != nil {
 		return err
@@ -657,6 +666,22 @@ func upgradeDB(v int) error {
 			}
 		}
 		if _, err := db.Exec("PRAGMA user_version = 21"); err != nil {
+			return err
+		}
+		fallthrough
+	case 21:
+		// MUSIC_BANS persists /musicban: each row blocks one IPID from playing
+		// music across sessions. Fresh databases get the table from the CREATE
+		// TABLE in Open(); the migration is a no-op-safe CREATE for upgrades.
+		if _, err := db.Exec(`CREATE TABLE IF NOT EXISTS MUSIC_BANS(
+			IPID      TEXT    PRIMARY KEY,
+			REASON    TEXT    NOT NULL DEFAULT '',
+			BANNED_BY TEXT    NOT NULL DEFAULT '',
+			BANNED_AT INTEGER NOT NULL DEFAULT 0
+		)`); err != nil {
+			return err
+		}
+		if _, err := db.Exec("PRAGMA user_version = 22"); err != nil {
 			return err
 		}
 	}
@@ -2466,4 +2491,95 @@ func DeleteModnote(id int64) error {
 		return sql.ErrNoRows
 	}
 	return nil
+}
+
+// MusicBanInfo is the persistent record of a /musicban entry. Each IPID has at
+// most one row (the table is keyed by IPID with INSERT OR REPLACE upsert).
+type MusicBanInfo struct {
+	Ipid     string
+	Reason   string
+	BannedBy string
+	BannedAt int64
+}
+
+// AddMusicBan upserts a /musicban for the given IPID. Re-banning an already-
+// banned IPID overwrites the existing reason/issuer/timestamp rather than
+// creating a duplicate row.
+func AddMusicBan(ipid, reason, bannedBy string, bannedAt int64) error {
+	if db == nil {
+		return nil
+	}
+	_, err := db.Exec("INSERT OR REPLACE INTO MUSIC_BANS(IPID, REASON, BANNED_BY, BANNED_AT) VALUES(?, ?, ?, ?)",
+		ipid, reason, bannedBy, bannedAt)
+	return err
+}
+
+// RemoveMusicBan deletes the music-ban row for the given IPID. Returns
+// sql.ErrNoRows if no such ban existed so callers can distinguish "unbanned a
+// real ban" from "no ban was present".
+func RemoveMusicBan(ipid string) error {
+	if db == nil {
+		return nil
+	}
+	res, err := db.Exec("DELETE FROM MUSIC_BANS WHERE IPID = ?", ipid)
+	if err != nil {
+		return err
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if n == 0 {
+		return sql.ErrNoRows
+	}
+	return nil
+}
+
+// IsMusicBanned returns whether the given IPID is currently music-banned.
+// The hot path; called from the MC packet handler on every music change.
+func IsMusicBanned(ipid string) (bool, error) {
+	if db == nil {
+		return false, nil
+	}
+	var n int
+	if err := db.QueryRow("SELECT COUNT(*) FROM MUSIC_BANS WHERE IPID = ?", ipid).Scan(&n); err != nil {
+		return false, err
+	}
+	return n > 0, nil
+}
+
+// GetMusicBan returns the full record for one IPID's music-ban, or
+// (MusicBanInfo{}, sql.ErrNoRows) if none exists. Used by the moderator-facing
+// /musicban inspect path.
+func GetMusicBan(ipid string) (MusicBanInfo, error) {
+	if db == nil {
+		return MusicBanInfo{}, sql.ErrNoRows
+	}
+	var mb MusicBanInfo
+	mb.Ipid = ipid
+	err := db.QueryRow("SELECT REASON, BANNED_BY, BANNED_AT FROM MUSIC_BANS WHERE IPID = ?", ipid).
+		Scan(&mb.Reason, &mb.BannedBy, &mb.BannedAt)
+	return mb, err
+}
+
+// ListMusicBans returns every active music-ban, newest-first by BANNED_AT.
+// Used by /musicbans (the listing command).
+func ListMusicBans() ([]MusicBanInfo, error) {
+	if db == nil {
+		return nil, nil
+	}
+	rows, err := db.Query("SELECT IPID, REASON, BANNED_BY, BANNED_AT FROM MUSIC_BANS ORDER BY BANNED_AT DESC")
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []MusicBanInfo
+	for rows.Next() {
+		var mb MusicBanInfo
+		if err := rows.Scan(&mb.Ipid, &mb.Reason, &mb.BannedBy, &mb.BannedAt); err != nil {
+			return nil, err
+		}
+		out = append(out, mb)
+	}
+	return out, rows.Err()
 }

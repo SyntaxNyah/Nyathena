@@ -177,8 +177,11 @@ The `-h` flag works on every applicator: single-effect commands (`/tsundere 7 -h
 #### Persona / Personality (5)
 `/clown`, `/jester`, `/joker`, `/tourettes`, `/translator`
 
-#### Visibility / Cosmetic (6)
-`/emoji`, `/invisible`, `/shrink`, `/grow`, `/wide`, `/areainiswap` (vertical/horizontal sprite-offset locks; reverse with `/unshrink` / `/ungrow` / `/unwide`)
+#### Visibility / Cosmetic (8)
+`/emoji`, `/invisible`, `/shrink`, `/grow`, `/wide`, `/areainiswap` (vertical/horizontal sprite-offset locks; reverse with `/unshrink` / `/ungrow` / `/unwide`), plus the two viewport-control punishments below.
+
+- `/hidedisplay <uid>` — pushes the target's own sprite off-screen via a fixed self-offset so their text still appears in the chat box but their character does not. Looks especially funny on pairs (only the partner's sprite renders). Standard punishment flags: `-d`/`-r`/`-h`, comma UID lists, `global`, stackable, persists across sessions, removable with `/unpunish -t hidedisplay <uid>`.
+- `/forcedisplay <uid>` — pins the target's character onto every non-moderator IC message in their area, overwriting each speaker's outgoing sprite and clearing the pair fields. While active, no other character can show in the viewport — the whole room renders as that one character. Moderators are exempt (their own sprite still shows). The hot-path lookup is gated by an atomic counter, so servers that never use `/forcedisplay` pay nothing on every IC packet. Same flag set as `/hidedisplay`; removable with `/unpunish -t forcedisplay <uid>`.
 
 #### Timing Effects (3)
 `/slowpoke`, `/fastspammer`, `/lag`
@@ -368,6 +371,36 @@ Shadow moderators (`SHADOW` perm bit, no `ADMIN`) are completely hidden from `/g
 
 ### `/unpunish` Self-Removal Protection
 Punishments now record the issuer's permission tier (`IssuerSystem`/`IssuerMod`/`IssuerShadow`/`IssuerAdmin`) in the `PUNISHMENTS.ISSUER_TIER` column. A regular moderator cannot use `/unpunish` to lift a punishment that an admin or shadow mod applied to them — `/unpunish self`, `/unpunish -t <type> self`, and the self-target slice of `/unpunish all` are all gated. Admins and shadow mods bypass the gate. Persists across restarts via DB migration 18.
+
+### Persistent Music Ban (`/musicban`)
+`/musicban <uid> [-r reason]` bans the target's IPID from playing music — both jukebox entries (`music.txt`) and streaming URLs — across sessions. Persists via the `MUSIC_BANS` table (DB migration 22). Hot-path check is a single RWMutex map lookup, seeded from the DB at startup.
+
+**Quiet-area carve-out:** if the area has **fewer than 3 people** in it, the ban is **bypassed** and the music change is allowed — banned players can still set the mood in empty/small rooms but can't bother a populated one. Moderators are always exempt. Area-change MC packets are unaffected (a music-banned player can still move between rooms).
+
+| Command | Permission | Behaviour |
+|---------|------------|-----------|
+| `/musicban <uid> [-r reason]` | `MUTE` | Persistently ban the target's IPID. Idempotent; re-banning overwrites the reason and issuer. |
+| `/musicunban <uid\|ipid>` | `MUTE` | Lift a music-ban. Accepts a connected target's UID or a raw IPID, so offline players can still be unbanned. |
+| `/musicbans` | `MUTE` | List every active music-ban with reason, issuer and timestamp (newest first). |
+
+### Hot Config Reload (`/reload`)
+`/reload` (in-game, `ADMIN`) atomically re-reads every supported config/data file from disk and swaps it in without restarting the server. Also available as the `reload` CLI command on stdin and via `SIGHUP`.
+
+Each reloadable list lives behind a `sync/atomic.Pointer` (see `internal/athena/livereload.go`), so a swap is a single atomic store — readers on the hot IC path never lock and never see a torn value. A parse error in any one file aborts the whole reload before anything is published, so a bad file never leaves the running server half-updated. Validated end-to-end with `go test -race`.
+
+**Reloaded:**
+- `characters.txt` — **append-only** (see safety constraint below)
+- `music.txt` — full reload; the pre-built SM packet sent on every client join is rebuilt in lockstep
+- `cdns.txt`
+- `backgrounds.txt` — `/bglist`'s cached output string is rebuilt in lockstep
+- `parrot.txt`
+- `8ball.txt` (optional; missing file leaves the current value intact)
+- `banned_words.txt` (only when automod is enabled)
+- `config.toml` motd and description (the existing hot-config whitelist)
+
+**`characters.txt` safety constraint — append-only.** Connected AO2 clients reference characters by **slot index**, so inserting in the middle, removing, reordering or renaming an existing slot would silently desync every connected player (the person on slot 2600 would suddenly be on whatever character used to be slot 2595). To prevent that, the reload **validates that every existing slot is unchanged** and only accepts entries appended at the end of the file. If the new file changes any pre-existing slot, the reload is rejected with a precise message naming the first bad slot (e.g. `"characters.txt: slot 12 changed from 'X' to 'Y' — character reload is append-only; add new characters at the END of the file (restart the server to reorder, rename or insert)"`). When new characters are appended, every area's character-slot table is grown first via a new `Area.GrowTaken(n)` method so newly-selectable slots can never panic the IC path with an out-of-bounds.
+
+**NOT reloaded** (would require invasive work and is unsafe without restart): areas, listener ports/addr, rate-limit windows, max_players, roles, the server name. These are still restart-only.
 
 ### IPHub VPN Firewall
 When `iphub_api_key` is set, moderators can run `/firewall on|off` from in-game **or** from Discord (`/firewall on|off` slash command). New IPs are checked against IPHub; VPN/proxy IPs are rejected. Known IPs are never re-checked (respects 1,000 requests/day free tier).

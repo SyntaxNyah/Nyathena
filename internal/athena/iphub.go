@@ -61,10 +61,10 @@ type iphubResponse struct {
 var iphubHTTPClient = &http.Client{
 	Timeout: 4 * time.Second,
 	Transport: &http.Transport{
-		MaxIdleConns:        2,
-		IdleConnTimeout:     90 * time.Second,
-		DisableCompression:  true,
-		ForceAttemptHTTP2:   false, // IPHub v2 API works fine on HTTP/1.1
+		MaxIdleConns:       2,
+		IdleConnTimeout:    90 * time.Second,
+		DisableCompression: true,
+		ForceAttemptHTTP2:  false, // IPHub v2 API works fine on HTTP/1.1
 	},
 }
 

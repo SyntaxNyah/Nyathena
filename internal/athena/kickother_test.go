@@ -84,4 +84,3 @@ func TestKickOtherUsesHDIDAndSkipsCaller(t *testing.T) {
 		t.Fatal("did not expect command caller to be kicked")
 	}
 }
-

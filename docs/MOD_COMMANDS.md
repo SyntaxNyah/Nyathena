@@ -121,7 +121,7 @@ Permission bits are configured in `config/roles.toml`. Multiple bits are granted
 | Persona / personality | `/clown /jester /joker /tourettes /translator` |
 | Dere archetypes (26) | `/tsundere /yandere /kuudere /dandere /deredere /himedere /kamidere /undere /bakadere /mayadere /smugdere /deretsun /bokodere /thugdere /teasedere /dorodere /hinedere /hajidere /rindere /utsudere /darudere /butsudere /sdere /mdere /tsuyodere /omnidere` |
 | Animal filters (12) | `/monkey /snake /dog /cat /bird /cow /frog /duck /horse /lion /zoo /bunny` |
-| Visibility / cosmetic | `/emoji /invisible /shrink /grow /wide /areainiswap` (and `/unshrink /ungrow /unwide`) |
+| Visibility / cosmetic | `/emoji /invisible /shrink /grow /wide /areainiswap /hidedisplay /forcedisplay` (and `/unshrink /ungrow /unwide`) |
 | Timing | `/slowpoke /fastspammer /lag` |
 | Audio | `/sfxcurse <uid> <sfx-url>` and `/unsfx` |
 | Voice chat (5) | `/voicemute /voicestatic /voicegarble /voicecutout /voicestutter` |
@@ -186,16 +186,49 @@ The DB records the issuing tier of every punishment in `PUNISHMENTS.ISSUER_TIER`
 
 ---
 
+## Music Ban (persistent, per-IPID)
+
+| Command | Permission | Description |
+|---------|-----------|-------------|
+| `/musicban <uid> [-r reason]` | MUTE | Persistently ban the target's IPID from playing music (both jukebox entries and streaming URLs) across sessions. Idempotent — re-banning overwrites the reason and issuer. |
+| `/musicunban <uid\|ipid>` | MUTE | Lift a music-ban. Accepts a connected target's UID or a raw IPID, so offline players can still be unbanned. |
+| `/musicbans` | MUTE | List every active music-ban with its reason, issuer, and timestamp (newest first). |
+
+Music bans are stored in the `MUSIC_BANS` table (DB migration 22) and cached in-memory for a single-RWMutex-map-lookup hot path on the MC handler.
+
+**Quiet-area carve-out:** if the area has **fewer than 3 people** in it, the ban is **bypassed** and the music change is allowed — banned players can still set the mood in empty/small rooms but can't bother a populated one. Moderators are always exempt. Area-change MC packets are unaffected.
+
+---
+
 ## Server Admin
 
 | Command | Permission | Description |
 |---------|-----------|-------------|
 | `/arealog enable\|disable` | ADMIN | Toggle area-log silencing for the current area |
 | `/reloadplaytime` | ADMIN | Re-link every registered account to its IPID and merge orphaned playtime. Fixes the bug where a fresh account on a long-running anonymous IPID didn't appear on the leaderboard. |
+| `/reload` | ADMIN | Hot-reload all supported config/data files at runtime without restarting. See "Hot config reload" below. |
 | `/restart` | ADMIN | In-place server restart via `syscall.Exec` |
 | `/casinoenable` | ADMIN | Toggle casino in this area |
 | `/casinoset <key> <value>` | ADMIN | Configure casino limits / jackpot |
 | `/grantchips <username> <amount>` | ADMIN | Add chips to an account |
+
+### Hot config reload (`/reload`)
+
+`/reload` (in-game, ADMIN) atomically re-reads every supported config/data file from disk and swaps it in without restarting. Also available as the `reload` CLI command on stdin and via `SIGHUP`.
+
+Each reloadable list lives behind a `sync/atomic.Pointer` so a swap is a single atomic store — readers on the hot IC path never lock and never see a torn value. A parse error in any one file aborts the whole reload before anything is published, so a bad file never leaves the running server half-updated.
+
+**Reloaded:**
+- `characters.txt` — **append-only** (see safety constraint below)
+- `music.txt` — full reload; the pre-built SM packet sent on every client join is rebuilt in lockstep
+- `cdns.txt`, `backgrounds.txt` (with `/bglist` cache rebuilt), `parrot.txt`
+- `8ball.txt` (optional; missing file leaves the current value intact)
+- `banned_words.txt` (only when automod is enabled)
+- `config.toml` motd and description
+
+**`characters.txt` safety constraint — append-only.** Connected AO2 clients reference characters by **slot index**, so inserting in the middle, removing, reordering or renaming an existing slot would silently desync every connected player. The reload **validates that every existing slot is unchanged** and only accepts entries appended at the end of the file. If the new file changes any pre-existing slot, the reload is rejected with a precise message naming the first bad slot — change those operations require a restart.
+
+**NOT reloaded** (would require invasive work and is unsafe without restart): areas, listener ports/addr, rate-limit windows, max_players, roles, the server name.
 
 ---
 

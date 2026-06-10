@@ -408,9 +408,9 @@ func cmdCraps(client *Client, args []string, _ string) {
 const (
 	crashMinMultiplier = 1.05
 	crashMaxMultiplier = 6.0
-	crashGrowthPerSec  = 0.1  // multiplier increase per second
-	crashHouseEdge     = 0.80 // 20% house edge: payout = bet × current_mult × 0.80
-	crashMinHoldSec    = 5.0  // minimum seconds before cashout is allowed
+	crashGrowthPerSec  = 0.1              // multiplier increase per second
+	crashHouseEdge     = 0.80             // 20% house edge: payout = bet × current_mult × 0.80
+	crashMinHoldSec    = 5.0              // minimum seconds before cashout is allowed
 	crashBetCooldown   = 45 * time.Second // per-player cooldown between rounds
 )
 
@@ -1963,7 +1963,7 @@ func printBarMenu(client *Client) {
 var lottoSymbols = []string{"🍒", "🍋", "🍊", "🍇", "⭐", "💎", "🎰"}
 
 var lottoPayout = map[string]int64{
-	"🍒": 2,  // common: 2× ticket cost
+	"🍒": 2, // common: 2× ticket cost
 	"🍋": 3,
 	"🍊": 4,
 	"🍇": 5,
@@ -1972,7 +1972,7 @@ var lottoPayout = map[string]int64{
 	"🎰": 30, // rare triple: 30× ticket cost
 }
 
-const lottoJackpotChance = 500   // 1 in 500 for jackpot
+const lottoJackpotChance = 500     // 1 in 500 for jackpot
 const lottoJackpotMultiplier = 100 // 100× ticket cost
 
 func cmdLotto(client *Client, args []string, _ string) {

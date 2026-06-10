@@ -45,7 +45,7 @@ var jobs = map[string]jobDef{
 	},
 	"busker": {
 		key:      "busker",
-		reward:   2, // base; actual tips are random 2–6
+		reward:   2,       // base; actual tips are random 2–6
 		cooldown: 30 * 60, // 30 minutes
 		emoji:    "🎸",
 	},
@@ -258,11 +258,11 @@ func cmdJobs(client *Client, _ []string, _ string) {
 	sb.WriteString("  " + strings.Repeat("─", 56) + "\n")
 	type row struct{ name, base, cd, note string }
 	rows := []row{
-		{"busker",     "2–6 chips", "30 min",  "Random tips; performs in area chat!"},
-		{"janitor",    "3 chips",   "45 min",  "25% chance to find a coin (+1 bonus)"},
-		{"paperboy",   "3 chips",   "60 min",  "15% chance for a generous tip (+2 bonus)"},
-		{"clerk",      "4 chips",   "90 min",  "15% overtime rush chance (+2 bonus)"},
-		{"bailiffjob", "5 chips",   "2 hours", "10% chance to catch something (+2 bonus)"},
+		{"busker", "2–6 chips", "30 min", "Random tips; performs in area chat!"},
+		{"janitor", "3 chips", "45 min", "25% chance to find a coin (+1 bonus)"},
+		{"paperboy", "3 chips", "60 min", "15% chance for a generous tip (+2 bonus)"},
+		{"clerk", "4 chips", "90 min", "15% overtime rush chance (+2 bonus)"},
+		{"bailiffjob", "5 chips", "2 hours", "10% chance to catch something (+2 bonus)"},
 	}
 	for _, r := range rows {
 		sb.WriteString(fmt.Sprintf("  /%-12s %-10s %-8s %s\n", r.name, r.base, r.cd, r.note))

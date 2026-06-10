@@ -39,7 +39,7 @@ import (
 type autoModActionKind int
 
 const (
-	autoModActionBan     autoModActionKind = iota // default
+	autoModActionBan autoModActionKind = iota // default
 	autoModActionKick
 	autoModActionMute
 	autoModActionTorment
@@ -63,21 +63,23 @@ func tormentIntn(n int) int {
 	return tormentRng.Intn(n)
 }
 
-// bannedWords holds the lowercased banned words loaded from the wordlist file.
-// Stored as a slice for O(n) substring scan; lists are typically small so the
-// overhead of a full scan per message is negligible compared to network I/O.
-var bannedWords []string
+// The lowercased banned-word list lives behind an atomic.Pointer (bannedWordsPtr
+// in livereload.go) so that /reload can swap it at runtime without racing the
+// per-message reader. Read it via getBannedWords(); publish via setBannedWords().
+// It is stored as a slice for O(n) substring scan; lists are typically small so
+// the overhead of a full scan per message is negligible compared to network I/O.
 
-// loadBannedWords reads the wordlist at the given path and populates bannedWords.
-// Each non-empty, non-comment line is treated as one banned word (case-insensitive).
-// Lines starting with '#' are treated as comments and ignored.
-// Duplicates are removed and the list is sorted by word length ascending so that
-// matchBannedWord — which returns on the first hit — short-circuits as early as
-// possible when a message contains a short banned word.
-func loadBannedWords(path string) error {
+// loadBannedWordsList reads the wordlist at the given path and returns the
+// parsed words. Each non-empty, non-comment line is treated as one banned word
+// (case-insensitive). Lines starting with '#' are treated as comments and
+// ignored. Duplicates are removed and the list is sorted by word length
+// ascending so that matchBannedWord — which returns on the first hit —
+// short-circuits as early as possible when a message contains a short banned
+// word.
+func loadBannedWordsList(path string) ([]string, error) {
 	f, err := os.Open(path)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	defer f.Close()
 
@@ -91,7 +93,7 @@ func loadBannedWords(path string) error {
 		seen[strings.ToLower(line)] = struct{}{}
 	}
 	if err := scanner.Err(); err != nil {
-		return err
+		return nil, err
 	}
 
 	words := make([]string, 0, len(seen))
@@ -101,8 +103,7 @@ func loadBannedWords(path string) error {
 	// Shorter needles are checked first; matchBannedWord exits on first match,
 	// so a short word match skips all remaining (longer) pattern checks.
 	sort.Slice(words, func(i, j int) bool { return len(words[i]) < len(words[j]) })
-	bannedWords = words
-	return nil
+	return words, nil
 }
 
 // initAutoMod loads the banned-word list and caches the configured action when
@@ -112,11 +113,13 @@ func initAutoMod(cfg *settings.Config) {
 		return
 	}
 	path := filepath.Join(settings.ConfigPath, cfg.AutoModWordlist)
-	if err := loadBannedWords(path); err != nil {
+	words, err := loadBannedWordsList(path)
+	if err != nil {
 		logger.LogWarningf("automod: failed to load wordlist %q: %v", path, err)
 		return
 	}
-	logger.LogInfof("automod: loaded %d banned word(s) from %q", len(bannedWords), path)
+	setBannedWords(words)
+	logger.LogInfof("automod: loaded %d banned word(s) from %q", len(getBannedWords()), path)
 
 	// Parse the action once so the hot path never allocates.
 	switch strings.ToLower(strings.TrimSpace(cfg.AutoModAction)) {
@@ -135,7 +138,7 @@ func initAutoMod(cfg *settings.Config) {
 // (ban/kick/mute/torment) is applied and the function returns true so the caller
 // can abort further packet processing.
 func autoModCheck(client *Client, msg string) bool {
-	if !config.AutoModEnabled || len(bannedWords) == 0 {
+	if !config.AutoModEnabled || len(getBannedWords()) == 0 {
 		return false
 	}
 
@@ -337,7 +340,7 @@ func handleTormentedOOC(client *Client, name, msg string) {
 // as embedded punctuation or spacing variants. Returns the matched word and
 // true on the first hit, or ("", false) if no match is found.
 func matchBannedWord(s string) (string, bool) {
-	for _, word := range bannedWords {
+	for _, word := range getBannedWords() {
 		if strings.Contains(s, word) {
 			return word, true
 		}

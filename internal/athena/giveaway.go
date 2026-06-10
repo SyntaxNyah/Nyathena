@@ -42,7 +42,7 @@ type giveawayState struct {
 	active   bool
 	item     string
 	hostUID  int
-	hostName string          // showname or OOC name of the host
+	hostName string           // showname or OOC name of the host
 	entrants map[int]struct{} // set of opted-in UIDs
 	lastEnd  time.Time        // when the last giveaway ended (drives the cooldown)
 }

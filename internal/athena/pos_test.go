@@ -57,8 +57,8 @@ func TestPosCommandChangesPosition(t *testing.T) {
 		{"hlp", "hlp", true},
 		{"jur", "jur", true},
 		{"sea", "sea", true},
-		{"PRO", "pro", true},  // case-insensitive
-		{"DEF", "def", true},  // case-insensitive
+		{"PRO", "pro", true}, // case-insensitive
+		{"DEF", "def", true}, // case-insensitive
 		{"bad", "", false},
 		{"", "", false},
 	}

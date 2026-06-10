@@ -238,7 +238,7 @@ Replace text with animal sounds. All support `global` and `-h`.
 
 ---
 
-## Visibility / Cosmetic (6)
+## Visibility / Cosmetic (8)
 
 | Command | Effect |
 |---------|--------|
@@ -248,8 +248,10 @@ Replace text with animal sounds. All support `global` and `-h`.
 | `/grow [offset]` | Locks vertical sprite offset positive (default +25) |
 | `/wide [offset]` | Locks horizontal sprite offset (default +50) |
 | `/areainiswap <char>` | Forces everyone in area to display as a chosen character (KICK perm) |
+| `/hidedisplay <uid>` | Pushes the target's own sprite off-screen via a fixed self-offset; their text still shows. Funny on pairs (only the partner renders) |
+| `/forcedisplay <uid>` | Pins the target's character onto every IC sprite in the area (moderators exempt). While active, no other character can show in the viewport — the whole room renders as that one character |
 
-Remove offset locks with `/unshrink`, `/ungrow`, `/unwide`, or `/areainiswap off`.
+Remove offset locks with `/unshrink`, `/ungrow`, `/unwide`, or `/areainiswap off`. Remove the display punishments with `/unpunish -t hidedisplay <uid>` or `/unpunish -t forcedisplay <uid>` (or plain `/unpunish <uid>` to clear everything).
 
 ---
 

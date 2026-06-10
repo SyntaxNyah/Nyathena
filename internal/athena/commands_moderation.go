@@ -1399,7 +1399,7 @@ func cmdAreaIniswap(client *Client, args []string, usage string) {
 		client.SendServerMessage(fmt.Sprintf("Character %q was not found in the character list.", charName))
 		return
 	}
-	charName = characters[charID]
+	charName = getCharacters()[charID]
 	charIDStr := strconv.Itoa(charID)
 
 	// Phase 1: apply forced iniswap state, collect affected UIDs, send PV to each target.
@@ -1732,7 +1732,7 @@ func cmdCharStuck(client *Client, args []string, usage string) {
 	}
 
 	charID := target.CharID()
-	charName := characters[charID]
+	charName := getCharacters()[charID]
 
 	target.SetCharStuck(charID, stuckUntil)
 

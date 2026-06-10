@@ -246,4 +246,3 @@ func cmdRevokeCustomTag(client *Client, args []string, usage string) {
 	client.SendServerMessage(fmt.Sprintf("🗑️ Revoked [%v] from '%v'.", displayName, targetUser))
 	addToBuffer(client, "CMD", fmt.Sprintf("Revoked tag id '%v' from '%v'.", tagID, targetUser), true)
 }
-

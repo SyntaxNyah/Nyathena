@@ -140,7 +140,7 @@ func cmdBg(client *Client, args []string, _ string) {
 
 	arg := strings.Join(args, " ")
 
-	if client.Area().ForceBGList() && !sliceutil.ContainsString(backgrounds, arg) {
+	if client.Area().ForceBGList() && !sliceutil.ContainsString(getBackgrounds(), arg) {
 		client.SendServerMessage("Invalid background.")
 		return
 	}
@@ -155,7 +155,7 @@ func cmdBg(client *Client, args []string, _ string) {
 func cmdCharSelect(client *Client, args []string, _ string) {
 	if len(args) == 0 {
 		if stuckID := client.charStuckID(); stuckID >= 0 {
-			client.SendServerMessage(fmt.Sprintf("You are character stuck as %v and cannot return to character select.", characters[stuckID]))
+			client.SendServerMessage(fmt.Sprintf("You are character stuck as %v and cannot return to character select.", getCharacters()[stuckID]))
 			return
 		}
 		if client.IsTunged() {
@@ -224,7 +224,7 @@ func cmdRandomChar(client *Client, _ []string, _ string) {
 // Handles /randombg
 
 func cmdRandomBg(client *Client, _ []string, _ string) {
-	if len(backgrounds) == 0 {
+	if len(getBackgrounds()) == 0 {
 		client.SendServerMessage("No backgrounds are available.")
 		return
 	}
@@ -248,7 +248,7 @@ func cmdRandomBg(client *Client, _ []string, _ string) {
 			return
 		}
 	}
-	bg := backgrounds[rand.Intn(len(backgrounds))]
+	bg := getBackgrounds()[rand.Intn(len(getBackgrounds()))]
 	a.SetBackground(bg)
 	broadcastToArea(a, &packet.BN{Background: bg})
 	sendAreaServerMessage(a, fmt.Sprintf("%v set the background to a random one (%v).", client.OOCName(), bg))
@@ -416,11 +416,11 @@ func cmdSetEviMod(client *Client, args []string, _ string) {
 // Handles /bglist
 
 func cmdBgList(client *Client, _ []string, _ string) {
-	if len(backgrounds) == 0 {
+	if len(getBackgrounds()) == 0 {
 		client.SendServerMessage("No backgrounds are available.")
 		return
 	}
-	client.SendServerMessage(bgListStr)
+	client.SendServerMessage(getBgListStr())
 }
 
 // Handles /forcebglist
@@ -766,7 +766,7 @@ func isAllowedCDN(rawURL string) bool {
 		return false
 	}
 	host := strings.ToLower(parsed.Hostname())
-	for _, cdn := range cdns {
+	for _, cdn := range getCDNs() {
 		if host == cdn || strings.HasSuffix(host, "."+cdn) {
 			return true
 		}
@@ -844,8 +844,8 @@ func cmdRandomSong(client *Client, _ []string, _ string) {
 	}
 	// Collect playable songs from the jukebox list (music.txt).
 	// Category headers in music.txt have no '.'; skip them just as pktAM does.
-	playable := make([]string, 0, len(music))
-	for _, entry := range music {
+	playable := make([]string, 0, len(getMusicList()))
+	for _, entry := range getMusicList() {
 		if strings.ContainsRune(entry, '.') {
 			playable = append(playable, entry)
 		}

@@ -30,21 +30,21 @@ import (
 
 // PokerPlayer holds one player's state at the poker table.
 type PokerPlayer struct {
-	Client  *Client
-	Hand    []Card  // 2 hole cards
-	Chips   int64   // table session stack (starts at buy-in)
-	Bet     int64   // amount committed this betting round
-	Folded  bool
-	AllIn   bool
-	Ready   bool // pressed ready to start
-	SitOut  bool
+	Client *Client
+	Hand   []Card // 2 hole cards
+	Chips  int64  // table session stack (starts at buy-in)
+	Bet    int64  // amount committed this betting round
+	Folded bool
+	AllIn  bool
+	Ready  bool // pressed ready to start
+	SitOut bool
 }
 
 // PokerRound represents the current street of a Texas Hold'em hand.
 type PokerRound int
 
 const (
-	PokerWaiting  PokerRound = iota
+	PokerWaiting PokerRound = iota
 	PokerPreflop
 	PokerFlop
 	PokerTurn
@@ -66,7 +66,7 @@ type PokerTable struct {
 	deck       []Card
 	community  []Card // up to 5 community cards
 	pot        int64
-	currentBet int64  // highest bet in current street
+	currentBet int64 // highest bet in current street
 	dealerIdx  int
 	turnIdx    int
 	smallBlind int64
