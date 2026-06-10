@@ -28,19 +28,19 @@ import (
 // ── Constants ────────────────────────────────────────────────────────────────
 
 const (
-	rrJoinWindow      = 30 * time.Second // opt-in window duration
-	rrCooldown        = 5 * time.Minute  // global delay between games
-	rrChambers        = 6                // standard revolver chambers
-	rrMinPlayers      = 2                // minimum players to start
-	rrPunishDuration  = 15 * time.Minute // how long the loser's punishment lasts
-	rrShotPause       = 3 * time.Second  // dramatic pause between shots
-	rrDoubleBulletP   = 20               // % chance of 2-bullet game (integer 0–100)
-	rrRicochetP       = 8                // % chance the shot ricochets to a random player
-	rrChainShotP      = 8                // % chance a second player is also hit on BANG
-	rrDoublePunishP   = 12               // % chance the victim receives two punishments
-	rrReSpinP         = 10               // % chance the cylinder re-spins after a safe CLICK
-	rrSurvivorCurseP  = 15               // % chance all survivors receive a minor curse after game ends
-	rrCurseDuration   = 5 * time.Minute  // duration of survivor-curse punishments
+	rrJoinWindow     = 30 * time.Second // opt-in window duration
+	rrCooldown       = 5 * time.Minute  // global delay between games
+	rrChambers       = 6                // standard revolver chambers
+	rrMinPlayers     = 2                // minimum players to start
+	rrPunishDuration = 15 * time.Minute // how long the loser's punishment lasts
+	rrShotPause      = 3 * time.Second  // dramatic pause between shots
+	rrDoubleBulletP  = 20               // % chance of 2-bullet game (integer 0–100)
+	rrRicochetP      = 8                // % chance the shot ricochets to a random player
+	rrChainShotP     = 8                // % chance a second player is also hit on BANG
+	rrDoublePunishP  = 12               // % chance the victim receives two punishments
+	rrReSpinP        = 10               // % chance the cylinder re-spins after a safe CLICK
+	rrSurvivorCurseP = 15               // % chance all survivors receive a minor curse after game ends
+	rrCurseDuration  = 5 * time.Minute  // duration of survivor-curse punishments
 )
 
 // rrRules is broadcast when the join window opens.
@@ -255,9 +255,9 @@ type rrState struct {
 	mu         sync.Mutex
 	joinActive bool
 	gameActive bool
-	players    []int        // UIDs in shuffled turn order
-	lastEnd    time.Time    // when the last game ended (drives cooldown)
-	area       *area.Area   // the area this game is scoped to
+	players    []int      // UIDs in shuffled turn order
+	lastEnd    time.Time  // when the last game ended (drives cooldown)
+	area       *area.Area // the area this game is scoped to
 }
 
 // rrAreas maps each area to its own Russian Roulette state.
@@ -290,7 +290,7 @@ func isRRAreaCoolingDown(st *rrState) (bool, int) {
 		return false, 0
 	}
 	if rem := rrCooldown - time.Since(end); rem > 0 {
-		return true, int((rem+time.Second-1)/time.Second)
+		return true, int((rem + time.Second - 1) / time.Second)
 	}
 	return false, 0
 }

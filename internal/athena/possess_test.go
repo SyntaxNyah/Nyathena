@@ -190,19 +190,19 @@ func TestPossessPreservesAdminPosition(t *testing.T) {
 // TestPossessWithIniswap tests that possession works correctly when target has iniswapped
 func TestPossessWithIniswap(t *testing.T) {
 	// Save original characters and restore after test to ensure test isolation
-	originalCharacters := characters
+	originalCharacters := getCharacters()
 	t.Cleanup(func() {
-		characters = originalCharacters
+		setCharacters(originalCharacters)
 	})
 
 	// Initialize mock characters list for testing
 	// In real usage, this is loaded from characters.txt
-	characters = []string{
+	setCharacters([]string{
 		"Phoenix Wright",      // ID 0
 		"Miles Edgeworth",     // ID 1
 		"Maya Fey",            // ID 2
 		"Franziska von Karma", // ID 3
-	}
+	})
 
 	// Test getCharacterID helper function works correctly
 	edgeworthID := getCharacterID("Miles Edgeworth")
@@ -266,8 +266,8 @@ func TestPossessWithIniswap(t *testing.T) {
 	// Verify fallback to actual character works
 	// Since PairInfo.name is empty, fallback should use target's actual character
 	var fallbackCharName string
-	if target2.CharID() >= 0 && target2.CharID() < len(characters) {
-		fallbackCharName = characters[target2.CharID()]
+	if target2.CharID() >= 0 && target2.CharID() < len(getCharacters()) {
+		fallbackCharName = getCharacters()[target2.CharID()]
 	} else {
 		t.Errorf("target2.CharID() is out of bounds: %d", target2.CharID())
 		return
@@ -282,10 +282,9 @@ func TestPossessWithIniswap(t *testing.T) {
 // longer calls SetShowname with the folder name).  This is the core behaviour that
 // makes /possess commands display "Adachi" instead of "adachi_gunless".
 func TestShownamePersistsAcrossCharacterChange(t *testing.T) {
-	origChars := characters
-	t.Cleanup(func() { characters = origChars })
-	characters = []string{"adachi_gunless", "Phoenix Wright"}
-
+	origChars := getCharacters()
+	t.Cleanup(func() { setCharacters(origChars) })
+	setCharacters([]string{"adachi_gunless", "Phoenix Wright"})
 	// Simulate a client that has already sent an IC message and has showname "Adachi".
 	target := &Client{
 		uid:        2,
@@ -305,7 +304,7 @@ func TestShownamePersistsAcrossCharacterChange(t *testing.T) {
 	// With the fix, the showname remains "Adachi" regardless.
 	possessShowname := target.Showname()
 	if strings.TrimSpace(possessShowname) == "" {
-		possessShowname = characters[target.CharID()]
+		possessShowname = getCharacters()[target.CharID()]
 	}
 	if possessShowname != "Adachi" {
 		t.Errorf("Possess showname should be 'Adachi', got %q", possessShowname)
@@ -315,10 +314,9 @@ func TestShownamePersistsAcrossCharacterChange(t *testing.T) {
 // TestShownameFallsBackToCharNameWhenUnset verifies that possession still falls
 // back to the character folder name when the target has never spoken (showname "").
 func TestShownameFallsBackToCharNameWhenUnset(t *testing.T) {
-	origChars := characters
-	t.Cleanup(func() { characters = origChars })
-	characters = []string{"adachi_gunless", "Phoenix Wright"}
-
+	origChars := getCharacters()
+	t.Cleanup(func() { setCharacters(origChars) })
+	setCharacters([]string{"adachi_gunless", "Phoenix Wright"})
 	// A freshly-joined client that has never sent an IC message — showname is "".
 	target := &Client{
 		uid:        3,
@@ -328,7 +326,7 @@ func TestShownameFallsBackToCharNameWhenUnset(t *testing.T) {
 		pair:       ClientPairInfo{wanted_id: -1},
 	}
 
-	charFolderName := characters[target.CharID()] // "adachi_gunless"
+	charFolderName := getCharacters()[target.CharID()] // "adachi_gunless"
 
 	possessShowname := target.Showname()
 	if strings.TrimSpace(possessShowname) == "" {

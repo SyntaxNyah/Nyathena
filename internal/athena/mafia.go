@@ -67,23 +67,23 @@ func (p MafiaPhase) String() string {
 type RoleID int
 
 const (
-	RoleVillager   RoleID = iota // Town: no special ability; wins when all threats removed
-	RoleMafia                    // Evil: kill 1 each night; wins when they equal/outnumber town
-	RoleDetective                // Town: investigate 1 per night to learn alignment
-	RoleDoctor                   // Town: protect 1 per night from night kills
-	RoleJester                   // Neutral: wins ONLY if lynched during a day vote
-	RoleSheriff                  // Town: shoot 1 per game (kills if Mafia, self-kills if wrong)
-	RoleArsonist                 // Chaos: douse per night, ignite all doused simultaneously
-	RoleSerialKiller             // Chaos: kills 1 per night; immune to single Mafia kill; wins alone
-	RoleShapeshifter             // Mafia-aligned: copies another role's result on investigation
-	RoleWitch                    // Neutral: redirect a player's night action to a different target
-	RoleLawyer                   // Neutral: picks 1 client on game start; wins if client survives
-	RoleBodyguard                // Town: protect 1; if attacker kills, bodyguard and attacker both die
-	RoleVigilante                // Town: kill 1 per night; dies of guilt if target is Town-aligned
-	RoleMayor                    // Town: reveal publicly; all future votes count double
-	RoleEscort                   // Town: roleblock 1 per night; their action has no effect
-	RoleGodfather                // Mafia: appears Town to Detective; immune to Sheriff shot (Sheriff dies)
-	RoleSurvivor                 // Neutral: no ability; wins by surviving to game end
+	RoleVillager     RoleID = iota // Town: no special ability; wins when all threats removed
+	RoleMafia                      // Evil: kill 1 each night; wins when they equal/outnumber town
+	RoleDetective                  // Town: investigate 1 per night to learn alignment
+	RoleDoctor                     // Town: protect 1 per night from night kills
+	RoleJester                     // Neutral: wins ONLY if lynched during a day vote
+	RoleSheriff                    // Town: shoot 1 per game (kills if Mafia, self-kills if wrong)
+	RoleArsonist                   // Chaos: douse per night, ignite all doused simultaneously
+	RoleSerialKiller               // Chaos: kills 1 per night; immune to single Mafia kill; wins alone
+	RoleShapeshifter               // Mafia-aligned: copies another role's result on investigation
+	RoleWitch                      // Neutral: redirect a player's night action to a different target
+	RoleLawyer                     // Neutral: picks 1 client on game start; wins if client survives
+	RoleBodyguard                  // Town: protect 1; if attacker kills, bodyguard and attacker both die
+	RoleVigilante                  // Town: kill 1 per night; dies of guilt if target is Town-aligned
+	RoleMayor                      // Town: reveal publicly; all future votes count double
+	RoleEscort                     // Town: roleblock 1 per night; their action has no effect
+	RoleGodfather                  // Mafia: appears Town to Detective; immune to Sheriff shot (Sheriff dies)
+	RoleSurvivor                   // Neutral: no ability; wins by surviving to game end
 )
 
 // roleInfo holds human-readable metadata for each role.

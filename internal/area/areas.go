@@ -532,6 +532,22 @@ func (a *Area) SetBackground(bg string) {
 	a.mu.Unlock()
 }
 
+// GrowTaken expands the area's character-slot tracking array to at least n
+// entries, preserving every existing slot and its taken/free state. It is used
+// when characters are appended via a live config reload (/reload) so that the
+// newly-added character slots can be selected without an out-of-bounds panic on
+// the taken[] array. Shrinking is unsupported and a smaller n is a no-op.
+func (a *Area) GrowTaken(n int) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if n <= len(a.taken) {
+		return
+	}
+	grown := make([]bool, n)
+	copy(grown, a.taken)
+	a.taken = grown
+}
+
 // IsTaken returns whether the given character is taken in the area.
 func (a *Area) IsTaken(char int) bool {
 	a.mu.Lock()

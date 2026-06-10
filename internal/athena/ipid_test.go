@@ -29,84 +29,84 @@ func TestGetRealIP(t *testing.T) {
 	defer func() { config = originalConfig }()
 
 	tests := []struct {
-		name              string
-		reverseProxyMode  bool
-		remoteAddr        string
-		xForwardedFor     string
-		xRealIP           string
-		expectedResult    string
+		name             string
+		reverseProxyMode bool
+		remoteAddr       string
+		xForwardedFor    string
+		xRealIP          string
+		expectedResult   string
 	}{
 		{
-			name:              "Reverse proxy disabled - ignore X-Forwarded-For",
-			reverseProxyMode:  false,
-			remoteAddr:        "10.0.0.1:8080",
-			xForwardedFor:     "203.0.113.45",
-			xRealIP:           "",
-			expectedResult:    "10.0.0.1:8080",
+			name:             "Reverse proxy disabled - ignore X-Forwarded-For",
+			reverseProxyMode: false,
+			remoteAddr:       "10.0.0.1:8080",
+			xForwardedFor:    "203.0.113.45",
+			xRealIP:          "",
+			expectedResult:   "10.0.0.1:8080",
 		},
 		{
-			name:              "Reverse proxy disabled - ignore X-Real-IP",
-			reverseProxyMode:  false,
-			remoteAddr:        "10.0.0.1:8080",
-			xForwardedFor:     "",
-			xRealIP:           "203.0.113.45",
-			expectedResult:    "10.0.0.1:8080",
+			name:             "Reverse proxy disabled - ignore X-Real-IP",
+			reverseProxyMode: false,
+			remoteAddr:       "10.0.0.1:8080",
+			xForwardedFor:    "",
+			xRealIP:          "203.0.113.45",
+			expectedResult:   "10.0.0.1:8080",
 		},
 		{
-			name:              "Reverse proxy disabled - ignore both headers",
-			reverseProxyMode:  false,
-			remoteAddr:        "10.0.0.1:8080",
-			xForwardedFor:     "203.0.113.45",
-			xRealIP:           "198.51.100.20",
-			expectedResult:    "10.0.0.1:8080",
+			name:             "Reverse proxy disabled - ignore both headers",
+			reverseProxyMode: false,
+			remoteAddr:       "10.0.0.1:8080",
+			xForwardedFor:    "203.0.113.45",
+			xRealIP:          "198.51.100.20",
+			expectedResult:   "10.0.0.1:8080",
 		},
 		{
-			name:              "Reverse proxy enabled - no headers, use RemoteAddr",
-			reverseProxyMode:  true,
-			remoteAddr:        "192.168.1.100:12345",
-			xForwardedFor:     "",
-			xRealIP:           "",
-			expectedResult:    "192.168.1.100:12345",
+			name:             "Reverse proxy enabled - no headers, use RemoteAddr",
+			reverseProxyMode: true,
+			remoteAddr:       "192.168.1.100:12345",
+			xForwardedFor:    "",
+			xRealIP:          "",
+			expectedResult:   "192.168.1.100:12345",
 		},
 		{
-			name:              "Reverse proxy enabled - X-Forwarded-For with single IP",
-			reverseProxyMode:  true,
-			remoteAddr:        "10.0.0.1:8080",
-			xForwardedFor:     "203.0.113.45",
-			xRealIP:           "",
-			expectedResult:    "203.0.113.45",
+			name:             "Reverse proxy enabled - X-Forwarded-For with single IP",
+			reverseProxyMode: true,
+			remoteAddr:       "10.0.0.1:8080",
+			xForwardedFor:    "203.0.113.45",
+			xRealIP:          "",
+			expectedResult:   "203.0.113.45",
 		},
 		{
-			name:              "Reverse proxy enabled - X-Forwarded-For with multiple IPs",
-			reverseProxyMode:  true,
-			remoteAddr:        "10.0.0.1:8080",
-			xForwardedFor:     "203.0.113.45, 198.51.100.20, 10.0.0.1",
-			xRealIP:           "",
-			expectedResult:    "203.0.113.45",
+			name:             "Reverse proxy enabled - X-Forwarded-For with multiple IPs",
+			reverseProxyMode: true,
+			remoteAddr:       "10.0.0.1:8080",
+			xForwardedFor:    "203.0.113.45, 198.51.100.20, 10.0.0.1",
+			xRealIP:          "",
+			expectedResult:   "203.0.113.45",
 		},
 		{
-			name:              "Reverse proxy enabled - X-Real-IP header",
-			reverseProxyMode:  true,
-			remoteAddr:        "10.0.0.1:8080",
-			xForwardedFor:     "",
-			xRealIP:           "203.0.113.45",
-			expectedResult:    "203.0.113.45",
+			name:             "Reverse proxy enabled - X-Real-IP header",
+			reverseProxyMode: true,
+			remoteAddr:       "10.0.0.1:8080",
+			xForwardedFor:    "",
+			xRealIP:          "203.0.113.45",
+			expectedResult:   "203.0.113.45",
 		},
 		{
-			name:              "Reverse proxy enabled - both headers, X-Forwarded-For takes precedence",
-			reverseProxyMode:  true,
-			remoteAddr:        "10.0.0.1:8080",
-			xForwardedFor:     "203.0.113.45",
-			xRealIP:           "198.51.100.20",
-			expectedResult:    "203.0.113.45",
+			name:             "Reverse proxy enabled - both headers, X-Forwarded-For takes precedence",
+			reverseProxyMode: true,
+			remoteAddr:       "10.0.0.1:8080",
+			xForwardedFor:    "203.0.113.45",
+			xRealIP:          "198.51.100.20",
+			expectedResult:   "203.0.113.45",
 		},
 		{
-			name:              "Reverse proxy enabled - X-Forwarded-For with whitespace",
-			reverseProxyMode:  true,
-			remoteAddr:        "10.0.0.1:8080",
-			xForwardedFor:     " 203.0.113.45 , 198.51.100.20",
-			xRealIP:           "",
-			expectedResult:    "203.0.113.45",
+			name:             "Reverse proxy enabled - X-Forwarded-For with whitespace",
+			reverseProxyMode: true,
+			remoteAddr:       "10.0.0.1:8080",
+			xForwardedFor:    " 203.0.113.45 , 198.51.100.20",
+			xRealIP:          "",
+			expectedResult:   "203.0.113.45",
 		},
 	}
 
@@ -240,8 +240,8 @@ func TestIPsWithoutPortsProduceUniqueIPIDs(t *testing.T) {
 func TestIPWithAndWithoutPortProduceSameIPID(t *testing.T) {
 	// Test that IP with port and without port produce the same IPID
 	tests := []struct {
-		name       string
-		withPort   string
+		name        string
+		withPort    string
 		withoutPort string
 	}{
 		{

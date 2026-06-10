@@ -74,7 +74,7 @@ var punishmentHelpGroups = []punishmentSubcategory{
 		emoji: "👁", title: "Visibility / cosmetic",
 		desc: "Hides the player or alters their visual presentation.",
 		cmds: []string{"emoji", "invisible", "shrink", "grow", "wide", "areainiswap",
-			"unshrink", "ungrow", "unwide"},
+			"hidedisplay", "forcedisplay", "unshrink", "ungrow", "unwide"},
 	},
 	{
 		emoji: "⏱", title: "Timing & throughput",

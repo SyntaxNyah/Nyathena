@@ -223,15 +223,15 @@ func pktResCount(client *Client, _ *packet.Packet) {
 	}
 	client.joining = true // This simply exists to prevent skipping the askchaa#% packet and bypassing the player count check.
 	client.Send(&packet.SI{
-		CharCount:     len(characters),
+		CharCount:     len(getCharacters()),
 		EvidenceCount: len(areas[0].Evidence()),
-		MusicCount:    len(music),
+		MusicCount:    len(getMusicList()),
 	})
 }
 
 // Handles RC#%
 func pktReqChar(client *Client, _ *packet.Packet) {
-	client.Send(&packet.SC{Entries: characters})
+	client.Send(&packet.SC{Entries: getCharacters()})
 }
 
 // Handles RM#%
@@ -244,17 +244,17 @@ func pktReqAM(client *Client, _ *packet.Packet) {
 	// server emits is already encoded, and the encoded form round-trips
 	// fine through a JSON string field.
 	if client.JSONMode() {
-		items := make([]string, 0, len(areas)+len(music))
+		items := make([]string, 0, len(areas)+len(getMusicList()))
 		for _, a := range areas {
 			items = append(items, a.Name())
 		}
-		for _, m := range music {
+		for _, m := range getMusicList() {
 			items = append(items, encode(m))
 		}
 		client.Send(&packet.SM{Items: items})
 		return
 	}
-	client.write(smPacket)
+	client.write(getSMPacket())
 }
 
 // Handles RD#%
@@ -329,7 +329,7 @@ func pktReqDone(client *Client, _ *packet.Packet) {
 // or -1 if no characters are available.
 func getRandomFreeChar(client *Client) int {
 	var free []int
-	for i := range characters {
+	for i := range getCharacters() {
 		if !client.Area().IsTaken(i) {
 			free = append(free, i)
 		}
@@ -359,11 +359,11 @@ func pktChangeChar(client *Client, p *packet.Packet) {
 			return // No free characters available
 		}
 	}
-	if newid < 0 || newid >= len(characters) {
+	if newid < 0 || newid >= len(getCharacters()) {
 		return
 	}
 	if stuckID := client.charStuckID(); stuckID >= 0 && newid != stuckID {
-		client.SendServerMessage(fmt.Sprintf("You are character stuck as %v and cannot change characters.", characters[stuckID]))
+		client.SendServerMessage(fmt.Sprintf("You are character stuck as %v and cannot change characters.", getCharacters()[stuckID]))
 		return
 	}
 	if client.IsTunged() {
@@ -448,8 +448,8 @@ func pktIC(client *Client, p *packet.Packet) {
 			targetCharName := target.PairInfo().name
 			if targetCharName == "" {
 				// Bounds check before accessing characters array
-				if target.CharID() >= 0 && target.CharID() < len(characters) {
-					targetCharName = characters[target.CharID()]
+				if target.CharID() >= 0 && target.CharID() < len(getCharacters()) {
+					targetCharName = getCharacters()[target.CharID()]
 				} else {
 					// Invalid character, clear possession
 					client.SetPossessing(-1)
@@ -465,8 +465,8 @@ func pktIC(client *Client, p *packet.Packet) {
 				// If character name is not found, fall back to target's actual character
 				targetCharID = target.CharID()
 				// Verify bounds before accessing characters array
-				if targetCharID >= 0 && targetCharID < len(characters) {
-					targetCharName = characters[targetCharID]
+				if targetCharID >= 0 && targetCharID < len(getCharacters()) {
+					targetCharName = getCharacters()[targetCharID]
 				} else {
 					// Invalid character, clear possession
 					client.SetPossessing(-1)
@@ -652,14 +652,21 @@ func pktIC(client *Client, p *packet.Packet) {
 		}
 		if p.punishmentType == PunishmentUncannyValley {
 			name := ms.Showname
-			if strings.TrimSpace(name) == "" && client.CharID() >= 0 && client.CharID() < len(characters) {
-				name = characters[client.CharID()]
+			if strings.TrimSpace(name) == "" && client.CharID() >= 0 && client.CharID() < len(getCharacters()) {
+				name = getCharacters()[client.CharID()]
 			}
 			if name != "" {
 				ms.Showname = MutateShowname(name)
 			}
 		}
 	}
+
+	// HideDisplay: push the speaker's own sprite off-screen so only their text
+	// shows. Applied here — after the per-punishment loop but before the IC
+	// pair-info snapshot taken further down — so the off-screen offset also
+	// propagates to anyone paired with the hidden speaker (they stay hidden on
+	// the partner's screen too).
+	applyHideDisplay(ms, punishments)
 
 	// Global IC warp: if the area has it enabled and this client is not the
 	// exempt moderator, replace their message with a random past IC message
@@ -764,11 +771,11 @@ func pktIC(client *Client, p *packet.Packet) {
 	case !sliceutil.ContainsString(validDeskMods, ms.DeskMod):
 		logger.LogWarningf("dropped MS from IPID:%v UID:%v — DeskMod not in validDeskMods; value=%q", client.Ipid(), client.Uid(), ms.DeskMod)
 		return
-	case !isPossessing && !hasForcedIniswap && !strings.EqualFold(characters[client.CharID()], ms.Character) && !client.Area().IniswapAllowed(): // character name (skip check when possessing or forced iniswap)
+	case !isPossessing && !hasForcedIniswap && !strings.EqualFold(getCharacters()[client.CharID()], ms.Character) && !client.Area().IniswapAllowed(): // character name (skip check when possessing or forced iniswap)
 		client.SendServerMessage("Iniswapping is not allowed in this area.")
 		return
-	case !isPossessing && !hasForcedIniswap && stuckCharID >= 0 && !strings.EqualFold(characters[stuckCharID], ms.Character): // block iniswap when charstuck unless forced iniswap
-		client.SendServerMessage(fmt.Sprintf("You are character stuck as %v and cannot iniswap.", characters[stuckCharID]))
+	case !isPossessing && !hasForcedIniswap && stuckCharID >= 0 && !strings.EqualFold(getCharacters()[stuckCharID], ms.Character): // block iniswap when charstuck unless forced iniswap
+		client.SendServerMessage(fmt.Sprintf("You are character stuck as %v and cannot iniswap.", getCharacters()[stuckCharID]))
 		return
 	case len(msgText) > config.MaxMsg:
 		client.SendServerMessage("Your message exceeds the maximum message length!")
@@ -842,7 +849,7 @@ func pktIC(client *Client, p *packet.Packet) {
 		if err != nil {
 			return
 		}
-		if pid < 0 || pid > len(characters) || pid == client.CharID() {
+		if pid < 0 || pid > len(getCharacters()) || pid == client.CharID() {
 			return
 		}
 		client.SetPairWantedID(pid)
@@ -968,7 +975,7 @@ func pktIC(client *Client, p *packet.Packet) {
 	client.SetLastTextColor(ownTextColor)
 	newShowname := ownShowname
 	if strings.TrimSpace(ownShowname) == "" {
-		newShowname = characters[client.CharID()]
+		newShowname = getCharacters()[client.CharID()]
 	}
 	// Only broadcast a PU showname update when the showname actually changed.
 	if client.UpdateShowname(newShowname) {
@@ -1044,12 +1051,18 @@ func pktIC(client *Client, p *packet.Packet) {
 		if res.Text != decoded {
 			ms.Message = encode(res.Text)
 		}
-		if res.SwapBG && len(backgrounds) > 0 {
-			bg := backgrounds[rand.Intn(len(backgrounds))]
+		if res.SwapBG && len(getBackgrounds()) > 0 {
+			bg := getBackgrounds()[rand.Intn(len(getBackgrounds()))]
 			client.Area().SetBackground(bg)
 			broadcastToArea(client.Area(), &packet.BN{Background: bg})
 		}
 	}
+
+	// ForceDisplay: if a punished player in this area is pinned, rewrite this
+	// (non-moderator) speaker's sprite to that character and clear any pairing,
+	// so the whole room renders as the pinned character. Applied last so it has
+	// the final word on the outgoing sprite; gated to near-zero cost when unused.
+	maybeApplyForceDisplay(client, ms)
 
 	// Encode the structured packet back into wire format exactly once and
 	// hand it to the broadcaster. MSPacket implements packet.Outgoing, so
@@ -1105,6 +1118,25 @@ func pktAM(client *Client, p *packet.Packet) {
 	}
 
 	decodedSong := decode(mc.Name)
+
+	// /musicban gate. The check only applies to actual music plays (jukebox
+	// entries or streaming URLs) — area-change MC packets fall through to the
+	// areaNames branch further down, which we intentionally do NOT block (a
+	// music-banned player can still move between rooms). Moderators are exempt.
+	// In areas with fewer than musicBanQuietAreaThreshold players the ban is
+	// bypassed so banned players can still set the mood in quiet rooms.
+	if !permissions.IsModerator(client.Perms()) && isMusicBanned(client.Ipid()) {
+		if isMusicURL(decodedSong) || sliceutil.ContainsString(getMusicList(), decodedSong) {
+			if client.Area().PlayerCount() >= musicBanQuietAreaThreshold {
+				client.SendServerMessage(fmt.Sprintf(
+					"You are music-banned. (In areas with fewer than %d people you may still play music.)",
+					musicBanQuietAreaThreshold))
+				addToBuffer(client, "MUSIC", "Blocked by /musicban.", false)
+				return
+			}
+		}
+	}
+
 	if isMusicURL(decodedSong) {
 		// A client (typically WebAO) can request a streaming track by sending
 		// a raw http(s) URL in the MC packet's song slot. Such a URL is never
@@ -1139,7 +1171,7 @@ func pktAM(client *Client, p *packet.Packet) {
 		})
 		return
 	}
-	if sliceutil.ContainsString(music, decodedSong) {
+	if sliceutil.ContainsString(getMusicList(), decodedSong) {
 		if !client.CanChangeMusic() {
 			client.SendServerMessage("You are not allowed to change the music in this area.")
 			return

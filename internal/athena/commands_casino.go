@@ -31,14 +31,14 @@ import (
 // ── /chips give anti-abuse tracking ──────────────────────────────────────────
 
 const (
-	chipsGiveCooldown        = 10 * time.Minute // per-player cooldown between transfers
-	chipsGiveMax             = 200000           // maximum chips transferable per transaction
-	chipsGiveMinPlaytime     = 24 * time.Hour   // minimum total playtime to use /chips give
+	chipsGiveCooldown    = 10 * time.Minute // per-player cooldown between transfers
+	chipsGiveMax         = 200000           // maximum chips transferable per transaction
+	chipsGiveMinPlaytime = 24 * time.Hour   // minimum total playtime to use /chips give
 )
 
 var (
-	chipsGiveMu        sync.Mutex
-	chipsGiveLastTime  = make(map[string]time.Time) // ipid → last transfer time
+	chipsGiveMu       sync.Mutex
+	chipsGiveLastTime = make(map[string]time.Time) // ipid → last transfer time
 )
 
 // ── /casino ───────────────────────────────────────────────────────────────────

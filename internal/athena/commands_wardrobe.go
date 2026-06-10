@@ -45,8 +45,8 @@ func cmdFavourite(client *Client, args []string, _ string) {
 		return
 	}
 	// Use the canonical character name from the list so the stored name always
-	// matches the exact casing in characters[].
-	canonicalName := characters[charID]
+	// matches the exact casing in the character list.
+	canonicalName := getCharacters()[charID]
 	username := client.ModName()
 
 	already, err := db.IsFavourite(username, canonicalName)
@@ -105,7 +105,7 @@ func cmdWardrobe(client *Client, args []string, _ string) {
 		// Respect char-stuck punishment.
 		if stuckID := client.charStuckID(); stuckID >= 0 && charID != stuckID {
 			client.SendServerMessage(fmt.Sprintf(
-				"You are character stuck as %v and cannot change characters.", characters[stuckID]))
+				"You are character stuck as %v and cannot change characters.", getCharacters()[stuckID]))
 			return
 		}
 
@@ -195,7 +195,7 @@ func wardrobeResolve(client *Client, username string, args []string) (int, strin
 		client.SendServerMessage(fmt.Sprintf("Character \"%v\" was not found in the character list.", charName))
 		return 0, "", false
 	}
-	canonicalName := characters[charID]
+	canonicalName := getCharacters()[charID]
 
 	isFav, err := db.IsFavourite(username, canonicalName)
 	if err != nil {
@@ -211,4 +211,3 @@ func wardrobeResolve(client *Client, username string, args []string) (int, strin
 	}
 	return charID, canonicalName, true
 }
-

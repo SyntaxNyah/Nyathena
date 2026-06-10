@@ -74,24 +74,25 @@ var (
 )
 
 var (
-	config                                 *settings.Config
-	characters, music, backgrounds, parrot, cdns []string
-	eightBallAnswers                       []string // optional /8ball responses loaded from 8ball.txt
-	charactersByName                       map[string]int // O(1) lookup: lowercase name → character ID
-	areas                                  []*area.Area
-	areaNames                              string
-	smPacket                               string             // pre-built SM#<areas>#<music>#% packet; built once at startup
-	bgListStr                              string             // pre-built background list for /bglist; zero alloc per call
-	areaIndexMap                           map[*area.Area]int // pre-computed index lookup for O(1) getAreaIndex
-	roles                                  []permissions.Role
-	uids                                   *uidmanager.UidManager
-	players                                playercount.PlayerCount
-	enableDiscord                          bool
-	clients                                *ClientList = &ClientList{list: make(map[*Client]struct{}), uidIndex: make(map[int]*Client), ipidCounts: make(map[string]int)}
-	updatePlayers                                      = make(chan int)      // Updates the advertiser's player count.
-	advertDone                                         = make(chan struct{}) // Signals the advertiser to stop.
-	FatalError                                         = make(chan error)    // Signals that the server should stop after a fatal error.
-	RestartRequest                                     = make(chan struct{}) // Signals that the server should restart.
+	config *settings.Config
+	// The character list, music list, background list, parrot list, 8-ball
+	// answers, CDN whitelist, the derived name→ID index, the /bglist string and
+	// the pre-built SM packet are all hot-reloadable (see /reload) and now live
+	// behind atomic.Pointers in livereload.go. Read them via the get* accessors
+	// (getCharacters(), getMusicList(), getCDNs(), …) instead of as plain
+	// globals, so a runtime swap never races a reader.
+	areas          []*area.Area
+	areaNames      string
+	areaIndexMap   map[*area.Area]int // pre-computed index lookup for O(1) getAreaIndex
+	roles          []permissions.Role
+	uids           *uidmanager.UidManager
+	players        playercount.PlayerCount
+	enableDiscord  bool
+	clients        *ClientList = &ClientList{list: make(map[*Client]struct{}), uidIndex: make(map[int]*Client), ipidCounts: make(map[string]int)}
+	updatePlayers              = make(chan int)      // Updates the advertiser's player count.
+	advertDone                 = make(chan struct{}) // Signals the advertiser to stop.
+	FatalError                 = make(chan error)    // Signals that the server should stop after a fatal error.
+	RestartRequest             = make(chan struct{}) // Signals that the server should restart.
 
 	// connTracker tracks connection attempts per IP for connection-rate limiting.
 	connTracker = struct {
@@ -466,19 +467,18 @@ func NewServer(conf *settings.Config) (*Server, error) {
 	oocRateLimitWindowDur = time.Duration(config.OOCRateLimitWindow) * time.Second
 	rawPktRateLimitWindowDur = time.Duration(float64(time.Second) * config.RawPacketRateLimitWindow)
 	connRateLimitWindowDur = time.Duration(config.ConnRateLimitWindow) * time.Second
-	characters = s.characters
-	charactersByName = make(map[string]int, len(s.characters))
-	for i, name := range s.characters {
-		charactersByName[strings.ToLower(name)] = i
-	}
-	music = s.music
-	backgrounds = s.backgrounds
-	parrot = s.parrot
-	eightBallAnswers = s.eightBall
-	cdns = s.cdns
+	// Publish the hot-reloadable data behind their atomic.Pointers. setCharacters
+	// derives the name→ID index and setBackgrounds derives the /bglist string, so
+	// neither needs to be assigned separately here. These are read at runtime via
+	// the get* accessors and can later be swapped atomically by /reload.
+	setCharacters(s.characters)
+	setMusicList(s.music)
+	setBackgrounds(s.backgrounds)
+	setParrotList(s.parrot)
+	setEightBall(s.eightBall)
+	setCDNs(s.cdns)
 	areas = s.areas
 	areaNames = s.areaNames
-	bgListStr = s.bgListStr
 	areaIndexMap = s.areaIndexMap
 	roles = s.roles
 	uids = s.uids
@@ -486,8 +486,9 @@ func NewServer(conf *settings.Config) (*Server, error) {
 	tournamentParticipants = s.tournamentParticipants
 
 	// Pre-build the SM packet (sent to every client on join) once at startup
-	// so that pktReqAM performs a single write with no allocations.
-	smPacket = buildSMPacket(s.areaNames, s.music)
+	// so that pktReqAM performs a single write with no allocations. Rebuilt by
+	// /reload when music.txt changes.
+	setSMPacket(buildSMPacket(s.areaNames, s.music))
 
 	// Dump the decoded [Voice] config so operators can confirm at a glance
 	// whether the section was loaded.  If voice_allowed appears off here even
@@ -501,6 +502,7 @@ func NewServer(conf *settings.Config) (*Server, error) {
 	initFromSoftWords()
 	initCvote(conf)
 	initHotConfig(conf)
+	initMusicBans()
 	// Initialise the goroutine pool if a limit is configured.
 	if conf.MaxConnectionGoroutines > 0 {
 		connPool = make(chan struct{}, conf.MaxConnectionGoroutines)
@@ -1131,7 +1133,7 @@ func extractIP(s string) string {
 // getParrotMsg returns a random string from the server's parrot list.
 // parrot is validated to be non-empty in InitServer, so no bounds check is required here.
 func getParrotMsg() string {
-	return parrot[rand.Intn(len(parrot))]
+	return getParrotList()[rand.Intn(len(getParrotList()))]
 }
 
 // checkConnRateLimit checks whether the given ipid has exceeded the connection rate limit.

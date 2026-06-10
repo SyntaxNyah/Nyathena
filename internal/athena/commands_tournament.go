@@ -14,7 +14,6 @@ GNU Affero General Public License for more details.
 You should have received a copy of the GNU Affero General Public License
 along with this program.  If not, see <https://www.gnu.org/licenses/>. */
 
-
 package athena
 
 import (
@@ -80,7 +79,7 @@ func cmdTournament(client *Client, args []string, usage string) {
 			announcement := fmt.Sprintf("🏆 TOURNAMENT ENDED! Winner: UID %d with %d messages over %v! Congratulations!",
 				winner.uid, winner.messageCount, duration)
 			writeToAllClients("CT", "OOC", announcement)
-			
+
 			// Remove all punishments from winner (memory and DB).
 			winnerClient.RemoveAllPunishments()
 			if err := db.DeleteAllPunishments(winnerClient.Ipid()); err != nil {
@@ -174,7 +173,7 @@ func cmdJoinTournament(client *Client, args []string, usage string) {
 
 	numPunishments := 2 + rand.Intn(2) // 2 or 3 punishments
 	selectedPunishments := []PunishmentType{}
-	
+
 	// Randomly select unique punishments
 	shuffled := make([]PunishmentType, len(allPunishments))
 	copy(shuffled, allPunishments)

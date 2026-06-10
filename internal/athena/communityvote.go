@@ -86,7 +86,7 @@ type cvoteEntry struct {
 	reason     string
 	voters     map[string]struct{} // set of voter IPIDs (prevents duplicate votes)
 	threshold  int
-	pending    bool       // true when threshold reached, awaiting mod response
+	pending    bool // true when threshold reached, awaiting mod response
 	timer      *time.Timer
 	startedBy  string // initiator OOC name
 }
@@ -715,8 +715,8 @@ func cvoteList(client *Client) {
 	// Snapshot the fields we need under the lock so we can release it before
 	// doing any string formatting (which allocates and can be slow).
 	type voteSnap struct {
-		action    cvoteActionType
-		targetUID int
+		action     cvoteActionType
+		targetUID  int
 		targetName string
 		reason     string
 		votes      int

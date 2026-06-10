@@ -28,13 +28,12 @@ import (
 // ID from the client's area, matching the behaviour expected when WebAO sends
 // CC#0#-1#% (random character button).
 func TestGetRandomFreeChar(t *testing.T) {
-	origChars := characters
-	t.Cleanup(func() { characters = origChars })
+	origChars := getCharacters()
+	t.Cleanup(func() { setCharacters(origChars) })
 
-	characters = []string{"Phoenix Wright", "Miles Edgeworth", "Maya Fey", "Franziska von Karma"}
-
+	setCharacters([]string{"Phoenix Wright", "Miles Edgeworth", "Maya Fey", "Franziska von Karma"})
 	t.Run("returns free character when some are taken", func(t *testing.T) {
-		a := area.NewArea(area.AreaData{}, len(characters), 0, area.EviAny)
+		a := area.NewArea(area.AreaData{}, len(getCharacters()), 0, area.EviAny)
 		// Take characters 0 and 2.
 		a.AddChar(0)
 		a.AddChar(2)
@@ -54,9 +53,9 @@ func TestGetRandomFreeChar(t *testing.T) {
 	})
 
 	t.Run("returns -1 when all characters are taken", func(t *testing.T) {
-		a := area.NewArea(area.AreaData{}, len(characters), 0, area.EviAny)
+		a := area.NewArea(area.AreaData{}, len(getCharacters()), 0, area.EviAny)
 		// Take all characters.
-		for i := range characters {
+		for i := range getCharacters() {
 			a.AddChar(i)
 		}
 
@@ -75,7 +74,7 @@ func TestGetRandomFreeChar(t *testing.T) {
 	})
 
 	t.Run("returns the only free character when one is available", func(t *testing.T) {
-		a := area.NewArea(area.AreaData{}, len(characters), 0, area.EviAny)
+		a := area.NewArea(area.AreaData{}, len(getCharacters()), 0, area.EviAny)
 		// Take all except character 2.
 		a.AddChar(0)
 		a.AddChar(1)
@@ -96,10 +95,9 @@ func TestGetRandomFreeChar(t *testing.T) {
 	})
 
 	t.Run("returns -1 when character list is empty", func(t *testing.T) {
-		origCharsInner := characters
-		t.Cleanup(func() { characters = origCharsInner })
-		characters = []string{}
-
+		origCharsInner := getCharacters()
+		t.Cleanup(func() { setCharacters(origCharsInner) })
+		setCharacters([]string{})
 		a := area.NewArea(area.AreaData{}, 0, 0, area.EviAny)
 		client := &Client{
 			uid:        1,
@@ -190,15 +188,14 @@ func TestTungAndUntungCommandsRegistered(t *testing.T) {
 // TestForceRandomCharTargetsUID verifies the UID-lookup infrastructure that
 // cmdForceRandomChar uses when called with a UID argument.
 func TestForceRandomCharTargetsUID(t *testing.T) {
-	origChars := characters
-	t.Cleanup(func() { characters = origChars })
-	characters = []string{"Phoenix Wright", "Miles Edgeworth", "Maya Fey", "Franziska von Karma"}
-
+	origChars := getCharacters()
+	t.Cleanup(func() { setCharacters(origChars) })
+	setCharacters([]string{"Phoenix Wright", "Miles Edgeworth", "Maya Fey", "Franziska von Karma"})
 	origClients := clients
 	t.Cleanup(func() { clients = origClients })
 	clients = &ClientList{list: make(map[*Client]struct{}), uidIndex: make(map[int]*Client), ipidCounts: make(map[string]int)}
 
-	a := area.NewArea(area.AreaData{}, len(characters), 0, area.EviAny)
+	a := area.NewArea(area.AreaData{}, len(getCharacters()), 0, area.EviAny)
 
 	// The targeted player.
 	target := &Client{uid: 20, char: 1, possessing: -1, pair: ClientPairInfo{wanted_id: -1}}
@@ -247,17 +244,16 @@ func TestForceRandomCharTargetsUID(t *testing.T) {
 // TestForceRandomCharOnlyAffectsCurrentArea verifies that cmdForceRandomChar
 // changes characters only for clients in the admin's area.
 func TestForceRandomCharOnlyAffectsCurrentArea(t *testing.T) {
-	origChars := characters
-	t.Cleanup(func() { characters = origChars })
-	characters = []string{"Phoenix Wright", "Miles Edgeworth", "Maya Fey", "Franziska von Karma"}
-
+	origChars := getCharacters()
+	t.Cleanup(func() { setCharacters(origChars) })
+	setCharacters([]string{"Phoenix Wright", "Miles Edgeworth", "Maya Fey", "Franziska von Karma"})
 	// Snapshot and restore the global clients list.
 	origClients := clients
 	t.Cleanup(func() { clients = origClients })
 	clients = &ClientList{list: make(map[*Client]struct{}), uidIndex: make(map[int]*Client), ipidCounts: make(map[string]int)}
 
-	adminArea := area.NewArea(area.AreaData{}, len(characters), 0, area.EviAny)
-	otherArea := area.NewArea(area.AreaData{}, len(characters), 0, area.EviAny)
+	adminArea := area.NewArea(area.AreaData{}, len(getCharacters()), 0, area.EviAny)
+	otherArea := area.NewArea(area.AreaData{}, len(getCharacters()), 0, area.EviAny)
 
 	// Client in the admin's area.
 	inArea := &Client{uid: 1, char: 0, possessing: -1, pair: ClientPairInfo{wanted_id: -1}}

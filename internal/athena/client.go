@@ -236,6 +236,21 @@ const (
 	PunishmentVoiceStutter
 	// Grounded — replaces every IC line with a GoAnimate "grounded" tirade.
 	PunishmentGrounded
+	// Display punishments — manipulate which character sprites render in the
+	// viewport. Unlike the text effects above they touch the IC packet's sprite
+	// fields, not its message text, and are applied late in pktIC (just before
+	// broadcast). Appended last so existing persisted SUBTYPE values keep their
+	// meaning. See display_punishments.go.
+	//
+	// HideDisplay pushes the punished speaker's OWN sprite off-screen (a fixed
+	// off-viewport self-offset) so their text still appears but their character
+	// does not — looks especially funny on pairs, where only the partner shows.
+	//
+	// ForceDisplay pins the punished player's character onto every non-moderator
+	// IC message in their area: while it's active, everyone in the room renders
+	// as that one character, so no other sprite can show in the viewport.
+	PunishmentHideDisplay
+	PunishmentForceDisplay
 )
 
 // IssuerTier records the permission tier of the moderator who applied a
@@ -800,8 +815,8 @@ func (client *Client) logSnapshot() clientLogSnapshot {
 	var charName string
 	if client.char == -1 {
 		charName = "Spectator"
-	} else if client.char >= 0 && client.char < len(characters) {
-		charName = characters[client.char]
+	} else if client.char >= 0 && client.char < len(getCharacters()) {
+		charName = getCharacters()[client.char]
 	}
 	snap := clientLogSnapshot{
 		charName: charName,
@@ -892,6 +907,9 @@ func (client *Client) clientCleanup() {
 	}
 	handleCasinoDisconnect(client)
 	handleMafiaDisconnect(client)
+	// Lower the /forcedisplay gate if this client was a pinned target, so the
+	// area stops rendering everyone as their character once they're gone.
+	client.releaseForceDisplayGate()
 	client.markClosed()
 	clients.RemoveClient(client)
 }
@@ -922,7 +940,7 @@ func (client *Client) CurrentCharacter() string {
 	if client.CharID() == -1 {
 		return "Spectator"
 	} else {
-		return characters[client.CharID()]
+		return getCharacters()[client.CharID()]
 	}
 }
 
@@ -2060,8 +2078,10 @@ func (client *Client) AddPunishmentBy(pType PunishmentType, duration time.Durati
 
 	// Remove existing punishment of the same type (prevent duplicate same-type punishments)
 	// Different punishment types can coexist and stack their effects
+	existed := false
 	for i := len(client.punishments) - 1; i >= 0; i-- {
 		if client.punishments[i].punishmentType == pType {
+			existed = true
 			client.punishments = append(client.punishments[:i], client.punishments[i+1:]...)
 			break
 		}
@@ -2083,6 +2103,14 @@ func (client *Client) AddPunishmentBy(pType PunishmentType, duration time.Durati
 		targetUID:      -1,
 		issuerTier:     tier,
 	})
+	// Maintain the /forcedisplay hot-path gate. A forcedisplay that wasn't
+	// already present — a fresh application or a DB restore on reconnect — raises
+	// the count by one; a same-type re-apply leaves it unchanged. Only
+	// AddPunishmentBy is hooked because forcedisplay carries no customData and so
+	// never routes through AddPunishmentWithData.
+	if pType == PunishmentForceDisplay && !existed {
+		activeForceDisplay.Add(1)
+	}
 }
 
 // PunishmentIssuerTier returns the tier of the moderator who applied the given
@@ -2162,6 +2190,9 @@ func (client *Client) RemovePunishment(pType PunishmentType) {
 	for i := len(client.punishments) - 1; i >= 0; i-- {
 		if client.punishments[i].punishmentType == pType {
 			client.punishments = append(client.punishments[:i], client.punishments[i+1:]...)
+			if pType == PunishmentForceDisplay {
+				activeForceDisplay.Add(-1)
+			}
 			return
 		}
 	}
@@ -2226,6 +2257,12 @@ func (client *Client) AddICWarpPunishment(warpArea *area.Area, duration time.Dur
 func (client *Client) RemoveAllPunishments() {
 	client.mu.Lock()
 	defer client.mu.Unlock()
+	for i := range client.punishments {
+		if client.punishments[i].punishmentType == PunishmentForceDisplay {
+			activeForceDisplay.Add(-1)
+			break // at most one forcedisplay per client (same-type dedup)
+		}
+	}
 	client.punishments = []PunishmentState{}
 }
 
@@ -2355,6 +2392,9 @@ func (client *Client) CheckExpiredAndGetPunishments() (wasExpired bool, active [
 		if !p.expiresAt.IsZero() && now.After(p.expiresAt) {
 			wasExpired = true
 			pType := p.punishmentType
+			if pType == PunishmentForceDisplay {
+				activeForceDisplay.Add(-1)
+			}
 			ipid := client.ipid
 			go func() {
 				if err := db.DeleteTextPunishment(ipid, int(pType)); err != nil {
@@ -2629,6 +2669,10 @@ func (p PunishmentType) String() string {
 		return "voicestutter"
 	case PunishmentGrounded:
 		return "grounded"
+	case PunishmentHideDisplay:
+		return "hidedisplay"
+	case PunishmentForceDisplay:
+		return "forcedisplay"
 	default:
 		return "none"
 	}

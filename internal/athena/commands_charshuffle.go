@@ -97,7 +97,7 @@ func cmdCharShuffle(client *Client, _ []string, _ string) {
 		newID := newIDs[i]
 		if !targetArea.SwitchChar(-1, newID) {
 			// Should not happen — defensive fallback: pick any free slot.
-			for cand := 0; cand < len(characters); cand++ {
+			for cand := 0; cand < len(getCharacters()); cand++ {
 				if !targetArea.IsTaken(cand) {
 					if targetArea.SwitchChar(-1, cand) {
 						newID = cand

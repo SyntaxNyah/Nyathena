@@ -83,10 +83,9 @@ func newMusicTestClient(t *testing.T) (*Client, *captureConn) {
 // sends an MC packet whose song slot is a whitelisted http(s) URL, the server
 // re-broadcasts that URL byte-for-byte — it must never mangle it.
 func TestMCURLWhitelistedBroadcastsVerbatim(t *testing.T) {
-	origCDNs := cdns
-	t.Cleanup(func() { cdns = origCDNs })
-	cdns = []string{"host.com"}
-
+	origCDNs := getCDNs()
+	t.Cleanup(func() { setCDNs(origCDNs) })
+	setCDNs([]string{"host.com"})
 	client, conn := newMusicTestClient(t)
 
 	const url = "https://host.com/stuff.mp3"
@@ -109,10 +108,9 @@ func TestMCURLWhitelistedBroadcastsVerbatim(t *testing.T) {
 // the CDN whitelist is rejected with an OOC "Illegal origin" notice and is
 // never broadcast as a music change.
 func TestMCURLUnwhitelistedRejected(t *testing.T) {
-	origCDNs := cdns
-	t.Cleanup(func() { cdns = origCDNs })
-	cdns = []string{"trusted.example"}
-
+	origCDNs := getCDNs()
+	t.Cleanup(func() { setCDNs(origCDNs) })
+	setCDNs([]string{"trusted.example"})
 	client, conn := newMusicTestClient(t)
 
 	const url = "https://evil.com/stuff.mp3"
@@ -135,10 +133,9 @@ func TestMCURLUnwhitelistedRejected(t *testing.T) {
 // wire. The server must re-broadcast that wire form unchanged, so that when a
 // recipient decodes it they recover the exact original URL.
 func TestMCURLWithQueryStringNotMangled(t *testing.T) {
-	origCDNs := cdns
-	t.Cleanup(func() { cdns = origCDNs })
-	cdns = []string{"host.com"}
-
+	origCDNs := getCDNs()
+	t.Cleanup(func() { setCDNs(origCDNs) })
+	setCDNs([]string{"host.com"})
 	client, conn := newMusicTestClient(t)
 
 	const originalURL = "https://host.com/stream?id=7&fmt=mp3"

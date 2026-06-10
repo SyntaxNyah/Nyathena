@@ -26,7 +26,7 @@ This is the main thing Nyathena exists for. All punishment commands support `-d 
 
 **Animal Filters (12):** `/monkey`, `/snake`, `/dog`, `/cat`, `/bird`, `/cow`, `/frog`, `/duck`, `/horse`, `/lion`, `/zoo`, `/bunny`
 
-**Visibility / Cosmetic (6):** `/emoji`, `/invisible`, `/shrink`, `/grow`, `/wide`, `/areainiswap`
+**Visibility / Cosmetic (8):** `/emoji`, `/invisible`, `/shrink`, `/grow`, `/wide`, `/areainiswap`, `/hidedisplay` (push the target's own sprite off-screen — funny on pairs), `/forcedisplay` (pin the target's character onto every IC sprite in the area — nobody else's character shows)
 
 **Timing (3):** `/slowpoke`, `/fastspammer`, `/lag`
 
@@ -141,6 +141,8 @@ UID-based mutual pairing that survives area and character changes. Pair messages
 ### Other Additions
 
 - **Doki Area Effect** — literature-club-themed chaos per area (`doki_area = true` in `areas.toml`)
+- **Persistent `/musicban`** — bans an IPID from playing music across sessions; bypassed in areas with fewer than 3 people. `/musicunban` and `/musicbans` round out the set
+- **Hot `/reload`** — atomic, race-free reload of `characters.txt` (append-only), `music.txt`, `cdns.txt`, `backgrounds.txt`, `parrot.txt`, `8ball.txt`, `banned_words.txt` and `config.toml` motd/desc without restarting; also bound to stdin `reload` and `SIGHUP`
 - **Shadow Mod Visibility** — shadow mods are invisible in `/gas`/`/players` to non-admins
 - **`/charshuffle` / `/uncharshuffle`** — Sattolo-permutes everyone's character sprite; originals remembered
 - **`/reversename` / `/unreversename`** — flips showname rune order; stacks cleanly with `/forcename`

@@ -14,7 +14,6 @@ GNU Affero General Public License for more details.
 You should have received a copy of the GNU Affero General Public License
 along with this program.  If not, see <https://www.gnu.org/licenses/>. */
 
-
 package athena
 
 import (
@@ -282,7 +281,7 @@ func cmdPossess(client *Client, args []string, _ string) {
 	}
 
 	// Validate CharID is within bounds
-	if target.CharID() < 0 || target.CharID() >= len(characters) {
+	if target.CharID() < 0 || target.CharID() >= len(getCharacters()) {
 		client.SendServerMessage("Target has an invalid character.")
 		return
 	}
@@ -308,8 +307,8 @@ func cmdPossess(client *Client, args []string, _ string) {
 	targetCharName := target.PairInfo().name
 	if targetCharName == "" {
 		// Defensive bounds check before accessing characters array
-		if target.CharID() >= 0 && target.CharID() < len(characters) {
-			targetCharName = characters[target.CharID()]
+		if target.CharID() >= 0 && target.CharID() < len(getCharacters()) {
+			targetCharName = getCharacters()[target.CharID()]
 		} else {
 			client.SendServerMessage("Target has an invalid character.")
 			return
@@ -322,8 +321,8 @@ func cmdPossess(client *Client, args []string, _ string) {
 		// If character name is not found, fall back to target's actual character
 		targetCharID = target.CharID()
 		// Defensive bounds check before accessing characters array
-		if targetCharID >= 0 && targetCharID < len(characters) {
-			targetCharName = characters[targetCharID]
+		if targetCharID >= 0 && targetCharID < len(getCharacters()) {
+			targetCharName = getCharacters()[targetCharID]
 		} else {
 			client.SendServerMessage("Target has an invalid character.")
 			return
@@ -345,25 +344,25 @@ func cmdPossess(client *Client, args []string, _ string) {
 	// appearance completely. The struct is encoded to wire format exactly
 	// once on the call to writeToArea.
 	ms := &packet.MSPacket{
-		DeskMod:       "1",
-		Character:     targetCharName,
-		Emote:         targetEmote,
-		Message:       encodedMsg,
-		Side:          target.Pos(),
-		EmoteModifier: "0",
-		CharID:        strconv.Itoa(targetCharID),
-		SfxDelay:      "0",
-		ShoutModifier: "0",
-		Evidence:      "0",
-		Flip:          "0",
-		Realization:   "0",
-		TextColor:     targetTextColor,
-		Showname:      showname,
-		OtherCharID:   "-1",
+		DeskMod:                "1",
+		Character:              targetCharName,
+		Emote:                  targetEmote,
+		Message:                encodedMsg,
+		Side:                   target.Pos(),
+		EmoteModifier:          "0",
+		CharID:                 strconv.Itoa(targetCharID),
+		SfxDelay:               "0",
+		ShoutModifier:          "0",
+		Evidence:               "0",
+		Flip:                   "0",
+		Realization:            "0",
+		TextColor:              targetTextColor,
+		Showname:               showname,
+		OtherCharID:            "-1",
 		NonInterruptingPreAnim: "0",
-		SfxLooping:    "0",
-		Screenshake:   "0",
-		Additive:      "0",
+		SfxLooping:             "0",
+		Screenshake:            "0",
+		Additive:               "0",
 	}
 
 	// Send the IC message to the target's area
@@ -415,7 +414,7 @@ func cmdFullPossess(client *Client, args []string, _ string) {
 	}
 
 	// Validate CharID is within bounds
-	if target.CharID() < 0 || target.CharID() >= len(characters) {
+	if target.CharID() < 0 || target.CharID() >= len(getCharacters()) {
 		client.SendServerMessage("Target has an invalid character.")
 		return
 	}
@@ -584,7 +583,7 @@ func cmdCoinflip(client *Client, args []string, _ string) {
 
 	// Check if there's an active coinflip challenge in the area
 	activeChallenge := client.Area().ActiveCoinflip()
-	
+
 	if activeChallenge == nil {
 		// No active challenge - create a new one
 		challenge := &area.CoinflipChallenge{
@@ -594,16 +593,16 @@ func cmdCoinflip(client *Client, args []string, _ string) {
 		}
 		client.Area().SetActiveCoinflip(challenge)
 		client.Area().SetLastCoinflipTime(time.Now().UTC())
-		
+
 		// Announce the challenge
-		message := fmt.Sprintf("%v has chosen %v and is ready to coinflip! Type /coinflip %v to battle them!", 
+		message := fmt.Sprintf("%v has chosen %v and is ready to coinflip! Type /coinflip %v to battle them!",
 			client.OOCName(), choice, oppositeChoice(choice))
 		sendAreaServerMessage(client.Area(), message)
 		addToBuffer(client, "GAME", fmt.Sprintf("Started coinflip challenge with %v", choice), false)
-		
+
 	} else {
 		// There's an active challenge
-		
+
 		// Check if challenge has expired (30 seconds)
 		if time.Now().UTC().After(activeChallenge.CreatedAt.Add(30 * time.Second)) {
 			// Challenge expired, create new one
@@ -614,33 +613,33 @@ func cmdCoinflip(client *Client, args []string, _ string) {
 			}
 			client.Area().SetActiveCoinflip(challenge)
 			client.Area().SetLastCoinflipTime(time.Now().UTC())
-			
-			message := fmt.Sprintf("Previous coinflip expired. %v has chosen %v and is ready to coinflip! Type /coinflip %v to battle them!", 
+
+			message := fmt.Sprintf("Previous coinflip expired. %v has chosen %v and is ready to coinflip! Type /coinflip %v to battle them!",
 				client.OOCName(), choice, oppositeChoice(choice))
 			sendAreaServerMessage(client.Area(), message)
 			addToBuffer(client, "GAME", fmt.Sprintf("Started coinflip challenge with %v", choice), false)
 			return
 		}
-		
+
 		// Check if same player is trying to accept their own challenge
 		if activeChallenge.PlayerName == client.OOCName() {
 			client.SendServerMessage("You cannot accept your own coinflip challenge!")
 			return
 		}
-		
+
 		// Check if the choice is different from the challenger's choice
 		if activeChallenge.Choice == choice {
-			client.SendServerMessage(fmt.Sprintf("You must pick the opposite choice! The challenger picked %v, so you must pick %v.", 
+			client.SendServerMessage(fmt.Sprintf("You must pick the opposite choice! The challenger picked %v, so you must pick %v.",
 				activeChallenge.Choice, oppositeChoice(activeChallenge.Choice)))
 			return
 		}
-		
+
 		// Battle time! Flip the coin
 		coinResult := "heads"
 		if rand.Intn(2) == 1 {
 			coinResult = "tails"
 		}
-		
+
 		// Determine winner
 		var winner string
 		if coinResult == activeChallenge.Choice {
@@ -648,18 +647,18 @@ func cmdCoinflip(client *Client, args []string, _ string) {
 		} else {
 			winner = client.OOCName()
 		}
-		
+
 		// Announce result
-		message := fmt.Sprintf("⚔️ COINFLIP BATTLE! %v (%v) vs %v (%v) - The coin landed on %v! 🎉 %v WINS! 🎉", 
+		message := fmt.Sprintf("⚔️ COINFLIP BATTLE! %v (%v) vs %v (%v) - The coin landed on %v! 🎉 %v WINS! 🎉",
 			activeChallenge.PlayerName, activeChallenge.Choice,
 			client.OOCName(), choice,
 			coinResult, winner)
 		sendAreaServerMessage(client.Area(), message)
-		
+
 		// Log for both players
-		addToBuffer(client, "GAME", fmt.Sprintf("Coinflip battle: %v vs %v - Result: %v - Winner: %v", 
+		addToBuffer(client, "GAME", fmt.Sprintf("Coinflip battle: %v vs %v - Result: %v - Winner: %v",
 			activeChallenge.Choice, choice, coinResult, winner), false)
-		
+
 		// Clear the challenge
 		client.Area().SetActiveCoinflip(nil)
 	}
@@ -683,7 +682,7 @@ func cmdPoll(client *Client, args []string, usage string) {
 	}
 
 	// Check cooldown (5 minutes)
-	if time.Now().UTC().Before(client.Area().LastPollTime().Add(5 * time.Minute)) && !client.Area().LastPollTime().IsZero() {
+	if time.Now().UTC().Before(client.Area().LastPollTime().Add(5*time.Minute)) && !client.Area().LastPollTime().IsZero() {
 		remaining := time.Until(client.Area().LastPollTime().Add(5 * time.Minute))
 		client.SendServerMessage(fmt.Sprintf("Please wait %v before creating another poll in this area.", remaining.Round(time.Second)))
 		return
@@ -692,7 +691,7 @@ func cmdPoll(client *Client, args []string, usage string) {
 	// Parse poll format: question|option1|option2|...
 	fullArg := strings.Join(args, " ")
 	parts := strings.Split(fullArg, "|")
-	
+
 	if len(parts) < 3 {
 		client.SendServerMessage("Not enough poll options. Format: " + usage)
 		return
@@ -811,27 +810,25 @@ func cmdWhisper(client *Client, args []string, usage string) {
 	cmdPunishment(client, args, usage, PunishmentWhisper)
 }
 
-
-
 // Handles /erp
 
 var erpMessages = []string{
-"Get out of here, you dirty little ERPer. Nobody wants you.",
-"Ewww, an ERPer?! Get off this server immediately!",
-"Pathetic. Absolutely pathetic. Go ERP somewhere else.",
-"The AO ERP police have arrived. You're being escorted OUT.",
-"Did you really just try to ERP here? Disgusting. Goodbye.",
-"This server is an ERP-free zone. Enforcing policy NOW.",
-"Oh sweetie, no. Just... no. Take your cringe and leave.",
-"Your ERP license has been revoked. Please see yourself out.",
-"ERROR 404: Dignity not found. Kicking user for gross misconduct.",
-"The council has spoken. ERPers are NOT welcome. Bye-bye!",
+	"Get out of here, you dirty little ERPer. Nobody wants you.",
+	"Ewww, an ERPer?! Get off this server immediately!",
+	"Pathetic. Absolutely pathetic. Go ERP somewhere else.",
+	"The AO ERP police have arrived. You're being escorted OUT.",
+	"Did you really just try to ERP here? Disgusting. Goodbye.",
+	"This server is an ERP-free zone. Enforcing policy NOW.",
+	"Oh sweetie, no. Just... no. Take your cringe and leave.",
+	"Your ERP license has been revoked. Please see yourself out.",
+	"ERROR 404: Dignity not found. Kicking user for gross misconduct.",
+	"The council has spoken. ERPers are NOT welcome. Bye-bye!",
 }
 
 func cmdErp(client *Client, _ []string, _ string) {
-msg := erpMessages[rand.Intn(len(erpMessages))]
-client.SendSync(&packet.KK{Reason: msg})
-client.conn.Close()
+	msg := erpMessages[rand.Intn(len(erpMessages))]
+	client.SendSync(&packet.KK{Reason: msg})
+	client.conn.Close()
 }
 
 // cmdMaso lets any user self-apply a random punishment for a configurable
@@ -947,7 +944,7 @@ func cmd8Ball(client *Client, args []string, _ string) {
 		client.SendServerMessage("Usage: /8ball <question>")
 		return
 	}
-	pool := eightBallAnswers
+	pool := getEightBall()
 	if len(pool) == 0 {
 		pool = defaultEightBallAnswers
 	}
@@ -955,4 +952,3 @@ func cmd8Ball(client *Client, args []string, _ string) {
 	sendAreaServerMessage(client.Area(), fmt.Sprintf("%v asked: %s\n🎱 The Magic 8-Ball says: %s",
 		pairDisplayName(client), question, answer))
 }
-

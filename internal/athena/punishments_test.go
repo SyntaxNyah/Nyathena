@@ -191,9 +191,9 @@ func TestApplyFromSoftware(t *testing.T) {
 		// Exact / whole-token matches still work.
 		{"bum", "***"},
 		{"bart", "****"},
-		{"BUM", "***"},                          // case-insensitive
-		{"hello world", "hello world"},           // no match
-		{"hello bum world", "hello *** world"},   // word in sentence
+		{"BUM", "***"},                         // case-insensitive
+		{"hello world", "hello world"},         // no match
+		{"hello bum world", "hello *** world"}, // word in sentence
 
 		// Punctuation flanking a matched token is preserved.
 		{"bum!", "***!"},

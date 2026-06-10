@@ -131,19 +131,19 @@ func init() {
 
 // hangmanState is the per-area mutable game state.
 type hangmanState struct {
-	mu              sync.Mutex
-	optInActive     bool
-	gameActive      bool
-	word            string           // lowercase secret word
-	revealed        []bool           // revealed[i] = true when word[i] is known
-	wrongLetters    []rune           // wrong single-letter guesses (for display)
-	wrongWordCount  int              // wrong full-word guesses (each costs 1 strike)
-	guessedLetters  map[rune]bool    // all tried single letters
-	wrongGuessers   map[int]bool     // UID → made at least one wrong guess
-	participants    map[int]struct{} // opted-in UIDs
-	hostUID         int              // UID of the player who started the game
-	lastEnd         time.Time
-	area            *area.Area
+	mu             sync.Mutex
+	optInActive    bool
+	gameActive     bool
+	word           string           // lowercase secret word
+	revealed       []bool           // revealed[i] = true when word[i] is known
+	wrongLetters   []rune           // wrong single-letter guesses (for display)
+	wrongWordCount int              // wrong full-word guesses (each costs 1 strike)
+	guessedLetters map[rune]bool    // all tried single letters
+	wrongGuessers  map[int]bool     // UID → made at least one wrong guess
+	participants   map[int]struct{} // opted-in UIDs
+	hostUID        int              // UID of the player who started the game
+	lastEnd        time.Time
+	area           *area.Area
 }
 
 var (

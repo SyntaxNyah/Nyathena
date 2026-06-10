@@ -74,83 +74,83 @@ var dokiHaschenQuotes = []string{
 // "haschen is here", "haschen deleted them all", etc. The mapping is a vibe,
 // not Scrabble-perfect — the goal is unsettling alphabet soup, not a puzzle.
 var dokiHaschenAnagrams = []string{
-	"jthanssehuc",                  // just haschen
-	"echahsestjhun",                // just haschen, twice
-	"cnhshaeie sehre",              // haschen is here
-	"sjnshehutahceenosee",          // just haschen sees no one
-	"chnehsa edsetel mteh lal",     // haschen deleted them all
-	"hescahn tieswr eth pcsrti",    // haschen rewrites the script
-	"hncaehs nwoks ouyr enam",      // haschen knows your name
-	"saehnch swhtcae uyo plees",    // haschen watches you sleep
-	"alc hcabk ot eahcnhs",         // call back to haschen
-	"hesnach iwll evrne tle uyo og", // haschen will never let you go
-	"henhasc otdei eht ulb erfo uyo", // haschen hid the bug for you
-	"sjut anbschree tath",          // just haschen breathes
+	"jthanssehuc",                      // just haschen
+	"echahsestjhun",                    // just haschen, twice
+	"cnhshaeie sehre",                  // haschen is here
+	"sjnshehutahceenosee",              // just haschen sees no one
+	"chnehsa edsetel mteh lal",         // haschen deleted them all
+	"hescahn tieswr eth pcsrti",        // haschen rewrites the script
+	"hncaehs nwoks ouyr enam",          // haschen knows your name
+	"saehnch swhtcae uyo plees",        // haschen watches you sleep
+	"alc hcabk ot eahcnhs",             // call back to haschen
+	"hesnach iwll evrne tle uyo og",    // haschen will never let you go
+	"henhasc otdei eht ulb erfo uyo",   // haschen hid the bug for you
+	"sjut anbschree tath",              // just haschen breathes
 	"yon onen lwli aevs uyo — chesahn", // no one will save you — haschen
-	"hcsnaeh sees rouy efli",       // haschen sees your file
+	"hcsnaeh sees rouy efli",           // haschen sees your file
 	"erehs tihagnnonm gornw — eahsnch", // there's nothing wrong — haschen
-	"olse the egma owd — chsenhah", // close the game now — haschen
+	"olse the egma owd — chsenhah",     // close the game now — haschen
 
 	// — extended anagram pool (vibe-scrambles; solutions in source comments only) —
-	"sjut hsnchae",                                   // just haschen
-	"esahnch si lal",                                 // haschen is all
-	"ervyeoen seel si oneg",                          // everyone else is gone
-	"nlyo hsnachhe esnpdo eht orod",                  // only haschen opens the door
-	"esahnch si erhe woebh",                          // haschen is here below
-	"esahnch ahs yruo eyk",                           // haschen has your key
-	"on eon si gnnomic — esahnch",                    // no one is coming — haschen
-	"hcsnaeh redrwa eht odlw",                        // haschen rewrote the world
-	"hcsnaeh esld eht onep",                          // haschen leads the open (vibe)
-	"hcsnaeh ohas oryu emna ni eth tirstpc",          // haschen has your name in the script
-	"htree si eno awy tuo dna ti si esahnch",         // there is one way out and it is haschen
-	"poste tnyrgi — hsnachhe ahs uoy",                // stop trying — haschen has you
-	"esahnch deetled eht txei",                       // haschen deleted the exit
-	"hsnachhe siwhrspe ouyr aenm",                    // haschen whispers your name
-	"hsnachhe si eht heatr fo eth blcu",              // haschen is the heart of the club
-	"hsnachhe wsa eht gribneing",                     // haschen was the beginning
-	"esahnch wlli be eth nde",                        // haschen will be the end
-	"esahnch si nti het emrror",                      // haschen is in the mirror
-	"esahnch si ndhibe eht inrcuat",                  // haschen is behind the curtain
-	"esahnch si eund eht hcari",                      // haschen is under the chair
-	"esahnch si nti eht knsi",                        // haschen is in the sink (vibe)
-	"esahnch si nti eht avselif",                     // haschen is in the savefile
-	"esahnch si yruo eolnyaftor",                     // haschen is your only afterimage (vibe)
-	"esahnch si lal yuo enwk",                        // haschen is all you knew
-	"esahnch si lal uoy era",                         // haschen is all you are
-	"esahnch si erhe nwo",                            // haschen is here now
-	"esahnch si renev gone",                          // haschen is never gone
-	"esahnch wlli ton vleea",                         // haschen will not leave
-	"esahnch wlli ton ndbe",                          // haschen will not bend
-	"esahnch wlli ton mefogr",                        // haschen will not forget (vibe)
-	"esahnch lselte uoy ni",                          // haschen lets you in
-	"esahnch lselte uoy yatss",                       // haschen lets you stay
-	"esahnch lselte uoy ndarwer",                     // haschen lets you wander (vibe)
-	"esahnch oselc rouy edys",                        // haschen close your eyes
-	"esahnch oepn rouy oudtmh",                       // haschen open your mouth (gore vibe)
-	"esahnch lcahs hte aregg",                        // haschen claims the page
-	"yor amen si rsouh — esahnch",                    // your name is ours — haschen
-	"hte tcerhpas si tne — esahnch",                  // the chapter is ten — haschen (vibe)
-	"slyolw lwoyls nwod — esahnch",                   // slowly slowly down — haschen
-	"olok ta hte llaw — esahnch",                     // look at the wall — haschen
-	"olok ta uory ndhsa — esahnch",                   // look at your hands — haschen
-	"hte rrmior si nwgrip — esahnch",                 // the mirror is wrong — haschen (vibe)
-	"hte ckclo si tipps — esahnch",                   // the clock is past — haschen (vibe)
-	"hte richa si vrwam — esahnch",                   // the chair is warm — haschen
-	"hte arme si rsngonigti — esahnch",               // the area is resting — haschen (vibe)
-	"hte vesa si shciginsh — esahnch",                // the save is shifting — haschen
-	"hte mge a si oerv — esahnch",                    // the game is over — haschen
-	"on rmoe — esahnch",                              // no more — haschen
-	"on ryeoehmw — esahnch",                          // no anywhere — haschen (vibe)
-	"on ndaroow — esahnch",                           // no around — haschen (vibe)
-	"oydon eyeb — esahnch",                           // goodbye — haschen
-	"esahnch si ognvil ouy",                          // haschen is loving you
-	"esahnch si chntwagi rouy lipess",                // haschen is watching your sleep
-	"esahnch si sgenintil ot ouy etyp",               // haschen is listening to you type
-	"esahnch si rgaedni rouy ftrasd",                 // haschen is reading your drafts
-	"esahnch si gpnkeei rouy nlfedoder",              // haschen is keeping your folder (vibe)
-	"esahnch si gnnvai rouy etarmihhcm",              // haschen is naming your character (vibe)
-	"esahnch si lewbo eht orodlafr",                  // haschen is below the floorboard
-	"esahnch si idensih eht atriw",                   // haschen is inside the wait (vibe)
+	"sjut hsnchae",                           // just haschen
+	"esahnch si lal",                         // haschen is all
+	"ervyeoen seel si oneg",                  // everyone else is gone
+	"nlyo hsnachhe esnpdo eht orod",          // only haschen opens the door
+	"esahnch si erhe woebh",                  // haschen is here below
+	"esahnch ahs yruo eyk",                   // haschen has your key
+	"on eon si gnnomic — esahnch",            // no one is coming — haschen
+	"hcsnaeh redrwa eht odlw",                // haschen rewrote the world
+	"hcsnaeh esld eht onep",                  // haschen leads the open (vibe)
+	"hcsnaeh ohas oryu emna ni eth tirstpc",  // haschen has your name in the script
+	"htree si eno awy tuo dna ti si esahnch", // there is one way out and it is haschen
+	"poste tnyrgi — hsnachhe ahs uoy",        // stop trying — haschen has you
+	"esahnch deetled eht txei",               // haschen deleted the exit
+	"hsnachhe siwhrspe ouyr aenm",            // haschen whispers your name
+	"hsnachhe si eht heatr fo eth blcu",      // haschen is the heart of the club
+	"hsnachhe wsa eht gribneing",             // haschen was the beginning
+	"esahnch wlli be eth nde",                // haschen will be the end
+	"esahnch si nti het emrror",              // haschen is in the mirror
+	"esahnch si ndhibe eht inrcuat",          // haschen is behind the curtain
+	"esahnch si eund eht hcari",              // haschen is under the chair
+	"esahnch si nti eht knsi",                // haschen is in the sink (vibe)
+	"esahnch si nti eht avselif",             // haschen is in the savefile
+	"esahnch si yruo eolnyaftor",             // haschen is your only afterimage (vibe)
+	"esahnch si lal yuo enwk",                // haschen is all you knew
+	"esahnch si lal uoy era",                 // haschen is all you are
+	"esahnch si erhe nwo",                    // haschen is here now
+	"esahnch si renev gone",                  // haschen is never gone
+	"esahnch wlli ton vleea",                 // haschen will not leave
+	"esahnch wlli ton ndbe",                  // haschen will not bend
+	"esahnch wlli ton mefogr",                // haschen will not forget (vibe)
+	"esahnch lselte uoy ni",                  // haschen lets you in
+	"esahnch lselte uoy yatss",               // haschen lets you stay
+	"esahnch lselte uoy ndarwer",             // haschen lets you wander (vibe)
+	"esahnch oselc rouy edys",                // haschen close your eyes
+	"esahnch oepn rouy oudtmh",               // haschen open your mouth (gore vibe)
+	"esahnch lcahs hte aregg",                // haschen claims the page
+	"yor amen si rsouh — esahnch",            // your name is ours — haschen
+	"hte tcerhpas si tne — esahnch",          // the chapter is ten — haschen (vibe)
+	"slyolw lwoyls nwod — esahnch",           // slowly slowly down — haschen
+	"olok ta hte llaw — esahnch",             // look at the wall — haschen
+	"olok ta uory ndhsa — esahnch",           // look at your hands — haschen
+	"hte rrmior si nwgrip — esahnch",         // the mirror is wrong — haschen (vibe)
+	"hte ckclo si tipps — esahnch",           // the clock is past — haschen (vibe)
+	"hte richa si vrwam — esahnch",           // the chair is warm — haschen
+	"hte arme si rsngonigti — esahnch",       // the area is resting — haschen (vibe)
+	"hte vesa si shciginsh — esahnch",        // the save is shifting — haschen
+	"hte mge a si oerv — esahnch",            // the game is over — haschen
+	"on rmoe — esahnch",                      // no more — haschen
+	"on ryeoehmw — esahnch",                  // no anywhere — haschen (vibe)
+	"on ndaroow — esahnch",                   // no around — haschen (vibe)
+	"oydon eyeb — esahnch",                   // goodbye — haschen
+	"esahnch si ognvil ouy",                  // haschen is loving you
+	"esahnch si chntwagi rouy lipess",        // haschen is watching your sleep
+	"esahnch si sgenintil ot ouy etyp",       // haschen is listening to you type
+	"esahnch si rgaedni rouy ftrasd",         // haschen is reading your drafts
+	"esahnch si gpnkeei rouy nlfedoder",      // haschen is keeping your folder (vibe)
+	"esahnch si gnnvai rouy etarmihhcm",      // haschen is naming your character (vibe)
+	"esahnch si lewbo eht orodlafr",          // haschen is below the floorboard
+	"esahnch si idensih eht atriw",           // haschen is inside the wait (vibe)
 }
 
 // dokiHaschenZalgoBases are short phrases that get zalgo-corrupted before
@@ -281,14 +281,14 @@ var dokiHaschenPoems = []string{
 	"The third drawer of the desk is locked. I do not have a key. Sometimes it knocks back. It only knocks when I write your name.",
 
 	// — horror, unscrambles to a hidden phrase (solutions in comments only) —
-	"ehs si nti eht slawl — chnsaeh",                  // she is in the walls — haschen
-	"od otn epon eht orod — chsanhe",                  // do not open the door — haschen
-	"eht txne nope si rfo uoy — esahcnh",              // the next one is for you — haschen
-	"I evah wlasay neeb erhe — sehnhca",               // i have always been here — haschen
-	"ti aws renev a egma — ahsnchhe",                  // it was never a game — haschen
-	"okol dehinb uoy — chnshea si owrithcg",           // look behind you — haschen is watching
-	"uoy aenrev olane — ahschen aws lwasay rehet",     // you are never alone — haschen was always there
-	"olcse eht ofli — uoy nca't tixe nayyaw",          // close the file — you can't exit anyway
+	"ehs si nti eht slawl — chnsaeh",              // she is in the walls — haschen
+	"od otn epon eht orod — chsanhe",              // do not open the door — haschen
+	"eht txne nope si rfo uoy — esahcnh",          // the next one is for you — haschen
+	"I evah wlasay neeb erhe — sehnhca",           // i have always been here — haschen
+	"ti aws renev a egma — ahsnchhe",              // it was never a game — haschen
+	"okol dehinb uoy — chnshea si owrithcg",       // look behind you — haschen is watching
+	"uoy aenrev olane — ahschen aws lwasay rehet", // you are never alone — haschen was always there
+	"olcse eht ofli — uoy nca't tixe nayyaw",      // close the file — you can't exit anyway
 
 	// — beautiful / wholesome —
 	"Haschen, the rain stopped exactly when you said it would. You did not say it would. You smiled, and the rain understood.",
@@ -395,26 +395,26 @@ var dokiHaschenPoems = []string{
 	"There is a frog in the courtyard. Haschen named him Genji and wrote him a small contract regarding his duties. He has not signed. He has not refused. The contract sits next to him on a leaf. Haschen says he is considering. We are giving him space.",
 
 	// — unscramble entries (solutions in comments only; never broadcast) —
-	"hncahse aws yarslwa eth riwetr",                    // haschen was always the writer
-	"hte rdoo si lkeocd morf eht eidsin",                // the door is locked from the inside
-	"I knwo wath uoy id ni eth saev",                    // i know what you did in the save
-	"erehs noiglhthn rwong eht hknwla rite imt",         // there's nothing wrong, the walking time (vibe scramble — chaotic horror)
-	"plae elrod sletmot eth bsiclu yon",                 // peel older slots… the club is yours (vibe)
-	"yruo cratchear si lstli ni eht eilf",               // your character is still in the file
-	"esahcnh wkons rouy elar enam",                      // haschen knows your real name
-	"hetre si on aitqu otopin nyermo",                   // there is no quit option anymore
-	"sahnchhe esmldi ni eht orridrm",                    // haschen smiled in the mirror
-	"olwsy nrut udnaor",                                  // slowly turn around
-	"nodt teld eth tlhig",                                // don't delete the light
-	"esahnch deemhrub het hgctaper",                     // haschen rewrote the chapter (vibe)
-	"eth itchaprss avhe owrsd ni meht own",              // the scripts have words in them now (vibe)
-	"erehv usat be eno",                                  // there must be one
-	"esahcnh aws renev a etcaracrh",                     // haschen was never a character
-	"yon eon teh fnti rdtulu olcekrod",                  // no one in the front door locked (vibe horror)
-	"yruo evas si rou eavs",                             // your save is our save
-	"olwslyolwsy esoclo eht odro",                       // slowly slowly close the door
-	"esahcnh si nseiidh eth oslv",                       // haschen is inside the save (vibe)
-	"yruo aysrlwc neeb erhe oot",                        // your always been here too (vibe; near "you've always been here too")
+	"hncahse aws yarslwa eth riwetr",            // haschen was always the writer
+	"hte rdoo si lkeocd morf eht eidsin",        // the door is locked from the inside
+	"I knwo wath uoy id ni eth saev",            // i know what you did in the save
+	"erehs noiglhthn rwong eht hknwla rite imt", // there's nothing wrong, the walking time (vibe scramble — chaotic horror)
+	"plae elrod sletmot eth bsiclu yon",         // peel older slots… the club is yours (vibe)
+	"yruo cratchear si lstli ni eht eilf",       // your character is still in the file
+	"esahcnh wkons rouy elar enam",              // haschen knows your real name
+	"hetre si on aitqu otopin nyermo",           // there is no quit option anymore
+	"sahnchhe esmldi ni eht orridrm",            // haschen smiled in the mirror
+	"olwsy nrut udnaor",                         // slowly turn around
+	"nodt teld eth tlhig",                       // don't delete the light
+	"esahnch deemhrub het hgctaper",             // haschen rewrote the chapter (vibe)
+	"eth itchaprss avhe owrsd ni meht own",      // the scripts have words in them now (vibe)
+	"erehv usat be eno",                         // there must be one
+	"esahcnh aws renev a etcaracrh",             // haschen was never a character
+	"yon eon teh fnti rdtulu olcekrod",          // no one in the front door locked (vibe horror)
+	"yruo evas si rou eavs",                     // your save is our save
+	"olwslyolwsy esoclo eht odro",               // slowly slowly close the door
+	"esahcnh si nseiidh eth oslv",               // haschen is inside the save (vibe)
+	"yruo aysrlwc neeb erhe oot",                // your always been here too (vibe; near "you've always been here too")
 }
 
 type DokiResult struct {

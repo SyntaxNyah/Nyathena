@@ -78,7 +78,7 @@ var translatorLanguages = map[string]string{
 	"hebrew":     "HE",
 	"hungarian":  "HU",
 	"indonesian": "ID",
-	"italian":   "IT",
+	"italian":    "IT",
 	"japanese":   "JA",
 	"korean":     "KO",
 	"latvian":    "LV",

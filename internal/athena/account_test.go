@@ -27,13 +27,13 @@ func TestFormatPlaytime(t *testing.T) {
 	}{
 		{-1, "less than a minute"},
 		{0, "less than a minute"},
-		{30, "0m"},                  // < 60s: minutes = 0
-		{59, "0m"},                  // one second short of a minute
-		{60, "1m"},                  // exactly one minute
-		{90, "1m"},                  // 1m 30s → 1m (seconds truncated)
-		{3600, "1h 0m"},             // exactly one hour
-		{3661, "1h 1m"},             // 1h 1m 1s
-		{7322, "2h 2m"},             // 2h 2m 2s
+		{30, "0m"},      // < 60s: minutes = 0
+		{59, "0m"},      // one second short of a minute
+		{60, "1m"},      // exactly one minute
+		{90, "1m"},      // 1m 30s → 1m (seconds truncated)
+		{3600, "1h 0m"}, // exactly one hour
+		{3661, "1h 1m"}, // 1h 1m 1s
+		{7322, "2h 2m"}, // 2h 2m 2s
 	}
 	for _, tc := range cases {
 		got := formatPlaytime(tc.secs)

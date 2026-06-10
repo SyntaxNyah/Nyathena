@@ -32,7 +32,7 @@ const (
 	hotPotatoOptInDuration      = 60 * time.Second // window for /hotpotato accept
 	hotPotatoGameDuration       = 5 * time.Minute  // how long the carrier holds the potato
 	hotPotatoCooldown           = 5 * time.Minute  // global delay between games
-	hotPotatoMinParticipants    = 2                 // minimum opt-ins required to start
+	hotPotatoMinParticipants    = 2                // minimum opt-ins required to start
 	hotPotatoPunishmentDuration = 10 * time.Minute // how long punishments last
 	hotPotatoPassCooldown       = 10 * time.Second // minimum delay between passes
 )
@@ -88,11 +88,11 @@ func randomHotPotatoPunishment() PunishmentType {
 // lock has been released.
 type hotPotatoState struct {
 	mu           sync.Mutex
-	optInActive  bool            // true during the 60-second opt-in window
-	gameActive   bool            // true while the 5-minute game is running
-	participants map[int]struct{} // set of opted-in UIDs
-	carrierUID   int             // UID of the carrier (-1 when no game is active)
-	lastGameEnd  time.Time       // when the last game ended (drives the cooldown)
+	optInActive  bool              // true during the 60-second opt-in window
+	gameActive   bool              // true while the 5-minute game is running
+	participants map[int]struct{}  // set of opted-in UIDs
+	carrierUID   int               // UID of the carrier (-1 when no game is active)
+	lastGameEnd  time.Time         // when the last game ended (drives the cooldown)
 	passLastUsed map[int]time.Time // when each UID last used /hotpotato pass
 }
 
@@ -116,7 +116,7 @@ func isHotPotatoCoolingDown() (bool, int) {
 		return false, 0
 	}
 	if remaining := hotPotatoCooldown - time.Since(end); remaining > 0 {
-		return true, int((remaining+time.Second-1)/time.Second)
+		return true, int((remaining + time.Second - 1) / time.Second)
 	}
 	return false, 0
 }
