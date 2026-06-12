@@ -187,7 +187,9 @@ func applyForceDisplaySprite(ms *packet.MSPacket, target *Client) {
 		ms.SelfOffset = info.offset
 	}
 	// Suppress any pairing so only the pinned character renders in the viewport.
-	ms.OtherCharID = "-1^"
+	// Plain "-1": the "^" suffix breaks clients that can't parse pair order
+	// (message dropped on some desktop forks, NaN pair id on webAO).
+	ms.OtherCharID = "-1"
 	ms.OtherName = ""
 	ms.OtherEmote = ""
 	ms.OtherOffset = ""

@@ -880,7 +880,13 @@ func pktIC(client *Client, p *packet.Packet) {
 			}
 		})
 		if !pairing {
-			ms.OtherCharID = "-1^"
+			// Plain "-1", never "-1^": the "^" pair-order suffix is not parsed
+			// by every client (official webAO gets Number("-1^") = NaN and some
+			// fork desktop clients drop the whole message — see PR #386). Since
+			// /pair injects a wanted id into every message the requester sends,
+			// this fallback fires on each of them until the pair is accepted,
+			// so a "^" here silently mutes the requester on those clients.
+			ms.OtherCharID = "-1"
 			ms.OtherName = ""
 			ms.OtherEmote = ""
 		}

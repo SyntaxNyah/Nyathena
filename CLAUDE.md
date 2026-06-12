@@ -263,6 +263,8 @@ The `character` potion is a per-client goroutine, not a punishment — `/potion 
 ### Persistent Pairing
 UID-based mutual pairing surviving area/character changes. Dissolves on disconnect. Pair messages now reference each player's **showname** (in-character display name) when set, falling back to OOC name only when no showname exists, so pair text matches the IC fiction rather than OOC identity.
 
+A pending pair request never blocks speech: while waiting for the partner to accept, the requester's IC messages go out with a plain `-1` no-pair value (never the `-1^` order-suffixed form, which some desktop forks drop outright and webAO parses as `NaN`).
+
 `/unpair` is now a full bidirectional reset: it clears `PairWantedID` and `ForcePairUID` on every client that references the canceller (by UID or by current/historical CharID), preventing the desync where a stale pair-wanted-id lingered on a peer after the canceller's character changed.
 ```
 /pair <uid>
