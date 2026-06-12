@@ -905,3 +905,66 @@ documentation see **[MAFIA_COMMANDS.md](MAFIA_COMMANDS.md)**.
 - CodeQL scan: No vulnerabilities detected
 - All inter-player communication (whisper) is routed through the server; clients
   never see another player's private messages unless they are the intended recipient
+
+---
+
+## Feature 8: Wave-2 Punishments, Traps & QoL
+
+### Overview
+A 29-command expansion: 14 new text transforms, 6 protocol/viewport punishments
+that weaponize non-text IC packet fields, a reverse-order message queue,
+plague/trap mechanics, stealth muting, the long-missing punishment inspector,
+multiclient listing, pairing discoverability, and two new potions.
+
+### New Text Transforms (14)
+`/zalgo`, `/leetspeak`, `/smallcaps`, `/piglatin`, `/vaporwave`, `/lisp`,
+`/spoonerism`, `/keysmash`, `/weeb` (350+ romaji corpus), `/politician`,
+`/clickbait` (headlines star the speaker by name), `/markov` (babble brewed
+from the area's own recent chat history), `/alliteration`, and `/cipher`
+(escalating ROT13 → BINARY → BASE64 layers per message).
+
+All standard punishment plumbing applies: `-d`/`-r`/`-h`, comma UID lists,
+`global`, `/stack`, DB persistence, `/unpunish -t <type>`. Every expanding
+transform clamps output to the server's max IC length so punished messages
+are never silently dropped, and all of them (plus teleport/shakecurse/
+randomflip) joined the `/megamaso`, `/minefield` and `/silencebell` random
+pools.
+
+### Protocol / Viewport Punishments (6)
+`/teleport` (random sprite offset per message), `/shakecurse` (forced
+screenshake), `/randomflip` (coin-flipped sprite facing), `/forcecolor`
+(locked text colour 0-9 / named / rainbow, persisted via customData),
+`/nopreanim` and `/forcepreanim`. Applied in pktIC before field validation,
+so every written value is validator-legal by construction.
+
+### Delivery & Mechanics
+- **`/lifo`** — buffers the target's IC messages and releases them in
+  REVERSE order (flush at 3 messages or 6 s, whichever first).
+- **`/contagious <type>`** — the punishment spreads to anyone who speaks
+  within 5 s of an infected player's message, inheriting remaining duration
+  and issuer tier. Mods immune. Area-wide sneeze/spread announcements.
+- **`/minefield`** — 1-in-6 chance per message to detonate a random 2-minute
+  punishment, with a 💥 announcement.
+- **`/silencebell [type]`** — one-shot area trap: the next non-mod to speak
+  is cursed. `status`/`off` subcommands.
+- **`/stealthmute`** — IC/OOC messages echo back to the sender only; the
+  target is never notified. Area logs tag suppressed lines `(stealthmuted)`.
+
+### QoL
+- **`/punishments [uid]`** — the punishment dashboard: every active effect
+  with remaining duration, custom data, reason, issuer tier (mod view), plus
+  lag/mute/jail. Players self-inspect; the UID form requires MUTE.
+- **`/clients <uid>`** — every connection sharing the target's IPID.
+- **`/lfp` + `/pairlist`** — Looking-For-Pair flag and per-area listing.
+- **Potions**: `zalgo` (self-corruption) and `love` (💘 auto-sends a pair
+  request to the next speaker in your area — consent preserved).
+
+### Implementation Notes
+- New punishment types are appended after all existing enum values, so
+  persisted `SUBTYPE` rows keep their meaning across the upgrade.
+- The mechanics hooks run once per broadcast IC message with cheap
+  early-outs (an atomic counter gates love-potion scans; one shared mutex
+  covers the contagion/bell area maps).
+- Covered by `go test -race`: round-trip parsing for all 24 new types,
+  transform output budgets, cipher escalation, markov corpus generation,
+  LIFO release order, protocol field legality, and pool integrity.

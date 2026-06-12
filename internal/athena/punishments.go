@@ -1559,6 +1559,36 @@ func ApplyPunishmentToText(text string, pType PunishmentType) string {
 		return applyFromSoftware(text)
 	case PunishmentGrounded:
 		return applyGrounded(text)
+	case PunishmentZalgo:
+		return applyZalgo(text)
+	case PunishmentLeetspeak:
+		return applyLeetspeak(text)
+	case PunishmentSmallcaps:
+		return applySmallcaps(text)
+	case PunishmentPiglatin:
+		return applyPiglatin(text)
+	case PunishmentVaporwave:
+		return applyVaporwave(text)
+	case PunishmentLisp:
+		return applyLisp(text)
+	case PunishmentSpoonerism:
+		return applySpoonerism(text)
+	case PunishmentKeysmash:
+		return applyKeysmash(text)
+	case PunishmentWeeb:
+		return applyWeeb(text)
+	case PunishmentPolitician:
+		return applyPolitician(text)
+	case PunishmentClickbait:
+		// Nameless fallback (random pools); pktIC routes the speaker's
+		// display name through applyClickbaitWithName instead.
+		return applyClickbait(text)
+	case PunishmentAlliteration:
+		return applyAlliteration(text)
+	case PunishmentCipher:
+		// Stateless fallback (random pools); pktIC uses the state-aware
+		// escalating version via ApplyPunishmentToTextWithState.
+		return applyCipher(text)
 	default:
 		return text
 	}
@@ -1572,6 +1602,9 @@ func ApplyPunishmentToTextWithState(text string, pType PunishmentType, state *Pu
 		result := applyTorment(text, state.lastEffect)
 		state.lastEffect++
 		return result
+	case PunishmentCipher:
+		// Escalates one encryption layer per message (ROT13 → BINARY → BASE64).
+		return applyCipherWithState(text, state)
 	default:
 		return ApplyPunishmentToText(text, pType)
 	}

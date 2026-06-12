@@ -1,6 +1,8 @@
 # Punishment Commands Documentation
 
-Nyathena includes 90+ punishment commands for moderators. These commands temporarily modify how player messages appear or behave, stack freely, auto-expire, and persist across area changes.
+Nyathena includes 120+ punishment commands for moderators. These commands temporarily modify how player messages appear or behave, stack freely, auto-expire, and persist across area changes.
+
+**Inspecting punishments:** `/punishments` lists your own active punishments with remaining durations; moderators can run `/punishments <uid>` to inspect any player (includes lag, mute and jail). See [Inspecting Punishments](#inspecting-punishments).
 
 ## Common Flags
 
@@ -98,7 +100,7 @@ All of these can also be removed with `/unpunish -t <type> <uid>` or `/unpunish 
 
 ---
 
-## Text Effects (46)
+## Text Effects (60)
 
 Rewrite the target's IC text — light to heavy transformations. All support `global` and `-h`.
 
@@ -158,6 +160,24 @@ Rewrite the target's IC text — light to heavy transformations. All support `gl
 | `/dreamsequence` | Rewrites as surreal, dreamlike fragments |
 | `/timewarp` | Shuffles word order |
 | `/rng` | Random effect from pool each message |
+
+### Wave-2 Transforms
+| Command | Effect |
+|---------|--------|
+| `/zalgo` | C̴o̷r̶r̸u̵p̷t̶s̸ text with creeping combining marks (the doki-area engine, weaponized) |
+| `/leetspeak` | h4x0r 5p34k — char swaps plus word table (`hacker` → `h4x0r`, `the` → `teh`) |
+| `/smallcaps` | ᴇᴠᴇʀʏᴛʜɪɴɢ ɪɴ ᴛɪɴʏ ᴜɴɪᴄᴏᴅᴇ sᴍᴀʟʟ ᴄᴀᴘs |
+| `/piglatin` | Igpay Atinlay — onset moves to the end + "ay", vowel words get "yay" |
+| `/vaporwave` | Ｆｕｌｌｗｉｄｔｈ　ａｅｓｔｈｅｔｉｃ (distinct from `/fancy`) |
+| `/lisp` | Every `s`/`z` becomes `th` ("sh" survives). Tho thorry. |
+| `/spoonerism` | Swaps starting sounds of adjacent words ("shake a tower") |
+| `/keysmash` | Random asdfjkl; home-row bursts injected mid-sentence |
+| `/weeb` | 350+ anime romaji: word swaps (`justice` → `seigi`), honorifics on names, "Nani?!" interjections, "desu~" particles |
+| `/politician` | Never answers anything directly — "Great question. But what the people REALLY want to know is…" |
+| `/clickbait` | Every message becomes a clickbait headline starring the speaker ("Number 3 Will SHOCK You") |
+| `/markov` | Markov-chain babble generated from the **area's own recent chat history** — it sounds like the room because it IS the room. Falls back to word shuffle in fresh areas. |
+| `/alliteration` | Boldly bends both big and bitty words into bombastic alliteration (rolls one letter per message) |
+| `/cipher` | Escalating encryption layers per message: ROT13 → BINARY → BASE64, then `⟦decryption attempt #1 failed — re-arming layers⟧` and it loops forever |
 
 ---
 
@@ -255,15 +275,105 @@ Remove offset locks with `/unshrink`, `/ungrow`, `/unwide`, or `/areainiswap off
 
 ---
 
-## Timing & Throughput (3)
+## Protocol / Viewport Effects (6)
+
+These never touch the message text — they weaponize the IC packet's *other* fields. All support `global`, `-d`, `-r`, `-h`, `/stack`, DB persistence, and `/unpunish -t <type>`.
+
+| Command | Effect |
+|---------|--------|
+| `/teleport` | The sprite pops to a random screen position on every message (random self-offset). `/hidedisplay` wins if both are active. |
+| `/shakecurse` | Forces the screenshake flag on every message |
+| `/randomflip` | Coin-flips the sprite's horizontal facing per message — the target can't control which way they look |
+| `/forcecolor <targets> <color>` | Locks IC text colour. Accepts `0-9` or `white`, `green`, `red`, `orange`, `blue`, `yellow`, `rainbow` (9). |
+| `/nopreanim` | Strips preanimations (PREANIM emote modifiers demoted, preanim name cleared) — no more dramatic desk slams |
+| `/forcepreanim` | Promotes idle/talk emote modifiers so the named preanim always plays |
+
+```
+/forcecolor 7 rainbow            # UID 7 speaks in rainbow forever (well, 10 minutes)
+/forcecolor -d 1h global red     # The whole area sees red
+/teleport -d 30m 12,15           # Two players start teleporting
+```
+
+Every value written passes the same packet validators as client input (flip/shake ∈ {0,1}, colour ∈ [0,9], offsets within ±100), so these can never get a message dropped.
+
+---
+
+## Timing & Throughput (4)
 
 | Command | Effect |
 |---------|--------|
 | `/slowpoke` | Delays messages before sending |
 | `/fastspammer` | Heavily rate limits messages |
 | `/lag` | Adds IPID to torment list (ghost/delayed messages, silent disconnect timer) |
+| `/lifo` | Buffers messages and releases them in **reverse order** — say three things, they arrive third-second-first. Flushes every 3 messages or 6 seconds, whichever comes first. |
 
 **`/lag` note:** This is IPID-scoped (affects all sessions from the same IP). Remove with `/unlag <uid>`, `/unpunish -t lag <uid>`, or `/unpunish <uid>`.
+
+---
+
+## Traps & Contagion (4)
+
+Punishments that move on their own.
+
+### `/contagious <type>` — Plague Mode
+
+```
+/contagious <type> [-d duration] [-r reason] [-h] global | <uid1>,<uid2>,...
+```
+
+The target receives `<type>` **plus** a contagion marker. From then on, anyone who speaks in the area within **5 seconds** of an infected player's message catches both — and keeps spreading it. Victims inherit the remaining duration and the issuer's tier (so the self-removal protection follows the plague).
+
+- **Moderators are immune.**
+- The area gets a `☣️ A sneeze echoes through the area…` announcement on infection (suppressed by `-h`) and a `☣️ X caught 'uwu'! The plague spreads…` announcement on each spread.
+- Cure one player with `/unpunish <uid>` (or `-t contagious` + `-t <type>`); cure the room with `/unpunish all`.
+- `<type>` can be any normal punishment; `contagious`, `lag`, `minefield`, `lifo` and `stealthmute` can't be made contagious.
+
+```
+/contagious uwu 7                 # Patient zero
+/contagious brainrot -d 30m 12    # 30-minute brainrot plague
+```
+
+### `/minefield`
+
+Standard punishment flags. Every IC message the target sends has a **1-in-6** chance to detonate, stacking a random punishment (from the megamaso pool) on them for **2 minutes**. Both the victim and the area are told: `💥 X stepped on a mine! (piglatin for 2m0s)`.
+
+### `/silencebell`
+
+```
+/silencebell [type] [-d duration]    # Arm: next non-mod to speak gets cursed (random if no type)
+/silencebell status                  # Is a bell armed here?
+/silencebell off                     # Disarm
+```
+
+Arms a **one-shot trap on your current area** with a dramatic announcement: `🔔 A silence bell tolls through the area… the next soul to speak shall be cursed.` Moderators and the arming mod ring right past it. The victim and the area both hear the bell toll.
+
+### `/stealthmute`
+
+```
+/stealthmute [-d duration] [-r reason] global | <uid1>,<uid2>,...
+```
+
+The target's IC **and** OOC messages echo back to them normally — but reach nobody else. They never receive a notification and never know they're muted. Area logs mark suppressed OOC lines with `(stealthmuted)` so staff reviewing logs can tell. Lift with `/unpunish -t stealthmute <uid>`. Stealthmuted messages never trigger traps, contagion, or love potions (the room never heard them).
+
+---
+
+## Inspecting Punishments
+
+### `/punishments [uid]` — the punishment dashboard
+
+```
+/punishments          # Anyone: list your own active punishments
+/punishments <uid>    # Moderators (MUTE): inspect any player
+```
+
+Lists every active punishment with remaining duration, custom data (e.g. the forcecolor colour or translator language), reason, and — for moderator viewers — the issuer tier (`[by admin]`, `[by shadow]`, `[by mod]`). Also covers the effects that live outside the punishment list: `/lag` (torment list), mutes, and jail.
+
+```
+⛓️ Active punishments for [7] Phoenix (3):
+  • uwu — 9m32s left — reason: crimes [by mod]
+  • cipher — 22m10s left
+  • lag (torment list — lift with /unpunish -t lag)
+```
 
 ---
 

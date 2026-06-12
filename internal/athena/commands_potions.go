@@ -102,6 +102,22 @@ var potionRegistry = map[string]*potionDef{
 		desc:  "Each line picks a random anime dere flavour. (default 5 min)",
 		pType: PunishmentOmnidere,
 	},
+	"zalgo": {
+		name:  "zalgo",
+		emoji: "🌀",
+		desc:  "C̴o̷r̶r̸u̵p̷t̶s̸ your text with creeping zalgo marks. (default 5 min)",
+		pType: PunishmentZalgo,
+	},
+	// Special potion: not a punishment. The next player to speak in your area
+	// receives a pair request from you — they still choose to accept, so
+	// consent is preserved. Cleanup disarms the pending request.
+	"love": {
+		name:    "love",
+		emoji:   "💘",
+		desc:    "Auto-sends a pair request to the next player who speaks in your area. They still accept with /pair. (default 5 min)",
+		apply:   startLovePotion,
+		cleanup: stopLovePotion,
+	},
 	// Special potion: not a punishment. Auto-rotates the player's character
 	// every 30 seconds for the requested duration. Cleanup cancels the rotation timer.
 	"character": {

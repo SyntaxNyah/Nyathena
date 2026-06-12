@@ -54,6 +54,8 @@ For moderator-only commands, see [`MOD_COMMANDS.md`](MOD_COMMANDS.md). For casin
 |---------|-------------|
 | `/pair <uid>` | Request to pair with a player. Mutual `/pair` finalizes the pairing. Messages reference each player's **showname** (in-character name) when set. |
 | `/unpair` | Cancel your pair. Full bidirectional reset — clears state on every peer that referenced you, so no desyncs. |
+| `/lfp` | Toggle your **Looking-For-Pair** flag. Flagged players show up in `/pairlist`. |
+| `/pairlist` | List everyone in your area flagged `/lfp`, with UID, name and character — then `/pair <uid>` away. |
 
 ---
 
@@ -107,7 +109,17 @@ For moderator-only commands, see [`MOD_COMMANDS.md`](MOD_COMMANDS.md). For casin
 | `chef` | Swedish-Chef-isms |
 | `cherri` | Capitalizes Every Word |
 | `omnidere` | Each line picks a random anime dere flavour |
+| `zalgo` | C̴o̷r̶r̸u̵p̷t̶s̸ your text with creeping zalgo marks |
+| `love` | 💘 Auto-sends a **pair request** to the next player who speaks in your area. Consent preserved — they still accept with `/pair`. If you were already requesting each other, the pair completes instantly. |
 | `character` | Auto-rotates your character every 30 seconds |
+
+---
+
+## Punishment Self-Service
+
+| Command | Description |
+|---------|-------------|
+| `/punishments` | List your own active punishments with remaining durations — including lag, mute, and jail. Great for "wait, why am I still speaking pig latin?" |
 
 ---
 

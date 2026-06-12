@@ -7,7 +7,7 @@ Nyathena is a fork of [Athena](https://github.com/MangosArentLiterature/Athena),
 - A full **Discord bot** integration (slash commands, embeds, moderation bridge)
 - A **casino system** with 10 distinct games and persistent virtual currency ("Nyathena Chips")
 - A **Mafia social-deduction minigame** playable inside any server area
-- **42+ punishment commands** for moderators, with stacking, tournaments, and a coinflip challenge system
+- **120+ punishment commands** for moderators, with stacking, tournaments, contagion/trap mechanics, and a coinflip challenge system
 - Persistent pairing, per-area logging, configurable rate limiting, AutoMod, IPHub VPN firewall, and more
 
 Module path (retained from upstream): `github.com/MangosArentLiterature/Athena`
@@ -158,18 +158,22 @@ Copy `config_sample/` to `config/` before first run.
 
 ## Features Beyond Base Athena
 
-### Punishment System (90+ Commands)
+### Punishment System (120+ Commands)
 
 All punishment commands require `MUTE` permission unless noted. They support `-d <duration>` (max 24 h), `-r <reason>`, `-h` (hidden — suppresses the per-target OOC notification so the punishment applies silently; the issuer summary appends `(hidden)` so the mod can confirm), comma-separated UIDs, and the `global` keyword (applies to every non-moderator in the issuer's area). Multiple types stack on a single player.
 
 The `-h` flag works on every applicator: single-effect commands (`/tsundere 7 -h`, `/tsundere global -h`), `/stack`, `/lovebomb`, `/sfxcurse`, `/shrink` / `/grow` / `/wide`, `/randompunishall` (also suppresses the area-wide "unleashed random chaos" announcement), `/translator curse`, and `/icwarp <uid>`. Self-applied effects (`/megamaso`, `/maso`) and the PvP `/coinflip` mini-game are unaffected since they aren't moderator-issued.
 
-`/help punishment` is grouped by sub-theme (text effects / dere archetypes / animal filters / themed quotes / persona / audio / voice / timing / stacking / removal) so the long list is scannable.
+`/help punishment` is grouped by sub-theme (text effects / dere archetypes / animal filters / themed quotes / persona / protocol-viewport / audio / voice / timing / traps & contagion / stacking / removal) so the long list is scannable.
+
+**Inspect:** `/punishments` lists your own active punishments with remaining durations (includes lag, mute, jail). Moderators run `/punishments <uid>` to inspect any player — entries show custom data, reason, and issuer tier.
 
 **Remove:** `/unpunish <uid>` (all including lag) or `/unpunish -t <type> <uid>` (specific — works with `/unpunish -t lag <uid>`). `/unpunish all` clears every player in the area including lag. Self-removal is gated for staff-issued punishments — see "/unpunish Self-Removal Protection" below.
 
-#### Text Effects (46)
+#### Text Effects (60)
 `/whisper`, `/backward`, `/stutterstep`, `/elongate`, `/uppercase`, `/lowercase`, `/robotic`, `/alternating`, `/fancy`, `/uwu`, `/pirate`, `/shakespearean`, `/caveman`, `/censor`, `/fromsoftware`, `/confused`, `/paranoid`, `/drunk`, `/hiccup`, `/whistle`, `/mumble`, `/slang`, `/cherri`, `/albhed`, `/morse`, `/vowelhell`, `/upsidedown`, `/autospell`, `/thesaurusoverload`, `/valleygirl`, `/babytalk`, `/thirdperson`, `/unreliablenarrator`, `/uncannyvalley`, `/chef`, `/karen`, `/passiveaggressive`, `/nervous`, `/sarcasm`, `/academic`, `/philosopher`, `/poet`, `/quote`, `/spaghetti`, `/essay`, `/rng`, `/haiku`, `/dreamsequence`, `/timewarp`
+
+Wave-2 additions (14): `/zalgo` (combining-mark corruption), `/leetspeak`, `/smallcaps`, `/piglatin`, `/vaporwave` (ｆｕｌｌｗｉｄｔｈ), `/lisp`, `/spoonerism`, `/keysmash`, `/weeb` (350+ romaji corpus — word swaps, honorifics on names, interjections, desu~ particles), `/politician` (never answers directly), `/clickbait` (headlines star the speaker by name), `/markov` (babble generated from the **area's own recent chat history**; falls back to word shuffle in fresh areas), `/alliteration`, `/cipher` (escalates ROT13 → BINARY → BASE64 per message, then "decryption fails" and re-arms). Expanding transforms clamp output to the server's max IC length (`fitICBudget`) so punished messages are never dropped by the post-transform length check.
 
 #### Themed Quote Replacers (10)
 `/gordonramsay`, `/biblebot`, `/grounded`, `/mime`, `/subtitles`, `/spotlight`, `/recipe`, `/rickroll`, `/pickup`, `/brainrot`
@@ -183,8 +187,25 @@ The `-h` flag works on every applicator: single-effect commands (`/tsundere 7 -h
 - `/hidedisplay <uid>` — pushes the target's own sprite off-screen via a fixed self-offset so their text still appears in the chat box but their character does not. Looks especially funny on pairs (only the partner's sprite renders). Standard punishment flags: `-d`/`-r`/`-h`, comma UID lists, `global`, stackable, persists across sessions, removable with `/unpunish -t hidedisplay <uid>`.
 - `/forcedisplay <uid>` — pins the target's character onto every non-moderator IC message in their area, overwriting each speaker's outgoing sprite and clearing the pair fields. While active, no other character can show in the viewport — the whole room renders as that one character. Moderators are exempt (their own sprite still shows). The hot-path lookup is gated by an atomic counter, so servers that never use `/forcedisplay` pay nothing on every IC packet. Same flag set as `/hidedisplay`; removable with `/unpunish -t forcedisplay <uid>`.
 
-#### Timing Effects (3)
-`/slowpoke`, `/fastspammer`, `/lag`
+#### Protocol / Viewport Effects (6)
+Weaponize the IC packet's non-text fields. Applied in `pktIC` (`applyProtocolPunishments`, `internal/athena/punishments_protocol.go`) **before** field validation, so every written value is validator-legal by construction. Standard flags, persistence, `/stack`, `/unpunish -t`.
+- `/teleport <uid>` — random self-offset per message (±75 x, ±50 y); the sprite pops around the viewport. `/hidedisplay` wins if both are active.
+- `/shakecurse <uid>` — forces the screenshake flag on every message
+- `/randomflip <uid>` — coin-flips the sprite's horizontal facing per message
+- `/forcecolor <uid> <0-9|white|green|red|orange|blue|yellow|rainbow>` — locks IC text colour (stored in customData; persisted via the 0x1F reason convention like `/translator`)
+- `/nopreanim <uid>` — strips preanimations (PREANIM modifiers demoted, preanim name cleared)
+- `/forcepreanim <uid>` — promotes idle/talk modifiers so the named preanim plays
+
+#### Timing Effects (4)
+`/slowpoke`, `/fastspammer`, `/lag`, plus:
+- `/lifo <uid>` — buffers the target's IC messages and releases them in **reverse arrival order** (flush at 3 messages or 6 s, whichever first). Implemented in `internal/athena/punishments_lifo.go`; queues are keyed by `*Client` and self-flush, so disconnects can't leak.
+
+#### Traps & Contagion (4)
+Mechanic punishments hooked after the IC broadcast (`punishmentMechanicsOnIC`, `internal/athena/punishments_mechanics.go`) with cheap early-outs (atomic gate for love potions, one shared mutex for the area maps).
+- `/contagious <type> <uid|global>` — plague mode: target gets `<type>` + a contagion marker; anyone who speaks within **5 s** of an infected player's message catches both and keeps spreading it. Victims inherit remaining duration and issuer tier. Moderators immune; area gets ☣️ announcements. `contagious`/`lag`/`minefield`/`lifo`/`stealthmute` can't be made contagious.
+- `/minefield <uid|global>` — every message has a **1-in-6** chance to detonate a random 2-minute punishment (megamaso pool) with a 💥 announcement.
+- `/silencebell [type] [-d dur]` — arms a one-shot trap on the issuer's area: the next non-moderator to speak is cursed (random unless a type is given). `status` / `off` subcommands. Dramatic 🔔 announcements on arm and trigger.
+- `/stealthmute <uid|global>` — the target's IC **and** OOC messages echo back to them but reach nobody; they are never notified (the `-h` semantics are forced). Area logs tag suppressed OOC lines `(stealthmuted)`. Stealthmuted messages never trigger traps/contagion/love potions. Lift with `/unpunish -t stealthmute`.
 
 #### Audio (2)
 - `/sfxcurse <uid> <sfx-url>` — forces an SFX file to play on every IC message; URL must be `http(s)://…` or under `/base/sounds/…`
@@ -256,9 +277,11 @@ Self-applied fun effects accessed via `/potion <name>`. Duration defaults to **5
 | `chef` | Swedish-Chef-isms |
 | `cherri` | Capitalizes Every Word |
 | `omnidere` | Each line picks a random dere flavour |
+| `zalgo` | C̴o̷r̶r̸u̵p̷t̶s̸ your text with creeping zalgo marks |
+| `love` | 💘 Auto-sends a pair request to the next player who speaks in your area (consent preserved — they still accept with `/pair`; mutual interest completes instantly) |
 | `character` | Auto-rotates your character every 30 seconds |
 
-The `character` potion is a per-client goroutine, not a punishment — `/potion off` cancels its rotation cleanly.
+The `character` potion is a per-client goroutine, not a punishment — `/potion off` cancels its rotation cleanly. The `love` potion is likewise special: it arms a per-client flag (atomic-counter-gated on the IC hot path) and `/potion off` disarms it.
 
 ### Persistent Pairing
 UID-based mutual pairing surviving area/character changes. Dissolves on disconnect. Pair messages now reference each player's **showname** (in-character display name) when set, falling back to OOC name only when no showname exists, so pair text matches the IC fiction rather than OOC identity.
@@ -266,9 +289,13 @@ UID-based mutual pairing surviving area/character changes. Dissolves on disconne
 A pending pair request never blocks speech: while waiting for the partner to accept, the requester's IC messages go out with a plain `-1` no-pair value (never the `-1^` order-suffixed form, which some desktop forks drop outright and webAO parses as `NaN`).
 
 `/unpair` is now a full bidirectional reset: it clears `PairWantedID` and `ForcePairUID` on every client that references the canceller (by UID or by current/historical CharID), preventing the desync where a stale pair-wanted-id lingered on a peer after the canceller's character changed.
+
+**Discoverability:** `/lfp` toggles a Looking-For-Pair flag; `/pairlist` lists every flagged player in the area with UID, display name and character.
 ```
 /pair <uid>
 /unpair
+/lfp
+/pairlist
 ```
 
 ### Character Curse
@@ -483,6 +510,10 @@ JSON-mode connections have their **MS** (in-character) packets validated against
 - **Outbound** MS is validated against `MSBroadcast.schema.json` in `Client.SendPacket`; a packet that fails the schema is dropped (logged) before reaching a JSON-mode client.
 
 To satisfy the schemas, the JSON-mode MS encoder emits proper types (numbers, booleans, and `{x,y}` offset objects) rather than strings. Schemas are embedded via `//go:embed` in `athena.go` and compiled once at startup (`packet.CompileMSSchemas`). FantaCode (classic desktop AO2) traffic is never validated and is unaffected; if the schemas fail to load, validation is silently disabled. Library: `github.com/santhosh-tekuri/jsonschema/v5`.
+
+### `/punishments` Inspection & `/clients` Multiclient Listing
+- `/punishments [uid]` — lists active punishments with remaining durations, custom data, reasons, and (for mod viewers) issuer tiers. Covers the out-of-slice effects too: lag (torment list), mute, jail. No permission needed for self-inspection; the `<uid>` form requires `MUTE`. Implemented in `internal/athena/commands_qol.go`.
+- `/clients <uid>` — lists every connection sharing the target's IPID with UID, character, area, OOC name and showname. Requires `MUTE`.
 
 ### Other Features
 - Hot Potato area minigame

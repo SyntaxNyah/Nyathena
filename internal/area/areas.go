@@ -1241,6 +1241,31 @@ func (a *Area) RandomPastICMessage(ipid string) (string, bool) {
 	return msgs[rand.Intn(len(msgs))].text, true
 }
 
+// RecentICMessages returns up to max IC messages recorded in this area within
+// the past 24 hours, drawn across every speaker. Used as the corpus for the
+// /markov punishment; ordering is not guaranteed (a markov chain doesn't care).
+func (a *Area) RecentICMessages(max int) []string {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if a.icMessages == nil || max <= 0 {
+		return nil
+	}
+	cutoff := time.Now().Add(-24 * time.Hour)
+	out := make([]string, 0, max)
+	for _, msgs := range a.icMessages {
+		for i := len(msgs) - 1; i >= 0 && len(out) < max; i-- {
+			if msgs[i].at.Before(cutoff) {
+				break
+			}
+			out = append(out, msgs[i].text)
+		}
+		if len(out) >= max {
+			break
+		}
+	}
+	return out
+}
+
 // ICWarpGlobal reports whether global IC warp is currently enabled in this area.
 func (a *Area) ICWarpGlobal() bool {
 	a.mu.Lock()

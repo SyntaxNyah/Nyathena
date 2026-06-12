@@ -42,7 +42,10 @@ var punishmentHelpGroups = []punishmentSubcategory{
 			"thesaurusoverload", "valleygirl", "babytalk", "thirdperson",
 			"unreliablenarrator", "uncannyvalley", "chef", "karen", "passiveaggressive",
 			"nervous", "sarcasm", "academic", "philosopher", "poet", "quote", "spaghetti",
-			"essay", "rng", "haiku", "dreamsequence", "timewarp"},
+			"essay", "rng", "haiku", "dreamsequence", "timewarp",
+			"zalgo", "leetspeak", "smallcaps", "piglatin", "vaporwave", "lisp",
+			"spoonerism", "keysmash", "weeb", "politician", "clickbait", "markov",
+			"alliteration", "cipher"},
 	},
 	{
 		emoji: "🎭", title: "Themed quote replacers",
@@ -77,9 +80,20 @@ var punishmentHelpGroups = []punishmentSubcategory{
 			"hidedisplay", "forcedisplay", "unshrink", "ungrow", "unwide"},
 	},
 	{
+		emoji: "📡", title: "Protocol / viewport effects",
+		desc: "Weaponize the IC packet's non-text fields — offsets, screenshake, flip, colour, preanims. Supports 'global'.",
+		cmds: []string{"teleport", "shakecurse", "randomflip", "forcecolor",
+			"nopreanim", "forcepreanim"},
+	},
+	{
 		emoji: "⏱", title: "Timing & throughput",
-		desc: "Slow, speed up, or pace the target's IC chat.",
-		cmds: []string{"slowpoke", "fastspammer", "lag"},
+		desc: "Slow, speed up, pace — or reverse — the target's IC chat.",
+		cmds: []string{"slowpoke", "fastspammer", "lag", "lifo"},
+	},
+	{
+		emoji: "☣️", title: "Traps & contagion",
+		desc: "Punishments that move on their own: plagues, mines, area traps, and the silent treatment.",
+		cmds: []string{"contagious", "minefield", "silencebell", "stealthmute"},
 	},
 	{
 		emoji: "🔊", title: "Audio / SFX",
@@ -100,8 +114,8 @@ var punishmentHelpGroups = []punishmentSubcategory{
 	},
 	{
 		emoji: "🧹", title: "Removal & control",
-		desc: "Lift active punishments. /unpunish removes ALL types including lag.",
-		cmds: []string{"unpunish", "unlag", "unicwarp", "unlovebomb",
+		desc: "Inspect and lift active punishments. /punishments lists what's on a player; /unpunish removes ALL types including lag.",
+		cmds: []string{"punishments", "unpunish", "unlag", "unicwarp", "unlovebomb",
 			"un51", "unacademic", "unbabytalk", "undegrade",
 			"unphilosopher", "unpoet", "unquote", "unrecipe", "unsarcasm",
 			"unslang", "unthesaurusoverload", "unthirdperson", "untranslator",

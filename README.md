@@ -6,17 +6,17 @@
 
 This started as a personal server project and kind of spiralled. One punishment command becoming ten, a casino system, tag system, account system, a bunch of mini games and the whole time it kept being *fun* to add things, which is not always how software development goes. That's entirely down to how well Athena is built. Adding a new feature rarely meant slow build times or having to debug for hours in the codebase. It usually just meant writing the thing.
 
-This fork is a **90+ command punishment system** designed to give moderators a ridiculous, embarrassing amount of creative control over players to abuse as much as they want and mess with whether it be; backwards text, forced haiku, dere archetypes, voice corruption, coinflip PvP challenges. It's purposefully excessive and a little sadistic, and that's the point. Abuse players to your hearts content! Beyond that: a Discord bot, a casino with 11 games, a full Mafia minigame, server-relayed voice chat over websockets, and a lot of smaller quality-of-life things that accumulated over time.
+This fork is a **120+ command punishment system** designed to give moderators a ridiculous, embarrassing amount of creative control over players to abuse as much as they want and mess with whether it be; backwards text, forced haiku, dere archetypes, voice corruption, contagious plagues, area traps, reversed message order, coinflip PvP challenges. It's purposefully excessive and a little sadistic, and that's the point. Abuse players to your hearts content! Beyond that: a Discord bot, a casino with 11 games, a full Mafia minigame, server-relayed voice chat over websockets, and a lot of smaller quality-of-life things that accumulated over time.
 
 ---
 
 ## What's Different From Upstream Athena
 
-### Punishment System (100+ Commands)
+### Punishment System (120+ Commands)
 
-This is the main thing Nyathena exists for. All punishment commands support `-d <duration>`, `-r <reason>`, `-h` (hidden — applies silently without notifying the target), and the `global` keyword (applies to every non-moderator in the area). They accept comma-separated UIDs, auto-expire, and stack freely.
+This is the main thing Nyathena exists for. All punishment commands support `-d <duration>`, `-r <reason>`, `-h` (hidden — applies silently without notifying the target), and the `global` keyword (applies to every non-moderator in the area). They accept comma-separated UIDs, auto-expire, and stack freely. Check what's on a player (or yourself) anytime with `/punishments [uid]`.
 
-**Text Effects (46):** `/whisper`, `/backward`, `/stutterstep`, `/elongate`, `/uppercase`, `/lowercase`, `/robotic`, `/alternating`, `/fancy`, `/uwu`, `/pirate`, `/shakespearean`, `/caveman`, `/censor`, `/fromsoftware`, `/confused`, `/paranoid`, `/drunk`, `/hiccup`, `/whistle`, `/mumble`, `/slang`, `/cherri`, `/albhed`, `/morse`, `/vowelhell`, `/upsidedown`, `/autospell`, `/thesaurusoverload`, `/valleygirl`, `/babytalk`, `/thirdperson`, `/unreliablenarrator`, `/uncannyvalley`, `/chef`, `/karen`, `/passiveaggressive`, `/nervous`, `/sarcasm`, `/academic`, `/philosopher`, `/poet`, `/quote`, `/spaghetti`, `/essay`, `/rng`, `/haiku`, `/dreamsequence`, `/timewarp`
+**Text Effects (60):** `/whisper`, `/backward`, `/stutterstep`, `/elongate`, `/uppercase`, `/lowercase`, `/robotic`, `/alternating`, `/fancy`, `/uwu`, `/pirate`, `/shakespearean`, `/caveman`, `/censor`, `/fromsoftware`, `/confused`, `/paranoid`, `/drunk`, `/hiccup`, `/whistle`, `/mumble`, `/slang`, `/cherri`, `/albhed`, `/morse`, `/vowelhell`, `/upsidedown`, `/autospell`, `/thesaurusoverload`, `/valleygirl`, `/babytalk`, `/thirdperson`, `/unreliablenarrator`, `/uncannyvalley`, `/chef`, `/karen`, `/passiveaggressive`, `/nervous`, `/sarcasm`, `/academic`, `/philosopher`, `/poet`, `/quote`, `/spaghetti`, `/essay`, `/rng`, `/haiku`, `/dreamsequence`, `/timewarp`, `/zalgo`, `/leetspeak`, `/smallcaps`, `/piglatin`, `/vaporwave`, `/lisp`, `/spoonerism`, `/keysmash`, `/weeb` (350+ romaji corpus), `/politician`, `/clickbait`, `/markov` (babble brewed from the area's own chat history), `/alliteration`, `/cipher` (escalating ROT13 → BINARY → BASE64)
 
 **Themed Quote Replacers (10):** `/gordonramsay` (60+ kitchen tirades), `/biblebot`, `/grounded`, `/mime`, `/subtitles`, `/spotlight`, `/recipe`, `/rickroll`, `/pickup`, `/brainrot`
 
@@ -28,7 +28,11 @@ This is the main thing Nyathena exists for. All punishment commands support `-d 
 
 **Visibility / Cosmetic (8):** `/emoji`, `/invisible`, `/shrink`, `/grow`, `/wide`, `/areainiswap`, `/hidedisplay` (push the target's own sprite off-screen — funny on pairs), `/forcedisplay` (pin the target's character onto every IC sprite in the area — nobody else's character shows)
 
-**Timing (3):** `/slowpoke`, `/fastspammer`, `/lag`
+**Protocol / Viewport (6):** `/teleport` (sprite pops to random screen positions), `/shakecurse` (forced screenshake), `/randomflip` (coin-flipped sprite facing), `/forcecolor` (locked text colour — all-red rage or full rainbow), `/nopreanim`, `/forcepreanim`
+
+**Timing (4):** `/slowpoke`, `/fastspammer`, `/lag`, `/lifo` (messages release in REVERSE order — say three things, they arrive backwards)
+
+**Traps & Contagion (4):** `/contagious <type>` (plague mode — spreads to anyone who speaks within 5s of an infected player; mods immune), `/minefield` (1-in-6 chance per message to detonate a random 2-minute punishment), `/silencebell` (area trap: the next person to speak gets cursed), `/stealthmute` (messages echo back to the sender but reach nobody — they never know)
 
 **Audio (2):** `/sfxcurse <uid> <sfx-url>` (forces an SFX on every IC message), `/unsfx`
 
@@ -106,7 +110,7 @@ See `MAFIA_COMMANDS.md` for the full reference.
 
 Self-applied fun effects via `/potion <name>` (default 5 min, `-d` to override). `/potions` lists the cabinet; `/potion off` flushes everything.
 
-Available potions: `drunk`, `uwu`, `shy`, `dramatic`, `pirate`, `poet`, `caveman`, `fancy`, `chef`, `cherri`, `omnidere`, `character` (auto-rotates your sprite every 30 seconds).
+Available potions: `drunk`, `uwu`, `shy`, `dramatic`, `pirate`, `poet`, `caveman`, `fancy`, `chef`, `cherri`, `omnidere`, `zalgo` (corrupts your own text), `love` (💘 auto-sends a pair request to the next player who speaks — consent preserved), `character` (auto-rotates your sprite every 30 seconds).
 
 ### AutoMod
 
@@ -136,10 +140,12 @@ Daily-rotating log files per area under `logs/<AreaName>/`. Format: `[HH:MM:SS] 
 
 ### Persistent Pairing
 
-UID-based mutual pairing that survives area and character changes. Pair messages use each player's showname when set. `/unpair` does a full bidirectional reset — no stale pair state left on the peer.
+UID-based mutual pairing that survives area and character changes. Pair messages use each player's showname when set. `/unpair` does a full bidirectional reset — no stale pair state left on the peer. Flag yourself `/lfp` (Looking For Pair) and browse the area's flagged players with `/pairlist`.
 
 ### Other Additions
 
+- **`/punishments [uid]`** — the punishment dashboard: every active effect with remaining duration; players self-inspect, mods inspect anyone (includes lag/mute/jail and issuer tier)
+- **`/clients <uid>`** — every connection sharing a target's IPID at a glance (multiclient overview, MUTE)
 - **Doki Area Effect** — literature-club-themed chaos per area (`doki_area = true` in `areas.toml`)
 - **Persistent `/musicban`** — bans an IPID from playing music across sessions; bypassed in areas with fewer than 3 people. `/musicunban` and `/musicbans` round out the set
 - **Hot `/reload`** — atomic, race-free reload of `characters.txt` (append-only), `music.txt`, `cdns.txt`, `backgrounds.txt`, `parrot.txt`, `8ball.txt`, `banned_words.txt` and `config.toml` motd/desc without restarting; also bound to stdin `reload` and `SIGHUP`
