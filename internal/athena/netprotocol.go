@@ -534,10 +534,16 @@ func pktIC(client *Client, p *packet.Packet) {
 			var modifiedMsg string
 
 			// Use state-aware version for punishments that need it
-			if p.punishmentType == PunishmentTorment {
+			if p.punishmentType == PunishmentTorment || p.punishmentType == PunishmentCipher {
 				client.UpdatePunishmentState(p.punishmentType, func(ps *PunishmentState) {
 					modifiedMsg = ApplyPunishmentToTextWithState(decodedMsg, p.punishmentType, ps)
 				})
+			} else if p.punishmentType == PunishmentClickbait {
+				// Clickbait headlines star the speaker by name.
+				modifiedMsg = applyClickbaitWithName(decodedMsg, clientDisplayName(client))
+			} else if p.punishmentType == PunishmentMarkov {
+				// Markov babble is generated from this area's recent chat history.
+				modifiedMsg = applyMarkov(decodedMsg, client.Area())
 			} else if p.punishmentType == PunishmentLovebomb {
 				// Resolve the target's display name.
 				var targetShowname string
@@ -660,6 +666,12 @@ func pktIC(client *Client, p *packet.Packet) {
 			}
 		}
 	}
+
+	// Protocol-field punishments (teleport/shakecurse/randomflip/forcecolor/
+	// nopreanim/forcepreanim) rewrite the packet's non-text fields. Applied
+	// before the validators below so every written value gets checked, and
+	// before applyHideDisplay so a hidedisplay offset wins over /teleport.
+	applyProtocolPunishments(ms, punishments)
 
 	// HideDisplay: push the speaker's own sprite off-screen so only their text
 	// shows. Applied here — after the per-punishment loop but before the IC
@@ -1073,14 +1085,27 @@ func pktIC(client *Client, p *packet.Packet) {
 	// Encode the structured packet back into wire format exactly once and
 	// hand it to the broadcaster. MSPacket implements packet.Outgoing, so
 	// Args() is invoked once inside broadcastToAreaFrom.
-	broadcastToAreaFrom(client.Ipid(), permissions.IsModerator(client.Perms()), client.Area(), ms)
+	//
+	// Two delivery punishments intercept here:
+	//   - stealthmute: the packet echoes back to ONLY the sender — they see
+	//     their message appear normally while the room hears nothing.
+	//   - lifo: the packet is buffered and released in reverse arrival order.
+	stealthMuted := hasPunishmentType(punishments, PunishmentStealthMute)
+	switch {
+	case stealthMuted:
+		client.Send(ms)
+	case hasPunishmentType(punishments, PunishmentLifo):
+		lifoEnqueueIC(client, ms)
+	default:
+		broadcastToAreaFrom(client.Ipid(), permissions.IsModerator(client.Perms()), client.Area(), ms)
+	}
 	// SFX curse MC fallback: for external http(s) URLs the sfx_name field alone
 	// is not enough because standard AO2 desktop clients look for a local file
 	// and WebAO concatenates the asset URL with the sound name (producing a
 	// garbage path). Sending a one-shot MC packet lets desktop AO2 clients
 	// play the URL through their media stack (the same mechanism /play uses),
 	// so the cursed sound actually plays for everyone in the area.
-	if sfxCurseExternalURL != "" {
+	if sfxCurseExternalURL != "" && !stealthMuted {
 		broadcastToArea(client.Area(), &packet.MCToClient{
 			Name: sfxCurseExternalURL, CharID: client.CharID(),
 			Showname: client.Showname(), Looping: "0", Channel: "0", Effects: "",
@@ -1090,6 +1115,12 @@ func pktIC(client *Client, p *packet.Packet) {
 	// history so future icwarp lookups have something to pick from.
 	if originalICMsg != "" {
 		client.Area().RecordICMessage(client.Ipid(), originalICMsg)
+	}
+	// Mechanic hooks: contagion spread, minefield rolls, silence-bell traps
+	// and love potions all key off "a message the room actually heard", so a
+	// stealthmuted message never triggers them.
+	if !stealthMuted {
+		punishmentMechanicsOnIC(client, punishments)
 	}
 	addToBuffer(client, "IC", "\""+ms.Message+"\"", false)
 }
@@ -1396,6 +1427,14 @@ func pktOOC(client *Client, p *packet.Packet) {
 	// Torment: ghost or delay the OOC message without the client noticing.
 	if isIPIDTormented(client.Ipid()) {
 		handleTormentedOOC(client, encode(displayUsername), msg)
+		return
+	}
+	// Stealthmute: echo the message back to only the sender so they never
+	// notice the room can't hear them. The buffer entry is marked so mods
+	// reviewing logs can tell the message was suppressed.
+	if client.HasActivePunishment(PunishmentStealthMute) {
+		client.Send(&packet.CTToClient{Name: encode(displayUsername), Message: msg, IsFromServer: "0"})
+		addToBuffer(client, "OOC", "\""+msg+"\" (stealthmuted)", false)
 		return
 	}
 	broadcastToAreaFrom(client.Ipid(), permissions.IsModerator(client.Perms()), client.Area(),

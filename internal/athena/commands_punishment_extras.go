@@ -130,6 +130,14 @@ var megamasoStackPool = []PunishmentType{
 	PunishmentDeretsun, PunishmentThugdere, PunishmentTeasedere, PunishmentRindere,
 	PunishmentDarudere, PunishmentTsuyodere, PunishmentCherri,
 	PunishmentGrounded, PunishmentEmoticon,
+	// Wave-2 text transforms join the chaos pool (markov works here too:
+	// pktIC special-cases it against the speaker's current area).
+	PunishmentZalgo, PunishmentLeetspeak, PunishmentSmallcaps, PunishmentPiglatin,
+	PunishmentVaporwave, PunishmentLisp, PunishmentSpoonerism, PunishmentKeysmash,
+	PunishmentWeeb, PunishmentPolitician, PunishmentClickbait, PunishmentMarkov,
+	PunishmentAlliteration, PunishmentCipher,
+	// Protocol effects need no customData, so they roll safely as well.
+	PunishmentTeleport, PunishmentShakecurse, PunishmentRandomflip,
 }
 
 // Handles /megamaso

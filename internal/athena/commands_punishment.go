@@ -858,6 +858,54 @@ func parsePunishmentType(s string) PunishmentType {
 		return PunishmentHideDisplay
 	case "forcedisplay":
 		return PunishmentForceDisplay
+	case "zalgo":
+		return PunishmentZalgo
+	case "leetspeak":
+		return PunishmentLeetspeak
+	case "smallcaps":
+		return PunishmentSmallcaps
+	case "piglatin":
+		return PunishmentPiglatin
+	case "vaporwave":
+		return PunishmentVaporwave
+	case "lisp":
+		return PunishmentLisp
+	case "spoonerism":
+		return PunishmentSpoonerism
+	case "keysmash":
+		return PunishmentKeysmash
+	case "weeb":
+		return PunishmentWeeb
+	case "politician":
+		return PunishmentPolitician
+	case "clickbait":
+		return PunishmentClickbait
+	case "markov":
+		return PunishmentMarkov
+	case "alliteration":
+		return PunishmentAlliteration
+	case "cipher":
+		return PunishmentCipher
+	case "teleport":
+		return PunishmentTeleport
+	case "shakecurse":
+		return PunishmentShakecurse
+	case "randomflip":
+		return PunishmentRandomflip
+	case "forcecolor":
+		return PunishmentForceColor
+	case "nopreanim":
+		return PunishmentNoPreanim
+	case "forcepreanim":
+		return PunishmentForcePreanim
+	case "lifo":
+		return PunishmentLifo
+	case "contagious":
+		return PunishmentContagious
+	case "minefield":
+		return PunishmentMinefield
+	case "stealthmute":
+		return PunishmentStealthMute
 	default:
 		return PunishmentNone
 	}

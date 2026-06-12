@@ -107,6 +107,8 @@ Permission bits are configured in `config/roles.toml`. Multiple bits are granted
 | `/unnameshuffle` | MUTE | Restore shuffled shownames |
 | `/charshuffle` | MUTE | Randomly permute every player's character in this area (Sattolo's algorithm — guaranteed derangement) |
 | `/uncharshuffle` | MUTE | Restore characters to pre-shuffle state |
+| `/clients <uid>` | MUTE | List every connection sharing the target's IPID — multiclient overview with UID, character, area, OOC name and showname |
+| `/punishments <uid>` | MUTE | Inspect any player's active punishments with remaining durations, issuer tiers, lag/mute/jail status |
 
 ---
 
@@ -116,16 +118,19 @@ Permission bits are configured in `config/roles.toml`. Multiple bits are granted
 
 | Group | Commands |
 |-------|----------|
-| Text effects (46) | `/whisper /backward /stutterstep /elongate /uppercase /lowercase /robotic /alternating /fancy /uwu /pirate /shakespearean /caveman /censor /fromsoftware /confused /paranoid /drunk /hiccup /whistle /mumble /slang /cherri /albhed /morse /vowelhell /upsidedown /autospell /thesaurusoverload /valleygirl /babytalk /thirdperson /unreliablenarrator /uncannyvalley /chef /karen /passiveaggressive /nervous /sarcasm /academic /philosopher /poet /quote /spaghetti /essay /rng /haiku /dreamsequence /timewarp` |
+| Text effects (60) | `/whisper /backward /stutterstep /elongate /uppercase /lowercase /robotic /alternating /fancy /uwu /pirate /shakespearean /caveman /censor /fromsoftware /confused /paranoid /drunk /hiccup /whistle /mumble /slang /cherri /albhed /morse /vowelhell /upsidedown /autospell /thesaurusoverload /valleygirl /babytalk /thirdperson /unreliablenarrator /uncannyvalley /chef /karen /passiveaggressive /nervous /sarcasm /academic /philosopher /poet /quote /spaghetti /essay /rng /haiku /dreamsequence /timewarp /zalgo /leetspeak /smallcaps /piglatin /vaporwave /lisp /spoonerism /keysmash /weeb /politician /clickbait /markov /alliteration /cipher` |
 | Themed quote replacers | `/gordonramsay /biblebot /grounded /mime /subtitles /spotlight /recipe /rickroll /pickup /brainrot` |
 | Persona / personality | `/clown /jester /joker /tourettes /translator` |
 | Dere archetypes (26) | `/tsundere /yandere /kuudere /dandere /deredere /himedere /kamidere /undere /bakadere /mayadere /smugdere /deretsun /bokodere /thugdere /teasedere /dorodere /hinedere /hajidere /rindere /utsudere /darudere /butsudere /sdere /mdere /tsuyodere /omnidere` |
 | Animal filters (12) | `/monkey /snake /dog /cat /bird /cow /frog /duck /horse /lion /zoo /bunny` |
 | Visibility / cosmetic | `/emoji /invisible /shrink /grow /wide /areainiswap /hidedisplay /forcedisplay` (and `/unshrink /ungrow /unwide`) |
-| Timing | `/slowpoke /fastspammer /lag` |
+| Protocol / viewport (6) | `/teleport /shakecurse /randomflip /forcecolor /nopreanim /forcepreanim` |
+| Timing | `/slowpoke /fastspammer /lag /lifo` |
 | Audio | `/sfxcurse <uid> <sfx-url>` and `/unsfx` |
 | Voice chat (5) | `/voicemute /voicestatic /voicegarble /voicecutout /voicestutter` |
+| Traps & contagion (4) | `/contagious <type> /minefield /silencebell /stealthmute` |
 | Stacking / chaos | `/stack /torment /lovebomb /degrade /emoticon /51 /icwarp /megamaso /maso /randompunishall /togglerandompunish /tournament` |
+| Inspection | `/punishments [uid]` — active punishments with remaining durations (players: self only) |
 | Removal | `/unpunish <uid>`, `/unpunish -t <type> <uid>`, `/unpunish all`, `/unlag`, plus per-effect `un-` commands |
 | Self-chaos block | `/blockpunishment /unblockpunishment` |
 

@@ -251,6 +251,44 @@ const (
 	// as that one character, so no other sprite can show in the viewport.
 	PunishmentHideDisplay
 	PunishmentForceDisplay
+	// Wave-2 text transforms (see punishments_v2.go / punishments_weeb.go).
+	// Appended after every earlier type so persisted SUBTYPE values keep
+	// their meaning.
+	PunishmentZalgo        // creeping combining-mark corruption
+	PunishmentLeetspeak    // h4x0r 5p34k
+	PunishmentSmallcaps    // ᴇᴠᴇʀʏᴛʜɪɴɢ ɪɴ ᴛɪɴʏ ᴄᴀᴘs
+	PunishmentPiglatin     // igpay atinlay
+	PunishmentVaporwave    // ｆｕｌｌｗｉｄｔｈ aesthetic
+	PunishmentLisp         // th replaces s
+	PunishmentSpoonerism   // swaps word onsets ("shake a tower")
+	PunishmentKeysmash     // asdfjkl;; bursts mid-sentence
+	PunishmentWeeb         // romaji sprinkles + honorifics
+	PunishmentPolitician   // never answers anything directly
+	PunishmentClickbait    // message becomes a clickbait headline
+	PunishmentMarkov       // markov babble built from the area's chat history
+	PunishmentAlliteration // forces awkward alliteration
+	PunishmentCipher       // escalating ROT13 → BINARY → BASE64 layers
+	// Protocol-field punishments — manipulate the IC packet's non-text fields
+	// (offsets, screenshake, flip, text colour, preanim modifiers). Applied in
+	// pktIC via applyProtocolPunishments; every written value passes the
+	// packet validators. See punishments_protocol.go.
+	PunishmentTeleport     // random self-offset per message
+	PunishmentShakecurse   // screenshake on every message
+	PunishmentRandomflip   // 50% sprite flip per message
+	PunishmentForceColor   // text colour locked to customData (0-9)
+	PunishmentNoPreanim    // strips preanimations
+	PunishmentForcePreanim // forces preanimations to play
+	// Delivery punishment — buffers the speaker's IC messages and releases
+	// them in reverse (LIFO) order. See punishments_lifo.go.
+	PunishmentLifo
+	// Mechanic punishments — plague spread and per-message detonations.
+	// Hooked after the IC broadcast in pktIC. See punishments_mechanics.go.
+	PunishmentContagious // spreads to whoever speaks within the window; customData = underlying type
+	PunishmentMinefield  // each message has a 1-in-6 chance to detonate a random 2-min punishment
+	// StealthMute — the target's IC/OOC messages echo back to them but are
+	// never broadcast; they don't know they're muted. Gated at the broadcast
+	// call sites in pktIC/pktOOC.
+	PunishmentStealthMute
 )
 
 // IssuerTier records the permission tier of the moderator who applied a
@@ -355,6 +393,8 @@ type Client struct {
 	ignoredIPIDs        sync.Map       // Set of IPIDs permanently ignored by this client. Key: IPID string, Value: struct{}. Lock-free reads.
 	lastPingNano        atomic.Int64   // Unix nanosecond timestamp of the last CH packet; 0 until seeded on join.
 	masoPunishment      PunishmentType // Active self-applied maso punishment type; PunishmentNone if inactive.
+	lookingForPair      bool           // Whether the client is flagged as Looking For Pair (/lfp); shown by /pairlist.
+	lovePotionUntil     time.Time      // While in the future, the next area speaker receives a pair request from this client. Zero = not armed.
 
 	// Outbound packet queue. SendPacket enqueues here non-blockingly; a
 	// dedicated writer goroutine (started in HandleClient) drains sendCh and
@@ -910,6 +950,10 @@ func (client *Client) clientCleanup() {
 	// Lower the /forcedisplay gate if this client was a pinned target, so the
 	// area stops rendering everyone as their character once they're gone.
 	client.releaseForceDisplayGate()
+	// Disarm any pending love potion so the armed-count gate can't be left
+	// permanently elevated by a disconnect (the per-IC scan only self-corrects
+	// counters for clients it can still see).
+	stopLovePotion(client)
 	client.markClosed()
 	clients.RemoveClient(client)
 }
@@ -2673,6 +2717,54 @@ func (p PunishmentType) String() string {
 		return "hidedisplay"
 	case PunishmentForceDisplay:
 		return "forcedisplay"
+	case PunishmentZalgo:
+		return "zalgo"
+	case PunishmentLeetspeak:
+		return "leetspeak"
+	case PunishmentSmallcaps:
+		return "smallcaps"
+	case PunishmentPiglatin:
+		return "piglatin"
+	case PunishmentVaporwave:
+		return "vaporwave"
+	case PunishmentLisp:
+		return "lisp"
+	case PunishmentSpoonerism:
+		return "spoonerism"
+	case PunishmentKeysmash:
+		return "keysmash"
+	case PunishmentWeeb:
+		return "weeb"
+	case PunishmentPolitician:
+		return "politician"
+	case PunishmentClickbait:
+		return "clickbait"
+	case PunishmentMarkov:
+		return "markov"
+	case PunishmentAlliteration:
+		return "alliteration"
+	case PunishmentCipher:
+		return "cipher"
+	case PunishmentTeleport:
+		return "teleport"
+	case PunishmentShakecurse:
+		return "shakecurse"
+	case PunishmentRandomflip:
+		return "randomflip"
+	case PunishmentForceColor:
+		return "forcecolor"
+	case PunishmentNoPreanim:
+		return "nopreanim"
+	case PunishmentForcePreanim:
+		return "forcepreanim"
+	case PunishmentLifo:
+		return "lifo"
+	case PunishmentContagious:
+		return "contagious"
+	case PunishmentMinefield:
+		return "minefield"
+	case PunishmentStealthMute:
+		return "stealthmute"
 	default:
 		return "none"
 	}
