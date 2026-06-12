@@ -92,8 +92,8 @@ func TestApplyForceDisplaySprite_OverwritesAndClearsPair(t *testing.T) {
 	if ms.Flip != "1" {
 		t.Errorf("Flip = %q, want 1", ms.Flip)
 	}
-	if ms.OtherCharID != "-1^" {
-		t.Errorf("OtherCharID = %q, want -1^ (pair must be cleared)", ms.OtherCharID)
+	if ms.OtherCharID != "-1" {
+		t.Errorf("OtherCharID = %q, want -1 (pair must be cleared, no \"^\" suffix)", ms.OtherCharID)
 	}
 	if ms.OtherName != "" || ms.OtherEmote != "" || ms.OtherOffset != "" || ms.OtherFlip != "" {
 		t.Errorf("expected all Other* fields cleared, got name=%q emote=%q offset=%q flip=%q",
