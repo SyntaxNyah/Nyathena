@@ -458,6 +458,9 @@ For every player. Picks an answer from `config/8ball.txt` if present, otherwise 
 ### `/resetusername <new-username>`
 Lets a logged-in player rename their account without losing their playtime, chips, wardrobe, tags, or anything else tied to their account. Capped at **3 renames per account** (DB column `USERS.USERNAME_RESETS`, migration 19).
 
+### `/removerole <username>` (Admin)
+Demotes a user to a default player account **without deleting it**. Sits between `/setrole` (which requires a named role from `roles.toml`) and `/rmusr` (which purges the account entirely): `/removerole` zeroes the account's permissions via `db.ChangePermissions(username, 0)`, so a DJ or moderator becomes a plain registered player while keeping their username, password, linked IPID, chips, playtime, wardrobe and tags. Any connected session signed in to that account is updated live — it stays logged in but drops to zero permissions, and a former moderator is sent `AUTH#-1` to clear the AO2 "logged in as moderator" badge. Requires `ADMIN`. No-ops with a clear message if the target is already a default (zero-permission) player account.
+
 ### `/playtime` Pagination
 `/playtime top` lists 25 entries per page; pass a page number for the next 25 (`/playtime top 2` = positions 26–50). Both player accounts and moderator accounts (including shadow mods) are eligible — there's no permission filter.
 

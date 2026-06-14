@@ -898,6 +898,62 @@ func cmdChangeRole(client *Client, args []string, _ string) {
 	addToBuffer(client, "CMD", fmt.Sprintf("Updated role of %v to %v.", args[0], args[1]), true)
 }
 
+// Handles /removerole
+//
+// Strips a user's role back to the default, zero-permission player-account
+// state WITHOUT deleting the account. Unlike /rmusr (which deletes the account
+// outright), /removerole keeps the username, password, linked IPID, chips,
+// playtime, wardrobe and tags intact — the account simply loses its moderator
+// or DJ powers and becomes a plain registered player account.
+//
+// It is effectively /setrole <user> <no-perm-role>, but doesn't require a
+// zero-permission role to be defined in roles.toml.
+func cmdRemoveRole(client *Client, args []string, _ string) {
+	username := args[0]
+
+	if !db.UserExists(username) {
+		client.SendServerMessage("User does not exist.")
+		return
+	}
+
+	// IsModUser reports whether the account has any non-zero permissions, which
+	// covers both moderator/admin roles and DJ-only accounts. If it is already a
+	// plain (zero-permission) player account, there is nothing to strip.
+	if !db.IsModUser(username) {
+		client.SendServerMessage(fmt.Sprintf(
+			"'%v' has no role to remove — it is already a default player account.", username))
+		return
+	}
+
+	if err := db.ChangePermissions(username, permissions.PermissionField["NONE"]); err != nil {
+		client.SendServerMessage("Failed to remove role.")
+		logger.LogError(err.Error())
+		return
+	}
+
+	// Apply the demotion live to any connected session(s) signed in to this
+	// account. They stay logged in — the account still exists — but drop to
+	// zero permissions. If a session was a moderator, clear the AO2 "logged in
+	// as moderator" badge so the client UI matches its new state.
+	clients.ForEach(func(c *Client) {
+		if c.Authenticated() && c.ModName() == username {
+			wasMod := permissions.IsModerator(c.Perms())
+			c.SetPerms(permissions.PermissionField["NONE"])
+			if wasMod {
+				c.Send(&packet.AUTH{State: -1})
+			}
+			c.SendServerMessage(
+				"Your staff role has been removed by an administrator. " +
+					"Your account is still active — you are now a regular player.")
+		}
+	})
+
+	client.SendServerMessage(fmt.Sprintf(
+		"Role removed from '%v'. The account is intact (login, chips, playtime and tags are preserved) "+
+			"and now has default player permissions.", username))
+	addToBuffer(client, "CMD", fmt.Sprintf("Removed role from user %v (reset to default account).", username), true)
+}
+
 // Handles /status
 
 func cmdUnban(client *Client, args []string, _ string) {
