@@ -30,6 +30,11 @@ Permission bits are configured in `config/roles.toml`. Multiple bits are granted
 | `/login <username> <password>` | NONE | Sign in to your moderator account |
 | `/logout` | NONE | Sign out |
 | `mkusr <username> <password>` (CLI) | server stdin | Create the first moderator account |
+| `/mkusr <username> <password> <role>` | ADMIN | Create a moderator user |
+| `/setrole <username> <role>` | ADMIN | Change a user's role (permission tier) |
+| `/removerole <username>` | ADMIN | Strip a user's role, resetting them to a default player account. **Keeps the account** (login, chips, playtime, tags) — does not delete it. Use this to demote a DJ/mod without purging their account. |
+| `/resetpass <username> <new_password>` | ADMIN | Reset a user's password |
+| `/rmusr <username>` | ADMIN | **Delete** a moderator user account entirely |
 
 ---
 

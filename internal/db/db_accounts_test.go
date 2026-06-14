@@ -341,6 +341,52 @@ func TestExistingModAccountsCompatible(t *testing.T) {
 	}
 }
 
+// TestChangePermissionsToZeroKeepsAccount verifies the contract /removerole
+// relies on: stripping a user's permissions to zero demotes them to a plain
+// player account WITHOUT deleting the account. The username, password, and
+// IPID linkage all survive; only the role (permissions) is reset.
+func TestChangePermissionsToZeroKeepsAccount(t *testing.T) {
+	teardown := setupTestDB(t)
+	defer teardown()
+
+	// Create a moderator account and link an IPID, as a real login would.
+	if err := CreateUser("demoteme", []byte("modpass1"), 0xFFFF); err != nil {
+		t.Fatalf("CreateUser failed: %v", err)
+	}
+	if err := LinkIPIDToUser("demoteme", "ipid_demote"); err != nil {
+		t.Fatalf("LinkIPIDToUser failed: %v", err)
+	}
+	if !IsModUser("demoteme") {
+		t.Fatal("account should report as a mod user before role removal")
+	}
+
+	// Remove the role (what /removerole does at the DB layer).
+	if err := ChangePermissions("demoteme", 0); err != nil {
+		t.Fatalf("ChangePermissions failed: %v", err)
+	}
+
+	// The account must still exist...
+	if !UserExists("demoteme") {
+		t.Error("account should still exist after role removal (must not be deleted)")
+	}
+	// ...but no longer be treated as a staff account...
+	if IsModUser("demoteme") {
+		t.Error("account should no longer report as a mod user after role removal")
+	}
+	// ...and still authenticate, now with zero permissions.
+	ok, perms := AuthenticateUser("demoteme", []byte("modpass1"))
+	if !ok {
+		t.Error("demoted account should still authenticate with its original password")
+	}
+	if perms != 0 {
+		t.Errorf("expected permissions=0 after role removal, got %d", perms)
+	}
+	// The IPID linkage must survive so chips/playtime stay attached to the account.
+	if u, err := GetUsernameByIPID("ipid_demote"); err != nil || u != "demoteme" {
+		t.Errorf("expected IPID to remain linked to 'demoteme', got %q (err=%v)", u, err)
+	}
+}
+
 // TestLinkIPIDToUserMergesChips verifies that when a player re-logs from a new
 // IP address, the chip balance accumulated under their old IPID is carried over
 // to the new IPID so that players do not lose their earned chips.

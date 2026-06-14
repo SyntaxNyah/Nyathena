@@ -908,6 +908,14 @@ func initCommands() {
 			reqPerms: permissions.PermissionField["ADMIN"],
 			category: "admin",
 		},
+		"removerole": {
+			handler:  cmdRemoveRole,
+			minArgs:  1,
+			usage:    "Usage: /removerole <username>",
+			desc:     "Removes a user's role, resetting them to a default player account. Keeps the account intact (login, chips, playtime, tags) — does NOT delete it like /rmusr.",
+			reqPerms: permissions.PermissionField["ADMIN"],
+			category: "admin",
+		},
 		"resetpass": {
 			handler:  cmdResetPassword,
 			minArgs:  2,
