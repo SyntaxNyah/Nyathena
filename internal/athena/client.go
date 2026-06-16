@@ -289,6 +289,10 @@ const (
 	// never broadcast; they don't know they're muted. Gated at the broadcast
 	// call sites in pktIC/pktOOC.
 	PunishmentStealthMute
+	// Themed text punishments (see punishments_medieval_cheese.go). Appended
+	// last so existing persisted SUBTYPE values keep their meaning.
+	PunishmentMedieval // rewrites IC text into Olde-English / medieval speak
+	PunishmentCheese   // replaces every message with a random statement about cheese
 )
 
 // IssuerTier records the permission tier of the moderator who applied a
@@ -395,6 +399,17 @@ type Client struct {
 	masoPunishment      PunishmentType // Active self-applied maso punishment type; PunishmentNone if inactive.
 	lookingForPair      bool           // Whether the client is flagged as Looking For Pair (/lfp); shown by /pairlist.
 	lovePotionUntil     time.Time      // While in the future, the next area speaker receives a pair request from this client. Zero = not armed.
+
+	// Self-service idle auto-disconnect (/dc, /dctime). Opt-in and isolated to
+	// the client that sets it: the watcher goroutine only ever closes THIS
+	// connection and sends no packet to anyone else. dcIdleMinutes is the
+	// configured idle window in minutes (0 = off); dcLastActivityNano is the
+	// Unix-nanosecond timestamp of the client's last IC/OOC activity, refreshed
+	// on every message they send. dcWatcherStarted gates the lazy spawn of a
+	// single watcher goroutine for the life of the connection.
+	dcIdleMinutes      atomic.Int64
+	dcLastActivityNano atomic.Int64
+	dcWatcherStarted   atomic.Bool
 
 	// Outbound packet queue. SendPacket enqueues here non-blockingly; a
 	// dedicated writer goroutine (started in HandleClient) drains sendCh and
@@ -2765,6 +2780,10 @@ func (p PunishmentType) String() string {
 		return "minefield"
 	case PunishmentStealthMute:
 		return "stealthmute"
+	case PunishmentMedieval:
+		return "medieval"
+	case PunishmentCheese:
+		return "cheese"
 	default:
 		return "none"
 	}

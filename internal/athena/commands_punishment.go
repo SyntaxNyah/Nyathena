@@ -886,6 +886,10 @@ func parsePunishmentType(s string) PunishmentType {
 		return PunishmentAlliteration
 	case "cipher":
 		return PunishmentCipher
+	case "medieval":
+		return PunishmentMedieval
+	case "cheese":
+		return PunishmentCheese
 	case "teleport":
 		return PunishmentTeleport
 	case "shakecurse":

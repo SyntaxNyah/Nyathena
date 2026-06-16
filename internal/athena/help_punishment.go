@@ -45,13 +45,13 @@ var punishmentHelpGroups = []punishmentSubcategory{
 			"essay", "rng", "haiku", "dreamsequence", "timewarp",
 			"zalgo", "leetspeak", "smallcaps", "piglatin", "vaporwave", "lisp",
 			"spoonerism", "keysmash", "weeb", "politician", "clickbait", "markov",
-			"alliteration", "cipher"},
+			"alliteration", "cipher", "medieval"},
 	},
 	{
 		emoji: "🎭", title: "Themed quote replacers",
 		desc: "Discard the player's text and substitute a themed line per message. Supports 'global'.",
 		cmds: []string{"recipe", "rickroll", "pickup", "brainrot", "gordonramsay", "biblebot",
-			"grounded", "mime", "subtitles", "spotlight"},
+			"grounded", "mime", "subtitles", "spotlight", "cheese"},
 	},
 	{
 		emoji: "🃏", title: "Persona / personality",

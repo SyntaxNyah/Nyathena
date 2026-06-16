@@ -1589,6 +1589,10 @@ func ApplyPunishmentToText(text string, pType PunishmentType) string {
 		// Stateless fallback (random pools); pktIC uses the state-aware
 		// escalating version via ApplyPunishmentToTextWithState.
 		return applyCipher(text)
+	case PunishmentMedieval:
+		return applyMedieval(text)
+	case PunishmentCheese:
+		return applyCheese(text)
 	default:
 		return text
 	}
