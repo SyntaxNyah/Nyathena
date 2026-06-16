@@ -450,6 +450,14 @@ func initCommands() {
 			reqPerms: permissions.PermissionField["CM"],
 			category: "area",
 		},
+		"judge": {
+			handler:  cmdJudgeButtons,
+			minArgs:  1,
+			usage:    "Usage: /judge <true|false>",
+			desc:     "Toggles the WT/CE judge buttons on or off in this area.",
+			reqPerms: permissions.PermissionField["MODIFY_AREA"],
+			category: "area",
+		},
 		"musiclock": {
 			handler:  cmdMusicLock,
 			minArgs:  0,
