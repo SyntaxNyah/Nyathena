@@ -175,8 +175,12 @@ The `-h` flag works on every applicator: single-effect commands (`/tsundere 7 -h
 
 Wave-2 additions (14): `/zalgo` (combining-mark corruption), `/leetspeak`, `/smallcaps`, `/piglatin`, `/vaporwave` (ｆｕｌｌｗｉｄｔｈ), `/lisp`, `/spoonerism`, `/keysmash`, `/weeb` (350+ romaji corpus — word swaps, honorifics on names, interjections, desu~ particles), `/politician` (never answers directly), `/clickbait` (headlines star the speaker by name), `/markov` (babble generated from the **area's own recent chat history**; falls back to word shuffle in fresh areas), `/alliteration`, `/cipher` (escalates ROT13 → BINARY → BASE64 per message, then "decryption fails" and re-arms). Expanding transforms clamp output to the server's max IC length (`fitICBudget`) so punished messages are never dropped by the post-transform length check.
 
-#### Themed Quote Replacers (10)
-`/gordonramsay`, `/biblebot`, `/grounded`, `/mime`, `/subtitles`, `/spotlight`, `/recipe`, `/rickroll`, `/pickup`, `/brainrot`
+`/medieval` — rewrites the target's IC text into Olde-English / medieval speak: ~90 word-for-word swaps (`you`→`thou`, `your`→`thy`, `is`→`be`, `yes`→`aye`, `now`→`anon`…), a random heralds' cry prepended (`Hark!`, `Forsooth,`, `Prithee,`, `Zounds!`…) and a random courtly flourish appended (`…by my troth.`, `…mine liege.`, `…verily.`). The prefix and suffix are each rolled independently on top of the per-word swaps, so a single line has **100+ distinct renderings** (herald × flourish alone is 38 × 30 = 1,140 combinations, asserted by `medievalVariationCount` in tests). Transform in `internal/athena/punishments_medieval_cheese.go`.
+
+#### Themed Quote Replacers (11)
+`/gordonramsay`, `/biblebot`, `/grounded`, `/mime`, `/subtitles`, `/spotlight`, `/recipe`, `/rickroll`, `/pickup`, `/brainrot`, `/cheese`
+
+`/cheese` discards the target's text entirely and replaces every message with one of **100+ "statements about cheese"** (facts, puns, varieties, and the running gag that cheese is, technically, a sauce). Same shared punishment plumbing as the others (`-d`/`-r`/`-h`, comma UID lists, `global`, `/stack`, persistence, `/unpunish -t cheese`). Corpus size is pinned by `cheeseLineCount` in tests so it can't silently shrink. Like `/medieval` it requires `MUTE` (mod-only) and is **not** in the self-applied `/maso`/`/megamaso` pool.
 
 #### Persona / Personality (5)
 `/clown`, `/jester`, `/joker`, `/tourettes`, `/translator`
@@ -524,6 +528,23 @@ To satisfy the schemas, the JSON-mode MS encoder emits proper types (numbers, bo
 ### `/punishments` Inspection & `/clients` Multiclient Listing
 - `/punishments [uid]` — lists active punishments with remaining durations, custom data, reasons, and (for mod viewers) issuer tiers. Covers the out-of-slice effects too: lag (torment list), mute, jail. No permission needed for self-inspection; the `<uid>` form requires `MUTE`. Implemented in `internal/athena/commands_qol.go`.
 - `/clients <uid>` — lists every connection sharing the target's IPID with UID, character, area, OOC name and showname. Requires `MUTE`.
+
+### Self-Service Idle Auto-Disconnect (`/dc` / `/dctime`)
+Lets **any** player opt into being automatically disconnected after a chosen stretch of inactivity — the same convenience WebAO's idle timeout offers, but user-controlled. Implemented in `internal/athena/disconnect_timer.go`; no permission required (`general` category).
+
+- **Opt-in:** OFF by default. Nobody is ever auto-disconnected unless they personally enable it.
+- **Isolated to the caller:** the per-connection watcher goroutine only ever closes the connection of the client that set it. It sends no packet to anyone else and cannot affect another player. (Both clarifications the requester stressed.)
+- **Forgiving:** sending an IC or OOC message resets the countdown (`dcTouchActivity`, hooked in `pktIC`/`pktOOC`), so the timer fires only after genuine AFK inactivity — exactly like the WebAO behaviour it mirrors.
+- **Default:** running the command with no number arms a **1-hour** countdown.
+
+| Command | Behaviour |
+|---------|-----------|
+| `/dctime` (or `/dc`) | Enable with the default 60-minute idle window. |
+| `/dctime <minutes>` | Disconnect after `<minutes>` of inactivity (capped at 7 days so the deadline arithmetic can't overflow). |
+| `/dctime off` | Cancel the timer. Also accepts `0`, `stop`, `cancel`, `disable`, `none`. |
+| `/dctime status` | Show the current setting without changing it. |
+
+`/dc` is a plain alias of `/dctime`. A single watcher goroutine is spawned lazily on first enable (CAS-gated) and lives for the rest of the connection, no-opping while disabled and exiting on `client.done`, so re-enabling never respawns it and there is no start/stop race. The watcher re-checks every 10 s, so the disconnect lands within ~10 s of the deadline — plenty precise for an AFK timer. Documented in `/help` via the command's registry `desc`/`usage`.
 
 ### Other Features
 - Hot Potato area minigame

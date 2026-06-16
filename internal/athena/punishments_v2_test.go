@@ -42,6 +42,8 @@ func TestWave2PunishmentTypeRoundTrip(t *testing.T) {
 		"contagious":   PunishmentContagious,
 		"minefield":    PunishmentMinefield,
 		"stealthmute":  PunishmentStealthMute,
+		"medieval":     PunishmentMedieval,
+		"cheese":       PunishmentCheese,
 	}
 	seen := map[PunishmentType]string{}
 	for name, want := range cases {

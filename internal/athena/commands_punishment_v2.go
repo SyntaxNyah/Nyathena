@@ -65,3 +65,11 @@ func cmdAlliteration(client *Client, args []string, usage string) {
 func cmdCipher(client *Client, args []string, usage string) {
 	cmdPunishment(client, args, usage, PunishmentCipher)
 }
+
+func cmdMedieval(client *Client, args []string, usage string) {
+	cmdPunishment(client, args, usage, PunishmentMedieval)
+}
+
+func cmdCheese(client *Client, args []string, usage string) {
+	cmdPunishment(client, args, usage, PunishmentCheese)
+}

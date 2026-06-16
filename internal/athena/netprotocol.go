@@ -388,6 +388,9 @@ func pktIC(client *Client, p *packet.Packet) {
 		return
 	}
 
+	// Sending an IC message counts as activity for the opt-in /dc idle timer.
+	client.dcTouchActivity()
+
 	// Decode the wire-form client packet body into the structured MSPacket
 	// type exactly once. From this point on the IC pipeline operates on named
 	// fields; nothing else in this function indexes into the packet by slot.
@@ -1353,6 +1356,9 @@ func pktOOC(client *Client, p *packet.Packet) {
 		ParseCommand(client, command, args)
 		return
 	}
+
+	// A real (non-command) OOC message counts as activity for the /dc idle timer.
+	client.dcTouchActivity()
 
 	username := decode(strings.TrimSpace(ct.Name))
 	if username == "" || username == config.Name || len(username) > 30 || strings.ContainsAny(username, "[]") {
