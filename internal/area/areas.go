@@ -122,6 +122,7 @@ type Area struct {
 	mirrorArea          bool
 	punishmentArea      bool
 	dokiArea            bool
+	judgeAllowed        bool               // whether the WT/CE judge buttons are usable in this area
 	icWarpGlobal        bool               // whether global icwarp is enabled
 	icWarpExemptUID     int                // UID exempt from global icwarp (-1 = none)
 	icMessages          map[string][]icMsg // per-IPID IC message history for icwarp
@@ -149,6 +150,10 @@ type AreaData struct {
 	Mirror_area       bool   `toml:"mirror_area"`
 	Punishment_area   bool   `toml:"punishment_area"`
 	Doki_area         bool   `toml:"doki_area"`
+	// Judge_allowed is tri-state: nil means "judge buttons enabled" (the
+	// default, preserving upstream behaviour), an explicit false in areas.toml
+	// disables the WT/CE judge buttons so they can't be spammed in that area.
+	Judge_allowed *bool `toml:"judge"`
 	// Voice_allowed is tri-state: nil means "inherit the server default", an
 	// explicit true/false in areas.toml overrides it.  This lets operators
 	// keep voice off by default for a quiet RP area even when the server has
@@ -189,6 +194,12 @@ func NewAreaWithVoiceDefault(data AreaData, charlen int, bufsize int, evi_mode E
 	if data.Voice_allowed != nil {
 		voiceAllowed = *data.Voice_allowed
 	}
+	// Judge buttons default to enabled; only an explicit `judge = false` in
+	// areas.toml turns them off for the area.
+	judgeAllowed := true
+	if data.Judge_allowed != nil {
+		judgeAllowed = *data.Judge_allowed
+	}
 	return &Area{
 		data: data,
 		defaults: defaults{
@@ -210,6 +221,7 @@ func NewAreaWithVoiceDefault(data AreaData, charlen int, bufsize int, evi_mode E
 			punishment_area:   data.Punishment_area,
 		},
 		dokiArea:            data.Doki_area,
+		judgeAllowed:        judgeAllowed,
 		taken:               make([]bool, charlen),
 		defhp:               10,
 		prohp:               10,
@@ -1173,6 +1185,22 @@ func (a *Area) SetDokiArea(v bool) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	a.dokiArea = v
+}
+
+// JudgeAllowed reports whether the WT/CE judge buttons (the RT packet) may be
+// used in this area. Defaults to true; set `judge = false` on the area's TOML
+// entry to disable them so they can't be spammed.
+func (a *Area) JudgeAllowed() bool {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return a.judgeAllowed
+}
+
+// SetJudgeAllowed toggles the judge buttons at runtime.
+func (a *Area) SetJudgeAllowed(v bool) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	a.judgeAllowed = v
 }
 
 // PunishmentArea reports whether this area applies a random, one-shot

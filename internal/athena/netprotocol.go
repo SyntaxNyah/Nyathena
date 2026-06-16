@@ -1292,6 +1292,10 @@ func pktHP(client *Client, p *packet.Packet) {
 
 // Handles RT#%
 func pktWTCE(client *Client, p *packet.Packet) {
+	if !client.Area().JudgeAllowed() {
+		client.SendServerMessage("The judge buttons are disabled in this area.")
+		return
+	}
 	if client.CharID() == -1 || !client.CanJud() {
 		client.SendServerMessage("You are not allowed to play WT/CE in this area.")
 		return

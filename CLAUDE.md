@@ -389,6 +389,13 @@ Per-area chaos mode for literature-club-themed areas. Enable with `doki_area = t
 
 Stacks freely with `mirror_area` and `punishment_area` on the same area.
 
+### Per-Area Judge Button Toggle
+The WT/CE judge buttons (Witness Testimony, Cross Examination and the verdict gavels — the `RT` packet handled by `pktWTCE`) can be disabled per area so players can't spam them. They default to **enabled** (upstream behaviour preserved).
+
+- **Config:** add `judge = false` to an area's entry in `areas.toml` to disable the buttons. Omit the line (or set `judge = true`) to keep them on. The field is tri-state (`*bool`) so an absent value means "enabled".
+- **Runtime:** staff with `MODIFY_AREA` run `/judge <true|false>` (also accepts `on`/`off`) to flip the buttons live without a restart.
+- When disabled, an attempt to play WT/CE is rejected with *"The judge buttons are disabled in this area."* — the check runs before the existing `CanJud()`/character checks in `pktWTCE`.
+
 ### Tiered `/randomsong`
 `/randomsong` plays a random track from `music.txt`. Cooldown is tiered:
 - regular users — `random_song_cooldown` (default 20 s)

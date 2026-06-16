@@ -55,6 +55,13 @@ lock_music = false
 # Stacks freely with mirror_area / punishment_area on the same area.
 # doki_area = false
 
+# Judge buttons: controls whether the WT/CE judge buttons (Witness Testimony,
+# Cross Examination and the verdict gavels — the RT packet) work in this area.
+# Omit the line or set true to keep them enabled (the default). Set false to
+# disable them so they can't be spammed. Staff with MODIFY_AREA can also flip
+# this at runtime with /judge <true|false>.
+# judge = true
+
 # Per-area voice-chat permission.  Omit this line to inherit the server-level
 # [Voice] default_area_voice_allowed setting.  Uncomment and set explicitly
 # (true/false) to override for quiet RP rooms, courtrooms, etc.

@@ -591,6 +591,27 @@ func cmdLockMusic(client *Client, args []string, _ string) {
 	addToBuffer(client, "CMD", fmt.Sprintf("Set CM-only music list to %v.", args[0]), false)
 }
 
+// Handles /judge <true|false> - toggles the WT/CE judge buttons in this area.
+// When disabled, the RT packet (Witness Testimony, Cross Examination and the
+// verdict gavels) is rejected so the buttons can't be spammed.
+
+func cmdJudgeButtons(client *Client, args []string, _ string) {
+	var result string
+	switch args[0] {
+	case "true", "on":
+		client.Area().SetJudgeAllowed(true)
+		result = "enabled"
+	case "false", "off":
+		client.Area().SetJudgeAllowed(false)
+		result = "disabled"
+	default:
+		client.SendServerMessage("Argument not recognized. Usage: /judge <true|false>")
+		return
+	}
+	sendAreaServerMessage(client.Area(), fmt.Sprintf("%v has %v the judge buttons in this area.", client.OOCName(), result))
+	addToBuffer(client, "CMD", fmt.Sprintf("Set judge buttons to %v.", args[0]), false)
+}
+
 // Handles /musiclock - locks music so only moderators, DJs, and CMs can change it.
 
 func cmdMusicLock(client *Client, _ []string, _ string) {
