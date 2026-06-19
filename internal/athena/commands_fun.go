@@ -50,15 +50,17 @@ func cmdPos(client *Client, args []string, _ string) {
 	client.SendServerMessage(fmt.Sprintf("Invalid position. Available positions: %v", strings.Join(validPositions, ", ")))
 }
 
-// pairDisplayName returns the player's showname (in-character display name)
-// when set, falling back to their OOC name. Pair messages reference IC
-// presence rather than OOC identity, so showname matches the user's mental
-// model of "who that character is" better than their OOC alias.
-func pairDisplayName(c *Client) string {
-	if name := c.EffectiveShowname(); name != "" {
-		return name
+// oocDisplayName returns the name to show for a player in OOC-channel and
+// server messages. It prefers the player's OOC name (matching /global, /pm and
+// plain OOC chat), falling back to the showname and then the character name so
+// the label is never blank when a player hasn't set an OOC name. Used by pair
+// notifications, /rps, /8ball, etc. so every OOC-facing message labels players
+// by the same OOC identity rather than mixing in IC shownames.
+func oocDisplayName(c *Client) string {
+	if name := strings.TrimSpace(c.OOCName()); name != "" {
+		return c.OOCName()
 	}
-	return c.OOCName()
+	return clientDisplayName(c)
 }
 
 // Handles /pair
@@ -103,11 +105,11 @@ func cmdPair(client *Client, args []string, _ string) {
 		// Establish UID-tracked pair on both sides so it persists across area changes.
 		client.SetForcePairUID(target.Uid())
 		target.SetForcePairUID(client.Uid())
-		client.SendServerMessage(fmt.Sprintf("Now pairing with %v.", pairDisplayName(target)))
-		target.SendServerMessage(fmt.Sprintf("%v accepted your pair request.", pairDisplayName(client)))
+		client.SendServerMessage(fmt.Sprintf("Now pairing with %v.", oocDisplayName(target)))
+		target.SendServerMessage(fmt.Sprintf("%v accepted your pair request.", oocDisplayName(client)))
 	} else {
-		client.SendServerMessage(fmt.Sprintf("Sent pair request to %v.", pairDisplayName(target)))
-		target.SendServerMessage(fmt.Sprintf("%v wants to pair with you. Type /pair %v to accept.", pairDisplayName(client), client.Uid()))
+		client.SendServerMessage(fmt.Sprintf("Sent pair request to %v.", oocDisplayName(target)))
+		target.SendServerMessage(fmt.Sprintf("%v wants to pair with you. Type /pair %v to accept.", oocDisplayName(client), client.Uid()))
 	}
 }
 
@@ -175,7 +177,7 @@ func cmdForcePair(client *Client, args []string, _ string) {
 func cmdUnpair(client *Client, _ []string, _ string) {
 	clientUID := client.Uid()
 	clientCharID := client.CharID()
-	cancellerName := pairDisplayName(client)
+	cancellerName := oocDisplayName(client)
 
 	hadPair := client.PairWantedID() != -1 || client.ForcePairUID() != -1
 
@@ -235,7 +237,7 @@ func clearPairLinksOnDisconnect(client *Client) {
 	// O(n) walk is cheap.
 	clientUID := client.Uid()
 	clientCharID := client.CharID()
-	leaverName := pairDisplayName(client)
+	leaverName := oocDisplayName(client)
 
 	clients.ForEach(func(c *Client) {
 		if c == client {
@@ -505,7 +507,7 @@ func cmdRoll(client *Client, args []string, _ string) {
 	if *private {
 		client.SendServerMessage(fmt.Sprintf("Results: %v.", strings.Join(result, ", ")))
 	} else {
-		sendAreaServerMessage(client.Area(), fmt.Sprintf("%v rolled %v. Results: %v.", client.OOCName(), flags.Arg(0), strings.Join(result, ", ")))
+		sendAreaServerMessage(client.Area(), fmt.Sprintf("%v rolled %v. Results: %v.", oocDisplayName(client), flags.Arg(0), strings.Join(result, ", ")))
 	}
 	addToBuffer(client, "CMD", fmt.Sprintf("Rolled %v.", flags.Arg(0)), false)
 }
@@ -575,14 +577,14 @@ func cmdRps(client *Client, args []string, _ string) {
 		// First mover: stash the hidden challenge and announce it.
 		rpsState[a] = &rpsChallenge{
 			UID:       client.Uid(),
-			Name:      pairDisplayName(client),
+			Name:      oocDisplayName(client),
 			Choice:    choice,
 			CreatedAt: time.Now().UTC(),
 		}
 		client.SetLastRpsTime(time.Now().UTC())
 		sendAreaServerMessage(a, fmt.Sprintf(
 			"✊✋✌️ %v has thrown an RPS challenge! Anyone can answer with /rps <rock|paper|scissors> within 30 seconds.",
-			pairDisplayName(client)))
+			oocDisplayName(client)))
 		client.SendServerMessage(fmt.Sprintf("Your hidden choice: %s. Waiting for an opponent...", choice))
 		return
 	}
@@ -603,11 +605,11 @@ func cmdRps(client *Client, args []string, _ string) {
 	case rpsBeats(pending.Choice, choice):
 		result = fmt.Sprintf("%v wins!", pending.Name)
 	default:
-		result = fmt.Sprintf("%v wins!", pairDisplayName(client))
+		result = fmt.Sprintf("%v wins!", oocDisplayName(client))
 	}
 	sendAreaServerMessage(a, fmt.Sprintf(
 		"%v (%s) vs %v (%s) — %s",
-		pending.Name, pending.Choice, pairDisplayName(client), choice, result))
+		pending.Name, pending.Choice, oocDisplayName(client), choice, result))
 	addToBuffer(client, "GAME", fmt.Sprintf("RPS: %v vs %v -> %v", pending.Choice, choice, result), false)
 }
 
@@ -993,5 +995,5 @@ func cmd8Ball(client *Client, args []string, _ string) {
 	}
 	answer := pool[rand.Intn(len(pool))]
 	sendAreaServerMessage(client.Area(), fmt.Sprintf("%v asked: %s\n🎱 The Magic 8-Ball says: %s",
-		pairDisplayName(client), question, answer))
+		oocDisplayName(client), question, answer))
 }

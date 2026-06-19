@@ -4,6 +4,29 @@ package athena
 
 import "testing"
 
+// TestOocDisplayNamePrefersOOCName verifies that OOC-channel messages label a
+// player by their OOC name when set, falling back to showname then character
+// only when the OOC name is blank (so the label is never empty).
+func TestOocDisplayNamePrefersOOCName(t *testing.T) {
+	// OOC name set: wins over showname.
+	c := &Client{oocName: "OOCAlias", showname: "ICShow", char: -1}
+	if got := oocDisplayName(c); got != "OOCAlias" {
+		t.Errorf("oocDisplayName with OOC name set = %q, want %q", got, "OOCAlias")
+	}
+
+	// No OOC name: fall back to the showname rather than rendering blank.
+	c2 := &Client{oocName: "  ", showname: "ICShow", char: -1}
+	if got := oocDisplayName(c2); got != "ICShow" {
+		t.Errorf("oocDisplayName with blank OOC name = %q, want showname %q", got, "ICShow")
+	}
+
+	// Forced showname (e.g. /forcename) is honored over a blank OOC name.
+	c3 := &Client{oocName: "", showname: "raw", forcedShowname: "Forced", char: -1}
+	if got := oocDisplayName(c3); got != "Forced" {
+		t.Errorf("oocDisplayName with blank OOC name and forced showname = %q, want %q", got, "Forced")
+	}
+}
+
 // TestClearPairLinksOnDisconnect verifies that when one partner of a
 // force-pair leaves the server, clearPairLinksOnDisconnect dissolves the pair
 // on BOTH sides — clearing the surviving partner's ForcePairUID (a stale UID
