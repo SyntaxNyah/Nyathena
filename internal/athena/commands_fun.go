@@ -216,6 +216,49 @@ func cmdUnpair(client *Client, _ []string, _ string) {
 	}
 }
 
+// clearPairLinksOnDisconnect dissolves any pairing involving a client that is
+// leaving the server. Without this, a partner kept a stale ForcePairUID (or
+// PairWantedID) pointing at the departed player's now-recyclable UID/CharID,
+// which produced the IC pair desync the disconnect was supposed to clean up.
+//
+// Mirrors cmdUnpair: walk the client list and clear every reference to the
+// leaver by UID OR by current CharID, notifying each affected partner, then
+// clear the leaver's own state. Must run while the leaver's UID is still valid
+// (before uids.ReleaseUid in clientCleanup).
+func clearPairLinksOnDisconnect(client *Client) {
+	// Scan unconditionally (like cmdUnpair) rather than early-returning when the
+	// leaver's own pair fields are clear: a peer can hold an incoming pending
+	// request (peer.PairWantedID == leaver's CharID) while the leaver itself
+	// never reciprocated, so its own fields stay -1. Leaving that stale request
+	// behind lets it auto-complete against a recycled UID/CharID later — the
+	// desync this cleanup exists to prevent. Disconnects are infrequent, so the
+	// O(n) walk is cheap.
+	clientUID := client.Uid()
+	clientCharID := client.CharID()
+	leaverName := pairDisplayName(client)
+
+	clients.ForEach(func(c *Client) {
+		if c == client {
+			return
+		}
+		referenced := false
+		if c.ForcePairUID() == clientUID {
+			c.SetForcePairUID(-1)
+			referenced = true
+		}
+		if clientCharID >= 0 && c.PairWantedID() == clientCharID {
+			c.SetPairWantedID(-1)
+			referenced = true
+		}
+		if referenced {
+			c.SendServerMessage(fmt.Sprintf("%v disconnected — your pair has been cancelled.", leaverName))
+		}
+	})
+
+	client.SetForcePairUID(-1)
+	client.SetPairWantedID(-1)
+}
+
 // Handles /forceunpair
 
 func cmdForceUnpair(client *Client, args []string, _ string) {
