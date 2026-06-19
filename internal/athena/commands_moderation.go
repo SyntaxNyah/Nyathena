@@ -328,7 +328,7 @@ func cmdGlobal(client *Client, args []string, _ string) {
 	if tag != "" {
 		tag += " "
 	}
-	broadcastToAll(&packet.CTToClient{Name: fmt.Sprintf("[GLOBAL] [UID %d] %s%v", client.Uid(), tag, client.OOCName()), Message: strings.Join(args, " "), IsFromServer: "1"})
+	broadcastToAll(&packet.CTToClient{Name: fmt.Sprintf("[GLOBAL] [UID %d] %s%v", client.Uid(), tag, oocDisplayName(client)), Message: strings.Join(args, " "), IsFromServer: "1"})
 }
 
 // Handles /hide
@@ -808,12 +808,12 @@ func cmdPM(client *Client, args []string, _ string) {
 	toPM := getUidList(strings.Split(args[0], ","))
 	var recipientNames []string
 	for _, c := range toPM {
-		c.Send(&packet.CTToClient{Name: fmt.Sprintf("[PM] [UID %d] %v", client.Uid(), client.OOCName()), Message: msg, IsFromServer: "1"})
-		recipientNames = append(recipientNames, fmt.Sprintf("[%d] %v", c.Uid(), c.OOCName()))
+		c.Send(&packet.CTToClient{Name: fmt.Sprintf("[PM] [UID %d] %v", client.Uid(), oocDisplayName(client)), Message: msg, IsFromServer: "1"})
+		recipientNames = append(recipientNames, fmt.Sprintf("[%d] %v", c.Uid(), oocDisplayName(c)))
 	}
 	// Echo the message back to the sender so they can see what they sent.
 	if len(recipientNames) > 0 {
-		client.Send(&packet.CTToClient{Name: fmt.Sprintf("[PM → %v] %v", strings.Join(recipientNames, ", "), client.OOCName()), Message: msg, IsFromServer: "1"})
+		client.Send(&packet.CTToClient{Name: fmt.Sprintf("[PM → %v] %v", strings.Join(recipientNames, ", "), oocDisplayName(client)), Message: msg, IsFromServer: "1"})
 	}
 }
 

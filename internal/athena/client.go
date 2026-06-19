@@ -917,6 +917,11 @@ func (client *Client) clientCleanup() {
 			}
 		}
 
+		// Dissolve any pairing involving this client so a partner is never left
+		// with a stale pair pointing at this (soon-to-be-recycled) UID/CharID.
+		// Runs while client.Uid() is still valid, before uids.ReleaseUid below.
+		clearPairLinksOnDisconnect(client)
+
 		// Clear possession links if this client was possessing someone
 		if client.Possessing() != -1 {
 			client.SetPossessing(-1)

@@ -288,11 +288,13 @@ Self-applied fun effects accessed via `/potion <name>`. Duration defaults to **5
 The `character` potion is a per-client goroutine, not a punishment — `/potion off` cancels its rotation cleanly. The `love` potion is likewise special: it arms a per-client flag (atomic-counter-gated on the IC hot path) and `/potion off` disarms it.
 
 ### Persistent Pairing
-UID-based mutual pairing surviving area/character changes. Dissolves on disconnect. Pair messages now reference each player's **showname** (in-character display name) when set, falling back to OOC name only when no showname exists, so pair text matches the IC fiction rather than OOC identity.
+UID-based mutual pairing surviving area/character changes. Pair messages (like every OOC-channel/server message — `/global`, `/pm`, `/roll`, `/rps`, `/8ball`, etc.) label players by their **OOC name** via the shared `oocDisplayName` helper, falling back to showname then character only when the OOC name is blank so the label is never empty.
+
+**Auto-unpair on disconnect.** When either partner leaves the server, `clientCleanup` calls `clearPairLinksOnDisconnect` (mirrors `/unpair`'s full bidirectional scan) while the leaver's UID is still valid, clearing `PairWantedID`/`ForcePairUID` on the leaver **and** on every client that referenced them (by UID or CharID) and notifying the surviving partner. This prevents the IC pair desync where a partner kept a stale pair pointing at the departed player's now-recyclable UID/CharID — and stops a stale pending request from auto-completing against a recycled slot later.
 
 A pending pair request never blocks speech: while waiting for the partner to accept, the requester's IC messages go out with a plain `-1` no-pair value (never the `-1^` order-suffixed form, which some desktop forks drop outright and webAO parses as `NaN`).
 
-`/unpair` is now a full bidirectional reset: it clears `PairWantedID` and `ForcePairUID` on every client that references the canceller (by UID or by current/historical CharID), preventing the desync where a stale pair-wanted-id lingered on a peer after the canceller's character changed.
+`/unpair` is a full bidirectional reset: it clears `PairWantedID` and `ForcePairUID` on every client that references the canceller (by UID or by current/historical CharID), preventing the desync where a stale pair-wanted-id lingered on a peer after the canceller's character changed.
 
 **Discoverability:** `/lfp` toggles a Looking-For-Pair flag; `/pairlist` lists every flagged player in the area with UID, display name and character.
 ```

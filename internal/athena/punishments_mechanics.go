@@ -499,11 +499,11 @@ func lovePotionOnIC(speaker *Client) {
 		if speaker.PairWantedID() == c.CharID() {
 			c.SetForcePairUID(speaker.Uid())
 			speaker.SetForcePairUID(c.Uid())
-			c.SendServerMessage(fmt.Sprintf("💘 The love potion takes hold — now pairing with %v!", pairDisplayName(speaker)))
-			speaker.SendServerMessage(fmt.Sprintf("💘 %v's love potion takes hold — now pairing with them!", pairDisplayName(c)))
+			c.SendServerMessage(fmt.Sprintf("💘 The love potion takes hold — now pairing with %v!", oocDisplayName(speaker)))
+			speaker.SendServerMessage(fmt.Sprintf("💘 %v's love potion takes hold — now pairing with them!", oocDisplayName(c)))
 		} else {
-			c.SendServerMessage(fmt.Sprintf("💘 Your love potion kicks in! You sent a pair request to %v.", pairDisplayName(speaker)))
-			speaker.SendServerMessage(fmt.Sprintf("💘 %v (under a love potion) wants to pair with you. Type /pair %v to accept.", pairDisplayName(c), c.Uid()))
+			c.SendServerMessage(fmt.Sprintf("💘 Your love potion kicks in! You sent a pair request to %v.", oocDisplayName(speaker)))
+			speaker.SendServerMessage(fmt.Sprintf("💘 %v (under a love potion) wants to pair with you. Type /pair %v to accept.", oocDisplayName(c), c.Uid()))
 		}
 	})
 }
