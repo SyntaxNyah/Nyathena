@@ -75,7 +75,7 @@ Permission bits are configured in `config/roles.toml`. Multiple bits are granted
 | `/lock` | NONE (CM) | Lock the area; current occupants get auto-invited |
 | `/unlock` | NONE (CM) | Unlock the area |
 | `/lock -s` | NONE (CM) | Set area to spectatable (joiners enter as spectators) |
-| `/invite <uid>` | NONE (CM) | Add a UID to the invite list |
+| `/invite <uid>` | NONE (CM) | Invite a UID. In a **locked** area this grants entry; in **spectate mode** it also grants the right to speak in IC (same as `/spectate invite`). Requires the area to be locked or in spectate mode — in a plain unlocked area it explains how to restrict the area first instead of doing nothing. |
 | `/uninvite <uid>` | NONE (CM) | Remove from invite list |
 | `/kick <uid>` (in-area) | NONE (CM) | Eject a player from the area. Now also pulls them from the invite list, so they can't walk back into a locked room. |
 | `/cleararea` | MOVE_USERS | Move all players out of an area to the lobby |
@@ -91,7 +91,7 @@ Permission bits are configured in `config/roles.toml`. Multiple bits are granted
 | `/allowcms true\|false` | MODIFY_AREA | Permit area CMs |
 | `/evimode <mode>` | NONE (CM) | Set evidence mode (any/cms/mods) |
 | `/status <status>` | NONE (CM) | Set area status |
-| `/spectate [invite\|uninvite <uids>]` | NONE (CM) | Manage spectate-mode invitations |
+| `/spectate [invite\|uninvite <uids>]` | NONE (CM) | Toggle spectate mode, or grant/revoke IC speaking rights while it's on. Listed in `/help` for **all** players (not just CMs) so everyone can discover how spectate mode works, though only CMs can run it. |
 | `/areadesc [-c] [text]` | NONE | Set/clear area entry description |
 
 ---

@@ -40,6 +40,23 @@ func TestValidateCommandsCurrentRegistry(t *testing.T) {
 	}
 }
 
+// TestSpectatePublicHelp guards that /spectate stays discoverable in /help for
+// every player (not just CMs). It is a CM-only command, but spectate mode
+// affects all occupants, so users need to be able to look it up.
+func TestSpectatePublicHelp(t *testing.T) {
+	initCommands()
+	cmd, ok := Commands["spectate"]
+	if !ok {
+		t.Fatal("spectate command is not registered")
+	}
+	if !cmd.publicHelp {
+		t.Error("spectate must have publicHelp=true so non-CM players can find it in /help")
+	}
+	if cmd.reqPerms != permissions.PermissionField["CM"] {
+		t.Error("spectate must still require CM to run; publicHelp only affects /help visibility, not permission to execute")
+	}
+}
+
 // TestRegisterCommandInstalls verifies the additive registration path.
 func TestRegisterCommandInstalls(t *testing.T) {
 	initCommands()

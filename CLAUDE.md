@@ -497,6 +497,10 @@ Players with the `DJ` permission bit (and no moderator privileges) get a 💿 vi
 ### Locked-Room Kick Lockout (Bug Fix)
 Previously, `/lock` added every current occupant to the area's invite list, so a CM kicking a player from the locked area didn't actually keep them out — they'd walk right back in. The kick command now also pulls the target's UID from the invite list, so they can't return until the room is unlocked or they're explicitly re-invited.
 
+### `/invite` in Spectate Mode + Public `/spectate` Help
+- **`/invite <uid>` now works in spectate mode.** Previously `/invite` bailed with "This area is unlocked." whenever the area wasn't `/lock`-ed, which trapped CMs who had only enabled **spectate mode** (which leaves the area `LockFree`) and wanted to let someone speak. `cmdInvite` now invites to *enter* in a locked area **and** to *speak* (the spectate-invite list, same as `/spectate invite <uid>`) when spectate mode is on; both apply if both are active. In a genuinely unrestricted area the message now tells the CM how to restrict it (`/lock` for entry, `/spectate` for speaking) instead of failing silently.
+- **`/spectate` is now listed in `/help` for everyone.** A new `publicHelp` flag on the `Command` struct lets a command appear in `/help` (and show usage via `/help <cmd>`) regardless of the viewer's permissions. `/spectate` sets it so all players can discover how spectate mode works, even though running it still requires `CM`. The flag is honored at all three `/help` filter sites (category overview, category drill-down, single-command lookup).
+
 ### Recipe Step Variety
 `/recipe` rotates through Step 1 → Step 4 with **separate verb pools per step** (prep / combine / cook / plate). A stream of `/recipe` lines now reads like a real recipe instead of the same template.
 
