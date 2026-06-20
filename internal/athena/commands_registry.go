@@ -35,6 +35,7 @@ type Command struct {
 	accountCmd bool   // when true, command requires the account system (works without EnableCasino so long as EnableAccounts is true)
 	voiceCmd   bool   // when true, command is hidden/disabled if EnableVoice is false
 	category   string // help category (e.g. "general", "casino", "punishment")
+	publicHelp bool   // when true, command is listed in /help (and /help <cmd> shows usage) for everyone, even users who lack reqPerms
 }
 
 var Commands map[string]Command
@@ -1020,12 +1021,13 @@ func initCommands() {
 			category: "admin",
 		},
 		"spectate": {
-			handler:  cmdSpectate,
-			minArgs:  0,
-			usage:    "Usage: /spectate [invite|uninvite <uid1>,<uid2>...]",
-			desc:     "Toggles spectate mode, or invites/uninvites users to speak in IC during spectate mode.",
-			reqPerms: permissions.PermissionField["CM"],
-			category: "area",
+			handler:    cmdSpectate,
+			minArgs:    0,
+			usage:      "Usage: /spectate [invite|uninvite <uid1>,<uid2>...]\nToggles spectate mode (CM only). While spectate mode is on, only CMs and invited players may speak in IC — a CM grants speaking with /spectate invite <uid> (or /invite <uid>).",
+			desc:       "Toggles spectate mode, or invites/uninvites users to speak in IC during spectate mode.",
+			reqPerms:   permissions.PermissionField["CM"],
+			category:   "area",
+			publicHelp: true,
 		},
 		"status": {
 			handler:  cmdStatus,
@@ -3297,7 +3299,7 @@ func ParseCommand(client *Client, command string, args []string) {
 						if cmd.voiceCmd && !voiceEnabledNow {
 							continue
 						}
-						if clientCanUseCommand(client, cmd) {
+						if clientCanUseCommand(client, cmd) || cmd.publicHelp {
 							lines = append(lines, fmt.Sprintf("  /%v — %v", name, cmd.desc))
 						}
 					}
@@ -3315,7 +3317,7 @@ func ParseCommand(client *Client, command string, args []string) {
 			// Not a category — try to look up as a specific command
 			cmd, exists := Commands[cmdName]
 			if exists && !(cmd.casinoCmd && !casinoEnabled) && !(cmd.accountCmd && !accountsEnabled) && !(cmd.voiceCmd && !voiceEnabledNow) {
-				if clientCanUseCommand(client, cmd) {
+				if clientCanUseCommand(client, cmd) || cmd.publicHelp {
 					client.SendServerMessage(cmd.usage)
 				} else {
 					client.SendServerMessage("You do not have permission to use that command.")
@@ -3367,7 +3369,7 @@ func ParseCommand(client *Client, command string, args []string) {
 				if cmd.voiceCmd && !voiceEnabledNow {
 					continue
 				}
-				if clientCanUseCommand(client, cmd) {
+				if clientCanUseCommand(client, cmd) || cmd.publicHelp {
 					hasAny = true
 					break
 				}

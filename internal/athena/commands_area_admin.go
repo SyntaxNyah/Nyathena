@@ -445,16 +445,34 @@ func cmdForceBGList(client *Client, args []string, _ string) {
 // Handles /getban
 
 func cmdInvite(client *Client, args []string, _ string) {
-	if client.Area().Lock() == area.LockFree {
-		client.SendServerMessage("This area is unlocked.")
+	locked := client.Area().Lock() != area.LockFree
+	spectating := client.Area().SpectateMode()
+	// /invite is meaningful in two situations: a locked area (invite the
+	// target to ENTER) and spectate mode (invite the target to SPEAK in IC).
+	// If neither applies there is nothing to invite anyone to — tell the CM
+	// how to restrict the area first rather than failing silently.
+	if !locked && !spectating {
+		client.SendServerMessage("This area is unlocked. Lock it with /lock to control who can enter, or enable spectate mode with /spectate to control who can speak.")
 		return
 	}
 	toInvite := getUidList(strings.Split(args[0], ","))
 	var count int
 	var report string
 	for _, c := range toInvite {
-		if client.Area().AddInvited(c.Uid()) {
+		invited := false
+		// Locked area: grant entry to the area.
+		if locked && client.Area().AddInvited(c.Uid()) {
 			c.SendServerMessage(fmt.Sprintf("You were invited to area %v.", client.Area().Name()))
+			invited = true
+		}
+		// Spectate mode: grant the right to speak in IC. The spectate-invite
+		// list mirrors /spectate invite and only applies to players already
+		// in the area, so guard on that as /spectate invite does.
+		if spectating && c.Area() == client.Area() && client.Area().AddSpectateInvited(c.Uid()) {
+			c.SendServerMessage("You were invited to speak in IC during spectate mode.")
+			invited = true
+		}
+		if invited {
 			count++
 			report += fmt.Sprintf("%v, ", c.Uid())
 		}
