@@ -455,7 +455,19 @@ func cmdInvite(client *Client, args []string, _ string) {
 		client.SendServerMessage("This area is unlocked. Lock it with /lock to control who can enter, or enable spectate mode with /spectate to control who can speak.")
 		return
 	}
-	toInvite := getUidList(strings.Split(args[0], ","))
+	// "all" (any case) invites every player currently in the caller's area;
+	// otherwise the argument is a comma-separated UID list resolved server-wide.
+	var toInvite []*Client
+	if strings.EqualFold(args[0], "all") {
+		targetArea := client.Area()
+		clients.ForEach(func(c *Client) {
+			if c.Uid() != -1 && c.Area() == targetArea {
+				toInvite = append(toInvite, c)
+			}
+		})
+	} else {
+		toInvite = getUidList(strings.Split(args[0], ","))
+	}
 	var count int
 	var report string
 	for _, c := range toInvite {
