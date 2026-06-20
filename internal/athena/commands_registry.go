@@ -326,7 +326,7 @@ func initCommands() {
 		"invite": {
 			handler:  cmdInvite,
 			minArgs:  1,
-			usage:    "Usage: /invite <uid1>,<uid2>...",
+			usage:    "Usage: /invite <uid1>,<uid2>... | /invite all",
 			desc:     "Invites user(s) to the current area.",
 			reqPerms: permissions.PermissionField["CM"],
 			category: "area",
