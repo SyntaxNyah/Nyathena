@@ -26,6 +26,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/MangosArentLiterature/Athena/internal/area"
 	"github.com/MangosArentLiterature/Athena/internal/db"
@@ -792,7 +793,12 @@ func pktIC(client *Client, p *packet.Packet) {
 	case !isPossessing && !hasForcedIniswap && stuckCharID >= 0 && !strings.EqualFold(getCharacters()[stuckCharID], ms.Character): // block iniswap when charstuck unless forced iniswap
 		client.SendServerMessage(fmt.Sprintf("You are character stuck as %v and cannot iniswap.", getCharacters()[stuckCharID]))
 		return
-	case len(msgText) > config.MaxMsg:
+	case utf8.RuneCountInString(msgText) > config.MaxMsg:
+		// Count characters (runes), not bytes. len() returns the UTF-8 byte
+		// length, so a multi-byte character (accents, emoji, CJK) or an
+		// invisible zero-width character costs up to 4 bytes each and a
+		// visually short message could trip the byte-based limit. max_message_length
+		// is documented and understood as a character count, so enforce it as one.
 		client.SendServerMessage("Your message exceeds the maximum message length!")
 		return
 	case ms.Message == client.LastMsg():
@@ -1371,7 +1377,10 @@ func pktOOC(client *Client, p *packet.Packet) {
 	if autoModCheck(client, username) {
 		return
 	}
-	if len(ct.Message) > config.MaxMsg {
+	if utf8.RuneCountInString(ct.Message) > config.MaxMsg {
+		// Character (rune) count, not byte count — see the matching IC check in
+		// pktIC. A message with multi-byte or invisible zero-width characters
+		// shouldn't trip a limit that users read as a character count.
 		client.SendServerMessage("Your message exceeds the maximum message length!")
 		return
 	} else if strings.TrimSpace(ct.Message) == "" {
