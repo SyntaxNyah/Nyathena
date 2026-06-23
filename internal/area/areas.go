@@ -99,6 +99,7 @@ type Area struct {
 	evi_mode            EvidenceMode
 	status              Status
 	lock                Lock
+	adminLocked         bool // /adminlock: only admins may enter; even BYPASS_LOCK mods/shadow mods are refused
 	invited             map[int]struct{}
 	doc                 string
 	description         string
@@ -613,6 +614,22 @@ func (a *Area) SetLock(lock Lock) {
 	a.mu.Unlock()
 }
 
+// AdminLocked returns whether the area is sealed by /adminlock. An admin-locked
+// area refuses entry to everyone except administrators — even moderators and
+// shadow mods who hold BYPASS_LOCK, and even players on the invite list.
+func (a *Area) AdminLocked() bool {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return a.adminLocked
+}
+
+// SetAdminLocked sets the area's admin-lock state.
+func (a *Area) SetAdminLocked(b bool) {
+	a.mu.Lock()
+	a.adminLocked = b
+	a.mu.Unlock()
+}
+
 // AddInvited adds a new UID to the area's invite list.
 func (a *Area) AddInvited(uid int) bool {
 	a.mu.Lock()
@@ -668,6 +685,7 @@ func (a *Area) Reset() {
 	a.invited = make(map[int]struct{})
 	a.status = StatusIdle
 	a.lock = LockFree
+	a.adminLocked = false
 	a.cms = make(map[int]struct{})
 	a.last_msg = -1
 	a.defhp = 10

@@ -428,6 +428,10 @@ func cmdUnpossess(client *Client, args []string, _ string) {
 		return
 	}
 
+	// Lift the silent IC/OOC mute first if this was a /truepossess (no-op for a
+	// plain /fullpossess). Must run before the link is cleared, since it reads it.
+	endTruePossession(client)
+
 	// Clear the possession link
 	client.SetPossessing(-1)
 
@@ -441,40 +445,60 @@ func cmdUnpossess(client *Client, args []string, _ string) {
 	client.SendServerMessage("Stopped possessing.")
 }
 
-// Handles /fullpossess - makes all admin's IC messages appear from target
-
-func cmdFullPossess(client *Client, args []string, _ string) {
-	// Get the target UID
+// beginPossession establishes a persistent silencing possession: the issuer's IC
+// messages render as the target (pair-synced, applied in pktIC) AND the target is
+// silently muted in IC and OOC (and their showname / OOC name frozen) so they
+// cannot contest or expose it. Shared by /fullpossess and /truepossess — they are
+// equivalent, differing only in name and in the audit-log label. Stop with
+// /unpossess. Shadow mods and admins only (gated at the registry).
+func beginPossession(client *Client, args []string, label string) {
 	uid, err := strconv.Atoi(args[0])
 	if err != nil {
 		client.SendServerMessage("Invalid UID.")
 		return
 	}
 
-	// Get the target client
 	target, err := getClientByUid(uid)
 	if err != nil {
 		client.SendServerMessage("Client does not exist.")
 		return
 	}
 
-	// Validate CharID is within bounds
+	// Possessing yourself would silence yourself; reject it.
+	if target == client {
+		client.SendServerMessage("You cannot possess yourself.")
+		return
+	}
+
+	// Validate CharID is within bounds.
 	if target.CharID() < 0 || target.CharID() >= len(getCharacters()) {
 		client.SendServerMessage("Target has an invalid character.")
 		return
 	}
 
-	// Establish the persistent possession link
+	// If this moderator was already possessing someone else, release that
+	// player's silent mute before re-pointing the link at the new target.
+	endTruePossession(client)
+
+	// Establish the persistent link, spoof the target's position, and silence the
+	// target's own IC/OOC (their messages echo only back to them).
 	client.SetPossessing(target.Uid())
-
-	// Save the target's current position to spoof it
 	client.SetPossessedPos(target.Pos())
+	target.SetTruePossessed(true, client.Uid())
 
-	// Log the action
-	addToBuffer(client, "CMD", fmt.Sprintf("Started full possession of UID %v.", uid), true)
+	addToBuffer(client, "CMD", fmt.Sprintf("Started %s possession of UID %v.", label, uid), true)
+	client.SendServerMessage(fmt.Sprintf("Now possessing UID %v. Your IC messages appear as them (pair-synced), and they are silenced in IC and OOC — they cannot expose it. Use /unpossess to stop.", uid))
+}
 
-	// Notify the admin
-	client.SendServerMessage(fmt.Sprintf("Now fully possessing UID %v. All YOUR IC messages will appear as them. Use /unpossess to stop.", uid))
+// Handles /fullpossess — persistent silencing possession (see beginPossession).
+func cmdFullPossess(client *Client, args []string, _ string) {
+	beginPossession(client, args, "full")
+}
+
+// Handles /truepossess — identical to /fullpossess; kept as the explicit name for
+// the "become them and they can't expose it" behaviour (see beginPossession).
+func cmdTruePossess(client *Client, args []string, _ string) {
+	beginPossession(client, args, "true")
 }
 
 // Handles /rmusr

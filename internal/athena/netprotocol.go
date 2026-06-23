@@ -398,6 +398,12 @@ func pktIC(client *Client, p *packet.Packet) {
 	// The reverse encode happens once at the bottom via ms.ServerArgs().
 	ms := packet.ParseMSClient(p.Body)
 
+	// /truepossess silences its target: their own IC is echoed back to them but
+	// reaches nobody, and their showname is frozen so they can't expose the
+	// possession. Gated by the atomic counter so servers not using it pay only a
+	// single atomic load here.
+	trueMuted := activeTruePossess.Load() > 0 && client.TruePossessed()
+
 	// Save the admin's own values before any fullpossess transformation so that
 	// state updates (showname, pairInfo, textColor) always reflect the admin's
 	// own character — not the target's — even during fullpossess.
@@ -405,6 +411,8 @@ func pktIC(client *Client, p *packet.Packet) {
 	ownEmote := ms.Emote
 	ownTextColor := ms.TextColor
 	ownShowname := ms.Showname
+	ownFlip := ms.Flip
+	ownSelfOffset := ms.SelfOffset
 	hasForcedIniswap := false
 
 	// If a moderator has forced a showname for this client, override whatever
@@ -427,6 +435,10 @@ func pktIC(client *Client, p *packet.Packet) {
 
 	// Track if we're in fullpossess mode for validation adjustments
 	isPossessing := false
+	// The resolved target of an active possession, or nil. Used below to spoof
+	// the target's pairing instead of the possessor's so the partner's sprite
+	// renders correctly (no "the pair vanished" possess tell).
+	var possessedTarget *Client
 
 	// Full possession: Transform admin's IC messages to appear from target
 	if client.Possessing() != -1 {
@@ -500,6 +512,19 @@ func pktIC(client *Client, p *packet.Packet) {
 				targetShowname = targetCharName
 			}
 			ms.Showname = targetShowname
+
+			// Remember the target so the pairing block below renders the
+			// target's partner (not the possessor's), and adopt the target's own
+			// self-offset and flip so a paired possession sits the spoofed
+			// character exactly where the target sits. The possessor's real
+			// flip/offset were saved above (ownFlip/ownSelfOffset) for the
+			// possessor's own pair-info state update later.
+			possessedTarget = target
+			ms.SelfOffset = target.PairInfo().offset
+			ms.Flip = target.PairInfo().flip
+			if ms.Flip == "" {
+				ms.Flip = "0"
+			}
 		}
 	}
 
@@ -839,83 +864,94 @@ func pktIC(client *Client, p *packet.Packet) {
 		return
 	}
 
-	// If force-paired, always sync the wanted CharID to the partner's current CharID,
-	// keeping the pair active even when either player changes character or position.
-	// Also sync the position so both characters are always broadcast at the same
-	// courtroom position, preventing the pairing sprite from breaking on clients.
-	if client.ForcePairUID() >= 0 {
-		if partner, err := getClientByUid(client.ForcePairUID()); err == nil && partner.CharID() >= 0 {
-			ms.OtherCharID = partner.CharIDStr()
-			client.SetPairWantedID(partner.CharID())
-			partner.SetPairWantedID(client.CharID())
-			if pos := partner.Pos(); pos != "" {
-				ms.Side = pos
-				client.SetPos(pos)
-			}
-		}
-	}
+	// During possession the pair fields are resolved from the *target's* state,
+	// not the possessor's, so the target's partner renders exactly as it would on
+	// the target's own messages (no "the pair vanished" possess tell). Applies to
+	// both /fullpossess and /truepossess. Otherwise, fall through to the normal
+	// possessor-driven pairing resolution.
+	if possessedTarget != nil {
+		applyPossessedPairFields(ms, possessedTarget)
+	} else {
 
-	// If the client used /pair to set a desired pair but has not selected one via the
-	// in-client pair button (OtherCharID is absent or -1), inject the server-set pair
-	// character ID so the pairing animation activates exactly as if the pair button
-	// had been used.
-	if (ms.OtherCharID == "" || ms.OtherCharID == "-1") && client.PairWantedID() != -1 {
-		ms.OtherCharID = strconv.Itoa(client.PairWantedID())
-	}
+		// If force-paired, always sync the wanted CharID to the partner's current CharID,
+		// keeping the pair active even when either player changes character or position.
+		// Also sync the position so both characters are always broadcast at the same
+		// courtroom position, preventing the pairing sprite from breaking on clients.
+		if client.ForcePairUID() >= 0 {
+			if partner, err := getClientByUid(client.ForcePairUID()); err == nil && partner.CharID() >= 0 {
+				ms.OtherCharID = partner.CharIDStr()
+				client.SetPairWantedID(partner.CharID())
+				partner.SetPairWantedID(client.CharID())
+				if pos := partner.Pos(); pos != "" {
+					ms.Side = pos
+					client.SetPos(pos)
+				}
+			}
+		}
 
-	// Pairing validation
-	if ms.OtherCharID != "" && ms.OtherCharID != "-1" {
-		pidStr, _, _ := strings.Cut(ms.OtherCharID, "^")
-		pid, err := strconv.Atoi(pidStr)
-		if err != nil {
-			return
+		// If the client used /pair to set a desired pair but has not selected one via the
+		// in-client pair button (OtherCharID is absent or -1), inject the server-set pair
+		// character ID so the pairing animation activates exactly as if the pair button
+		// had been used.
+		if (ms.OtherCharID == "" || ms.OtherCharID == "-1") && client.PairWantedID() != -1 {
+			ms.OtherCharID = strconv.Itoa(client.PairWantedID())
 		}
-		if pid < 0 || pid > len(getCharacters()) || pid == client.CharID() {
-			return
-		}
-		client.SetPairWantedID(pid)
-		pairing := false
-		clients.ForEach(func(c *Client) {
-			if pairing {
+
+		// Pairing validation
+		if ms.OtherCharID != "" && ms.OtherCharID != "-1" {
+			pidStr, _, _ := strings.Cut(ms.OtherCharID, "^")
+			pid, err := strconv.Atoi(pidStr)
+			if err != nil {
 				return
 			}
-			isForce := client.ForcePairUID() >= 0 && client.ForcePairUID() == c.Uid() &&
-				c.ForcePairUID() >= 0 && c.ForcePairUID() == client.Uid()
-			// If the client has a stored pair partner, skip any client that isn't
-			// that specific partner to prevent false matches from position overlap.
-			if client.ForcePairUID() >= 0 && !isForce {
+			if pid < 0 || pid > len(getCharacters()) || pid == client.CharID() {
 				return
 			}
-			// Also guard the candidate: if c is already UID-committed to a different partner,
-			// it must not be matched by anyone other than that partner.
-			if c.ForcePairUID() >= 0 && c.ForcePairUID() != client.Uid() {
-				return
+			client.SetPairWantedID(pid)
+			pairing := false
+			clients.ForEach(func(c *Client) {
+				if pairing {
+					return
+				}
+				isForce := client.ForcePairUID() >= 0 && client.ForcePairUID() == c.Uid() &&
+					c.ForcePairUID() >= 0 && c.ForcePairUID() == client.Uid()
+				// If the client has a stored pair partner, skip any client that isn't
+				// that specific partner to prevent false matches from position overlap.
+				if client.ForcePairUID() >= 0 && !isForce {
+					return
+				}
+				// Also guard the candidate: if c is already UID-committed to a different partner,
+				// it must not be matched by anyone other than that partner.
+				if c.ForcePairUID() >= 0 && c.ForcePairUID() != client.Uid() {
+					return
+				}
+				if c.CharID() == pid && c.PairWantedID() == client.CharID() && (isForce || c.Pos() == client.Pos()) {
+					pairinfo := c.PairInfo()
+					ms.OtherName = pairinfo.name
+					ms.OtherEmote = pairinfo.emote
+					ms.OtherOffset = pairinfo.offset
+					ms.OtherFlip = pairinfo.flip
+					pairing = true
+				}
+			})
+			if !pairing {
+				// Plain "-1", never "-1^": the "^" pair-order suffix is not parsed
+				// by every client (official webAO gets Number("-1^") = NaN and some
+				// fork desktop clients drop the whole message — see PR #386). Since
+				// /pair injects a wanted id into every message the requester sends,
+				// this fallback fires on each of them until the pair is accepted,
+				// so a "^" here silently mutes the requester on those clients.
+				ms.OtherCharID = "-1"
+				ms.OtherName = ""
+				ms.OtherEmote = ""
 			}
-			if c.CharID() == pid && c.PairWantedID() == client.CharID() && (isForce || c.Pos() == client.Pos()) {
-				pairinfo := c.PairInfo()
-				ms.OtherName = pairinfo.name
-				ms.OtherEmote = pairinfo.emote
-				ms.OtherOffset = pairinfo.offset
-				ms.OtherFlip = pairinfo.flip
-				pairing = true
-			}
-		})
-		if !pairing {
-			// Plain "-1", never "-1^": the "^" pair-order suffix is not parsed
-			// by every client (official webAO gets Number("-1^") = NaN and some
-			// fork desktop clients drop the whole message — see PR #386). Since
-			// /pair injects a wanted id into every message the requester sends,
-			// this fallback fires on each of them until the pair is accepted,
-			// so a "^" here silently mutes the requester on those clients.
-			ms.OtherCharID = "-1"
+		} else {
+			// No pair attempted: ensure OtherName/OtherEmote are empty.
 			ms.OtherName = ""
 			ms.OtherEmote = ""
 		}
-	} else {
-		// No pair attempted: ensure OtherName/OtherEmote are empty.
-		ms.OtherName = ""
-		ms.OtherEmote = ""
-	}
+
+	} // end of the non-possession pairing branch opened above
 
 	// Offset validation
 	if ms.SelfOffset != "" {
@@ -997,7 +1033,7 @@ func pktIC(client *Client, p *packet.Packet) {
 	// Use the admin's own (pre-transformation) values for state updates so that
 	// the admin's showname, pairInfo and textColor are never overwritten with
 	// the target's during fullpossess.
-	client.SetPairInfo(ownCharName, ownEmote, ms.Flip, ms.SelfOffset)
+	client.SetPairInfo(ownCharName, ownEmote, ownFlip, ownSelfOffset)
 	client.SetLastMsg(ms.Message)
 	client.SetLastTextColor(ownTextColor)
 	newShowname := ownShowname
@@ -1005,7 +1041,10 @@ func pktIC(client *Client, p *packet.Packet) {
 		newShowname = getCharacters()[client.CharID()]
 	}
 	// Only broadcast a PU showname update when the showname actually changed.
-	if client.UpdateShowname(newShowname) {
+	// A /truepossess target's showname is frozen: skipping the update keeps their
+	// stored showname (shown in /players and reused on the possessor's spoofed
+	// messages) pinned, so they can't rename into a distress signal.
+	if !trueMuted && client.UpdateShowname(newShowname) {
 		broadcastToAll(&packet.PU{ID: client.Uid(), Type: 2, Data: decode(newShowname)})
 	}
 	client.Area().SetLastSpeaker(client.CharID())
@@ -1100,8 +1139,12 @@ func pktIC(client *Client, p *packet.Packet) {
 	//     their message appear normally while the room hears nothing.
 	//   - lifo: the packet is buffered and released in reverse arrival order.
 	stealthMuted := hasPunishmentType(punishments, PunishmentStealthMute)
+	// A /truepossess target is silenced exactly like a stealthmute: the packet
+	// echoes back to only them (so their own client still looks normal) while the
+	// room hears nothing — they cannot contest or expose the possession.
+	silenced := stealthMuted || trueMuted
 	switch {
-	case stealthMuted:
+	case silenced:
 		client.Send(ms)
 	case hasPunishmentType(punishments, PunishmentLifo):
 		lifoEnqueueIC(client, ms)
@@ -1114,7 +1157,7 @@ func pktIC(client *Client, p *packet.Packet) {
 	// garbage path). Sending a one-shot MC packet lets desktop AO2 clients
 	// play the URL through their media stack (the same mechanism /play uses),
 	// so the cursed sound actually plays for everyone in the area.
-	if sfxCurseExternalURL != "" && !stealthMuted {
+	if sfxCurseExternalURL != "" && !silenced {
 		broadcastToArea(client.Area(), &packet.MCToClient{
 			Name: sfxCurseExternalURL, CharID: client.CharID(),
 			Showname: client.Showname(), Looping: "0", Channel: "0", Effects: "",
@@ -1128,10 +1171,16 @@ func pktIC(client *Client, p *packet.Packet) {
 	// Mechanic hooks: contagion spread, minefield rolls, silence-bell traps
 	// and love potions all key off "a message the room actually heard", so a
 	// stealthmuted message never triggers them.
-	if !stealthMuted {
+	if !silenced {
 		punishmentMechanicsOnIC(client, punishments)
 	}
-	addToBuffer(client, "IC", "\""+ms.Message+"\"", false)
+	// Log suppressed /truepossess IC with a marker so staff can audit what the
+	// silenced target tried to say (e.g. an attempt to expose the possession).
+	if trueMuted {
+		addToBuffer(client, "IC", "\""+ms.Message+"\" (truepossessed)", false)
+	} else {
+		addToBuffer(client, "IC", "\""+ms.Message+"\"", false)
+	}
 }
 
 // reverseRunes returns s with its runes (not bytes) reversed. Used by the
@@ -1350,11 +1399,21 @@ func pktOOC(client *Client, p *packet.Packet) {
 		return
 	}
 
+	// /truepossess silences the target's OOC entirely (see pktIC for the IC side).
+	// Gated by the atomic counter so servers not using it pay only one atomic load.
+	trueMuted := activeTruePossess.Load() > 0 && client.TruePossessed()
+
 	// Commands are dispatched before OOC-name validation so that /login and
 	// other commands are always reachable regardless of new-IPID OOC cooldowns,
 	// username validity, or duplicate-name collisions.  Returning players whose
 	// IP changed must be able to /login without waiting out any cooldown timer.
 	if strings.HasPrefix(ct.Message, "/") {
+		// Swallow commands from a /truepossess target so they can't reach anyone
+		// via /global, /pm, /modchat, /a, etc. The attempt is logged for staff.
+		if trueMuted {
+			addToBuffer(client, "CMD", "(suppressed during /truepossess) "+decode(ct.Message), false)
+			return
+		}
 		decoded := decode(ct.Message)
 		match := commandRegex.FindString(decoded)
 		command := strings.ToLower(strings.TrimPrefix(match, "/"))
@@ -1384,6 +1443,22 @@ func pktOOC(client *Client, p *packet.Packet) {
 		client.SendServerMessage("Your message exceeds the maximum message length!")
 		return
 	} else if strings.TrimSpace(ct.Message) == "" {
+		return
+	}
+	// /truepossess: the target's OOC is inert beyond this point. Echo the message
+	// back to only them under their frozen display name (so their own client still
+	// looks normal), but propagate nothing — no broadcast, no rename, no name PU —
+	// so they cannot expose or contest the possession.
+	if trueMuted {
+		display := client.OOCName()
+		if client.Uid() != -1 {
+			display = "[" + strconv.Itoa(client.Uid()) + "] " + display
+		}
+		if tag := formatTagDisplay(db.GetActiveTag(client.Ipid())); tag != "" {
+			display = tag + " " + display
+		}
+		client.Send(&packet.CTToClient{Name: encode(display), Message: ct.Message, IsFromServer: "0"})
+		addToBuffer(client, "OOC", "\""+ct.Message+"\" (truepossessed)", false)
 		return
 	}
 	var usernameTaken bool

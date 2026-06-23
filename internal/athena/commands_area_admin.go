@@ -558,6 +558,12 @@ func cmdKickOther(client *Client, args []string, _ string) {
 // Handles /lock
 
 func cmdLock(client *Client, args []string, _ string) {
+	// An admin-locked area's lock state is admin-controlled; a non-admin can't
+	// downgrade it to spectatable or otherwise change it out from under the lock.
+	if client.Area().AdminLocked() && !permissions.IsAdmin(client.Perms()) {
+		client.SendServerMessage("This area is admin-locked. Only an administrator can change its lock.")
+		return
+	}
 	if sliceutil.ContainsString(args, "-s") { // Set area to spectatable.
 		client.Area().SetLock(area.LockSpectatable)
 		sendAreaServerMessage(client.Area(), fmt.Sprintf("%v set the area to spectatable.", client.OOCName()))
@@ -1181,6 +1187,11 @@ func cmdUninvite(client *Client, args []string, _ string) {
 // Handles /unlock
 
 func cmdUnlock(client *Client, _ []string, _ string) {
+	// An admin-locked area can only be unlocked by an admin (via /adminlock).
+	if client.Area().AdminLocked() && !permissions.IsAdmin(client.Perms()) {
+		client.SendServerMessage("This area is admin-locked. Only an administrator can unlock it (with /adminlock).")
+		return
+	}
 	if client.Area().Lock() == area.LockFree {
 		client.SendServerMessage("This area is not locked.")
 		return
@@ -1190,6 +1201,32 @@ func cmdUnlock(client *Client, _ []string, _ string) {
 	sendLockArup()
 	sendAreaServerMessage(client.Area(), fmt.Sprintf("%v unlocked the area.", client.OOCName()))
 	addToBuffer(client, "CMD", "Unlocked the area.", false)
+}
+
+// Handles /adminlock — an admin-only seal. Unlike /lock (which BYPASS_LOCK mods,
+// shadow mods, and invited players can all enter), an admin-locked area refuses
+// everyone but administrators. Toggles: seals an open area, reopens a sealed one.
+// Players already inside are not evicted — it only blocks new entries.
+func cmdAdminLock(client *Client, _ []string, _ string) {
+	a := client.Area()
+	if a.AdminLocked() {
+		a.SetAdminLocked(false)
+		a.SetLock(area.LockFree)
+		a.ClearInvited()
+		sendLockArup()
+		sendAreaServerMessage(a, fmt.Sprintf("%v lifted the admin-lock; the area is open again.", client.OOCName()))
+		addToBuffer(client, "CMD", "Lifted the admin-lock.", true)
+		return
+	}
+	if a == areas[0] {
+		client.SendServerMessage("You cannot admin-lock area 0.")
+		return
+	}
+	a.SetAdminLocked(true)
+	a.SetLock(area.LockLocked)
+	sendLockArup()
+	sendAreaServerMessage(a, fmt.Sprintf("%v admin-locked the area. Only administrators can enter.", client.OOCName()))
+	addToBuffer(client, "CMD", "Admin-locked the area.", true)
 }
 
 // Handles /spectate
