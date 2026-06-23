@@ -374,6 +374,8 @@ type Client struct {
 	forcePairUID        int            // UID of the client this client is force-paired with (-1 if none)
 	possessing          int            // UID of the client being possessed (-1 if not possessing anyone)
 	possessedPos        string         // Position of the possessed target (saved at time of possession)
+	trueMuted           bool           // True when this client's IC/OOC is silenced by an active /truepossess (see possess.go)
+	truePossessedBy     int            // UID of the possessor who applied the /truepossess silence (only meaningful while trueMuted)
 	forcedShowname      string         // Showname forced by a moderator ("" if none)
 	nameReversed        bool           // gates /reversename so it cannot double-apply
 	preReverseShowname  string         // forcedShowname before /reversename; restored by /unreversename
@@ -922,11 +924,19 @@ func (client *Client) clientCleanup() {
 		// Runs while client.Uid() is still valid, before uids.ReleaseUid below.
 		clearPairLinksOnDisconnect(client)
 
-		// Clear possession links if this client was possessing someone
+		// Clear possession links if this client was possessing someone. If it was
+		// a /truepossess, lift the target's silent mute first (before the link is
+		// cleared, since endTruePossession reads it).
 		if client.Possessing() != -1 {
+			endTruePossession(client)
 			client.SetPossessing(-1)
 			client.SetPossessedPos("")
 		}
+
+		// If this client was itself being truepossessed, release the mute so a
+		// disconnect can't leak the activeTruePossess hot-path gate. No-ops (and
+		// leaves the gate untouched) when the client wasn't truepossessed.
+		client.SetTruePossessed(false, -1)
 
 		// Clear possession links if anyone was possessing this client
 		uid := client.Uid()
@@ -1468,6 +1478,14 @@ func (client *Client) ChangeArea(a *area.Area) bool {
 	// Check if client is jailed
 	if time.Now().UTC().Before(client.JailedUntil()) && !client.JailedUntil().IsZero() {
 		client.SendServerMessage("You are jailed in this area")
+		return false
+	}
+	// Admin-lock: a /adminlock'd area refuses everyone but administrators —
+	// even moderators and shadow mods with BYPASS_LOCK, and even invited
+	// players. Checked before the normal lock so there is no emergency-bypass or
+	// invite escape hatch.
+	if a.AdminLocked() && !permissions.IsAdmin(client.Perms()) {
+		client.SendServerMessage("This area is admin-locked. Only an administrator can enter.")
 		return false
 	}
 	if a.Lock() == area.LockLocked &&

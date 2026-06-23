@@ -75,6 +75,7 @@ Permission bits are configured in `config/roles.toml`. Multiple bits are granted
 | `/lock` | NONE (CM) | Lock the area; current occupants get auto-invited |
 | `/unlock` | NONE (CM) | Unlock the area |
 | `/lock -s` | NONE (CM) | Set area to spectatable (joiners enter as spectators) |
+| `/adminlock` | ADMIN | Toggle an **admin-only seal**: nobody but admins can enter — not even mods or shadow mods with `BYPASS_LOCK`, and not even invited players. Players already inside are not evicted. A non-admin cannot `/unlock` or `/lock` an admin-locked area; only `/adminlock` (by an admin) lifts it. |
 | `/invite <uid>` | NONE (CM) | Invite a UID. In a **locked** area this grants entry; in **spectate mode** it also grants the right to speak in IC (same as `/spectate invite`). Requires the area to be locked or in spectate mode — in a plain unlocked area it explains how to restrict the area first instead of doing nothing. |
 | `/uninvite <uid>` | NONE (CM) | Remove from invite list |
 | `/kick <uid>` (in-area) | NONE (CM) | Eject a player from the area. Now also pulls them from the invite list, so they can't walk back into a locked room. |
@@ -114,6 +115,21 @@ Permission bits are configured in `config/roles.toml`. Multiple bits are granted
 | `/uncharshuffle` | MUTE | Restore characters to pre-shuffle state |
 | `/clients <uid>` | MUTE | List every connection sharing the target's IPID — multiclient overview with UID, character, area, OOC name and showname |
 | `/punishments <uid>` | MUTE | Inspect any player's active punishments with remaining durations, issuer tiers, lag/mute/jail status |
+
+---
+
+## Possession
+
+Speak through another player's character. All three flavours fully copy the target's appearance — character, emote, position, text colour, showname — **and** spoof the target's pairing, so if the target is paired their partner's sprite still renders next to them in the viewport (no "the pair vanished" tell).
+
+| Command | Permission | Description |
+|---------|-----------|-------------|
+| `/possess <uid> <message>` | SHADOW | Make the target say one message, rendered exactly as them. |
+| `/fullpossess <uid>` | SHADOW | Become the target persistently — see below. Identical to `/truepossess`. |
+| `/truepossess <uid>` | SHADOW | Become the target persistently — see below. Identical to `/fullpossess`. |
+| `/unpossess` | SHADOW | Stop a full/true possession (lifts the target's mute). |
+
+`/fullpossess` and `/truepossess` are the **same command** (two names for the same behaviour): every one of *your* IC messages renders as the target until `/unpossess`, **and** the target is silently muted — their own IC and OOC are echoed only back to them (so their client still looks normal) but reach nobody, their commands (`/global`, `/pm`, `/modchat`, …) are swallowed, and their showname / OOC name are frozen. Combined with the pair-spoof, an onlooker sees the target talking normally (with their partner) while you drive every line, and the target has no in-game channel to shout "it's not me". Suppressed IC/OOC and swallowed commands are still written to the area log (tagged `(truepossessed)` / `(suppressed during /truepossess)`) for staff audit. A possession ends automatically — and the mute lifts — if either party disconnects.
 
 ---
 
@@ -268,3 +284,5 @@ Each reloadable list lives behind a `sync/atomic.Pointer` so a swap is a single 
 Shadow moderators (`SHADOW` perm bit, no `ADMIN`) are hidden from `/gas` and `/players` for non-admin viewers — no `Mod:` line is shown at all. Only admins see anything for a shadow mod, labelled `Mod: <name> (shadow)`.
 
 Shadow mods are still visible on `/playtime top` (the leaderboard does not filter by permission), and they are NOT exempt from `/unpunish` self-removal protection — which means a regular mod cannot lift a shadow-mod-issued punishment on themselves.
+
+Shadow mods (and admins) can also **`/hide`** themselves — vanishing entirely from `/players`, `/gas`, and room player counts — so they can lurk on an area unseen. `/hide` again to reappear. Regular (non-shadow) moderators cannot `/hide`.

@@ -310,6 +310,21 @@ One-time forced character swap (requires KICK). Target may freely change afterwa
 /charcurse <uid> <charname>
 ```
 
+### Possession
+Speak through another player's character. Shares one sprite-spoof + pair-spoof pipeline (`internal/athena/possess.go`, applied in `pktIC`):
+
+- `/possess <uid> <message>` (SHADOW) — one message rendered exactly as the target.
+- `/fullpossess <uid>` (SHADOW) — persistent silencing possession; identical to `/truepossess`.
+- `/truepossess <uid>` (SHADOW) — persistent silencing possession; identical to `/fullpossess`. (Both names kept; both share `beginPossession`.)
+- `/unpossess` (SHADOW) — stop a full/true possession; lifts the mute.
+
+**Pair-spoof (applies to all flavours).** A possessed IC message reproduces the *target's* pairing, not the possessor's: `applyPossessedPairFields` resolves the target's partner (normal `/pair` or UID-locked `/forcepair`) and stamps the partner's sprite (`OtherCharID`/`OtherName`/`OtherEmote`/`OtherOffset`/`OtherFlip`) onto the packet, and the possessed message also adopts the target's own self-offset/flip. Without this, possessing a paired player dropped their partner from the viewport — an obvious "this is a possess" tell. The possessor's own pair-info state is preserved (the bottom-of-`pktIC` `SetPairInfo` uses saved `ownFlip`/`ownSelfOffset`).
+
+**Silencing (`/fullpossess` and `/truepossess`).** The target is marked `trueMuted` (per-client flag, hot-path-gated by the `activeTruePossess` atomic counter so unused servers pay nothing). While active: their IC and OOC are echoed back to *only them* (stealthmute semantics — their client looks normal) but reach nobody; their OOC commands (`/global`, `/pm`, `/modchat`, `/a`, …) are swallowed undispatched; and their showname / OOC name are frozen (the PU broadcasts are skipped) so they can't rename into a distress signal — which also keeps the possessor's spoofed messages pinned to the target's original showname. Suppressed lines are logged tagged `(truepossessed)` / `(suppressed during /truepossess)` for staff audit. The mute is lifted by `/unpossess`, switching target, or either party disconnecting (`endTruePossession` + `clientCleanup`, keeping the atomic gate balanced). Shadow mods and admins only.
+
+### Admin Lock (`/adminlock`)
+`/adminlock` (ADMIN) toggles an admin-only seal on the caller's area: an admin-locked area refuses entry to **everyone but administrators** — even moderators and shadow mods who hold `BYPASS_LOCK`, and even players on the invite list. Unlike `/lock`, there is no emergency-bypass or invite escape hatch. Players already inside are not evicted (it blocks new entries only). The check sits at the top of `Client.ChangeArea`, before the normal lock logic. The area is also set to `LockLocked` so it displays as locked in ARUP; a new `area.adminLocked` bool (cleared on `Area.Reset`) carries the extra seal. A non-admin cannot `/unlock` or `/lock` an admin-locked area out from under it — only `/adminlock` (by an admin) lifts it, which reopens the area (`LockFree`, invites cleared). Area 0 cannot be admin-locked.
+
 ### Mafia Social Deduction Minigame
 Fully featured in-server Mafia (4–20+ players) with automatic role pools, day/night phases, lynch voting, night actions, last wills, graveyard, whisper, and phase timers.
 
@@ -410,6 +425,8 @@ The WT/CE judge buttons (Witness Testimony, Cross Examination and the verdict ga
 
 ### Shadow Mod Visibility
 Shadow moderators (`SHADOW` perm bit, no `ADMIN`) are completely hidden from `/gas`/`/players` for non-admin viewers — no "Mod:" line is shown at all. Only admins see them, labelled as `Mod: <name> (shadow)`. Previously the line still rendered as `Mod: Moderator`, which let other moderators infer staff status.
+
+Shadow mods can also **`/hide`** themselves — vanishing entirely from `/players`, `/gas`, and room player counts (toggle). `/hide` was previously `ADMIN`-only; it is now gated to `SHADOW`, so shadow mods (and admins, who carry every bit) can go invisible while regular moderators still cannot.
 
 ### `/unpunish` Self-Removal Protection
 Punishments now record the issuer's permission tier (`IssuerSystem`/`IssuerMod`/`IssuerShadow`/`IssuerAdmin`) in the `PUNISHMENTS.ISSUER_TIER` column. A regular moderator cannot use `/unpunish` to lift a punishment that an admin or shadow mod applied to them — `/unpunish self`, `/unpunish -t <type> self`, and the self-target slice of `/unpunish all` are all gated. Admins and shadow mods bypass the gate. Persists across restarts via DB migration 18.
