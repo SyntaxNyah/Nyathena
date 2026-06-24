@@ -167,7 +167,7 @@ func pktHdid(client *Client, p *packet.Packet) {
 		return
 	}
 
-	client.Send(&packet.IDClient{PlayerNumber: 0, Software: "Athena", Version: encode(version)})
+	client.Send(&packet.IDClient{PlayerNumber: 0, Software: "Nyathena", Version: encode(version)})
 }
 
 // Handles ID#%
@@ -290,7 +290,7 @@ func pktReqDone(client *Client, _ *packet.Packet) {
 	sendStatusArup()
 	sendLockArup()
 	// Notify the client of their actual UID so the player list widget filters correctly.
-	client.Send(&packet.IDClient{PlayerNumber: client.Uid(), Software: "Athena", Version: encode(version)})
+	client.Send(&packet.IDClient{PlayerNumber: client.Uid(), Software: "Nyathena", Version: encode(version)})
 	sendPlayerListToClient(client)
 	broadcastPlayerJoin(client)
 	if motd := GetMotd(); motd != "" {
