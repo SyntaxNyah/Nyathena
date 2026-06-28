@@ -22,7 +22,6 @@ import (
 
 	"github.com/MangosArentLiterature/Athena/internal/area"
 	"github.com/MangosArentLiterature/Athena/internal/packet"
-	"github.com/MangosArentLiterature/Athena/internal/permissions"
 )
 
 const (
@@ -60,8 +59,9 @@ var lifoBroadcastFn = func(e lifoPending) {
 func lifoEnqueueIC(client *Client, ms *packet.MSPacket) {
 	entry := lifoPending{
 		ipid: client.Ipid(),
-		// Moderators aren't normally punished, but keep the shadow flag honest.
-		isMod: permissions.IsModerator(client.Perms()),
+		// Mirrors the live IC bypass: real mods override ignore lists, shadow
+		// mods don't (so they can still be ignored like normal players).
+		isMod: senderBypassesIgnore(client.Perms()),
 		a:     client.Area(),
 		ms:    ms,
 	}

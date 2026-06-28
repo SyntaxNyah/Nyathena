@@ -1149,7 +1149,7 @@ func pktIC(client *Client, p *packet.Packet) {
 	case hasPunishmentType(punishments, PunishmentLifo):
 		lifoEnqueueIC(client, ms)
 	default:
-		broadcastToAreaFrom(client.Ipid(), permissions.IsModerator(client.Perms()), client.Area(), ms)
+		broadcastToAreaFrom(client.Ipid(), senderBypassesIgnore(client.Perms()), client.Area(), ms)
 	}
 	// SFX curse MC fallback: for external http(s) URLs the sfx_name field alone
 	// is not enough because standard AO2 desktop clients look for a local file
@@ -1531,7 +1531,7 @@ func pktOOC(client *Client, p *packet.Packet) {
 		addToBuffer(client, "OOC", "\""+msg+"\" (stealthmuted)", false)
 		return
 	}
-	broadcastToAreaFrom(client.Ipid(), permissions.IsModerator(client.Perms()), client.Area(),
+	broadcastToAreaFrom(client.Ipid(), senderBypassesIgnore(client.Perms()), client.Area(),
 		&packet.CTToClient{Name: encode(displayUsername), Message: msg, IsFromServer: "0"})
 	addToBuffer(client, "OOC", "\""+msg+"\"", false)
 }
