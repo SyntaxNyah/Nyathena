@@ -1929,7 +1929,10 @@ func cmdIgnore(client *Client, args []string, usage string) {
 		return
 	}
 
-	if target.Authenticated() && permissions.IsModerator(target.Perms()) {
+	// Shadow mods are intentionally ignorable — being un-ignorable is exactly
+	// what would out them (see senderBypassesIgnore). Only real moderators and
+	// administrators are protected from /ignore.
+	if target.Authenticated() && senderBypassesIgnore(target.Perms()) {
 		client.SendServerMessage("You cannot ignore a moderator or administrator.")
 		return
 	}

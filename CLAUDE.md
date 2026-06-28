@@ -428,6 +428,8 @@ Shadow moderators (`SHADOW` perm bit, no `ADMIN`) are completely hidden from `/g
 
 Shadow mods can also **`/hide`** themselves — vanishing entirely from `/players`, `/gas`, and room player counts (toggle). `/hide` was previously `ADMIN`-only; it is now gated to `SHADOW`, so shadow mods (and admins, who carry every bit) can go invisible while regular moderators still cannot.
 
+**Shadow mods are `/ignore`-able.** Real moderators and admins can never be silenced with `/ignore` (the command refuses, and their IC/OOC messages bypass every recipient's ignore list). Shadow mods are deliberately exempt from that protection: an un-ignorable sender betrays staff status, so to anyone who ignores them a shadow mod must disappear exactly like a normal player. The single source of truth is `senderBypassesIgnore(perm)` (`internal/athena/client.go`) — `IsModerator(perm) && !IsShadow(perm)` — applied at the `/ignore` guard (`cmdIgnore`) and at all three ignore-list bypass sites (IC broadcast, OOC broadcast, and the buffered `/lifo` release). Pinned by `TestSenderBypassesIgnore`.
+
 ### `/unpunish` Self-Removal Protection
 Punishments now record the issuer's permission tier (`IssuerSystem`/`IssuerMod`/`IssuerShadow`/`IssuerAdmin`) in the `PUNISHMENTS.ISSUER_TIER` column. A regular moderator cannot use `/unpunish` to lift a punishment that an admin or shadow mod applied to them — `/unpunish self`, `/unpunish -t <type> self`, and the self-target slice of `/unpunish all` are all gated. Admins and shadow mods bypass the gate. Persists across restarts via DB migration 18.
 

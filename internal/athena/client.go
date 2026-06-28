@@ -2996,6 +2996,18 @@ func (client *Client) AddSessionChipsAwarded(n int64) int64 {
 	return client.sessionChipsAwarded
 }
 
+// senderBypassesIgnore reports whether a sender's IC/OOC messages should
+// override recipients' /ignore lists. Real moderators and administrators
+// always reach the whole area so their messages can't be silenced.
+//
+// Shadow moderators deliberately do NOT bypass ignore: a sender who can't be
+// ignored betrays staff status, so to a player who ignores them a shadow mod
+// must vanish exactly like any normal player. This is the same anonymity
+// contract that hides shadow mods from /gas and /players.
+func senderBypassesIgnore(perm uint64) bool {
+	return permissions.IsModerator(perm) && !permissions.IsShadow(perm)
+}
+
 // IgnoresIPID returns true if this client has permanently ignored the given IPID.
 // Uses sync.Map.Load which is essentially lock-free for keys that have been stored
 // at least once, keeping the hot per-message path free of mutex contention.
