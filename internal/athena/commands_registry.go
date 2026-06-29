@@ -471,8 +471,8 @@ func initCommands() {
 			handler:  cmdMusicLock,
 			minArgs:  0,
 			usage:    "Usage: /musiclock",
-			desc:     "Locks music in the area so only moderators and DJs can change it.",
-			reqPerms: permissions.PermissionField["DJ"],
+			desc:     "Locks music in the area so only moderators and CMs can change it.",
+			reqPerms: permissions.PermissionField["CM"],
 			category: "area",
 		},
 		"musicunlock": {
