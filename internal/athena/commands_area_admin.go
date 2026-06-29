@@ -648,7 +648,7 @@ func cmdJudgeButtons(client *Client, args []string, _ string) {
 	addToBuffer(client, "CMD", fmt.Sprintf("Set judge buttons to %v.", args[0]), false)
 }
 
-// Handles /musiclock - locks music so only moderators, DJs, and CMs can change it.
+// Handles /musiclock - locks music so only moderators and CMs can change it.
 
 func cmdMusicLock(client *Client, _ []string, _ string) {
 	if client.Area().MusicFrozen() {
@@ -656,7 +656,7 @@ func cmdMusicLock(client *Client, _ []string, _ string) {
 		return
 	}
 	client.Area().SetMusicFrozen(true)
-	sendAreaServerMessage(client.Area(), fmt.Sprintf("🔒 %v has locked the music — only moderators and DJs can change it until /musicunlock.", client.OOCName()))
+	sendAreaServerMessage(client.Area(), fmt.Sprintf("🔒 %v has locked the music — only moderators and CMs can change it until /musicunlock.", client.OOCName()))
 	addToBuffer(client, "CMD", "Music locked.", false)
 }
 
@@ -834,7 +834,7 @@ func isAllowedCDN(rawURL string) bool {
 // Handles /play
 
 func cmdPlay(client *Client, args []string, _ string) {
-	if client.Area().MusicFrozen() && !permissions.IsModerator(client.Perms()) && !client.HasCMPermission() && !permissions.HasPermission(client.Perms(), permissions.PermissionField["DJ"]) {
+	if client.Area().MusicFrozen() && !permissions.IsModerator(client.Perms()) && !client.HasCMPermission() {
 		client.SendServerMessage("Music is locked in this area - no changes allowed.")
 		return
 	}
