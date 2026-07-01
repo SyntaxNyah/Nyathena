@@ -123,6 +123,14 @@ func initCommands() {
 			reqPerms: permissions.PermissionField["MODIFY_AREA"],
 			category: "area",
 		},
+		"area": {
+			handler:  cmdArea,
+			minArgs:  1,
+			usage:    "Usage: /area <mute|unmute>\nmute: Mute everyone in this area except CMs and moderators (IC and OOC).\nunmute: Lift the area mute so people can talk again.",
+			desc:     "Area-wide moderation. /area mute silences everyone except CMs and moderators; /area unmute reverses it so they can talk again. Usable by CMs and moderators.",
+			reqPerms: permissions.PermissionField["CM"],
+			category: "area",
+		},
 		"areainfo": {
 			handler:  cmdAreaInfo,
 			minArgs:  0,
