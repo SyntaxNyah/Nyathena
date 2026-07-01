@@ -66,8 +66,11 @@ func TestAreaMuteExemptsStaffAndOtherAreas(t *testing.T) {
 	areaCM := &Client{conn: &testConn{}, uid: 5, ipid: "ip-acm", area: a}
 	a.AddCM(areaCM.Uid())
 	elsewhere := &Client{conn: &testConn{}, uid: 6, ipid: "ip-else", area: other}
+	// A non-staff player carrying a separate individual mute — /area unmute
+	// must leave this one alone (it only reverses its own ICOOCMuted state).
+	individuallyMuted := &Client{conn: &testConn{}, uid: 7, ipid: "ip-ind", area: a, muted: ICMuted}
 
-	for _, c := range []*Client{caller, regular, mod, cmByPerm, areaCM, elsewhere} {
+	for _, c := range []*Client{caller, regular, mod, cmByPerm, areaCM, elsewhere, individuallyMuted} {
 		clients.AddClient(c)
 	}
 
@@ -82,9 +85,13 @@ func TestAreaMuteExemptsStaffAndOtherAreas(t *testing.T) {
 		}
 	}
 
-	// Unmute lifts the mute on the regular player only.
+	// Unmute reverses /area mute: the ICOOCMuted regular player can speak
+	// again, but a separate individual mute is left intact.
 	areaMuteAll(caller, true)
 	if regular.Muted() != Unmuted {
 		t.Fatalf("expected regular player to be unmuted after /area unmute, got %v", regular.Muted())
+	}
+	if individuallyMuted.Muted() != ICMuted {
+		t.Fatalf("expected individually-muted player to keep their ICMuted state after /area unmute, got %v", individuallyMuted.Muted())
 	}
 }

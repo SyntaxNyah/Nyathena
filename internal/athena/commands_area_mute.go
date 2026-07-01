@@ -66,7 +66,10 @@ func areaMuteAll(client *Client, unmute bool) {
 	var count int
 	for _, c := range targets {
 		if unmute {
-			if c.Muted() == Unmuted {
+			// Only cancel out an /area mute: lift the ICOOCMuted state it sets,
+			// and leave any separate individual mute (IC-only, OOC-only, music,
+			// etc.) untouched so /area unmute is a clean inverse of /area mute.
+			if c.Muted() != ICOOCMuted {
 				continue
 			}
 			c.SetMuted(Unmuted)
@@ -76,7 +79,10 @@ func areaMuteAll(client *Client, unmute bool) {
 			}
 			c.SendServerMessage("The area mute has been lifted; you can speak again.")
 		} else {
-			if c.Muted() == ICOOCMuted {
+			// Don't clobber a player who already carries a separate individual
+			// mute — otherwise /area unmute couldn't restore it. Only silence
+			// players who are currently unmuted.
+			if c.Muted() != Unmuted {
 				continue
 			}
 			c.SetMuted(ICOOCMuted)
