@@ -484,6 +484,9 @@ Flips the rune order of a player's showname (`Phoenix` → `xineohP`). `/reverse
 ### `/getmusic`
 For every player. Prints the URL of the song currently playing in the area **and** re-sends the MC packet to just the requesting client. Useful when a client's audio handling glitched and the song never started — the user can either copy the URL or have the bot poke their player to restart playback locally.
 
+### `/area mute` / `/area unmute`
+Area-wide moderation for CMs and moderators. `/area mute` silences **everyone in the caller's area except CMs and moderators** — both IC and OOC (`ICOOCMuted`) — and persists by IPID exactly like `/mute`, so the mute survives a reconnect until it is lifted. `/area unmute` clears it. The caller, area CMs, CM-permission holders, and moderators are all exempt. Gated on the `CM` permission (which every mod role carries, and which `clientCanUseCommand` also grants to area CMs), so both CMs and moderators can run it. Registered as the `area` command with `mute`/`unmute` sub-commands (`internal/athena/commands_area_mute.go`); listed under the `area` help category (`/help area`, `/area -h`).
+
 ### `/8ball <question>`
 For every player. Picks an answer from `config/8ball.txt` if present, otherwise from the built-in 20 classic Magic 8-Ball responses. The sample shipped in `config_sample/8ball.txt` adds a few cheeky extras.
 
