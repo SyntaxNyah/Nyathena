@@ -1793,7 +1793,6 @@ func pktMA(client *Client, p *packet.Packet) {
 		}
 	}
 	forgetIP(targetIPID)
-	deleteAccountForIPID(targetIPID)
 	for _, c := range targets {
 		if id, ok := banIDByHdid[c.Hdid()]; ok {
 			c.SendSync(&packet.KB{Reason: fmt.Sprintf("%v\nUntil: %v\nID: %v", reason, untilS, id)})
