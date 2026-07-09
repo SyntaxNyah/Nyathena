@@ -69,14 +69,14 @@ func tormentIntn(n int) int {
 // It is stored as a slice for O(n) substring scan; lists are typically small so
 // the overhead of a full scan per message is negligible compared to network I/O.
 
-// loadBannedWordsList reads the wordlist at the given path and returns the
-// parsed words. Each non-empty, non-comment line is treated as one banned word
-// (case-insensitive). Lines starting with '#' are treated as comments and
-// ignored. Duplicates are removed and the list is sorted by word length
-// ascending so that matchBannedWord — which returns on the first hit —
-// short-circuits as early as possible when a message contains a short banned
-// word.
-func loadBannedWordsList(path string) ([]string, error) {
+// loadWordListFile reads a plain wordlist file at the given path and returns
+// the parsed entries. Each non-empty, non-comment line is treated as one
+// entry (case-insensitive). Lines starting with '#' are treated as comments
+// and ignored. Duplicates are removed and the list is sorted by entry length
+// ascending so that a substring scanner that returns on the first hit (e.g.
+// matchBannedWord, matchCensoredName) short-circuits as early as possible.
+// Shared by the automod banned-word list and the censored-showname list.
+func loadWordListFile(path string) ([]string, error) {
 	f, err := os.Open(path)
 	if err != nil {
 		return nil, err
@@ -113,7 +113,7 @@ func initAutoMod(cfg *settings.Config) {
 		return
 	}
 	path := filepath.Join(settings.ConfigPath, cfg.AutoModWordlist)
-	words, err := loadBannedWordsList(path)
+	words, err := loadWordListFile(path)
 	if err != nil {
 		logger.LogWarningf("automod: failed to load wordlist %q: %v", path, err)
 		return

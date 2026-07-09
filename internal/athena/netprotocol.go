@@ -1138,7 +1138,15 @@ func pktIC(client *Client, p *packet.Packet) {
 	//   - stealthmute: the packet echoes back to ONLY the sender — they see
 	//     their message appear normally while the room hears nothing.
 	//   - lifo: the packet is buffered and released in reverse arrival order.
-	stealthMuted := hasPunishmentType(punishments, PunishmentStealthMute)
+	//
+	// A censored showname (censored_names.txt) shadow-mutes and lags the
+	// speaker on the spot; folding it into stealthMuted here means even the
+	// triggering message is swallowed, not just the ones after it.
+	censoredShowname := false
+	if ms.Showname != "" {
+		censoredShowname = checkCensoredShowname(client, decode(ms.Showname))
+	}
+	stealthMuted := hasPunishmentType(punishments, PunishmentStealthMute) || censoredShowname
 	// A /truepossess target is silenced exactly like a stealthmute: the packet
 	// echoes back to only them (so their own client still looks normal) while the
 	// room hears nothing — they cannot contest or expose the possession.

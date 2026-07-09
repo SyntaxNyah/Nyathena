@@ -499,6 +499,7 @@ func NewServer(conf *settings.Config) (*Server, error) {
 	initCommands()
 	validateCommands()
 	initAutoMod(conf)
+	initShownameCensor()
 	initFromSoftWords()
 	initCvote(conf)
 	initHotConfig(conf)
