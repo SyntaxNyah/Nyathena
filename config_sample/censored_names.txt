@@ -1,0 +1,19 @@
+# Censored Shownames List
+#
+# Add one showname (or substring of one) per line. Lines starting with '#'
+# are comments. Matching is case-insensitive and matches anywhere inside the
+# showname, so an entry like "admin" also blocks "Fake_Admin_99".
+#
+# Anyone who tries to send an IC message under a showname that matches an
+# entry here is automatically shadow-muted (their IC messages stop reaching
+# the room, exactly like /stealthmute) and added to the lag list (exactly
+# like /lag) — every single time they try to speak under that name, until a
+# moderator lifts it with /unpunish or they change their showname.
+#
+# This file is independent of automod_enabled/banned_words.txt and is
+# reloadable at runtime with /reload.
+#
+# Examples (fill in your own list below):
+# Admin
+# Moderator
+# SERVER

@@ -399,6 +399,13 @@ Enabled with `enable_area_logging = true` in `[Logging]`.
 ### AutoMod
 Word-list-based automatic enforcement. Actions: permanent ban (silent), kick, mute, or torment (random disconnects every 30–60 s). Covers IC message text, IC showname, OOC message text, and OOC username — slurs in any of those fields trigger the configured action.
 
+### Censored Showname Auto Shadow-Mute
+`config/censored_names.txt` lists shownames (or substrings of them, case-insensitive) that nobody is allowed to speak under — independent of `automod_enabled`/`banned_words.txt`. The moment a player tries to send an IC message while their showname matches an entry, they are automatically:
+- **shadow-muted** — `PunishmentStealthMute` is applied and persisted (permanent until lifted), so their IC/OOC messages echo back to only them while the room hears nothing, exactly like a moderator running `/stealthmute`. The triggering message itself is swallowed too, not just later ones.
+- **added to the lag list** — their IPID goes into the torment set exactly like `/lag`, so they get the ghost/delayed-message treatment and eventual silent disconnects until a moderator removes them (`/unpunish -t lag`) or they lose the tormented IPID.
+
+Both effects re-arm on every message sent under a matching showname, so changing to a clean showname is the only way to stop retriggering it. A moderator can still lift the stealthmute with `/unpunish -t stealthmute <uid>`. Implemented in `internal/athena/showname_censor.go`, hooked into `pktIC` in `netprotocol.go` right alongside the existing automod showname check. The list is hot-reloadable via `/reload` like `parrot.txt`/`backgrounds.txt`; a missing file simply leaves the feature inactive.
+
 ### Doki Area Effect
 Per-area chaos mode for literature-club-themed areas. Enable with `doki_area = true` on the area entry in `areas.toml`. Each IC message rolls independently:
 - 1/300 — replace text with a Haschen-themed Monika-style quote
@@ -457,6 +464,7 @@ Each reloadable list lives behind a `sync/atomic.Pointer` (see `internal/athena/
 - `parrot.txt`
 - `8ball.txt` (optional; missing file leaves the current value intact)
 - `banned_words.txt` (only when automod is enabled)
+- `censored_names.txt` (optional; independent of automod_enabled; missing file leaves the current value intact)
 - `config.toml` motd and description (the existing hot-config whitelist)
 
 **`characters.txt` safety constraint — append-only.** Connected AO2 clients reference characters by **slot index**, so inserting in the middle, removing, reordering or renaming an existing slot would silently desync every connected player (the person on slot 2600 would suddenly be on whatever character used to be slot 2595). To prevent that, the reload **validates that every existing slot is unchanged** and only accepts entries appended at the end of the file. If the new file changes any pre-existing slot, the reload is rejected with a precise message naming the first bad slot (e.g. `"characters.txt: slot 12 changed from 'X' to 'Y' — character reload is append-only; add new characters at the END of the file (restart the server to reorder, rename or insert)"`). When new characters are appended, every area's character-slot table is grown first via a new `Area.GrowTaken(n)` method so newly-selectable slots can never panic the IC path with an out-of-bounds.
