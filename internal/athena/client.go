@@ -1470,6 +1470,14 @@ func (client *Client) JoinArea(area *area.Area) {
 	if desc := area.Description(); desc != "" {
 		client.SendServerMessage("📍 " + desc)
 	}
+	// Sync the joining client to whatever is already playing in the area.
+	// Without this, a client that connects or walks into an area mid-track
+	// never receives an MC packet for that track and simply plays nothing
+	// until someone changes the music again (or the player thinks to run
+	// /getmusic, which does the same resend by hand).
+	if song := area.CurrentSong(); song != "" {
+		client.Send(&packet.MCToClient{Name: song, CharID: client.CharID(), Showname: "Server", Looping: "1", Channel: "0", Effects: "0"})
+	}
 	sendPlayerArup()
 }
 
