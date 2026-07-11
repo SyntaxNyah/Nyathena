@@ -492,6 +492,9 @@ Flips the rune order of a player's showname (`Phoenix` → `xineohP`). `/reverse
 ### `/getmusic`
 For every player. Prints the URL of the song currently playing in the area **and** re-sends the MC packet to just the requesting client. Useful when a client's audio handling glitched and the song never started — the user can either copy the URL or have the bot poke their player to restart playback locally.
 
+### Music Sync on Area Entry (Bug Fix)
+Joining an area — the initial connect into area 0, or any subsequent `/area` change — now sends the area's currently-playing track to the joining client as an MC packet. Previously nothing synced a fresh arrival to music already in progress: the client just sat in silence until the track changed again or the player thought to run `/getmusic` by hand. The fix lives in the shared `JoinArea` (`internal/athena/client.go`), so both the initial join and every area change are covered from one place. No packet is sent when the area has no `CurrentSong()` yet (a fresh area, or nothing has played since the last restart).
+
 ### `/area mute` / `/area unmute`
 Area-wide moderation for CMs and moderators. `/area mute` silences **everyone in the caller's area except CMs and moderators** — both IC and OOC (`ICOOCMuted`) — and persists by IPID exactly like `/mute`, so the mute survives a reconnect until it is lifted. `/area unmute` **reverses it so people can talk again**. The caller, area CMs, CM-permission holders, and moderators are all exempt.
 

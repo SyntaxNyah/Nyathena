@@ -128,6 +128,54 @@ func TestMCURLUnwhitelistedRejected(t *testing.T) {
 	}
 }
 
+// TestJoinAreaSyncsCurrentMusic verifies that a client joining an area where a
+// track is already playing (initial connect into area 0, or an /area change
+// into any other area) is sent an MC packet for that track. Without this, the
+// joining client's player simply sits in silence — nothing ever tells it what
+// to play — until someone changes the track again or the player thinks to
+// run /getmusic by hand.
+func TestJoinAreaSyncsCurrentMusic(t *testing.T) {
+	newTestClients(t)
+	origAreas := areas
+	t.Cleanup(func() { areas = origAreas })
+
+	a := area.NewArea(area.AreaData{Name: "Lobby"}, 4, 50, area.EviAny)
+	areas = []*area.Area{a}
+	a.SetCurrentSong("[aatnt] godot.opus")
+
+	conn := &captureConn{}
+	client := &Client{conn: conn, uid: 1, char: 0, possessing: -1, pair: ClientPairInfo{wanted_id: -1}}
+	clients.AddClient(client)
+
+	client.JoinArea(a)
+
+	const wantMC = "MC#[aatnt] godot.opus#0#Server#1#0#0#%"
+	if out := conn.String(); !strings.Contains(out, wantMC) {
+		t.Fatalf("JoinArea did not sync current music: expected %q in output, got %q", wantMC, out)
+	}
+}
+
+// TestJoinAreaNoCurrentMusicSendsNoMC verifies that joining an area where
+// nothing has played yet does not emit a spurious MC packet.
+func TestJoinAreaNoCurrentMusicSendsNoMC(t *testing.T) {
+	newTestClients(t)
+	origAreas := areas
+	t.Cleanup(func() { areas = origAreas })
+
+	a := area.NewArea(area.AreaData{Name: "Lobby"}, 4, 50, area.EviAny)
+	areas = []*area.Area{a}
+
+	conn := &captureConn{}
+	client := &Client{conn: conn, uid: 1, char: 0, possessing: -1, pair: ClientPairInfo{wanted_id: -1}}
+	clients.AddClient(client)
+
+	client.JoinArea(a)
+
+	if out := conn.String(); strings.Contains(out, "MC#") {
+		t.Fatalf("expected no MC packet when area has no current song, got %q", out)
+	}
+}
+
 // TestMCURLWithQueryStringNotMangled is the stronger no-mangle guarantee: a URL
 // carrying a query string arrives AO2-escape-encoded ('&' → "<and>") on the
 // wire. The server must re-broadcast that wire form unchanged, so that when a
