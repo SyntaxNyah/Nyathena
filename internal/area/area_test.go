@@ -131,6 +131,33 @@ func TestEvidence(t *testing.T) {
 	}
 }
 
+// Out-of-range indexes (negative, or one past the last valid index) must be
+// rejected rather than panicking on the underlying slice.
+func TestEvidenceOutOfRangeIndexes(t *testing.T) {
+	a := NewArea(AreaData{}, 50, 0, EviAny)
+	a.AddEvidence("foo&foo&foo")
+	a.AddEvidence("bar&bar&bar")
+
+	if ok := a.SwapEvidence(-1, 0); ok {
+		t.Errorf("SwapEvidence(-1, 0) = true, want false")
+	}
+	if ok := a.SwapEvidence(0, -1); ok {
+		t.Errorf("SwapEvidence(0, -1) = true, want false")
+	}
+	if ok := a.SwapEvidence(len(a.evidence), 0); ok {
+		t.Errorf("SwapEvidence(len, 0) = true, want false")
+	}
+
+	a.EditEvidence(-1, "should not panic")
+	a.EditEvidence(len(a.evidence), "should not panic")
+
+	a.RemoveEvidence(-1)
+	a.RemoveEvidence(len(a.evidence))
+	if len(a.evidence) != 2 {
+		t.Errorf("out-of-range RemoveEvidence calls mutated evidence, got length %d, want %d", len(a.evidence), 2)
+	}
+}
+
 func TestCMs(t *testing.T) {
 	a := NewArea(AreaData{}, 50, 0, EviAny)
 

@@ -387,7 +387,7 @@ func (a *Area) AddEvidence(evi string) {
 // RemoveEvidence removes a piece of evidence to the area.
 func (a *Area) RemoveEvidence(id int) {
 	a.mu.Lock()
-	if len(a.evidence) >= id {
+	if id >= 0 && id < len(a.evidence) {
 		copy(a.evidence[id:], a.evidence[id+1:])
 		a.evidence = a.evidence[:len(a.evidence)-1]
 	}
@@ -397,7 +397,7 @@ func (a *Area) RemoveEvidence(id int) {
 // EditEvidence replaces a piece of evidence.
 func (a *Area) EditEvidence(id int, evi string) {
 	a.mu.Lock()
-	if len(a.evidence) >= id {
+	if id >= 0 && id < len(a.evidence) {
 		a.evidence[id] = evi
 	}
 	a.mu.Unlock()
@@ -407,7 +407,7 @@ func (a *Area) EditEvidence(id int, evi string) {
 func (a *Area) SwapEvidence(x int, y int) bool {
 	a.mu.Lock()
 	defer a.mu.Unlock()
-	if len(a.evidence) < x+1 || len(a.evidence) < y+1 {
+	if x < 0 || y < 0 || len(a.evidence) < x+1 || len(a.evidence) < y+1 {
 		return false
 	}
 	a.evidence[x], a.evidence[y] = a.evidence[y], a.evidence[x]
