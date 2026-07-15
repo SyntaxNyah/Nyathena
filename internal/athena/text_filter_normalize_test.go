@@ -16,7 +16,10 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>. */
 
 package athena
 
-import "testing"
+import (
+	"os"
+	"testing"
+)
 
 // Bypass strings below are written as explicit \uXXXX / \UXXXXXXXX escapes
 // (rather than literal glyphs) so the source stays unambiguous under any
@@ -131,6 +134,67 @@ func TestMatchBannedWordCatchesUnicodeBypass(t *testing.T) {
 		normalized := normalizeForFilter(msg)
 		if _, ok := matchBannedWord(normalized); !ok {
 			t.Errorf("matchBannedWord failed to catch bypass %q (normalized: %q)", msg, normalized)
+		}
+	}
+}
+
+// Regression test: a word list entry with no letters at all (a "---" style
+// divider, a phone number, a postcode fragment like "69" made only of digits
+// outside the leetspeak table, ...) normalizes to the empty string. Since
+// strings.Contains treats "" as a substring of every message, letting such an
+// entry into bannedWords used to make automod fire on every single message
+// from every player. matchBannedWord must never match on an empty entry.
+func TestMatchBannedWordIgnoresEmptyEntry(t *testing.T) {
+	orig := getBannedWords()
+	defer setBannedWords(orig)
+	setBannedWords([]string{"", normalizeForFilter("nigger")})
+
+	ordinary := []string{"hello", "good game", "moving to area 3", ""}
+	for _, msg := range ordinary {
+		if matched, ok := matchBannedWord(normalizeForFilter(msg)); ok {
+			t.Errorf("matchBannedWord(%q) unexpectedly matched empty entry (matched=%q)", msg, matched)
+		}
+	}
+	// The real entry must still work alongside the poisoned empty one.
+	if _, ok := matchBannedWord(normalizeForFilter("nigger")); !ok {
+		t.Error("matchBannedWord failed to catch the real entry once an empty entry was also present")
+	}
+}
+
+// Regression test for the same bug at the load boundary: a wordlist line
+// that has no letters after normalization must be dropped rather than stored
+// as an empty entry.
+func TestLoadWordListFile_SkipsEntriesThatNormalizeToEmpty(t *testing.T) {
+	f, err := os.CreateTemp("", "athena-wordlist-empty-*.txt")
+	if err != nil {
+		t.Fatalf("failed to create temp file: %v", err)
+	}
+	defer os.Remove(f.Name())
+	_, _ = f.WriteString("nigger\n---\n69\n===\nmoderator\n")
+	f.Close()
+
+	words, err := loadWordListFile(f.Name())
+	if err != nil {
+		t.Fatalf("loadWordListFile returned error: %v", err)
+	}
+	for _, w := range words {
+		if w == "" {
+			t.Fatalf("loadWordListFile returned an empty entry from %v", words)
+		}
+	}
+	want := map[string]bool{normalizeForFilter("nigger"): false, normalizeForFilter("moderator"): false}
+	if len(words) != len(want) {
+		t.Fatalf("expected %d entries (the divider/number-only lines should be dropped), got %d: %v", len(want), len(words), words)
+	}
+	for _, w := range words {
+		if _, ok := want[w]; !ok {
+			t.Errorf("unexpected entry %q", w)
+		}
+		want[w] = true
+	}
+	for w, seen := range want {
+		if !seen {
+			t.Errorf("expected entry %q was not loaded", w)
 		}
 	}
 }

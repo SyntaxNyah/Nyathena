@@ -68,6 +68,22 @@ func TestMatchCensoredName(t *testing.T) {
 	}
 }
 
+// Regression test: same class of bug as TestMatchBannedWordIgnoresEmptyEntry
+// (text_filter_normalize_test.go) — an empty entry must never match, since
+// strings.Contains treats "" as a substring of every showname.
+func TestMatchCensoredName_IgnoresEmptyEntry(t *testing.T) {
+	orig := getCensoredNames()
+	t.Cleanup(func() { setCensoredNames(orig) })
+	setCensoredNames([]string{"", "admin"})
+
+	if matched, ok := matchCensoredName("phoenix wright"); ok {
+		t.Errorf("matchCensoredName(%q) unexpectedly matched empty entry (matched=%q)", "phoenix wright", matched)
+	}
+	if _, ok := matchCensoredName("admin"); !ok {
+		t.Error("matchCensoredName failed to catch the real entry once an empty entry was also present")
+	}
+}
+
 // A fullwidth-Unicode rendering of "admin" (e.g. typed by a user trying to
 // dodge censored_names.txt) must still match once normalizeForFilter'd,
 // exactly like the plain-ASCII form.

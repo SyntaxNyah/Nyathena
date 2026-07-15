@@ -92,7 +92,18 @@ func loadWordListFile(path string) ([]string, error) {
 		if len(line) == 0 || line[0] == '#' {
 			continue
 		}
-		seen[normalizeForFilter(line)] = struct{}{}
+		normalized := normalizeForFilter(line)
+		if normalized == "" {
+			// A word list entry with no letters (e.g. a "---" divider, or a
+			// number made only of digits normalizeForFilter doesn't map to a
+			// letter) normalizes to the empty string. An empty needle is a
+			// substring of every possible message, so letting it into the
+			// list would make every message match instantly — skip it and
+			// tell the admin so the dead entry doesn't silently do nothing.
+			logger.LogWarningf("%s: entry %q has no letters after normalization and was skipped (use '#' to comment out dividers)", path, line)
+			continue
+		}
+		seen[normalized] = struct{}{}
 	}
 	if err := scanner.Err(); err != nil {
 		return nil, err
@@ -340,8 +351,18 @@ func handleTormentedOOC(client *Client, name, msg string) {
 // matchBannedWord performs a substring search of s (expected to already be
 // normalizeForFilter'd) against every entry in bannedWords. Returns the
 // matched word and true on the first hit, or ("", false) if no match is found.
+//
+// An empty entry is skipped rather than matched: strings.Contains treats ""
+// as a substring of everything, so a stray empty entry would match every
+// message unconditionally. loadWordListFile already keeps empty entries out
+// of the list, but this is the actual point of use, so it stays safe even if
+// an empty string reaches getBannedWords() through some other path (e.g. a
+// test or future caller of setBannedWords).
 func matchBannedWord(s string) (string, bool) {
 	for _, word := range getBannedWords() {
+		if word == "" {
+			continue
+		}
 		if strings.Contains(s, word) {
 			return word, true
 		}
