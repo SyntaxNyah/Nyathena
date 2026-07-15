@@ -63,7 +63,7 @@ func tormentIntn(n int) int {
 	return tormentRng.Intn(n)
 }
 
-// The lowercased banned-word list lives behind an atomic.Pointer (bannedWordsPtr
+// The normalized banned-word list lives behind an atomic.Pointer (bannedWordsPtr
 // in livereload.go) so that /reload can swap it at runtime without racing the
 // per-message reader. Read it via getBannedWords(); publish via setBannedWords().
 // It is stored as a slice for O(n) substring scan; lists are typically small so
@@ -71,11 +71,13 @@ func tormentIntn(n int) int {
 
 // loadWordListFile reads a plain wordlist file at the given path and returns
 // the parsed entries. Each non-empty, non-comment line is treated as one
-// entry (case-insensitive). Lines starting with '#' are treated as comments
-// and ignored. Duplicates are removed and the list is sorted by entry length
-// ascending so that a substring scanner that returns on the first hit (e.g.
-// matchBannedWord, matchCensoredName) short-circuits as early as possible.
-// Shared by the automod banned-word list and the censored-showname list.
+// entry, run through normalizeForFilter so it matches on the same terms as
+// the text being checked (case-insensitive, Unicode-confusable-insensitive).
+// Lines starting with '#' are treated as comments and ignored. Duplicates are
+// removed and the list is sorted by entry length ascending so that a
+// substring scanner that returns on the first hit (e.g. matchBannedWord,
+// matchCensoredName) short-circuits as early as possible. Shared by the
+// automod banned-word list and the censored-showname list.
 func loadWordListFile(path string) ([]string, error) {
 	f, err := os.Open(path)
 	if err != nil {
@@ -90,7 +92,7 @@ func loadWordListFile(path string) ([]string, error) {
 		if len(line) == 0 || line[0] == '#' {
 			continue
 		}
-		seen[strings.ToLower(line)] = struct{}{}
+		seen[normalizeForFilter(line)] = struct{}{}
 	}
 	if err := scanner.Err(); err != nil {
 		return nil, err
@@ -142,8 +144,8 @@ func autoModCheck(client *Client, msg string) bool {
 		return false
 	}
 
-	lower := strings.ToLower(msg)
-	matched, ok := matchBannedWord(lower)
+	normalized := normalizeForFilter(msg)
+	matched, ok := matchBannedWord(normalized)
 	if !ok {
 		return false
 	}
@@ -335,10 +337,9 @@ func handleTormentedOOC(client *Client, name, msg string) {
 	}
 }
 
-// matchBannedWord performs a case-insensitive substring search of s against
-// every entry in bannedWords. Substring matching catches evasion attempts such
-// as embedded punctuation or spacing variants. Returns the matched word and
-// true on the first hit, or ("", false) if no match is found.
+// matchBannedWord performs a substring search of s (expected to already be
+// normalizeForFilter'd) against every entry in bannedWords. Returns the
+// matched word and true on the first hit, or ("", false) if no match is found.
 func matchBannedWord(s string) (string, bool) {
 	for _, word := range getBannedWords() {
 		if strings.Contains(s, word) {

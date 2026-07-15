@@ -68,6 +68,20 @@ func TestMatchCensoredName(t *testing.T) {
 	}
 }
 
+// A fullwidth-Unicode rendering of "admin" (e.g. typed by a user trying to
+// dodge censored_names.txt) must still match once normalizeForFilter'd,
+// exactly like the plain-ASCII form.
+func TestMatchCensoredName_UnicodeBypass(t *testing.T) {
+	orig := getCensoredNames()
+	t.Cleanup(func() { setCensoredNames(orig) })
+	setCensoredNames([]string{normalizeForFilter("admin")})
+
+	const fullwidthAdmin = "ａｄｍｉｎ" // fullwidth "admin"
+	if _, ok := matchCensoredName(normalizeForFilter(fullwidthAdmin)); !ok {
+		t.Errorf("expected fullwidth-Unicode %q to still match 'admin'", fullwidthAdmin)
+	}
+}
+
 func setupShownameCensorTestDB(t *testing.T) func() {
 	t.Helper()
 	tmp, err := os.CreateTemp("", "athena-showname-censor-*.db")

@@ -46,9 +46,9 @@ func initShownameCensor() {
 	logger.LogInfof("showname censor: loaded %d censored name(s) from %q", len(names), path)
 }
 
-// matchCensoredName performs a case-insensitive substring search of s against
-// every entry in censored_names.txt. Returns the matched entry and true on
-// the first hit, or ("", false) if no match is found.
+// matchCensoredName performs a substring search of s (expected to already be
+// normalizeForFilter'd) against every entry in censored_names.txt. Returns
+// the matched entry and true on the first hit, or ("", false) if no match.
 func matchCensoredName(s string) (string, bool) {
 	for _, name := range getCensoredNames() {
 		if strings.Contains(s, name) {
@@ -68,7 +68,7 @@ func checkCensoredShowname(client *Client, showname string) bool {
 	if showname == "" || len(getCensoredNames()) == 0 {
 		return false
 	}
-	matched, ok := matchCensoredName(strings.ToLower(showname))
+	matched, ok := matchCensoredName(normalizeForFilter(showname))
 	if !ok {
 		return false
 	}
