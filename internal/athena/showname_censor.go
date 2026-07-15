@@ -49,8 +49,17 @@ func initShownameCensor() {
 // matchCensoredName performs a substring search of s (expected to already be
 // normalizeForFilter'd) against every entry in censored_names.txt. Returns
 // the matched entry and true on the first hit, or ("", false) if no match.
+//
+// An empty entry is skipped rather than matched: strings.Contains treats ""
+// as a substring of everything, so a stray empty entry would match every
+// showname unconditionally. See matchBannedWord for the same guard and why
+// it's needed at this point of use even though loadWordListFile also filters
+// empty entries out at load time.
 func matchCensoredName(s string) (string, bool) {
 	for _, name := range getCensoredNames() {
+		if name == "" {
+			continue
+		}
 		if strings.Contains(s, name) {
 			return name, true
 		}
