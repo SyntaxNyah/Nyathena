@@ -151,6 +151,7 @@ func normalizeForFilter(s string) string {
 	s = norm.NFKD.String(s)
 
 	letters := make([]rune, 0, len(s))
+	streak := 0 // consecutive copies of the last kept letter already emitted
 	for _, r := range s {
 		if unicode.Is(unicode.Mn, r) {
 			continue // strip combining marks (accents, zalgo)
@@ -163,7 +164,22 @@ func normalizeForFilter(s string) string {
 			continue // drop separators: whitespace, punctuation, digits, symbols, zero-width/format chars
 		}
 		if n := len(letters); n > 0 && letters[n-1] == r {
-			continue // collapse consecutive duplicate letters (letter-stuffing evasion)
+			streak++
+			if streak >= 2 {
+				// This is the 3rd+ consecutive copy: collapse runs of 3+ down
+				// to 2. Capping at 2 rather than 1 preserves ordinary double
+				// letters (a legitimately double-lettered word normalizes to
+				// itself instead of shrinking further and colliding with an
+				// unrelated single-lettered word, e.g. keeping "nigger"'s
+				// double g intact instead of shrinking to "niger" avoids
+				// "ngger" also shrinking to "nger", which would otherwise
+				// match "anger"/"danger"/"finger"/"stronger"/... ) while
+				// still defeating obvious letter-stuffing evasion like
+				// "niggggger".
+				continue
+			}
+		} else {
+			streak = 0
 		}
 		letters = append(letters, r)
 	}

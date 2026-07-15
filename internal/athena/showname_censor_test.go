@@ -30,7 +30,12 @@ func TestLoadWordListFile_ParsesCommentsBlanksAndDedup(t *testing.T) {
 		t.Fatalf("failed to create temp file: %v", err)
 	}
 	defer os.Remove(f.Name())
-	_, _ = f.WriteString("# comment\n\nAdmin\nADMIN\n  Moderator  \n# another comment\nServer\n")
+	// Zqvexo/Plarnif/Trebkil are nonsense placeholders chosen specifically
+	// because they don't collide with any real English word (unlike e.g.
+	// "admin", which collides with "administrator" and would be rejected by
+	// collidesWithCommonWords) — this test is only exercising comment/blank/
+	// dedup/case-fold parsing, not the collision guard.
+	_, _ = f.WriteString("# comment\n\nZqvexo\nZQVEXO\n  Plarnif  \n# another comment\nTrebkil\n")
 	f.Close()
 
 	words, err := loadWordListFile(f.Name())
@@ -38,7 +43,7 @@ func TestLoadWordListFile_ParsesCommentsBlanksAndDedup(t *testing.T) {
 		t.Fatalf("loadWordListFile returned error: %v", err)
 	}
 
-	want := map[string]bool{"admin": false, "moderator": false, "server": false}
+	want := map[string]bool{"zqvexo": false, "plarnif": false, "trebkil": false}
 	if len(words) != len(want) {
 		t.Fatalf("expected %d entries, got %d: %v", len(want), len(words), words)
 	}
