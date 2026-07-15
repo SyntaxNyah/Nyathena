@@ -399,11 +399,15 @@ Enabled with `enable_area_logging = true` in `[Logging]`.
 ### AutoMod
 Word-list-based automatic enforcement. Actions: permanent ban (silent), kick, mute, or torment (random disconnects every 30–60 s). Covers IC message text, IC showname, OOC message text, and OOC username — slurs in any of those fields trigger the configured action.
 
-**Unicode-bypass normalization.** Both `banned_words.txt`/`censored_names.txt` entries and the text being checked are run through `normalizeForFilter` (`internal/athena/text_filter_normalize.go`) before matching, so stylizing or obfuscating a slur doesn't evade the filter. It defeats:
+**Filter-evasion normalization.** Both `banned_words.txt`/`censored_names.txt` entries and the text being checked are run through `normalizeForFilter` (`internal/athena/text_filter_normalize.go`) before matching, so stylizing, spacing out, or leetspeaking a slur doesn't evade the filter. Only letters survive normalization — everything else is either substituted into a letter or dropped — which defeats:
 - stylized Unicode letters — mathematical bold/script/fraktur, fullwidth, circled, superscript, etc. — via NFKD compatibility decomposition (`golang.org/x/text/unicode/norm`), which folds e.g. `𝓷𝓲𝓰𝓰𝓮𝓻` or fullwidth `ｎｉｇｇｅｒ` back to plain `nigger`
-- zero-width characters (ZWSP, ZWNJ, ZWJ, word joiner, BOM, soft hyphen) inserted mid-word to split a banned substring
-- combining marks (accents, "zalgo" corruption) stacked onto letters
-- common Cyrillic/Greek homoglyphs (`а`/`е`/`о`/`р`/`с`, `α`/`ο`/`ρ`, etc.) that don't have a compatibility decomposition to Latin, via a small confusables table
+- combining marks (accents, "zalgo" corruption) stacked onto letters, and zero-width/format characters (ZWSP, ZWNJ, ZWJ, word joiner, BOM, soft hyphen, ...) inserted mid-word — the latter fall out naturally since only Unicode letters survive
+- non-Latin homoglyphs — Cyrillic, Greek, Armenian, and Cherokee letters that render almost identically to a Latin letter (`а`/`е`/`о`/`р`/`с`, `α`/`ο`/`ρ`, Armenian `հ`, Cherokee `Ꮟ`, etc.) — via a table cross-checked against Unicode's own `confusables.txt` (the data UTS #39 security profiles are built from), not hand-guessed
+- leetspeak digit/symbol substitutions (`n1gg3r`, `$h1t`) — a small, high-confidence set (`0137458@$!`) that skips ambiguous digits like `2`/`6`/`9` which collide too often with ordinary numbers in chat
+- spacing/punctuation insertion (`n i g g e r`, `n.i.g.g.e.r`, `n-i-g-g-e-r`) — any character that isn't a letter after substitution is dropped entirely, so inserted separators never break up a banned substring
+- letter stuffing (`niggggger`) — consecutive duplicate letters collapse to one, applied identically to both sides of the match so ordinary double letters (e.g. `nigger`'s own double `g`) stay symmetric
+
+This trades word-boundary awareness for evasion resistance: since punctuation/spacing is stripped and repeats collapse, a banned entry can in principle match across what used to be separate words, or inside more unrelated text than a strict word-boundary filter would allow. That's an extension of the false-positive risk substring matching already had (e.g. `ass` inside `class`), not a new category — keep `banned_words.txt`/`censored_names.txt` entries as specific as practical.
 
 ### Censored Showname Auto Shadow-Mute
 `config/censored_names.txt` lists shownames (or substrings of them, case-insensitive) that nobody is allowed to speak under — independent of `automod_enabled`/`banned_words.txt`. Matching goes through the same `normalizeForFilter` Unicode-bypass normalization as AutoMod. The moment a player tries to send an IC message while their showname matches an entry, they are automatically:
