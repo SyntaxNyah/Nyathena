@@ -26,6 +26,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode/utf8"
 
 	"github.com/MangosArentLiterature/Athena/internal/db"
 	"github.com/MangosArentLiterature/Athena/internal/logger"
@@ -69,6 +70,15 @@ func tormentIntn(n int) int {
 // It is stored as a slice for O(n) substring scan; lists are typically small so
 // the overhead of a full scan per message is negligible compared to network I/O.
 
+// minNormalizedEntryLen is the shortest normalizeForFilter output
+// loadWordListFile will accept into bannedWords/censoredNames. Below this,
+// a substring match is either unconditional (an empty needle) or broad
+// enough to fire on huge swaths of ordinary chat, and it's never what an
+// admin actually meant to block (see loadWordListFile). 4 is a floor, not a
+// guarantee: even a 4-letter entry can collide with common words (see
+// commonWordCollisions), which is checked separately.
+const minNormalizedEntryLen = 4
+
 // loadWordListFile reads a plain wordlist file at the given path and returns
 // the parsed entries. Each non-empty, non-comment line is treated as one
 // entry, run through normalizeForFilter so it matches on the same terms as
@@ -93,14 +103,32 @@ func loadWordListFile(path string) ([]string, error) {
 			continue
 		}
 		normalized := normalizeForFilter(line)
-		if normalized == "" {
-			// A word list entry with no letters (e.g. a "---" divider, or a
-			// number made only of digits normalizeForFilter doesn't map to a
-			// letter) normalizes to the empty string. An empty needle is a
-			// substring of every possible message, so letting it into the
-			// list would make every message match instantly — skip it and
-			// tell the admin so the dead entry doesn't silently do nothing.
-			logger.LogWarningf("%s: entry %q has no letters after normalization and was skipped (use '#' to comment out dividers)", path, line)
+		if n := utf8.RuneCountInString(normalized); n < minNormalizedEntryLen {
+			// A word list entry that is mostly digits/punctuation can collapse
+			// to something far shorter than it looks: e.g. "l36" normalizes to
+			// "le" once the digit-drop and leetspeak substitution both apply.
+			// A 0-2 character needle is either a substring of literally every
+			// message (empty) or of a huge fraction of ordinary chat ("le"
+			// alone matches "hello", "please", "level", ...), so entries this
+			// short are always a filter-evasion own-goal, never intentional —
+			// skip them and tell the admin so a dead/dangerous entry doesn't
+			// silently do nothing (or too much).
+			if n == 0 {
+				logger.LogWarningf("%s: entry %q has no letters after normalization and was skipped (use '#' to comment out dividers)", path, line)
+			} else {
+				logger.LogWarningf("%s: entry %q normalized to %q (too short to use safely, min %d letters) and was skipped", path, line, normalized, minNormalizedEntryLen)
+			}
+			continue
+		}
+		if hits := collidesWithCommonWords(normalized); len(hits) > 0 {
+			// Length alone doesn't guarantee safety: e.g. "tron" (4 letters,
+			// clears minNormalizedEntryLen) still matches "electronic",
+			// "strong", "astronomy", ... Reject rather than warn-and-load,
+			// since letting an entry like this through is exactly the kind
+			// of automod-fires-on-everyone incident this whole check exists
+			// to prevent, and the admin can always rephrase the entry to be
+			// more specific (e.g. keep more of the original spelling).
+			logger.LogWarningf("%s: entry %q normalized to %q, which also matches common word(s) %v — skipped to avoid false positives on ordinary chat", path, line, normalized, hits)
 			continue
 		}
 		seen[normalized] = struct{}{}
