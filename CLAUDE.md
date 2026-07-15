@@ -399,8 +399,14 @@ Enabled with `enable_area_logging = true` in `[Logging]`.
 ### AutoMod
 Word-list-based automatic enforcement. Actions: permanent ban (silent), kick, mute, or torment (random disconnects every 30–60 s). Covers IC message text, IC showname, OOC message text, and OOC username — slurs in any of those fields trigger the configured action.
 
+**Unicode-bypass normalization.** Both `banned_words.txt`/`censored_names.txt` entries and the text being checked are run through `normalizeForFilter` (`internal/athena/text_filter_normalize.go`) before matching, so stylizing or obfuscating a slur doesn't evade the filter. It defeats:
+- stylized Unicode letters — mathematical bold/script/fraktur, fullwidth, circled, superscript, etc. — via NFKD compatibility decomposition (`golang.org/x/text/unicode/norm`), which folds e.g. `𝓷𝓲𝓰𝓰𝓮𝓻` or fullwidth `ｎｉｇｇｅｒ` back to plain `nigger`
+- zero-width characters (ZWSP, ZWNJ, ZWJ, word joiner, BOM, soft hyphen) inserted mid-word to split a banned substring
+- combining marks (accents, "zalgo" corruption) stacked onto letters
+- common Cyrillic/Greek homoglyphs (`а`/`е`/`о`/`р`/`с`, `α`/`ο`/`ρ`, etc.) that don't have a compatibility decomposition to Latin, via a small confusables table
+
 ### Censored Showname Auto Shadow-Mute
-`config/censored_names.txt` lists shownames (or substrings of them, case-insensitive) that nobody is allowed to speak under — independent of `automod_enabled`/`banned_words.txt`. The moment a player tries to send an IC message while their showname matches an entry, they are automatically:
+`config/censored_names.txt` lists shownames (or substrings of them, case-insensitive) that nobody is allowed to speak under — independent of `automod_enabled`/`banned_words.txt`. Matching goes through the same `normalizeForFilter` Unicode-bypass normalization as AutoMod. The moment a player tries to send an IC message while their showname matches an entry, they are automatically:
 - **shadow-muted** — `PunishmentStealthMute` is applied and persisted (permanent until lifted), so their IC/OOC messages echo back to only them while the room hears nothing, exactly like a moderator running `/stealthmute`. The triggering message itself is swallowed too, not just later ones.
 - **added to the lag list** — their IPID goes into the torment set exactly like `/lag`, so they get the ghost/delayed-message treatment and eventual silent disconnects until a moderator removes them (`/unpunish -t lag`) or they lose the tormented IPID.
 
