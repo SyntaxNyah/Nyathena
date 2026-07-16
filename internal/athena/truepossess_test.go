@@ -225,9 +225,9 @@ func TestEndTruePossessionOwnershipGuard(t *testing.T) {
 	}
 }
 
-// TestPossessionCommandsRegistered verifies the command registry: /truepossess is
-// shadow/admin-gated, /unpossess and /hide are reachable by shadow mods, and
-// /fullpossess remains admin-only.
+// TestPossessionCommandsRegistered verifies the command registry: /possess,
+// /fullpossess, /truepossess, and /hide are all admin-only — shadow mods
+// (without the ADMIN sentinel) can no longer reach any of them.
 func TestPossessionCommandsRegistered(t *testing.T) {
 	initCommands()
 
@@ -242,15 +242,15 @@ func TestPossessionCommandsRegistered(t *testing.T) {
 	if tp.handler == nil {
 		t.Error("truepossess has a nil handler")
 	}
-	if tp.reqPerms != shadow {
-		t.Errorf("truepossess reqPerms = %v, want SHADOW (%v)", tp.reqPerms, shadow)
+	if tp.reqPerms != admin {
+		t.Errorf("truepossess reqPerms = %v, want ADMIN (%v)", tp.reqPerms, admin)
 	}
 	if tp.minArgs != 1 {
 		t.Errorf("truepossess minArgs = %d, want 1", tp.minArgs)
 	}
-	// SHADOW gate => shadow mods and admins pass, regular mods don't.
-	if !permissions.HasPermission(shadow, tp.reqPerms) {
-		t.Error("a shadow mod should be able to run /truepossess")
+	// ADMIN gate => only true admins pass, shadow mods and regular mods don't.
+	if permissions.HasPermission(shadow, tp.reqPerms) {
+		t.Error("a shadow mod should NOT be able to run /truepossess")
 	}
 	if !permissions.HasPermission(admin, tp.reqPerms) {
 		t.Error("an admin should be able to run /truepossess")
@@ -259,18 +259,27 @@ func TestPossessionCommandsRegistered(t *testing.T) {
 		t.Error("a regular (non-shadow) mod should NOT be able to run /truepossess")
 	}
 
-	if hide := Commands["hide"]; hide.reqPerms != shadow {
-		t.Errorf("hide reqPerms = %v, want SHADOW (%v) so shadow mods can vanish", hide.reqPerms, shadow)
+	if hide := Commands["hide"]; hide.reqPerms != admin {
+		t.Errorf("hide reqPerms = %v, want ADMIN (%v) so shadow mods can no longer vanish", hide.reqPerms, admin)
+	}
+	if permissions.HasPermission(shadow, Commands["hide"].reqPerms) {
+		t.Error("a shadow mod should NOT be able to run /hide")
 	}
 	if permissions.HasPermission(regularMod, Commands["hide"].reqPerms) {
 		t.Error("a regular (non-shadow) mod should NOT be able to run /hide")
 	}
-	if unp := Commands["unpossess"]; unp.reqPerms != shadow {
-		t.Errorf("unpossess reqPerms = %v, want SHADOW (%v) so shadow mods can stop a /truepossess", unp.reqPerms, shadow)
+	if pos := Commands["possess"]; pos.reqPerms != admin {
+		t.Errorf("possess reqPerms = %v, want ADMIN (%v)", pos.reqPerms, admin)
 	}
-	// /fullpossess now also silences the target and is shadow-accessible.
-	if fp := Commands["fullpossess"]; fp.reqPerms != shadow {
-		t.Errorf("fullpossess reqPerms = %v, want SHADOW (%v)", fp.reqPerms, shadow)
+	if permissions.HasPermission(shadow, Commands["possess"].reqPerms) {
+		t.Error("a shadow mod should NOT be able to run /possess")
+	}
+	// /fullpossess also silences the target and is now admin-only.
+	if fp := Commands["fullpossess"]; fp.reqPerms != admin {
+		t.Errorf("fullpossess reqPerms = %v, want ADMIN (%v)", fp.reqPerms, admin)
+	}
+	if permissions.HasPermission(shadow, Commands["fullpossess"].reqPerms) {
+		t.Error("a shadow mod should NOT be able to run /fullpossess")
 	}
 	if permissions.HasPermission(regularMod, Commands["fullpossess"].reqPerms) {
 		t.Error("a regular (non-shadow) mod should NOT be able to run /fullpossess")
