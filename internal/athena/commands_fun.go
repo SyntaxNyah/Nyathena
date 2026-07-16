@@ -450,7 +450,7 @@ func cmdUnpossess(client *Client, args []string, _ string) {
 // silently muted in IC and OOC (and their showname / OOC name frozen) so they
 // cannot contest or expose it. Shared by /fullpossess and /truepossess — they are
 // equivalent, differing only in name and in the audit-log label. Stop with
-// /unpossess. Shadow mods and admins only (gated at the registry).
+// /unpossess. Admins only (gated at the registry).
 func beginPossession(client *Client, args []string, label string) {
 	uid, err := strconv.Atoi(args[0])
 	if err != nil {

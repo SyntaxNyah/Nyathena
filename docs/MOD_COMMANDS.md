@@ -124,9 +124,9 @@ Speak through another player's character. All three flavours fully copy the targ
 
 | Command | Permission | Description |
 |---------|-----------|-------------|
-| `/possess <uid> <message>` | SHADOW | Make the target say one message, rendered exactly as them. |
-| `/fullpossess <uid>` | SHADOW | Become the target persistently — see below. Identical to `/truepossess`. |
-| `/truepossess <uid>` | SHADOW | Become the target persistently — see below. Identical to `/fullpossess`. |
+| `/possess <uid> <message>` | ADMIN | Make the target say one message, rendered exactly as them. |
+| `/fullpossess <uid>` | ADMIN | Become the target persistently — see below. Identical to `/truepossess`. |
+| `/truepossess <uid>` | ADMIN | Become the target persistently — see below. Identical to `/fullpossess`. |
 | `/unpossess` | SHADOW | Stop a full/true possession (lifts the target's mute). |
 
 `/fullpossess` and `/truepossess` are the **same command** (two names for the same behaviour): every one of *your* IC messages renders as the target until `/unpossess`, **and** the target is silently muted — their own IC and OOC are echoed only back to them (so their client still looks normal) but reach nobody, their commands (`/global`, `/pm`, `/modchat`, …) are swallowed, and their showname / OOC name are frozen. Combined with the pair-spoof, an onlooker sees the target talking normally (with their partner) while you drive every line, and the target has no in-game channel to shout "it's not me". Suppressed IC/OOC and swallowed commands are still written to the area log (tagged `(truepossessed)` / `(suppressed during /truepossess)`) for staff audit. A possession ends automatically — and the mute lifts — if either party disconnects.
@@ -285,4 +285,4 @@ Shadow moderators (`SHADOW` perm bit, no `ADMIN`) are hidden from `/gas` and `/p
 
 Shadow mods are still visible on `/playtime top` (the leaderboard does not filter by permission), and they are NOT exempt from `/unpunish` self-removal protection — which means a regular mod cannot lift a shadow-mod-issued punishment on themselves.
 
-Shadow mods (and admins) can also **`/hide`** themselves — vanishing entirely from `/players`, `/gas`, and room player counts — so they can lurk on an area unseen. `/hide` again to reappear. Regular (non-shadow) moderators cannot `/hide`.
+**`/hide`** — vanishing entirely from `/players`, `/gas`, and room player counts — is ADMIN-only. `/hide` again to reappear. Shadow mods (without the ADMIN sentinel) cannot `/hide`, and neither can regular moderators.

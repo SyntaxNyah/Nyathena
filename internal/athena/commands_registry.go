@@ -328,7 +328,7 @@ func initCommands() {
 			minArgs:  0,
 			usage:    "Usage: /hide",
 			desc:     "Toggles hiding yourself from the player list, /players, /gas, and room player counts.",
-			reqPerms: permissions.PermissionField["SHADOW"],
+			reqPerms: permissions.PermissionField["ADMIN"],
 			category: "moderation",
 		},
 		"invite": {
@@ -898,7 +898,7 @@ func initCommands() {
 			minArgs:  2,
 			usage:    "Usage: /possess <uid> <message>",
 			desc:     "Makes target say a message once, copying their appearance.",
-			reqPerms: permissions.PermissionField["SHADOW"],
+			reqPerms: permissions.PermissionField["ADMIN"],
 			category: "moderation",
 		},
 		"fullpossess": {
@@ -906,7 +906,7 @@ func initCommands() {
 			minArgs:  1,
 			usage:    "Usage: /fullpossess <uid>",
 			desc:     "Become the target: all YOUR IC appears as them (pair-synced) AND they are silently muted in IC and OOC so they can't expose it. Same as /truepossess. Stop with /unpossess.",
-			reqPerms: permissions.PermissionField["SHADOW"],
+			reqPerms: permissions.PermissionField["ADMIN"],
 			category: "moderation",
 		},
 		"truepossess": {
@@ -914,7 +914,7 @@ func initCommands() {
 			minArgs:  1,
 			usage:    "Usage: /truepossess <uid>",
 			desc:     "Become the target: your IC appears as them (pair-synced) AND they are silently muted in IC and OOC so they can't expose it. Same as /fullpossess. Stop with /unpossess.",
-			reqPerms: permissions.PermissionField["SHADOW"],
+			reqPerms: permissions.PermissionField["ADMIN"],
 			category: "moderation",
 		},
 		"unpossess": {

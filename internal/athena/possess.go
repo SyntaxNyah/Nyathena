@@ -26,13 +26,14 @@ import (
 // Possession lets a moderator speak through another player's character. There
 // are three flavours, all sharing the same sprite-spoof and pair-spoof plumbing:
 //
-//   - /possess <uid> <msg>  one-shot: a single message rendered as the target.
+//   - /possess <uid> <msg>  one-shot: a single message rendered as the target
+//                           (ADMIN).
 //   - /fullpossess <uid>    persistent: every one of the possessor's IC messages
 //                           is rendered as the target until /unpossess (ADMIN).
 //   - /truepossess <uid>    persistent AND silences the target: their own IC and
 //                           OOC are suppressed (echoed only back to them) and
 //                           their showname / OOC name are frozen, so they cannot
-//                           contest or expose the possession (SHADOW/ADMIN).
+//                           contest or expose the possession (ADMIN).
 //
 // The possessor's appearance transform lives in pktIC; this file holds the
 // shared pair-spoof helper plus all of the /truepossess silencing state.
