@@ -1,0 +1,26 @@
+# Punished Shownames List
+#
+# Add one showname (or substring of one) per line. Lines starting with '#'
+# are comments. Matching is case-insensitive, matches anywhere inside the
+# showname, and goes through the same Unicode/leetspeak normalization as
+# banned_words.txt, so stylized spellings can't dodge it.
+#
+# The first IC message sent under a matching showname "stains" the speaker's
+# IPID: they immediately receive one random punishment (from the /megamaso
+# pool), and another one every minute after that — each lasting 10 minutes,
+# so effects pile up. The stain sticks to the IPID, NOT the showname:
+# changing to a clean showname does not stop the drip.
+#
+# Only a moderator can stop it, with any full-removal /unpunish form:
+#   /unpunish <uid>     — clears the target's punishments and the stain
+#   /unpunish <ipid>    — same, works even after they disconnect
+#   /unpunish all       — clears everyone in your area, stains included
+# After being unpunished, speaking under a different (clean) showname is
+# fine — only using a listed showname again re-triggers the stain.
+#
+# This file is optional (delete it to disable the feature), independent of
+# automod_enabled, and reloadable at runtime with /reload.
+#
+# Examples (fill in your own list below):
+# blacklistname1
+# AnnoyingRegular

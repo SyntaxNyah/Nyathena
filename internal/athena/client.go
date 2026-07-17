@@ -426,6 +426,13 @@ type Client struct {
 	curseRandomCharActive         atomic.Bool
 	curseRandomCharWatcherStarted atomic.Bool
 
+	// Showname punisher (punishment_names.txt): gates the lazy spawn of the
+	// per-connection drip watcher goroutine (showname_punishment.go). The
+	// stain itself is keyed by IPID in shownamePunishStains so relogging or
+	// renaming can't escape it — this field is just the runtime half tied to
+	// this connection.
+	shownamePunishWatcherStarted atomic.Bool
+
 	// Outbound packet queue. SendPacket enqueues here non-blockingly; a
 	// dedicated writer goroutine (started in HandleClient) drains sendCh and
 	// performs the actual TCP write. This decouples broadcasters (whose

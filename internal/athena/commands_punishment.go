@@ -516,6 +516,9 @@ func cmdUnpunish(client *Client, args []string, usage string) {
 			// punishment slice but moderators expect /unpunish all to
 			// cover every active punishment including /lag.
 			removeTormentedIP(c.Ipid())
+			// And the showname-punisher stain, or the per-minute drip
+			// would just re-apply a fresh punishment within a minute.
+			unstainShownamePunish(c.Ipid())
 			if err := db.DeleteAllPunishments(c.Ipid()); err != nil {
 				logger.LogErrorf("Failed to remove persistent punishments for %v: %v", c.Ipid(), err)
 			}
@@ -531,7 +534,24 @@ func cmdUnpunish(client *Client, args []string, usage string) {
 		return
 	}
 
-	toUnpunish := getUidList(strings.Split(flags.Arg(0), ","))
+	// Split the target list into numeric UIDs and raw IPIDs. A non-numeric
+	// token is treated as an IPID (same convention as /musicunban) so
+	// punishments — including the showname-punisher stain — can be cleared
+	// for players who already disconnected.
+	var uidTokens, ipidTokens []string
+	for _, tok := range strings.Split(flags.Arg(0), ",") {
+		tok = strings.TrimSpace(tok)
+		if tok == "" {
+			continue
+		}
+		if _, err := strconv.Atoi(tok); err == nil {
+			uidTokens = append(uidTokens, tok)
+		} else {
+			ipidTokens = append(ipidTokens, tok)
+		}
+	}
+
+	toUnpunish := getUidList(uidTokens)
 	var count int
 	var report string
 
@@ -556,12 +576,14 @@ func cmdUnpunish(client *Client, args []string, usage string) {
 		}
 
 		if *punishmentType == "" {
-			// Remove all punishments (text, mute, jail, and lag) from memory and DB.
+			// Remove all punishments (text, mute, jail, and lag) from memory and DB,
+			// plus the showname-punisher stain so the drip stops for good.
 			c.RemoveAllPunishments()
 			c.SetMuted(Unmuted)
 			c.SetUnmuteTime(time.Time{})
 			c.SetJailedUntil(time.Time{})
 			removeTormentedIP(c.Ipid())
+			unstainShownamePunish(c.Ipid())
 			if err := db.DeleteAllPunishments(c.Ipid()); err != nil {
 				logger.LogErrorf("Failed to remove persistent punishments for %v: %v", c.Ipid(), err)
 			}
@@ -594,6 +616,65 @@ func cmdUnpunish(client *Client, args []string, usage string) {
 		}
 		count++
 		report += fmt.Sprintf("%v, ", c.Uid())
+	}
+
+	// IPID targets: clear the persisted punishments, torment/lag entry and
+	// showname-punisher stain even when nobody with that IPID is connected.
+	// Any connected clients sharing the IPID are cleared in memory too.
+	for _, ipid := range ipidTokens {
+		// Self-removal protection applies to the IPID form as well, or a
+		// regular mod could bypass the UID-path gate with their own IPID.
+		if ipid == client.Ipid() && callerTier < IssuerShadow {
+			if *punishmentType == "" {
+				if client.HasProtectedPunishment() {
+					client.SendServerMessage("You cannot remove all of your own punishments — at least one was issued by an admin or shadow mod. Ask staff to lift it.")
+					continue
+				}
+			} else {
+				pType := parsePunishmentType(*punishmentType)
+				if pType != PunishmentNone && client.HasPunishment(pType) && client.PunishmentIssuerTier(pType) >= IssuerShadow {
+					client.SendServerMessage(fmt.Sprintf("Punishment '%v' was issued by an admin or shadow mod and cannot be self-removed.", pType.String()))
+					continue
+				}
+			}
+		}
+
+		connected := getClientsByIpid(ipid)
+		if *punishmentType == "" {
+			removeTormentedIP(ipid)
+			unstainShownamePunish(ipid)
+			if err := db.DeleteAllPunishments(ipid); err != nil {
+				logger.LogErrorf("Failed to remove persistent punishments for %v: %v", ipid, err)
+			}
+			for _, c := range connected {
+				c.RemoveAllPunishments()
+				c.SetMuted(Unmuted)
+				c.SetUnmuteTime(time.Time{})
+				c.SetJailedUntil(time.Time{})
+				c.SendServerMessage("All punishments have been removed.")
+			}
+		} else {
+			pType := parsePunishmentType(*punishmentType)
+			if pType == PunishmentNone {
+				client.SendServerMessage(fmt.Sprintf("Unknown punishment type: %v", *punishmentType))
+				continue
+			}
+			if pType == PunishmentLag {
+				removeTormentedIP(ipid)
+			} else {
+				if err := db.DeleteTextPunishment(ipid, int(pType)); err != nil {
+					logger.LogErrorf("Failed to remove persistent punishment for %v: %v", ipid, err)
+				}
+				for _, c := range connected {
+					if c.HasPunishment(pType) {
+						c.RemovePunishment(pType)
+						c.SendServerMessage(fmt.Sprintf("Punishment '%v' has been removed.", pType.String()))
+					}
+				}
+			}
+		}
+		count++
+		report += fmt.Sprintf("%v, ", ipid)
 	}
 
 	report = strings.TrimSuffix(report, ", ")
