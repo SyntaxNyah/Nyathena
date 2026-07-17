@@ -136,7 +136,7 @@ const MaxChipBalance = 10_000_000
 
 // Database version.
 // This should be incremented whenever changes are made to the DB that require existing databases to upgrade.
-const ver = 22
+const ver = 23
 
 // MaxFavourites is the maximum number of favourite characters a player can save.
 const MaxFavourites = 100
@@ -332,6 +332,14 @@ func Open() error {
 		REASON    TEXT    NOT NULL DEFAULT '',
 		BANNED_BY TEXT    NOT NULL DEFAULT '',
 		BANNED_AT INTEGER NOT NULL DEFAULT 0
+	)`)
+	if err != nil {
+		return err
+	}
+	_, err = db.Exec(`CREATE TABLE IF NOT EXISTS RANDOMCHAR_CURSES(
+		IPID      TEXT    PRIMARY KEY,
+		ISSUED_BY TEXT    NOT NULL DEFAULT '',
+		ISSUED_AT INTEGER NOT NULL DEFAULT 0
 	)`)
 	if err != nil {
 		return err
@@ -682,6 +690,23 @@ func upgradeDB(v int) error {
 			return err
 		}
 		if _, err := db.Exec("PRAGMA user_version = 22"); err != nil {
+			return err
+		}
+		fallthrough
+	case 22:
+		// RANDOMCHAR_CURSES persists /curserandomchar: each row forces one
+		// IPID's character to randomly change every 1-5 seconds, across
+		// sessions, until an admin lifts it with /uncurserandomchar. Fresh
+		// databases get the table from the CREATE TABLE in Open(); this
+		// migration is a no-op-safe CREATE for upgrades.
+		if _, err := db.Exec(`CREATE TABLE IF NOT EXISTS RANDOMCHAR_CURSES(
+			IPID      TEXT    PRIMARY KEY,
+			ISSUED_BY TEXT    NOT NULL DEFAULT '',
+			ISSUED_AT INTEGER NOT NULL DEFAULT 0
+		)`); err != nil {
+			return err
+		}
+		if _, err := db.Exec("PRAGMA user_version = 23"); err != nil {
 			return err
 		}
 	}
@@ -2582,4 +2607,52 @@ func ListMusicBans() ([]MusicBanInfo, error) {
 		out = append(out, mb)
 	}
 	return out, rows.Err()
+}
+
+// AddRandomCharCurse upserts a /curserandomchar curse for the given IPID.
+// Re-cursing an already-cursed IPID overwrites the issuer/timestamp rather
+// than creating a duplicate row.
+func AddRandomCharCurse(ipid, issuedBy string, issuedAt int64) error {
+	if db == nil {
+		return nil
+	}
+	_, err := db.Exec("INSERT OR REPLACE INTO RANDOMCHAR_CURSES(IPID, ISSUED_BY, ISSUED_AT) VALUES(?, ?, ?)",
+		ipid, issuedBy, issuedAt)
+	return err
+}
+
+// RemoveRandomCharCurse deletes the /curserandomchar curse row for the given
+// IPID. Returns sql.ErrNoRows if no such curse existed so callers can
+// distinguish "lifted a real curse" from "no curse was present".
+func RemoveRandomCharCurse(ipid string) error {
+	if db == nil {
+		return nil
+	}
+	res, err := db.Exec("DELETE FROM RANDOMCHAR_CURSES WHERE IPID = ?", ipid)
+	if err != nil {
+		return err
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if n == 0 {
+		return sql.ErrNoRows
+	}
+	return nil
+}
+
+// IsRandomCharCursed reports whether the given IPID currently carries an
+// active /curserandomchar curse. Checked once per client on join so the
+// curse re-arms itself after a reconnect — the whole point of persisting it
+// by IPID is that relogging cannot be used to escape it.
+func IsRandomCharCursed(ipid string) (bool, error) {
+	if db == nil {
+		return false, nil
+	}
+	var n int
+	if err := db.QueryRow("SELECT COUNT(*) FROM RANDOMCHAR_CURSES WHERE IPID = ?", ipid).Scan(&n); err != nil {
+		return false, err
+	}
+	return n > 0, nil
 }

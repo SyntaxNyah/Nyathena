@@ -413,6 +413,19 @@ type Client struct {
 	dcLastActivityNano atomic.Int64
 	dcWatcherStarted   atomic.Bool
 
+	// /curserandomchar admin curse: forces this client to a random free
+	// character every 1-5 seconds until an admin lifts it with
+	// /uncurserandomchar. curseRandomCharActive is the live on/off flag the
+	// watcher goroutine checks each tick; curseRandomCharWatcherStarted gates
+	// the lazy spawn of that single per-connection goroutine so re-arming
+	// (e.g. on reconnect) never double-spawns it. The curse itself is
+	// persisted by IPID in the RANDOMCHAR_CURSES table (see
+	// curse_randomchar.go) specifically so relogging cannot be used to
+	// escape it — these two fields are just the runtime half tied to this
+	// connection.
+	curseRandomCharActive         atomic.Bool
+	curseRandomCharWatcherStarted atomic.Bool
+
 	// Outbound packet queue. SendPacket enqueues here non-blockingly; a
 	// dedicated writer goroutine (started in HandleClient) drains sendCh and
 	// performs the actual TCP write. This decouples broadcasters (whose
