@@ -1310,7 +1310,9 @@ func GetAllBans() ([]BanInfo, error) {
 
 // MarkIPKnown records an IPID as known and updates its last-seen timestamp.
 // For new IPIDs both FIRST_SEEN and LAST_SEEN are set to now.
-// For IPIDs already in the table FIRST_SEEN is preserved and only LAST_SEEN is updated.
+// For IPIDs already in the table FIRST_SEEN is preserved and only LAST_SEEN is
+// updated — unless the row was zeroed by RemoveKnownIP (a ban), in which case
+// FIRST_SEEN is re-stamped so the row becomes a normal known-IP row again.
 func MarkIPKnown(ipid string) error {
 	if db == nil {
 		return nil
@@ -1318,18 +1320,22 @@ func MarkIPKnown(ipid string) error {
 	now := time.Now().Unix()
 	_, err := db.Exec(
 		`INSERT INTO KNOWN_IPS(IPID, FIRST_SEEN, LAST_SEEN) VALUES(?, ?, ?)
-		 ON CONFLICT(IPID) DO UPDATE SET LAST_SEEN = excluded.LAST_SEEN`,
+		 ON CONFLICT(IPID) DO UPDATE SET
+		 	LAST_SEEN = excluded.LAST_SEEN,
+		 	FIRST_SEEN = CASE WHEN KNOWN_IPS.FIRST_SEEN = 0 THEN excluded.FIRST_SEEN ELSE KNOWN_IPS.FIRST_SEEN END`,
 		ipid, now, now)
 	return err
 }
 
 // LoadKnownIPs returns every IPID that has previously been recorded by MarkIPKnown.
 // It is called once at server startup to pre-populate the in-memory first-seen tracker.
+// Rows zeroed by RemoveKnownIP (banned IPs whose playtime is being preserved) are
+// excluded so a banned IP is still treated as new after a server restart.
 func LoadKnownIPs() ([]string, error) {
 	if db == nil {
 		return nil, nil
 	}
-	rows, err := db.Query("SELECT IPID FROM KNOWN_IPS")
+	rows, err := db.Query("SELECT IPID FROM KNOWN_IPS WHERE FIRST_SEEN != 0 OR LAST_SEEN != 0")
 	if err != nil {
 		return nil, err
 	}
@@ -1345,14 +1351,20 @@ func LoadKnownIPs() ([]string, error) {
 	return ipids, rows.Err()
 }
 
-// RemoveKnownIP deletes an IPID from the KNOWN_IPS table.
-// It is called when an IP is banned so that, once the ban expires, the IP is
-// treated as new again (subject to new-connection cooldowns and rate limits).
+// RemoveKnownIP forgets an IPID's known-IP status without destroying its
+// accumulated playtime. It is called when an IP is banned so that, once the ban
+// expires, the IP is treated as new again (subject to new-connection cooldowns
+// and rate limits). A row with no playtime is deleted outright; a row with
+// playtime is kept with FIRST_SEEN/LAST_SEEN zeroed — LoadKnownIPs skips zeroed
+// rows, so the "new again" behaviour is preserved while /playtime survives the ban.
 func RemoveKnownIP(ipid string) error {
 	if db == nil {
 		return nil
 	}
-	_, err := db.Exec("DELETE FROM KNOWN_IPS WHERE IPID = ?", ipid)
+	if _, err := db.Exec("DELETE FROM KNOWN_IPS WHERE IPID = ? AND PLAYTIME <= 0", ipid); err != nil {
+		return err
+	}
+	_, err := db.Exec("UPDATE KNOWN_IPS SET FIRST_SEEN = 0, LAST_SEEN = 0 WHERE IPID = ?", ipid)
 	return err
 }
 

@@ -444,6 +444,88 @@ func TestRemoveKnownIPNonExistent(t *testing.T) {
 	}
 }
 
+func TestRemoveKnownIPPreservesPlaytime(t *testing.T) {
+	teardown := setupTestDB(t)
+	defer teardown()
+
+	ipid := "banned.with.playtime"
+	if err := MarkIPKnown(ipid); err != nil {
+		t.Fatalf("MarkIPKnown failed: %v", err)
+	}
+	if err := AddPlaytime(ipid, 7200); err != nil {
+		t.Fatalf("AddPlaytime failed: %v", err)
+	}
+
+	// Banning forgets the known-IP status...
+	if err := RemoveKnownIP(ipid); err != nil {
+		t.Fatalf("RemoveKnownIP failed: %v", err)
+	}
+	ipids, _ := LoadKnownIPs()
+	for _, ip := range ipids {
+		if ip == ipid {
+			t.Fatal("banned IP still returned by LoadKnownIPs")
+		}
+	}
+
+	// ...but the playtime must survive the ban.
+	playtime, err := GetPlaytime(ipid)
+	if err != nil {
+		t.Fatalf("GetPlaytime failed: %v", err)
+	}
+	if playtime != 7200 {
+		t.Fatalf("expected playtime 7200 after ban, got %d", playtime)
+	}
+}
+
+func TestMarkIPKnownAfterBanRestoresKnownStatus(t *testing.T) {
+	teardown := setupTestDB(t)
+	defer teardown()
+
+	ipid := "returning.after.ban"
+	if err := MarkIPKnown(ipid); err != nil {
+		t.Fatalf("MarkIPKnown failed: %v", err)
+	}
+	if err := AddPlaytime(ipid, 9000); err != nil {
+		t.Fatalf("AddPlaytime failed: %v", err)
+	}
+	if err := RemoveKnownIP(ipid); err != nil {
+		t.Fatalf("RemoveKnownIP failed: %v", err)
+	}
+
+	// The player reconnects after the ban expires.
+	if err := MarkIPKnown(ipid); err != nil {
+		t.Fatalf("MarkIPKnown after ban failed: %v", err)
+	}
+
+	ipids, _ := LoadKnownIPs()
+	found := false
+	for _, ip := range ipids {
+		if ip == ipid {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatal("reconnected IP not returned by LoadKnownIPs")
+	}
+
+	var firstSeen, lastSeen int64
+	row := db.QueryRow("SELECT FIRST_SEEN, LAST_SEEN FROM KNOWN_IPS WHERE IPID = ?", ipid)
+	if err := row.Scan(&firstSeen, &lastSeen); err != nil {
+		t.Fatalf("scan failed: %v", err)
+	}
+	if firstSeen == 0 || lastSeen == 0 {
+		t.Fatalf("expected seen-timestamps re-stamped after reconnect, got FIRST_SEEN=%d LAST_SEEN=%d", firstSeen, lastSeen)
+	}
+
+	playtime, err := GetPlaytime(ipid)
+	if err != nil {
+		t.Fatalf("GetPlaytime failed: %v", err)
+	}
+	if playtime != 9000 {
+		t.Fatalf("expected playtime 9000 after ban and reconnect, got %d", playtime)
+	}
+}
+
 func TestPruneInactiveIPs(t *testing.T) {
 	teardown := setupTestDB(t)
 	defer teardown()
@@ -499,9 +581,14 @@ func TestPruneInactiveIPsSkipsZeroLastSeen(t *testing.T) {
 		t.Errorf("expected 0 rows pruned (LAST_SEEN=0 is protected), got %d", n)
 	}
 
-	ipids, _ := LoadKnownIPs()
-	if len(ipids) != 1 {
-		t.Fatalf("expected legacy.ip to remain, got %v", ipids)
+	// Verify with a direct query: a fully zeroed row is hidden from LoadKnownIPs
+	// (that's the banned-with-playtime marker) but must still exist in the table.
+	var count int
+	if err := db.QueryRow("SELECT COUNT(*) FROM KNOWN_IPS WHERE IPID = ?", "legacy.ip").Scan(&count); err != nil {
+		t.Fatalf("count legacy.ip failed: %v", err)
+	}
+	if count != 1 {
+		t.Fatalf("expected legacy.ip to remain, got count %d", count)
 	}
 }
 
@@ -542,13 +629,16 @@ func TestPruneShortPlaytimeIPs(t *testing.T) {
 	teardown := setupTestDB(t)
 	defer teardown()
 
-	// Insert two IPs: one with >= 1h playtime, one without.
+	// Insert two IPs: one with >= 1h playtime, one without. Use non-zero seen
+	// timestamps as MarkIPKnown would — zeroed timestamps mark a banned row,
+	// which LoadKnownIPs deliberately skips.
+	now := time.Now().Unix()
 	if _, err := db.Exec("INSERT INTO KNOWN_IPS(IPID, FIRST_SEEN, LAST_SEEN, PLAYTIME) VALUES(?, ?, ?, ?)",
-		"veteran.ip", 0, 0, 3600); err != nil {
+		"veteran.ip", now, now, 3600); err != nil {
 		t.Fatalf("insert veteran.ip failed: %v", err)
 	}
 	if _, err := db.Exec("INSERT INTO KNOWN_IPS(IPID, FIRST_SEEN, LAST_SEEN, PLAYTIME) VALUES(?, ?, ?, ?)",
-		"newbie.ip", 0, 0, 0); err != nil {
+		"newbie.ip", now, now, 0); err != nil {
 		t.Fatalf("insert newbie.ip failed: %v", err)
 	}
 

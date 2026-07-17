@@ -1188,9 +1188,11 @@ func checkConnRateLimit(ipid string) (rejected, autoban bool) {
 	return true, autoban
 }
 
-// forgetIP removes an IPID from the in-memory first-seen tracker and from the
-// KNOWN_IPS database table. This is called when an IP is banned so that, once the
-// ban expires, the IP will be treated as new again (subject to cooldowns and rate limits).
+// forgetIP removes an IPID from the in-memory first-seen tracker and clears its
+// known-IP status in the database. This is called when an IP is banned so that, once
+// the ban expires, the IP will be treated as new again (subject to cooldowns and rate
+// limits). Accumulated /playtime is preserved — db.RemoveKnownIP only zeroes the
+// seen-timestamps, it does not delete the playtime row.
 func forgetIP(ipid string) {
 	ipFirstSeenTracker.mu.Lock()
 	delete(ipFirstSeenTracker.times, ipid)
@@ -1202,7 +1204,7 @@ func forgetIP(ipid string) {
 
 	go func() {
 		if err := db.RemoveKnownIP(ipid); err != nil {
-			logger.LogErrorf("Failed to remove banned IP %s from known IPs: %v", ipid, err)
+			logger.LogErrorf("Failed to clear known-IP status for banned IP %s: %v", ipid, err)
 		}
 	}()
 }
