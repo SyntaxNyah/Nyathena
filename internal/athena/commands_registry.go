@@ -869,6 +869,22 @@ func initCommands() {
 			reqPerms: permissions.PermissionField["SHADOW"],
 			category: "moderation",
 		},
+		"curserandomchar": {
+			handler:  cmdCurseRandomChar,
+			minArgs:  1,
+			usage:    "Usage: /curserandomchar <uid>",
+			desc:     "Curses a player: their character randomly changes every 1-5 seconds, forever, even across reconnects, until an admin removes it with /uncurserandomchar.",
+			reqPerms: permissions.PermissionField["ADMIN"],
+			category: "moderation",
+		},
+		"uncurserandomchar": {
+			handler:  cmdUnCurseRandomChar,
+			minArgs:  1,
+			usage:    "Usage: /uncurserandomchar <uid>",
+			desc:     "Removes an active /curserandomchar curse from a player.",
+			reqPerms: permissions.PermissionField["ADMIN"],
+			category: "moderation",
+		},
 		"forceunpair": {
 			handler:  cmdForceUnpair,
 			minArgs:  1,

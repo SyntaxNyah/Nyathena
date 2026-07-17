@@ -310,6 +310,18 @@ One-time forced character swap (requires KICK). Target may freely change afterwa
 /charcurse <uid> <charname>
 ```
 
+### Random Character Curse (`/curserandomchar`)
+ADMIN-only curse (`internal/athena/curse_randomchar.go`) that forces the target's character to randomly change every 1–5 seconds, forever, until an admin lifts it.
+
+```
+/curserandomchar <uid>      # ADMIN — arm the curse
+/uncurserandomchar <uid>    # ADMIN — lift it
+```
+
+Unlike the `character` potion's per-session auto-rotation, the curse is **persisted by IPID** in the `RANDOMCHAR_CURSES` table (DB migration 23), the same way `/musicban` persists — a curse tied only to the live `*Client` would vanish the instant the target reconnects, since a fresh connection gets a brand-new `*Client`. Instead, `restoreRandomCharCurse` (called from `pktReqDone` right alongside `restorePunishments`) checks the joining client's IPID against the table and re-arms the curse on every join, so **relogging cannot be used to escape it** — nor can a full server restart.
+
+Each armed connection runs a single per-client watcher goroutine that picks a new random 1–5 second interval every tick, swaps to a random free character via the same `getRandomFreeChar`/`ChangeCharacter` path `/randomchar` uses (skips a tick if the target is tunged), and exits cleanly via `client.done` the moment the connection closes — so a cursed player who disconnects can never leak a goroutine, and `/uncurserandomchar` clearing the active flag makes the next tick exit on its own.
+
 ### Possession
 Speak through another player's character. Shares one sprite-spoof + pair-spoof pipeline (`internal/athena/possess.go`, applied in `pktIC`):
 

@@ -297,6 +297,7 @@ func pktReqDone(client *Client, _ *packet.Packet) {
 		client.SendMotd(motd)
 	}
 	client.restorePunishments()
+	client.restoreRandomCharCurse()
 
 	// Casino on-join setup: seed chip balance and prompt unregistered players.
 	// When the casino is off but the account system is enabled, the account

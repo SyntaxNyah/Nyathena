@@ -17,6 +17,8 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>. */
 package db
 
 import (
+	"database/sql"
+	"errors"
 	"os"
 	"testing"
 	"time"
@@ -561,5 +563,53 @@ func TestPruneShortPlaytimeIPs(t *testing.T) {
 	ipids, _ := LoadKnownIPs()
 	if len(ipids) != 1 || ipids[0] != "veteran.ip" {
 		t.Errorf("expected only veteran.ip to remain, got %v", ipids)
+	}
+}
+
+func TestRandomCharCurse(t *testing.T) {
+	teardown := setupTestDB(t)
+	defer teardown()
+
+	ipid := "cursed.ip"
+
+	if cursed, err := IsRandomCharCursed(ipid); err != nil {
+		t.Fatalf("IsRandomCharCursed failed: %v", err)
+	} else if cursed {
+		t.Error("expected ipid to not be cursed before AddRandomCharCurse")
+	}
+
+	if err := AddRandomCharCurse(ipid, "TestAdmin", 12345); err != nil {
+		t.Fatalf("AddRandomCharCurse failed: %v", err)
+	}
+	if cursed, err := IsRandomCharCursed(ipid); err != nil {
+		t.Fatalf("IsRandomCharCursed failed: %v", err)
+	} else if !cursed {
+		t.Error("expected ipid to be cursed after AddRandomCharCurse")
+	}
+
+	// Re-cursing (upsert) must not error and must not create a duplicate row.
+	if err := AddRandomCharCurse(ipid, "TestAdmin2", 67890); err != nil {
+		t.Fatalf("re-AddRandomCharCurse failed: %v", err)
+	}
+	var count int
+	if err := db.QueryRow("SELECT COUNT(*) FROM RANDOMCHAR_CURSES WHERE IPID = ?", ipid).Scan(&count); err != nil {
+		t.Fatalf("count query failed: %v", err)
+	}
+	if count != 1 {
+		t.Errorf("expected exactly 1 row after re-cursing, got %d", count)
+	}
+
+	if err := RemoveRandomCharCurse(ipid); err != nil {
+		t.Fatalf("RemoveRandomCharCurse failed: %v", err)
+	}
+	if cursed, err := IsRandomCharCursed(ipid); err != nil {
+		t.Fatalf("IsRandomCharCursed failed: %v", err)
+	} else if cursed {
+		t.Error("expected ipid to not be cursed after RemoveRandomCharCurse")
+	}
+
+	// Removing again should report sql.ErrNoRows, not silently succeed.
+	if err := RemoveRandomCharCurse(ipid); !errors.Is(err, sql.ErrNoRows) {
+		t.Errorf("expected sql.ErrNoRows removing an already-removed curse, got %v", err)
 	}
 }
