@@ -307,7 +307,7 @@ Every value written passes the same packet validators as client input (flip/shak
 | `/lag` | Adds IPID to torment list (ghost/delayed messages, silent disconnect timer) |
 | `/lifo` | Buffers messages and releases them in **reverse order** — say three things, they arrive third-second-first. Flushes every 3 messages or 6 seconds, whichever comes first. |
 
-**`/lag` note:** This is IPID-scoped (affects all sessions from the same IP). Remove with `/unlag <uid>`, `/unpunish -t lag <uid>`, or `/unpunish <uid>`.
+**`/lag` note:** This is IPID-scoped (affects all sessions from the same IP). Remove with `/unlag <uid>`, `/unpunish -t lag <uid>`, or `/unpunish <uid>`. The same list backs the censor's automatic torment additions: view it with `/tormentlist` (shows offline IPIDs too), remove a specific offline IPID with `/untorment <ipid>`, or purge the whole list with `/untorment all`. Adding someone by hand with `/lag` never notifies other mods — only censor trips send the `[CENSOR]` OOC alerts (silence them for yourself with `/censoralerts off`).
 
 ---
 

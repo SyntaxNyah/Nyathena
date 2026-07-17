@@ -1176,9 +1176,25 @@ func initCommands() {
 		"untorment": {
 			handler:  cmdUntorment,
 			minArgs:  1,
-			usage:    "Usage: /untorment <ipid>",
-			desc:     "Removes an IPID from the automod torment list.",
+			usage:    "Usage: /untorment <ipid|all>\nall: purge every IPID from the torment list.",
+			desc:     "Removes an IPID from the torment list, or purges the entire list with 'all'.",
 			reqPerms: permissions.PermissionField["BAN"],
+			category: "moderation",
+		},
+		"tormentlist": {
+			handler:  cmdTormentList,
+			minArgs:  0,
+			usage:    "Usage: /tormentlist",
+			desc:     "Lists every IPID on the torment/lag list, with any connected sessions.",
+			reqPerms: permissions.PermissionField["MUTE"],
+			category: "moderation",
+		},
+		"censoralerts": {
+			handler:  cmdCensorAlerts,
+			minArgs:  0,
+			usage:    "Usage: /censoralerts <on|off>",
+			desc:     "Toggles the OOC alerts you receive when a player trips the word censor.",
+			reqPerms: permissions.PermissionField["MOD_CHAT"],
 			category: "moderation",
 		},
 		"vote": {

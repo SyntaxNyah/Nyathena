@@ -40,10 +40,20 @@ import (
 type autoModActionKind int
 
 const (
-	autoModActionBan autoModActionKind = iota // default
+	autoModActionShadow autoModActionKind = iota // default
+	autoModActionBan
 	autoModActionKick
 	autoModActionMute
 	autoModActionTorment
+)
+
+// autoModResult is what autoModCheck reports back to the packet handlers.
+type autoModResult int
+
+const (
+	autoModPass    autoModResult = iota // no banned word — continue normally
+	autoModBlocked                      // matched; handled destructively (ban/kick/mute/torment) — abort processing
+	autoModShadow                       // matched; shadow-send — echo the message to the sender only, drop it for everyone else
 )
 
 // autoModAction caches the parsed action so autoModCheck is allocation-free.
@@ -164,6 +174,8 @@ func initAutoMod(cfg *settings.Config) {
 
 	// Parse the action once so the hot path never allocates.
 	switch strings.ToLower(strings.TrimSpace(cfg.AutoModAction)) {
+	case "ban":
+		autoModAction = autoModActionBan
 	case "kick":
 		autoModAction = autoModActionKick
 	case "mute":
@@ -171,61 +183,90 @@ func initAutoMod(cfg *settings.Config) {
 	case "torment":
 		autoModAction = autoModActionTorment
 	default:
-		autoModAction = autoModActionBan
+		// "shadow" and anything unset/unrecognized: shadow-send the censored
+		// message (sender sees it, room doesn't) and torment-list the speaker.
+		autoModAction = autoModActionShadow
 	}
 }
 
-// autoModCheck tests msg for banned words. If one is found the configured action
-// (ban/kick/mute/torment) is applied and the function returns true so the caller
-// can abort further packet processing.
-func autoModCheck(client *Client, msg string) bool {
+// autoModCheck tests msg for banned words. If one is found the configured
+// action is applied and staff are alerted in OOC. source labels which field
+// tripped (e.g. "IC message", "OOC username") for the staff alert and logs.
+// The caller acts on the result: autoModBlocked aborts packet processing
+// outright, while autoModShadow means the message must be echoed back to the
+// sender only — it looks sent on their side but never reaches another client.
+func autoModCheck(client *Client, msg string, source string) autoModResult {
 	if !config.AutoModEnabled || len(getBannedWords()) == 0 {
-		return false
+		return autoModPass
 	}
 
 	normalized := normalizeForFilter(msg)
 	matched, ok := matchBannedWord(normalized)
 	if !ok {
-		return false
+		return autoModPass
 	}
 
 	switch autoModAction {
 	case autoModActionKick:
 		client.SendSync(&packet.KK{Reason: "Kicked for prohibited language."})
 		client.conn.Close()
+		alertCensorTrip(client, source, matched, msg, "They were kicked.")
 		logger.LogInfof("automod: kicked %v (uid %d) — matched word %q", client.Ipid(), client.Uid(), matched)
-		return true
+		return autoModBlocked
 
 	case autoModActionMute:
 		// expires = 0 means permanent in the PUNISHMENTS table.
 		if err := db.UpsertMute(client.Ipid(), int(ICOOCMuted), 0); err != nil {
 			logger.LogErrorf("automod: failed to mute %v: %v", client.Ipid(), err)
-			return false
+			return autoModPass
 		}
 		client.SetMuted(ICOOCMuted)
 		client.SetUnmuteTime(time.Time{}) // zero = permanent
 		client.SendServerMessage("You have been muted for prohibited language.")
+		alertCensorTrip(client, source, matched, msg, "They were permanently muted.")
 		logger.LogInfof("automod: permanently muted %v (uid %d) — matched word %q", client.Ipid(), client.Uid(), matched)
-		return true
+		return autoModBlocked
 
 	case autoModActionTorment:
-		addTormentedIP(client.Ipid())
-		go startTormentDisconnect(client)
+		addCensorTripToTormentList(client)
+		alertCensorTrip(client, source, matched, msg, "The message was dropped and they were added to the torment list.")
 		logger.LogInfof("automod: added %v (uid %d) to torment list — matched word %q", client.Ipid(), client.Uid(), matched)
-		return true
+		return autoModBlocked
 
-	default: // autoModActionBan
+	case autoModActionBan:
 		banTime := time.Now().UTC().Unix()
 		id, err := db.AddBan(client.Ipid(), client.Hdid(), banTime, -1, "Automatic ban: prohibited language", "Server")
 		if err != nil {
 			logger.LogErrorf("automod: failed to ban %v: %v", client.Ipid(), err)
-			return false
+			return autoModPass
 		}
 		forgetIP(client.Ipid())
 		client.SendSync(&packet.KB{Reason: fmt.Sprintf("Banned for prohibited language.\nUntil: ∞\nID: %d", id)})
 		client.conn.Close()
+		alertCensorTrip(client, source, matched, msg, "They were permanently banned.")
 		logger.LogInfof("automod: permanently banned %v (uid %d) — matched word %q", client.Ipid(), client.Uid(), matched)
-		return true
+		return autoModBlocked
+
+	default: // autoModActionShadow
+		addCensorTripToTormentList(client)
+		alertCensorTrip(client, source, matched, msg, "The message was shadow-dropped (only they can see it) and they were added to the torment list.")
+		logger.LogInfof("automod: shadow-dropped %s from %v (uid %d) — matched word %q", source, client.Ipid(), client.Uid(), matched)
+		return autoModShadow
+	}
+}
+
+// addCensorTripToTormentList puts the offender's IPID on the torment list (if
+// it isn't already there) and arms a disconnect timer for every session open
+// under it, exactly like /lag. Censor trips are the only torment-list
+// additions that alert staff — a moderator adding someone by hand with /lag
+// stays silent (see alertCensorTrip's call sites).
+func addCensorTripToTormentList(client *Client) {
+	if isIPIDTormented(client.Ipid()) {
+		return
+	}
+	addTormentedIP(client.Ipid())
+	for _, c := range getClientsByIpid(client.Ipid()) {
+		go startTormentDisconnect(c)
 	}
 }
 

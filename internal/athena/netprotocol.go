@@ -1071,20 +1071,37 @@ func pktIC(client *Client, p *packet.Packet) {
 		unscrambleOnIC(client, msgText)
 	}
 
-	// Automod: check the decoded message AND the showname for banned words
-	// before broadcasting. Slurs in shownames are just as visible as in
-	// message text; checking both closes a common bypass.
-	if autoModCheck(client, msgText) {
+	// Censor checks: AutoMod banned words in the decoded message AND the
+	// showname (slurs in shownames are just as visible as in message text;
+	// checking both closes a common bypass), plus the censored_names.txt
+	// showname list. A shadow trip does NOT abort processing: the message
+	// flows through the normal pipeline and is folded into the silenced
+	// delivery path below, so the sender gets a well-formed echo — their
+	// client shows the message as sent while no other client ever sees it.
+	// These run BEFORE the torment branch on purpose: a censored message
+	// must never reach the room, not even through the delayed 50/50 torment
+	// rebroadcast in handleTormentedIC.
+	censorShadow := false
+	switch autoModCheck(client, msgText, "IC message") {
+	case autoModBlocked:
 		return
+	case autoModShadow:
+		censorShadow = true
 	}
-	if ms.Showname != "" {
-		if autoModCheck(client, decode(ms.Showname)) {
+	if !censorShadow && ms.Showname != "" {
+		switch autoModCheck(client, decode(ms.Showname), "IC showname") {
+		case autoModBlocked:
 			return
+		case autoModShadow:
+			censorShadow = true
 		}
+	}
+	if !censorShadow && ms.Showname != "" && checkCensoredShowname(client, decode(ms.Showname)) {
+		censorShadow = true
 	}
 
 	// Torment: ghost or delay the message without the client noticing.
-	if isIPIDTormented(client.Ipid()) {
+	if !censorShadow && isIPIDTormented(client.Ipid()) {
 		handleTormentedIC(client, ms)
 		return
 	}
@@ -1141,19 +1158,19 @@ func pktIC(client *Client, p *packet.Packet) {
 	//     their message appear normally while the room hears nothing.
 	//   - lifo: the packet is buffered and released in reverse arrival order.
 	//
-	// A censored showname (censored_names.txt) shadow-mutes and lags the
-	// speaker on the spot; folding it into stealthMuted here means even the
-	// triggering message is swallowed, not just the ones after it.
-	censoredShowname := false
+	// A censor trip (banned word or censored showname, checked above) is
+	// folded in the same way: the triggering message is echoed back to the
+	// sender alone, so it looks sent on their side while the room never
+	// sees it.
+	//
+	// Showname punisher (punishment_names.txt): a matching showname stains
+	// the speaker's IPID and starts the one-random-punishment-per-minute
+	// drip. Unlike the censor checks above it never silences this message —
+	// the effects apply from the next message onward.
 	if ms.Showname != "" {
-		censoredShowname = checkCensoredShowname(client, decode(ms.Showname))
-		// Showname punisher (punishment_names.txt): a matching showname stains
-		// the speaker's IPID and starts the one-random-punishment-per-minute
-		// drip. Unlike the censor above it never silences this message — the
-		// effects apply from the next message onward.
 		checkPunishmentShowname(client, decode(ms.Showname))
 	}
-	stealthMuted := hasPunishmentType(punishments, PunishmentStealthMute) || censoredShowname
+	stealthMuted := hasPunishmentType(punishments, PunishmentStealthMute) || censorShadow
 	// A /truepossess target is silenced exactly like a stealthmute: the packet
 	// echoes back to only them (so their own client still looks normal) while the
 	// room hears nothing — they cannot contest or expose the possession.
@@ -1179,8 +1196,10 @@ func pktIC(client *Client, p *packet.Packet) {
 		})
 	}
 	// Record the original (pre-punishment) decoded message in the area's icwarp
-	// history so future icwarp lookups have something to pick from.
-	if originalICMsg != "" {
+	// history so future icwarp lookups have something to pick from. Censored
+	// messages are deliberately excluded: the area history feeds /icwarp and
+	// /markov, which could otherwise regurgitate the slur to the room.
+	if originalICMsg != "" && !censorShadow {
 		client.Area().RecordICMessage(client.Ipid(), originalICMsg)
 	}
 	// Mechanic hooks: contagion spread, minefield rolls, silence-bell traps
@@ -1191,9 +1210,13 @@ func pktIC(client *Client, p *packet.Packet) {
 	}
 	// Log suppressed /truepossess IC with a marker so staff can audit what the
 	// silenced target tried to say (e.g. an attempt to expose the possession).
-	if trueMuted {
+	// Censor-tripped messages get their own marker for the same reason.
+	switch {
+	case trueMuted:
 		addToBuffer(client, "IC", "\""+ms.Message+"\" (truepossessed)", false)
-	} else {
+	case censorShadow:
+		addToBuffer(client, "IC", "\""+ms.Message+"\" (censored)", false)
+	default:
 		addToBuffer(client, "IC", "\""+ms.Message+"\"", false)
 	}
 }
@@ -1447,8 +1470,22 @@ func pktOOC(client *Client, p *packet.Packet) {
 	}
 	// Automod check on the OOC username itself — slurs in display names are
 	// just as visible as in message bodies, and the autoModCheck handles the
-	// configured action (ban/kick/mute/torment) consistently.
-	if autoModCheck(client, username) {
+	// configured action consistently. On a shadow trip the message is echoed
+	// back to only the sender (under the offending name, so their client
+	// looks normal) and dropped for everyone else.
+	switch autoModCheck(client, username, "OOC username") {
+	case autoModBlocked:
+		return
+	case autoModShadow:
+		display := username
+		if client.Uid() != -1 {
+			display = "[" + strconv.Itoa(client.Uid()) + "] " + display
+		}
+		if tag := formatTagDisplay(db.GetActiveTag(client.Ipid())); tag != "" {
+			display = tag + " " + display
+		}
+		client.Send(&packet.CTToClient{Name: encode(display), Message: ct.Message, IsFromServer: "0"})
+		addToBuffer(client, "OOC", "\""+ct.Message+"\" (censored username)", false)
 		return
 	}
 	if utf8.RuneCountInString(ct.Message) > config.MaxMsg {
@@ -1530,7 +1567,16 @@ func pktOOC(client *Client, p *packet.Packet) {
 	}
 	areaLastOOCMsg.Store(client.Area(), msg)
 	// Automod: check the OOC message for banned words before broadcasting.
-	if autoModCheck(client, decode(msg)) {
+	// A shadow trip echoes the message back to only the sender — it looks
+	// sent on their side while no other client ever receives it. This runs
+	// before the torment branch so a censored message can never leak out
+	// through handleTormentedOOC's delayed rebroadcast.
+	switch autoModCheck(client, decode(msg), "OOC message") {
+	case autoModBlocked:
+		return
+	case autoModShadow:
+		client.Send(&packet.CTToClient{Name: encode(displayUsername), Message: msg, IsFromServer: "0"})
+		addToBuffer(client, "OOC", "\""+msg+"\" (censored)", false)
 		return
 	}
 	// Torment: ghost or delay the OOC message without the client noticing.

@@ -17,11 +17,9 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>. */
 package athena
 
 import (
-	"fmt"
 	"path/filepath"
 	"strings"
 
-	"github.com/MangosArentLiterature/Athena/internal/db"
 	"github.com/MangosArentLiterature/Athena/internal/logger"
 	"github.com/MangosArentLiterature/Athena/internal/settings"
 )
@@ -68,11 +66,15 @@ func matchCensoredName(s string) (string, bool) {
 }
 
 // checkCensoredShowname tests showname against censored_names.txt. On a
-// match the speaker is shadow-muted (PunishmentStealthMute, persisted so it
-// survives reconnect) and their IPID is added to the lag/torment list —
-// mirroring what a moderator running /stealthmute and /lag by hand would do —
-// every time they try to speak under that name. Returns true if a match
-// fired, so the caller can also silence the very message that triggered it.
+// match the triggering message is shadow-dropped — the caller folds the
+// returned true into its silenced delivery path, so the sender sees their
+// message echo back normally while no other client ever receives it — and
+// the speaker's IPID is added to the lag/torment list, with staff alerted in
+// OOC. There is deliberately no permanent stealthmute: a player who switches
+// to a clean showname talks normally again (they stay on the torment list
+// until a moderator lifts it), but every message sent under a censored
+// showname is swallowed and re-trips the censor. Returns true if a match
+// fired, so the caller silences the very message that triggered it.
 func checkCensoredShowname(client *Client, showname string) bool {
 	if showname == "" || len(getCensoredNames()) == 0 {
 		return false
@@ -82,17 +84,9 @@ func checkCensoredShowname(client *Client, showname string) bool {
 		return false
 	}
 
-	if !client.HasActivePunishment(PunishmentStealthMute) {
-		reason := fmt.Sprintf("Censored showname (matched %q)", matched)
-		client.AddPunishmentBy(PunishmentStealthMute, 0, reason, IssuerSystem)
-		if err := db.UpsertTextPunishmentBy(client.Ipid(), int(PunishmentStealthMute), 0, reason, int(IssuerSystem)); err != nil {
-			logger.LogErrorf("showname censor: failed to persist stealthmute for %v: %v", client.Ipid(), err)
-		}
-	}
-	if !isIPIDTormented(client.Ipid()) {
-		addTormentedIP(client.Ipid())
-		go startTormentDisconnect(client)
-	}
-	logger.LogInfof("showname censor: shadow-muted and lagged %v (uid %d) — matched name %q", client.Ipid(), client.Uid(), matched)
+	addCensorTripToTormentList(client)
+	alertCensorTrip(client, "showname", matched, showname,
+		"The message was shadow-dropped (only they can see it) and they are on the torment list.")
+	logger.LogInfof("showname censor: shadow-dropped message from %v (uid %d) — matched name %q", client.Ipid(), client.Uid(), matched)
 	return true
 }

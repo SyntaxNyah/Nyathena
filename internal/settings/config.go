@@ -242,7 +242,7 @@ func DefaultConfig() *Config {
 			WebAOAllowedOrigin:        "web.aceattorneyonline.com",
 			AutoModEnabled:             false,
 			AutoModWordlist:            "banned_words.txt",
-			AutoModAction:              "ban",
+			AutoModAction:              "shadow",
 			RandomSongCooldown:         20,
 			RandomSongCooldownDJ:       5,
 			RandomSongCooldownMod:      0,
