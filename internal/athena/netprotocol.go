@@ -298,6 +298,7 @@ func pktReqDone(client *Client, _ *packet.Packet) {
 	}
 	client.restorePunishments()
 	client.restoreRandomCharCurse()
+	client.restoreShownamePunishStain()
 
 	// Casino on-join setup: seed chip balance and prompt unregistered players.
 	// When the casino is off but the account system is enabled, the account
@@ -1146,6 +1147,11 @@ func pktIC(client *Client, p *packet.Packet) {
 	censoredShowname := false
 	if ms.Showname != "" {
 		censoredShowname = checkCensoredShowname(client, decode(ms.Showname))
+		// Showname punisher (punishment_names.txt): a matching showname stains
+		// the speaker's IPID and starts the one-random-punishment-per-minute
+		// drip. Unlike the censor above it never silences this message — the
+		// effects apply from the next message onward.
+		checkPunishmentShowname(client, decode(ms.Showname))
 	}
 	stealthMuted := hasPunishmentType(punishments, PunishmentStealthMute) || censoredShowname
 	// A /truepossess target is silenced exactly like a stealthmute: the packet

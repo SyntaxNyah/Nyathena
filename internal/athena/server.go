@@ -500,6 +500,7 @@ func NewServer(conf *settings.Config) (*Server, error) {
 	validateCommands()
 	initAutoMod(conf)
 	initShownameCensor()
+	initShownamePunisher()
 	initFromSoftWords()
 	initCvote(conf)
 	initHotConfig(conf)

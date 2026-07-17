@@ -48,17 +48,18 @@ import (
 // This is the standard "rarely-written, frequently-read config" pattern and is
 // clean under `go test -race`.
 var (
-	charactersPtr    atomic.Pointer[[]string]
-	charIndexPtr     atomic.Pointer[map[string]int]
-	musicPtr         atomic.Pointer[[]string]
-	backgroundsPtr   atomic.Pointer[[]string]
-	bgListStrPtr     atomic.Pointer[string]
-	parrotPtr        atomic.Pointer[[]string]
-	eightBallPtr     atomic.Pointer[[]string]
-	cdnsPtr          atomic.Pointer[[]string]
-	bannedWordsPtr   atomic.Pointer[[]string]
-	censoredNamesPtr atomic.Pointer[[]string]
-	smPacketPtr      atomic.Pointer[string]
+	charactersPtr      atomic.Pointer[[]string]
+	charIndexPtr       atomic.Pointer[map[string]int]
+	musicPtr           atomic.Pointer[[]string]
+	backgroundsPtr     atomic.Pointer[[]string]
+	bgListStrPtr       atomic.Pointer[string]
+	parrotPtr          atomic.Pointer[[]string]
+	eightBallPtr       atomic.Pointer[[]string]
+	cdnsPtr            atomic.Pointer[[]string]
+	bannedWordsPtr     atomic.Pointer[[]string]
+	censoredNamesPtr   atomic.Pointer[[]string]
+	punishmentNamesPtr atomic.Pointer[[]string]
+	smPacketPtr        atomic.Pointer[string]
 )
 
 // reloadMu serializes calls to ReloadConfig so two concurrent reloads cannot
@@ -97,11 +98,12 @@ func getBgListStr() string {
 	return ""
 }
 
-func getParrotList() []string    { return loadStrSlice(&parrotPtr) }
-func getEightBall() []string     { return loadStrSlice(&eightBallPtr) }
-func getCDNs() []string          { return loadStrSlice(&cdnsPtr) }
-func getBannedWords() []string   { return loadStrSlice(&bannedWordsPtr) }
-func getCensoredNames() []string { return loadStrSlice(&censoredNamesPtr) }
+func getParrotList() []string      { return loadStrSlice(&parrotPtr) }
+func getEightBall() []string       { return loadStrSlice(&eightBallPtr) }
+func getCDNs() []string            { return loadStrSlice(&cdnsPtr) }
+func getBannedWords() []string     { return loadStrSlice(&bannedWordsPtr) }
+func getCensoredNames() []string   { return loadStrSlice(&censoredNamesPtr) }
+func getPunishmentNames() []string { return loadStrSlice(&punishmentNamesPtr) }
 
 func getSMPacket() string {
 	if v := smPacketPtr.Load(); v != nil {
@@ -132,12 +134,13 @@ func setBackgrounds(bg []string) {
 	storeStrSlice(&backgroundsPtr, bg)
 }
 
-func setParrotList(p []string)    { storeStrSlice(&parrotPtr, p) }
-func setEightBall(e []string)     { storeStrSlice(&eightBallPtr, e) }
-func setCDNs(c []string)          { storeStrSlice(&cdnsPtr, c) }
-func setBannedWords(w []string)   { storeStrSlice(&bannedWordsPtr, w) }
-func setCensoredNames(n []string) { storeStrSlice(&censoredNamesPtr, n) }
-func setSMPacket(s string)        { smPacketPtr.Store(&s) }
+func setParrotList(p []string)      { storeStrSlice(&parrotPtr, p) }
+func setEightBall(e []string)       { storeStrSlice(&eightBallPtr, e) }
+func setCDNs(c []string)            { storeStrSlice(&cdnsPtr, c) }
+func setBannedWords(w []string)     { storeStrSlice(&bannedWordsPtr, w) }
+func setCensoredNames(n []string)   { storeStrSlice(&censoredNamesPtr, n) }
+func setPunishmentNames(n []string) { storeStrSlice(&punishmentNamesPtr, n) }
+func setSMPacket(s string)          { smPacketPtr.Store(&s) }
 
 // buildCharIndex builds the lowercase-name → character-ID lookup map.
 func buildCharIndex(chars []string) map[string]int {
@@ -282,6 +285,17 @@ func ReloadConfig() (string, error) {
 		haveCensored = true
 	}
 
+	// punishment_names.txt (showname punisher) is likewise optional and
+	// independent of automod_enabled; a missing file leaves the current
+	// (possibly empty) list in place.
+	var newPunishNames []string
+	havePunishNames := false
+	punishNamesPath := filepath.Join(settings.ConfigPath, punishmentNamesFile)
+	if loaded, perr := loadWordListFile(punishNamesPath); perr == nil {
+		newPunishNames = loaded
+		havePunishNames = true
+	}
+
 	// --- Phase 2: publish. These are atomic stores; readers see old-or-new, never
 	// a torn value.
 	var changes []string
@@ -333,6 +347,11 @@ func ReloadConfig() (string, error) {
 	if haveCensored && !equalStrSlices(getCensoredNames(), newCensored) {
 		setCensoredNames(newCensored)
 		changes = append(changes, "censored_names.txt")
+	}
+
+	if havePunishNames && !equalStrSlices(getPunishmentNames(), newPunishNames) {
+		setPunishmentNames(newPunishNames)
+		changes = append(changes, "punishment_names.txt")
 	}
 
 	// config.toml hot fields (motd / description).
