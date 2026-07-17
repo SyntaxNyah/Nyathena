@@ -413,6 +413,11 @@ type Client struct {
 	dcLastActivityNano atomic.Int64
 	dcWatcherStarted   atomic.Bool
 
+	// censorAlertsOff mutes the staff censor-trip OOC alerts for this session
+	// (/censoralerts off). Only consulted for clients holding MOD_CHAT; every
+	// fresh connection defaults back to alerts on. See censor_alerts.go.
+	censorAlertsOff atomic.Bool
+
 	// /curserandomchar admin curse: forces this client to a random free
 	// character every 1-5 seconds until an admin lifts it with
 	// /uncurserandomchar. curseRandomCharActive is the live on/off flag the

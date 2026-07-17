@@ -120,10 +120,12 @@ func setupShownameCensorTestDB(t *testing.T) func() {
 	}
 }
 
-// A showname matching censored_names.txt shadow-mutes the speaker
-// (PunishmentStealthMute) and adds their IPID to the lag/torment list, exactly
-// as /stealthmute + /lag would.
-func TestCheckCensoredShowname_MatchAppliesStealthMuteAndLag(t *testing.T) {
+// A showname matching censored_names.txt shadow-drops the triggering message
+// (the caller folds the returned true into its silenced echo path) and adds
+// the speaker's IPID to the lag/torment list. Deliberately NO permanent
+// stealthmute is applied: a player who switches to a clean showname must be
+// able to talk normally again.
+func TestCheckCensoredShowname_MatchTormentsWithoutStealthMute(t *testing.T) {
 	defer setupShownameCensorTestDB(t)()
 
 	origNames := getCensoredNames()
@@ -135,8 +137,8 @@ func TestCheckCensoredShowname_MatchAppliesStealthMuteAndLag(t *testing.T) {
 	if got := checkCensoredShowname(client, "Fake_Admin_99"); !got {
 		t.Fatal("expected checkCensoredShowname to report a match")
 	}
-	if !client.HasActivePunishment(PunishmentStealthMute) {
-		t.Error("expected client to carry an active PunishmentStealthMute")
+	if client.HasActivePunishment(PunishmentStealthMute) {
+		t.Error("expected NO permanent stealthmute — censored shownames only shadow-drop the triggering message")
 	}
 	if !isIPIDTormented(client.Ipid()) {
 		t.Error("expected client's IPID to be added to the torment/lag list")

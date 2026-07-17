@@ -121,7 +121,7 @@ Copy `config_sample/` to `config/` before first run.
 | `modcall_cooldown` | `0` | Seconds between modcalls per user |
 | `automod_enabled` | `false` | Enable AutoMod banned-word enforcement |
 | `automod_wordlist` | `"banned_words.txt"` | Path to banned-words file |
-| `automod_action` | `"ban"` | AutoMod action: `ban`, `kick`, `mute`, or `torment` |
+| `automod_action` | `"shadow"` | AutoMod action: `shadow` (shadow-send + torment list), `ban`, `kick`, `mute`, or `torment` |
 | `iphub_api_key` | `""` | IPHub API key for VPN/proxy detection |
 | `enable_casino` | `false` | Enable casino and player account system |
 | `register_captcha` | `true` | Require captcha on `/register` |
@@ -409,7 +409,15 @@ Actions: IC, OOC, AREA, MUSIC, CMD, AUTH, MOD, JUD, EVI.
 Enabled with `enable_area_logging = true` in `[Logging]`.
 
 ### AutoMod
-Word-list-based automatic enforcement. Actions: permanent ban (silent), kick, mute, or torment (random disconnects every 30–60 s). Covers IC message text, IC showname, OOC message text, and OOC username — slurs in any of those fields trigger the configured action.
+Word-list-based automatic enforcement. Covers IC message text, IC showname, OOC message text, and OOC username — slurs in any of those fields trigger the configured action.
+
+**Actions:** `shadow` (default), `ban` (permanent, silent), `kick`, `mute`, or `torment` (drop the message + torment list).
+
+**`shadow` (default action):** the censored message is **shadow-sent** — echoed back to the sender so their client shows it as sent, while the packet is dropped for every other client, so nobody ever sees the slur. The speaker's IPID is also added to the torment list (same list as `/lag`: ghost/delayed messages and random silent disconnects, persisted across reconnects). Clean messages are unaffected — only messages that trip the censor are swallowed, but once tripped the speaker stays on the torment list until a moderator lifts it. In `pktIC` the shadow trip is folded into the existing stealthmute `silenced` delivery path (so the sender's echo is a fully-processed, well-formed packet) and runs **before** the torment branch, so a censored message can never leak out through `handleTormentedIC`'s delayed rebroadcast; it is also excluded from the area's IC history so `/markov`/`/icwarp` can't regurgitate it. Area logs tag suppressed lines `(censored)`.
+
+**Staff alerts:** every censor trip (any action, and the showname censor below) sends a `[CENSOR]` OOC alert to everyone holding `MOD_CHAT` — who tripped, where, the matched entry, the (truncated) text, and what the server did about it. Every alert carries the opt-out hint; each staff member can mute them per-session with `/censoralerts off` (`/censoralerts on` re-enables; bare `/censoralerts` shows the current state). Manual torment additions (`/lag`) deliberately never alert — only censor trips do.
+
+**Torment list tooling:** `/tormentlist` (MUTE) lists every IPID on the torment/lag list with any connected sessions (UID, name, area) or `offline`. `/untorment <ipid>` (BAN) removes one entry; `/untorment all` purges the entire list — every IPID, in memory and in the DB (which also cancels all pending torment disconnect timers).
 
 **Filter-evasion normalization.** Both `banned_words.txt`/`censored_names.txt` entries and the text being checked are run through `normalizeForFilter` (`internal/athena/text_filter_normalize.go`) before matching, so stylizing, spacing out, or leetspeaking a slur doesn't evade the filter. Only letters survive normalization — everything else is either substituted into a letter or dropped — which defeats:
 - stylized Unicode letters — mathematical bold/script/fraktur, fullwidth, circled, superscript, etc. — via NFKD compatibility decomposition (`golang.org/x/text/unicode/norm`), which folds e.g. `𝓷𝓲𝓰𝓰𝓮𝓻` or fullwidth `ｎｉｇｇｅｒ` back to plain `nigger`
@@ -427,12 +435,13 @@ Runs collapse to 2 rather than 1 on purpose: a genuinely double-lettered entry n
 
 Both checks run once at load time (startup and `/reload`), not on the hot per-message path. This trades word-boundary awareness for evasion resistance: even with both gates, a banned entry can in principle match across what used to be separate words. That's an extension of the false-positive risk substring matching already had (e.g. `ass` inside `class`), not a new category — keep `banned_words.txt`/`censored_names.txt` entries as specific as practical, and check the startup/`/reload` logs for skipped-entry warnings after editing either file.
 
-### Censored Showname Auto Shadow-Mute
-`config/censored_names.txt` lists shownames (or substrings of them, case-insensitive) that nobody is allowed to speak under — independent of `automod_enabled`/`banned_words.txt`. Matching goes through the same `normalizeForFilter` Unicode-bypass normalization as AutoMod. The moment a player tries to send an IC message while their showname matches an entry, they are automatically:
-- **shadow-muted** — `PunishmentStealthMute` is applied and persisted (permanent until lifted), so their IC/OOC messages echo back to only them while the room hears nothing, exactly like a moderator running `/stealthmute`. The triggering message itself is swallowed too, not just later ones.
-- **added to the lag list** — their IPID goes into the torment set exactly like `/lag`, so they get the ghost/delayed-message treatment and eventual silent disconnects until a moderator removes them (`/unpunish -t lag`) or they lose the tormented IPID.
+### Censored Showname Shadow-Send
+`config/censored_names.txt` lists shownames (or substrings of them, case-insensitive) that nobody is allowed to speak under — independent of `automod_enabled`/`banned_words.txt`. Matching goes through the same `normalizeForFilter` Unicode-bypass normalization as AutoMod. Every IC message a player sends while their showname matches an entry is:
+- **shadow-dropped** — echoed back to only the sender (their client shows it as sent) while no other client ever receives it, including the very message that tripped the check.
+- **torment-listed** — their IPID goes into the torment set exactly like `/lag` (persisted), so they get the ghost/delayed-message treatment and eventual silent disconnects until a moderator removes them (`/untorment <ipid|all>`, `/unpunish -t lag`, or `/unlag`).
+- **reported to staff** — the same `[CENSOR]` OOC alert as AutoMod trips, with the `/censoralerts off` opt-out hint.
 
-Both effects re-arm on every message sent under a matching showname, so changing to a clean showname is the only way to stop retriggering it. A moderator can still lift the stealthmute with `/unpunish -t stealthmute <uid>`. Implemented in `internal/athena/showname_censor.go`, hooked into `pktIC` in `netprotocol.go` right alongside the existing automod showname check. The list is hot-reloadable via `/reload` like `parrot.txt`/`backgrounds.txt`; a missing file simply leaves the feature inactive.
+There is deliberately **no permanent stealthmute anymore**: a player who switches to a clean showname talks normally again (they stay on the torment list until a moderator lifts it), but every message sent under a censored showname is swallowed and re-alerts staff. Implemented in `internal/athena/showname_censor.go`, hooked into `pktIC` in `netprotocol.go` right alongside the automod checks — before the torment branch, so a censored message can never leak through the delayed torment rebroadcast. The list is hot-reloadable via `/reload` like `parrot.txt`/`backgrounds.txt`; a missing file simply leaves the feature inactive.
 
 ### Doki Area Effect
 Per-area chaos mode for literature-club-themed areas. Enable with `doki_area = true` on the area entry in `areas.toml`. Each IC message rolls independently:

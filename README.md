@@ -114,7 +114,9 @@ Available potions: `drunk`, `uwu`, `shy`, `dramatic`, `pirate`, `poet`, `caveman
 
 ### AutoMod
 
-Word-list-based enforcement covering IC text, IC showname, OOC text, and OOC username. Actions: `ban`, `kick`, `mute`, or `torment`.
+Word-list-based enforcement covering IC text, IC showname, OOC text, and OOC username. Actions: `shadow` (default), `ban`, `kick`, `mute`, or `torment`.
+
+With the default `shadow` action a censored message is **shadow-sent**: the sender's client shows it as sent, but the packet is dropped for every other client — nobody sees the slur. The speaker's IPID is also added to the torment list, and every censor trip alerts online moderators in OOC (mods can opt out per-session with `/censoralerts off`). Inspect the list with `/tormentlist`; lift entries with `/untorment <ipid>` or purge everything with `/untorment all`.
 
 ### IPHub VPN Firewall
 

@@ -1461,11 +1461,22 @@ func cmdAreaIniswap(client *Client, args []string, usage string) {
 	addToBuffer(client, "CMD", fmt.Sprintf("Applied area iniswap as %q to %d clients in area %v.", charName, affected, targetArea.Name()), true)
 }
 
-// cmdUntorment removes an IPID from the automod torment list.
+// cmdUntorment removes an IPID from the automod torment list, or purges the
+// entire list at once with /untorment all.
 func cmdUntorment(client *Client, args []string, usage string) {
 	ipid := strings.TrimSpace(args[0])
 	if ipid == "" {
 		client.SendServerMessage("Not enough arguments:\n" + usage)
+		return
+	}
+	if strings.EqualFold(ipid, "all") {
+		n := clearAllTormentedIPs()
+		if n == 0 {
+			client.SendServerMessage("The torment list is already empty.")
+			return
+		}
+		client.SendServerMessage(fmt.Sprintf("Purged the torment list — removed %d IPID(s).", n))
+		addToBuffer(client, "CMD", fmt.Sprintf("purged the entire torment list (%d IPIDs)", n), true)
 		return
 	}
 	if !isIPIDTormented(ipid) {
@@ -1475,6 +1486,38 @@ func cmdUntorment(client *Client, args []string, usage string) {
 	removeTormentedIP(ipid)
 	client.SendServerMessage(fmt.Sprintf("Removed %v from the torment list.", ipid))
 	addToBuffer(client, "CMD", fmt.Sprintf("removed IPID %v from torment list", ipid), true)
+}
+
+// cmdTormentList lists every IPID currently on the torment/lag list, with any
+// connected sessions under each IPID so staff can see who is actually online.
+func cmdTormentList(client *Client, _ []string, _ string) {
+	ipids := snapshotTormentedIPs()
+	if len(ipids) == 0 {
+		client.SendServerMessage("The torment list is empty.")
+		return
+	}
+	sort.Strings(ipids)
+	var b strings.Builder
+	fmt.Fprintf(&b, "%d IPID(s) on the torment list:", len(ipids))
+	for _, ipid := range ipids {
+		b.WriteString("\n" + ipid)
+		online := false
+		for _, c := range getClientsByIpid(ipid) {
+			if c.Uid() == -1 {
+				continue
+			}
+			online = true
+			areaName := "unknown area"
+			if a := c.Area(); a != nil {
+				areaName = a.Name()
+			}
+			fmt.Fprintf(&b, " — [%d] %s (%s)", c.Uid(), oocDisplayName(c), areaName)
+		}
+		if !online {
+			b.WriteString(" — offline")
+		}
+	}
+	client.SendServerMessage(b.String())
 }
 
 // cmdLockdown toggles server lockdown mode, or manages the lockdown whitelist.
