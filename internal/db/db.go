@@ -1516,6 +1516,16 @@ func RemoveTormentedIP(ipid string) error {
 	return err
 }
 
+// ClearTormentedIPs deletes every IPID from the TORMENTED_IPS table.
+// Used by /untorment all to purge the whole torment list at once.
+func ClearTormentedIPs() error {
+	if db == nil {
+		return nil
+	}
+	_, err := db.Exec("DELETE FROM TORMENTED_IPS")
+	return err
+}
+
 // LoadTormentedIPs returns every IPID currently in the TORMENTED_IPS table.
 // Called once at server startup to pre-populate the in-memory torment set.
 func LoadTormentedIPs() ([]string, error) {

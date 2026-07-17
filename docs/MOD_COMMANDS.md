@@ -51,6 +51,11 @@ Permission bits are configured in `config/roles.toml`. Multiple bits are granted
 | `/kickother` | NONE | Kick stale ghost connections sharing your HDID |
 | `/firewall on\|off` | BAN | Toggle the IPHub VPN/proxy firewall (requires `iphub_api_key` in config). Also exposed as a Discord slash command. |
 | `/lockdown [add <uid>\|whitelist all]` | BAN | Toggle server lockdown, or whitelist players |
+| `/tormentlist` | MUTE | List every IPID on the torment/lag list, with any connected sessions |
+| `/untorment <ipid\|all>` | BAN | Remove one IPID from the torment list, or `all` to purge the entire list |
+| `/censoralerts [on\|off]` | MOD_CHAT | Toggle the OOC alerts you receive when a player trips the word censor (per-session; defaults to on) |
+
+Censor trips (AutoMod banned words and `censored_names.txt` shownames) alert every online moderator in OOC. With the default `automod_action = "shadow"`, the offending message is shadow-sent — the sender's client shows it as sent, but no other client ever receives it — and the speaker is put on the torment list. Manual `/lag` additions never alert other mods; only censor trips do.
 
 ---
 

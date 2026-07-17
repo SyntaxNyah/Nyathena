@@ -1245,6 +1245,36 @@ func removeTormentedIP(ipid string) {
 	}()
 }
 
+// snapshotTormentedIPs returns a copy of every IPID currently on the torment
+// list, for /tormentlist.
+func snapshotTormentedIPs() []string {
+	tormentedIPIDs.mu.RLock()
+	ipids := make([]string, 0, len(tormentedIPIDs.set))
+	for ipid := range tormentedIPIDs.set {
+		ipids = append(ipids, ipid)
+	}
+	tormentedIPIDs.mu.RUnlock()
+	return ipids
+}
+
+// clearAllTormentedIPs empties the entire torment list — in memory and in the
+// database — and returns how many IPIDs were removed. Emptying the in-memory
+// set also cancels every pending torment disconnect timer, since they re-check
+// isIPIDTormented before firing.
+func clearAllTormentedIPs() int {
+	tormentedIPIDs.mu.Lock()
+	n := len(tormentedIPIDs.set)
+	tormentedIPIDs.set = make(map[string]struct{})
+	tormentedIPIDs.mu.Unlock()
+
+	go func() {
+		if err := db.ClearTormentedIPs(); err != nil {
+			logger.LogErrorf("Failed to clear tormented IPs from database: %v", err)
+		}
+	}()
+	return n
+}
+
 // isIPIDTormented returns true if the IPID is in the tormented set.
 func isIPIDTormented(ipid string) bool {
 	tormentedIPIDs.mu.RLock()

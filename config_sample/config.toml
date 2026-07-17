@@ -387,15 +387,22 @@ automod_enabled = false
 automod_wordlist = "banned_words.txt"
 
 # Action to take when the AutoMod detects a banned word in a player's message.
+# Whatever the action, every trip also alerts online moderators in OOC (each
+# mod can silence the alerts for their session with /censoralerts off).
 # Accepted values:
-#   "ban"     — Permanently ban the player (default).
+#   "shadow"  — (default) Shadow-send the censored message: it is echoed back
+#               to the sender so their client shows it as sent, but no other
+#               client ever receives it. The speaker's IPID is also added to
+#               the torment list. Clean messages are unaffected.
+#               Inspect with /tormentlist; lift with /untorment <ipid|all>.
+#   "ban"     — Permanently ban the player.
 #   "kick"    — Kick the player from the server without a ban.
 #   "mute"    — Permanently mute the player's IC and OOC chat.
-#   "torment" — Add the player's IPID to a torment list. Tormented players are
-#               randomly disconnected every 30–60 seconds every time they connect,
-#               making the experience deeply unpleasant without a hard ban.
-#               Use /untorment <ipid> to remove an IPID from the torment list.
-automod_action = "ban"
+#   "torment" — Drop the message and add the player's IPID to the torment
+#               list. Tormented players are randomly disconnected every time
+#               they connect, making the experience deeply unpleasant without
+#               a hard ban. Use /untorment <ipid|all> to lift.
+automod_action = "shadow"
 
 # /randomsong cooldown: Tiered minimum seconds between uses of /randomsong.
 #   random_song_cooldown      — regular users (default 20)
