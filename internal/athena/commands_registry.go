@@ -315,6 +315,14 @@ func initCommands() {
 			reqPerms: permissions.PermissionField["NONE"],
 			category: "general",
 		},
+		"g": {
+			handler:  cmdGlobal,
+			minArgs:  1,
+			usage:    "Usage: /g <message>",
+			desc:     "Alias of /global — sends a global message.",
+			reqPerms: permissions.PermissionField["NONE"],
+			category: "general",
+		},
 		"getmusic": {
 			handler:  cmdGetMusic,
 			minArgs:  0,
@@ -869,6 +877,14 @@ func initCommands() {
 			reqPerms: permissions.PermissionField["SHADOW"],
 			category: "moderation",
 		},
+		"forcepos": {
+			handler:  cmdForcePos,
+			minArgs:  2,
+			usage:    "Usage: /forcepos <uid1>,<uid2>,...|all <position>\nAvailable positions: def, pro, wit, jud, hld, hlp, jur, sea",
+			desc:     "CM tool: forces one or more players in your area (or everyone with \"all\") into a specific courtroom position, same as /pos but for another player. Not persistent — they can /pos themself elsewhere afterward.",
+			reqPerms: permissions.PermissionField["CM"],
+			category: "area",
+		},
 		"curserandomchar": {
 			handler:  cmdCurseRandomChar,
 			minArgs:  1,
@@ -1072,8 +1088,8 @@ func initCommands() {
 		"status": {
 			handler:  cmdStatus,
 			minArgs:  1,
-			usage:    "Usage: /status <status>",
-			desc:     "Sets the current area's status.",
+			usage:    "Usage: /status <idle|looking-for-players|lfp|casing|recess|rp|gaming>",
+			desc:     "Sets the current area's status. \"lfp\" is a shorthand for looking-for-players.",
 			reqPerms: permissions.PermissionField["CM"],
 			category: "area",
 		},

@@ -311,6 +311,63 @@ func cmdForceRandomChar(client *Client, args []string, _ string) {
 	}
 }
 
+// Handles /forcepos <uid1>,<uid2>,...|all <position>
+//
+// Lets a CM (area CM or CM-permission holder) push one or more players in
+// their own area into a specific courtroom position — def, pro, wit, jud,
+// hld, hlp, jur, sea — the same set /pos lets a player choose for themself.
+// Unlike a punishment, this isn't persisted or stacked: it's a one-shot
+// nudge for staging a scene, and the target is free to /pos themself
+// elsewhere again right after. Targets outside the caller's area are
+// silently skipped, mirroring /charselect's per-uid force branch.
+func cmdForcePos(client *Client, args []string, _ string) {
+	pos := strings.ToLower(args[len(args)-1])
+	var validPos bool
+	for _, v := range validPositions {
+		if pos == v {
+			validPos = true
+			break
+		}
+	}
+	if !validPos {
+		client.SendServerMessage(fmt.Sprintf("Invalid position. Available positions: %v", strings.Join(validPositions, ", ")))
+		return
+	}
+
+	targetArg := strings.Join(args[:len(args)-1], " ")
+	a := client.Area()
+	var targets []*Client
+	if strings.EqualFold(targetArg, "all") {
+		clients.ForEach(func(c *Client) {
+			if c.Area() == a && c.Uid() != -1 {
+				targets = append(targets, c)
+			}
+		})
+	} else {
+		targets = getUidList(strings.Split(targetArg, ","))
+	}
+
+	var count int
+	var report string
+	for _, c := range targets {
+		if c.Area() != a {
+			continue
+		}
+		c.SetPos(pos)
+		c.SendServerMessage(fmt.Sprintf("A CM forced your position to: %v", pos))
+		count++
+		report += fmt.Sprintf("%v, ", c.Uid())
+	}
+	report = strings.TrimSuffix(report, ", ")
+
+	if count == 0 {
+		client.SendServerMessage("No valid targets found in this area.")
+		return
+	}
+	client.SendServerMessage(fmt.Sprintf("Forced %v player(s) to position: %v.", count, pos))
+	addToBuffer(client, "CMD", fmt.Sprintf("Forced %v to position %v.", report, pos), false)
+}
+
 // Handles /cm
 
 func cmdCM(client *Client, args []string, _ string) {
@@ -925,7 +982,7 @@ func cmdStatus(client *Client, args []string, _ string) {
 	switch strings.ToLower(args[0]) {
 	case "idle":
 		client.Area().SetStatus(area.StatusIdle)
-	case "looking-for-players":
+	case "looking-for-players", "lfp":
 		client.Area().SetStatus(area.StatusPlayers)
 	case "casing":
 		client.Area().SetStatus(area.StatusCasing)
@@ -936,7 +993,7 @@ func cmdStatus(client *Client, args []string, _ string) {
 	case "gaming":
 		client.Area().SetStatus(area.StatusGaming)
 	default:
-		client.SendServerMessage("Status not recognized. Recognized statuses: idle, looking-for-players, casing, recess, rp, gaming")
+		client.SendServerMessage("Status not recognized. Recognized statuses: idle, looking-for-players (or lfp), casing, recess, rp, gaming")
 		return
 	}
 	sendAreaServerMessage(client.Area(), fmt.Sprintf("%v set the status to %v.", client.OOCName(), args[0]))

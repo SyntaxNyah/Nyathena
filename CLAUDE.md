@@ -310,6 +310,17 @@ One-time forced character swap (requires KICK). Target may freely change afterwa
 /charcurse <uid> <charname>
 ```
 
+### Forced Position (`/forcepos`)
+CM tool for staging a scene: pushes one or more players in the caller's own area into a specific courtroom position — the same `def`/`pro`/`wit`/`jud`/`hld`/`hlp`/`jur`/`sea` set `/pos` lets a player choose for themself. Gated on the `CM` permission, so both server CM-permission holders and area-designated CMs (`/cm`) can use it, same as `/invite`, `/lock`, and `/spectate`.
+
+```
+/forcepos <uid> <position>              # force one player
+/forcepos <uid1>,<uid2>,... <position>  # force several players at once
+/forcepos all <position>                # force everyone in the caller's area
+```
+
+Not a punishment — nothing is persisted or stacked, and the target is free to run `/pos` themself again right after. Targets outside the caller's area are silently skipped (mirroring `/charselect`'s per-UID force branch), so a CM can't reach into a different room. Implemented in `internal/athena/commands_area_admin.go` (`cmdForcePos`), reusing the same `validPositions` list `/pos` validates against.
+
 ### Random Character Curse (`/curserandomchar`)
 ADMIN-only curse (`internal/athena/curse_randomchar.go`) that forces the target's character to randomly change every 1–5 seconds, forever, until an admin lifts it.
 
@@ -564,7 +575,10 @@ Demotes a user to a default player account **without deleting it**. Sits between
 Players with the `DJ` permission bit (and no moderator privileges) get a 💿 vinyl badge on their `/profile` card so DJs are visible at a glance. Mods are unaffected — they have their own staff lines.
 
 ### `/global` Tag Display
-`/global` now shows the sender's `[tag]` in the prefix, matching local-OOC formatting.
+`/global` now shows the sender's `[tag]` in the prefix, matching local-OOC formatting. `/g` is a plain alias of `/global` (same permissions, same handler) for players who want a shorter command to type.
+
+### `/status lfp` Shorthand
+`/status` (CM) sets the current area's AO2 status (`idle`, `looking-for-players`, `casing`, `recess`, `rp`, `gaming`). `lfp` is accepted as a shorthand for `looking-for-players` — `/status lfp` and `/status looking-for-players` set the exact same status.
 
 ### `/gas` Empty-Area Suppression
 `/gas` (the all-areas player listing) hides empty areas to keep the listing scannable on servers with many areas. The empty-area count is shown at the bottom.
