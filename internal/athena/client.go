@@ -984,8 +984,14 @@ func (client *Client) clientCleanup() {
 			sendStatusArup()
 			sendCMArup()
 		} else if client.Area().HasCM(client.Uid()) {
-			client.Area().RemoveCM(client.Uid())
+			a := client.Area()
+			a.RemoveCM(client.Uid())
 			sendCMArup()
+			if autoUnlockIfLastCMGone(a) {
+				sendLockArup()
+				sendAreaServerMessage(a, "The area was automatically unlocked because its last CM disconnected.")
+				addToBuffer(client, "AREA", "Area auto-unlocked: last CM disconnected.", false)
+			}
 		}
 		for _, a := range areas {
 			if a.Lock() != area.LockFree {
