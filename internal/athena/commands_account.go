@@ -323,6 +323,16 @@ func cmdPlaytimeTop(client *Client, args []string, usage string) {
 		cmdPlaytimeAdd(client, args[1:])
 		return
 	}
+	// Admin subcommand: /playtime remove <username> <duration>
+	if len(args) > 0 && strings.EqualFold(args[0], "remove") {
+		cmdPlaytimeRemove(client, args[1:])
+		return
+	}
+	// Admin subcommand: /playtime set <username> <duration>
+	if len(args) > 0 && strings.EqualFold(args[0], "set") {
+		cmdPlaytimeSet(client, args[1:])
+		return
+	}
 
 	page := 1
 	remaining := args
@@ -500,6 +510,144 @@ func cmdPlaytimeAdd(client *Client, args []string) {
 
 	addToBuffer(client, "CMD",
 		fmt.Sprintf("Added %vs of playtime to '%v' (new total %vs).", addSeconds, targetUser, newTotal),
+		true)
+}
+
+// cmdPlaytimeRemove handles the admin-only /playtime remove <username> <duration>
+// subcommand. It decrements the target account's stored playtime by the parsed
+// duration (e.g. "60h", "30m", "1h30m"), clamped at 0.
+func cmdPlaytimeRemove(client *Client, args []string) {
+	const usage = "Usage: /playtime remove <username> <duration>  (e.g. /playtime remove alice 60h)"
+
+	if !permissions.HasPermission(client.Perms(), permissions.PermissionField["ADMIN"]) {
+		client.SendServerMessage("You do not have permission to use that command.")
+		return
+	}
+	if len(args) < 2 {
+		client.SendServerMessage(usage)
+		return
+	}
+
+	targetUser := args[0]
+	duration, err := str2duration.ParseDuration(args[1])
+	if err != nil {
+		client.SendServerMessage("Invalid duration format. Use values like 60h, 30m, or 1h30m.")
+		return
+	}
+	if duration <= 0 {
+		client.SendServerMessage("Duration must be greater than zero.")
+		return
+	}
+	removeSeconds := int64(duration.Seconds())
+	if removeSeconds <= 0 {
+		client.SendServerMessage("Duration must be at least one second.")
+		return
+	}
+
+	ipid, err := db.GetIPIDByUsername(targetUser)
+	if err != nil {
+		client.SendServerMessage("Failed to look up account: " + err.Error())
+		return
+	}
+	if ipid == "" {
+		client.SendServerMessage(fmt.Sprintf(
+			"Account '%v' was not found, or has never logged in (no IPID linked yet).",
+			targetUser))
+		return
+	}
+
+	if err := db.MarkIPKnown(ipid); err != nil {
+		client.SendServerMessage("Failed to update playtime: " + err.Error())
+		return
+	}
+
+	newTotal, err := db.SubtractPlaytimeReturning(ipid, removeSeconds)
+	if err != nil {
+		client.SendServerMessage("Failed to update playtime: " + err.Error())
+		return
+	}
+
+	client.SendServerMessage(fmt.Sprintf(
+		"✅ Removed %v of playtime from '%v'. New total: %v.",
+		formatPlaytime(removeSeconds), targetUser, formatPlaytime(newTotal)))
+
+	clients.ForEach(func(c *Client) {
+		if c.ModName() == targetUser {
+			c.SendServerMessage(fmt.Sprintf(
+				"⏱ An admin removed %v of playtime from your account. New total: %v.",
+				formatPlaytime(removeSeconds), formatPlaytime(newTotal)))
+		}
+	})
+
+	addToBuffer(client, "CMD",
+		fmt.Sprintf("Removed %vs of playtime from '%v' (new total %vs).", removeSeconds, targetUser, newTotal),
+		true)
+}
+
+// cmdPlaytimeSet handles the admin-only /playtime set <username> <duration>
+// subcommand. It sets the target account's stored playtime to exactly the
+// parsed duration (e.g. "1000h", "3d12h", "90m"), overwriting the previous
+// total. Accepts any combination of units str2duration supports: ns, us/µs,
+// ms, s, m, h, d, w — e.g. "1d2h30m15s".
+func cmdPlaytimeSet(client *Client, args []string) {
+	const usage = "Usage: /playtime set <username> <duration>  (e.g. /playtime set alice 1000h, /playtime set alice 3d12h30m)"
+
+	if !permissions.HasPermission(client.Perms(), permissions.PermissionField["ADMIN"]) {
+		client.SendServerMessage("You do not have permission to use that command.")
+		return
+	}
+	if len(args) < 2 {
+		client.SendServerMessage(usage)
+		return
+	}
+
+	targetUser := args[0]
+	duration, err := str2duration.ParseDuration(args[1])
+	if err != nil {
+		client.SendServerMessage("Invalid duration format. Use values like 1000h, 3d12h30m, or 90m.")
+		return
+	}
+	if duration < 0 {
+		client.SendServerMessage("Duration cannot be negative.")
+		return
+	}
+	setSeconds := int64(duration.Seconds())
+
+	ipid, err := db.GetIPIDByUsername(targetUser)
+	if err != nil {
+		client.SendServerMessage("Failed to look up account: " + err.Error())
+		return
+	}
+	if ipid == "" {
+		client.SendServerMessage(fmt.Sprintf(
+			"Account '%v' was not found, or has never logged in (no IPID linked yet).",
+			targetUser))
+		return
+	}
+
+	if err := db.MarkIPKnown(ipid); err != nil {
+		client.SendServerMessage("Failed to update playtime: " + err.Error())
+		return
+	}
+
+	newTotal, err := db.SetPlaytimeReturning(ipid, setSeconds)
+	if err != nil {
+		client.SendServerMessage("Failed to update playtime: " + err.Error())
+		return
+	}
+
+	client.SendServerMessage(fmt.Sprintf(
+		"✅ Set playtime for '%v' to %v.", targetUser, formatPlaytime(newTotal)))
+
+	clients.ForEach(func(c *Client) {
+		if c.ModName() == targetUser {
+			c.SendServerMessage(fmt.Sprintf(
+				"⏱ An admin set your playtime to %v.", formatPlaytime(newTotal)))
+		}
+	})
+
+	addToBuffer(client, "CMD",
+		fmt.Sprintf("Set playtime for '%v' to %vs.", targetUser, newTotal),
 		true)
 }
 

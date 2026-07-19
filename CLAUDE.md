@@ -599,6 +599,8 @@ Demotes a user to a default player account **without deleting it**. Sits between
 ### `/playtime` Pagination
 `/playtime top` lists 25 entries per page; pass a page number for the next 25 (`/playtime top 2` = positions 26–50). Both player accounts and moderator accounts (including shadow mods) are eligible — there's no permission filter.
 
+Admins can adjust an account's stored playtime directly: `/playtime add <username> <duration>` grants time, `/playtime remove <username> <duration>` deducts it (clamped at 0), and `/playtime set <username> <duration>` overwrites the total outright. Duration accepts any combination of `ns`/`us`/`ms`/`s`/`m`/`h`/`d`/`w` units (e.g. `1000h`, `3d12h30m`). The target account must have logged in at least once (so its IPID is linked); the change applies immediately to the leaderboard, and the player is notified live if online.
+
 `/reloadplaytime` (admin) re-links every registered account to its IPID and merges any orphaned playtime — fixes the bug where an account created on a long-running anonymous IPID didn't show pre-existing hours on the leaderboard until the server restarted.
 
 ### `/profile` DJ Insignia

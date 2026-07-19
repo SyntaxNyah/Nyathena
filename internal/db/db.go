@@ -1415,6 +1415,50 @@ func AddPlaytimeReturning(ipid string, seconds int64) (int64, error) {
 	return newTotal, nil
 }
 
+// SubtractPlaytimeReturning atomically decrements the PLAYTIME counter for an
+// IPID by the given number of seconds, clamped at 0 (never goes negative),
+// and returns the new accumulated total.
+// Returns (0, nil) when the database is not initialised.
+func SubtractPlaytimeReturning(ipid string, seconds int64) (int64, error) {
+	if db == nil {
+		return 0, nil
+	}
+	row := db.QueryRow(
+		"UPDATE KNOWN_IPS SET PLAYTIME = MAX(0, PLAYTIME - ?) WHERE IPID = ? RETURNING PLAYTIME",
+		seconds, ipid)
+	var newTotal int64
+	if err := row.Scan(&newTotal); err != nil {
+		if err == sql.ErrNoRows {
+			return 0, nil
+		}
+		return 0, err
+	}
+	return newTotal, nil
+}
+
+// SetPlaytimeReturning atomically sets the PLAYTIME counter for an IPID to the
+// given number of seconds (clamped at 0) and returns the new total.
+// Returns (0, nil) when the database is not initialised.
+func SetPlaytimeReturning(ipid string, seconds int64) (int64, error) {
+	if db == nil {
+		return 0, nil
+	}
+	if seconds < 0 {
+		seconds = 0
+	}
+	row := db.QueryRow(
+		"UPDATE KNOWN_IPS SET PLAYTIME = ? WHERE IPID = ? RETURNING PLAYTIME",
+		seconds, ipid)
+	var newTotal int64
+	if err := row.Scan(&newTotal); err != nil {
+		if err == sql.ErrNoRows {
+			return 0, nil
+		}
+		return 0, err
+	}
+	return newTotal, nil
+}
+
 // PruneShortPlaytimeIPs deletes all KNOWN_IPS rows whose accumulated PLAYTIME is
 // less than minSeconds. IPs that have played for at least minSeconds are retained.
 // It returns the number of rows removed.
