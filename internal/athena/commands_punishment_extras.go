@@ -272,24 +272,29 @@ func cmdSfxCurse(client *Client, args []string, usage string) {
 		}
 		client.SendServerMessage(summary)
 		addToBuffer(client, "CMD", fmt.Sprintf("SFX curse global: %s", sfx), false)
+		alertPunishmentIssued(client, fmt.Sprintf("sfxcurse (%s)", sfx), "area-wide", count, duration, *reason, hidden)
 		return
 	}
 
 	toCurse := getUidList(strings.Split(uidArg, ","))
 	count := 0
+	var report string
 	for _, c := range toCurse {
 		c.AddPunishmentWithData(PunishmentSfxCurse, duration, *reason, sfx)
 		if !hidden {
 			c.SendServerMessage(fmt.Sprintf("🔊 You are now SFX-cursed: every IC message will play %s", sfx))
 		}
 		count++
+		report += fmt.Sprintf("%v, ", c.Uid())
 	}
+	report = strings.TrimSuffix(report, ", ")
 	summary := fmt.Sprintf("Applied SFX curse to %d client(s).", count)
 	if hidden {
 		summary += " (hidden)"
 	}
 	client.SendServerMessage(summary)
 	addToBuffer(client, "CMD", fmt.Sprintf("SFX curse: %s", sfx), false)
+	alertPunishmentIssued(client, fmt.Sprintf("sfxcurse (%s)", sfx), report, count, duration, *reason, hidden)
 }
 
 // Handles /unsfx <uid>
@@ -351,18 +356,22 @@ func applyShrinkGrowWide(client *Client, args []string, usage string, pType Puni
 
 	toCurse := getUidList(strings.Split(uidArg, ","))
 	count := 0
+	var report string
 	for _, c := range toCurse {
 		c.AddPunishmentWithData(pType, duration, *reason, strconv.Itoa(offset))
 		if !hidden {
 			c.SendServerMessage(fmt.Sprintf("📐 You have been %v'd. Your sprite offset is locked at %d.", pType.String(), offset))
 		}
 		count++
+		report += fmt.Sprintf("%v, ", c.Uid())
 	}
+	report = strings.TrimSuffix(report, ", ")
 	summary := fmt.Sprintf("Applied %v to %d client(s) (offset %d).", pType.String(), count, offset)
 	if hidden {
 		summary += " (hidden)"
 	}
 	client.SendServerMessage(summary)
+	alertPunishmentIssued(client, fmt.Sprintf("%s (offset %d)", pType.String(), offset), report, count, duration, *reason, hidden)
 }
 
 // /shrink: lock the target into a negative vertical offset (default -25).

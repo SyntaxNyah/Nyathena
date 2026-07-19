@@ -285,6 +285,7 @@ func cmdContagious(client *Client, args []string, usage string) {
 		sendAreaServerMessage(client.Area(), "☣️ A sneeze echoes through the area. Someone in here doesn't look so good…")
 	}
 	addToBuffer(client, "CMD", fmt.Sprintf("Applied contagious '%v' to %v.", pType.String(), report), false)
+	alertPunishmentIssued(client, fmt.Sprintf("contagious (%s)", pType.String()), report, count, duration, *reason, hidden)
 }
 
 // ── Minefield ─────────────────────────────────────────────────────────────
@@ -430,6 +431,7 @@ func cmdSilencebell(client *Client, args []string, usage string) {
 	client.SendServerMessage(fmt.Sprintf("🔔 Silence bell armed: the next non-moderator to speak receives %v for %v.", effect, duration))
 	sendAreaServerMessage(a, "🔔 A silence bell tolls through the area… the next soul to speak shall be cursed.")
 	addToBuffer(client, "CMD", fmt.Sprintf("Armed silencebell (%v, %v).", effect, duration), false)
+	alertPunishmentIssued(client, fmt.Sprintf("silencebell (%s, armed)", effect), "", 0, duration, "", false)
 }
 
 // ── Love potion ───────────────────────────────────────────────────────────

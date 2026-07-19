@@ -418,6 +418,11 @@ type Client struct {
 	// fresh connection defaults back to alerts on. See censor_alerts.go.
 	censorAlertsOff atomic.Bool
 
+	// punishAuditOff mutes the punishment-audit OOC alerts for this session
+	// (/punishaudit off). Only consulted for clients holding ADMIN; every
+	// fresh connection defaults back to alerts on. See punishment_audit.go.
+	punishAuditOff atomic.Bool
+
 	// /curserandomchar admin curse: forces this client to a random free
 	// character every 1-5 seconds until an admin lifts it with
 	// /uncurserandomchar. curseRandomCharActive is the live on/off flag the
