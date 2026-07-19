@@ -700,11 +700,19 @@ func cmdPlayers(client *Client, args []string, _ string) {
 				// let other moderators infer the target was staff. Now only
 				// admins see anything for a shadow mod; everyone else sees no
 				// mod line at all (the player looks like a regular user).
-				if permissions.IsShadow(c.Perms()) {
+				switch {
+				case permissions.IsShadow(c.Perms()):
 					if isAdmin {
 						fmt.Fprintf(b, "Mod: %v (shadow)\n", c.ModName())
 					}
-				} else {
+				case permissions.IsAdmin(c.Perms()) && isAdminHidden(c.ModName()):
+					// /admin hide: the admin's role is hidden from non-admin
+					// viewers exactly like a shadow mod's, but other admins
+					// still see it (tagged so they know it's deliberately hidden).
+					if isAdmin {
+						fmt.Fprintf(b, "Mod: %v (hidden)\n", c.ModName())
+					}
+				default:
 					fmt.Fprintf(b, "Mod: %v\n", c.ModName())
 				}
 			}
@@ -1889,6 +1897,7 @@ func cmdCharCurse(client *Client, args []string, usage string) {
 	target.SendServerMessage(fmt.Sprintf("A moderator has forced you to play as %s. You may change characters freely.", charName))
 	client.SendServerMessage(fmt.Sprintf("Forced UID %d to character %s.", uid, charName))
 	addToBuffer(client, "CMD", fmt.Sprintf("Char-cursed UID %d to character %s.", uid, charName), false)
+	alertPunishmentIssued(client, fmt.Sprintf("charcurse (%s)", charName), strconv.Itoa(uid), 1, 0, "", false)
 }
 
 // cmdIgnore permanently ignores a user based on their IPID so their IC and OOC

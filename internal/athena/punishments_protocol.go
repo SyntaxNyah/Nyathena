@@ -217,4 +217,5 @@ func cmdForceColor(client *Client, args []string, usage string) {
 	}
 	client.SendServerMessage(summary)
 	addToBuffer(client, "CMD", fmt.Sprintf("Applied forcecolor (%v) to %v.", colorArg, report), false)
+	alertPunishmentIssued(client, fmt.Sprintf("forcecolor (%s)", colorArg), report, count, duration, *reason, hidden)
 }

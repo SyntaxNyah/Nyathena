@@ -47,6 +47,9 @@ const (
 	Fatal
 )
 
+// maxRecentLogLines bounds the recentLines ring buffer backing RecentLines.
+const maxRecentLogLines = 2000
+
 // levelToString maps a LogLevel to its display name.
 // Indexed by the iota value so lookup is O(1) with no hash overhead.
 var levelToString = [4]string{
@@ -72,6 +75,15 @@ var (
 	// there is zero overhead when the TUI is not in use. Never holds a lock
 	// during the call, so callers must serialize their own state.
 	TUITap func(string)
+
+	// recentLines is a bounded in-memory ring of the most recently formatted
+	// log lines, independent of LogStdOut/LogFile/TUITap. It backs the
+	// in-game /terminal admin command so a moderator without shell access to
+	// the host can still check on the server. Capped at maxRecentLogLines by
+	// trimming the oldest entries in one slice re-copy rather than shifting
+	// one element at a time.
+	recentLinesMu sync.Mutex
+	recentLines   []string
 
 	// Persistent file handles – kept open between writes to avoid
 	// the overhead of os.OpenFile + Close on every log message.
@@ -125,19 +137,55 @@ func log(level LogLevel, s string) {
 		os.Stdout.Write(buf)
 		outputLock.Unlock()
 	}
+
+	// formatted is computed once and shared by WriteLog, TUITap and the
+	// /terminal ring buffer; turning the byte slice back into a string here
+	// is one unavoidable allocation, but it replaces up to three separate
+	// conversions in the old path (one per consumer) and keeps WriteLog's
+	// interface stable for area-log callers.
+	formatted := string(buf)
 	if LogFile {
-		// WriteLog takes a string; turning the byte slice back into a
-		// string here is one unavoidable allocation, but it replaces
-		// three allocations in the old path and keeps WriteLog's
-		// interface stable for area-log callers.
-		WriteLog(string(buf))
+		WriteLog(formatted)
 	}
 	if tap := TUITap; tap != nil {
-		tap(string(buf))
+		tap(formatted)
 	}
+	appendRecentLine(formatted)
 
 	*bp = buf
 	logBytePool.Put(bp)
+}
+
+// appendRecentLine stores a formatted log line (already newline-terminated)
+// into the bounded ring buffer backing RecentLines.
+func appendRecentLine(s string) {
+	recentLinesMu.Lock()
+	recentLines = append(recentLines, strings.TrimRight(s, "\n"))
+	if len(recentLines) > maxRecentLogLines {
+		// Drop the oldest excess in one re-copy rather than shifting one
+		// element at a time on every single call past the cap.
+		excess := len(recentLines) - maxRecentLogLines
+		recentLines = append([]string(nil), recentLines[excess:]...)
+	}
+	recentLinesMu.Unlock()
+}
+
+// RecentLines returns up to n of the most recently logged lines, oldest
+// first, regardless of whether LogStdOut/LogFile are enabled. Backs the
+// in-game /terminal admin command. Returns nil if nothing has been logged
+// yet or n <= 0.
+func RecentLines(n int) []string {
+	recentLinesMu.Lock()
+	defer recentLinesMu.Unlock()
+	if n <= 0 || len(recentLines) == 0 {
+		return nil
+	}
+	if n > len(recentLines) {
+		n = len(recentLines)
+	}
+	out := make([]string, n)
+	copy(out, recentLines[len(recentLines)-n:])
+	return out
 }
 
 // LogInfo prints an info message to stdout. Arguments are handled in the manner of fmt.Print.

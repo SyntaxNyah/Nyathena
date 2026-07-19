@@ -151,6 +151,7 @@ func cmdPunishment(client *Client, args []string, usage string, pType Punishment
 		}
 		client.SendServerMessage(summary)
 		addToBuffer(client, "CMD", fmt.Sprintf("Applied '%v' punishment globally to %v.", pType.String(), report), false)
+		alertPunishmentIssued(client, pType.String(), report, count, duration, *reason, hidden)
 		return
 	}
 
@@ -181,6 +182,7 @@ func cmdPunishment(client *Client, args []string, usage string, pType Punishment
 	}
 	client.SendServerMessage(summary)
 	addToBuffer(client, "CMD", fmt.Sprintf("Applied '%v' punishment to %v.", pType.String(), report), false)
+	alertPunishmentIssued(client, pType.String(), report, count, duration, *reason, hidden)
 }
 
 // Handlers for all punishment commands
@@ -1112,6 +1114,7 @@ func cmdStack(client *Client, args []string, usage string) {
 	}
 	client.SendServerMessage(summary)
 	addToBuffer(client, "CMD", fmt.Sprintf("Applied stacked punishments [%v] to %v.", punishmentList, report), false)
+	alertPunishmentIssued(client, fmt.Sprintf("stack[%s]", punishmentList), report, count, duration, *reason, hidden)
 }
 
 // cmdLovebomb applies the lovebomb punishment.
@@ -1217,6 +1220,7 @@ func cmdLovebomb(client *Client, args []string, usage string) {
 		}
 		client.SendServerMessage(summary)
 		addToBuffer(client, "CMD", fmt.Sprintf("Applied area lovebomb to %v.", report), false)
+		alertPunishmentIssued(client, "lovebomb", report, count, duration, *reason, hidden)
 		return
 	}
 
@@ -1264,6 +1268,7 @@ func cmdLovebomb(client *Client, args []string, usage string) {
 	}
 	client.SendServerMessage(summary)
 	addToBuffer(client, "CMD", fmt.Sprintf("Applied lovebomb punishment to %v.", report), false)
+	alertPunishmentIssued(client, "lovebomb", report, count, duration, *reason, hidden)
 }
 
 // cmdUnlovebomb removes the lovebomb punishment from user(s).
@@ -1912,6 +1917,7 @@ func cmdTranslator(client *Client, args []string, usage string) {
 	}
 	client.SendServerMessage(summary)
 	addToBuffer(client, "CMD", fmt.Sprintf("Applied translator (%v) punishment to %v.", language, report), false)
+	alertPunishmentIssued(client, fmt.Sprintf("translator (%s)", language), report, count, duration, *reason, hidden)
 }
 
 // cmdUntranslator removes the translator punishment from user(s).
@@ -2045,6 +2051,7 @@ func cmdRandomPunishAll(client *Client, args []string, usage string) {
 	}
 	client.SendServerMessage(summary)
 	addToBuffer(client, "CMD", fmt.Sprintf("Applied randompunishall: %v.", report), false)
+	alertPunishmentIssued(client, "randompunishall", report, len(targets), duration, *reason, hidden)
 }
 
 // cmdToggleRandomPunish enables or disables /randompunishall for the caller's area.
@@ -2194,6 +2201,7 @@ func cmdICWarp(client *Client, args []string, usage string) {
 	}
 	client.SendServerMessage(summary)
 	addToBuffer(client, "CMD", fmt.Sprintf("Applied 'icwarp' punishment to %v.", report), false)
+	alertPunishmentIssued(client, "icwarp", report, count, duration, *reason, hidden)
 }
 
 // cmdUniCWarp removes the icwarp punishment from user(s).

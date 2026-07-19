@@ -265,6 +265,15 @@ Area-scoped 30-second PvP challenge. Players must choose opposite sides.
 /coinflip <heads|tails>
 ```
 
+#### Punishment Audit Log
+By default, every `ADMIN` gets a live `[AUDIT]` OOC alert whenever a moderator issues a punishment-system command (dere archetypes, text effects, protocol/viewport curses, traps, voice curses, `/stack`, etc.) — naming the issuing moderator (real name, not the shadow-anonymized one — admins always see through `SHADOW`), the punishment, the target(s), and the reason/duration, even when the command was run with `-h` (which only suppresses the *target*-facing notice, never the admin-facing one). Every trip is also written to the server's persistent audit log (`logger.WriteAudit`) so the record survives a restart. The issuing admin (if the issuer is themselves an admin) never gets their own alert. Self-applied effects (`/maso`, `/megamaso`), the showname-punisher drip, and a bystander catching a contagion are never reported since they aren't a moderator issuing a fresh command.
+
+```
+/punishaudit <on|off>   # ADMIN — toggle these alerts for your own session (default: on)
+```
+
+Implemented in `internal/athena/punishment_audit.go` (`alertPunishmentIssued`), hooked into every punishment command's apply path — `cmdPunishment` (the shared applicator behind the great majority of punishment commands), `/stack`, `/lovebomb`, `/sfxcurse`, `/shrink`/`/grow`/`/wide`, `/forcecolor`, `/contagious`, `/silencebell`, `/translator curse`, `/randompunishall`, `/icwarp`, and `/charcurse`.
+
 ### Potions System
 Self-applied fun effects accessed via `/potion <name>`. Duration defaults to **5 minutes** and can be set with `-d` (max 24 h): `/potion -d 30m drunk`. `/potions` lists the cabinet; `/potion off` flushes every active potion.
 
@@ -492,6 +501,17 @@ Shadow moderators (`SHADOW` perm bit, no `ADMIN`) are completely hidden from `/g
 
 **Shadow mods are `/ignore`-able.** Real moderators and admins can never be silenced with `/ignore` (the command refuses, and their IC/OOC messages bypass every recipient's ignore list). Shadow mods are deliberately exempt from that protection: an un-ignorable sender betrays staff status, so to anyone who ignores them a shadow mod must disappear exactly like a normal player. The single source of truth is `senderBypassesIgnore(perm)` (`internal/athena/client.go`) — `IsModerator(perm) && !IsShadow(perm)` — applied at the `/ignore` guard (`cmdIgnore`) and at all three ignore-list bypass sites (IC broadcast, OOC broadcast, and the buffered `/lifo` release). Pinned by `TestSenderBypassesIgnore`.
 
+### Admin Role Hiding (`/admin hide`)
+`/admin hide` (`ADMIN`) lets an admin hide their `ADMIN` role from `/players`/`/gas` for non-admin viewers — their UID, showname, character and IPID are completely unaffected; only the `Mod: <name>` line is suppressed, exactly like a shadow mod is hidden from non-admin viewers. Unlike shadow-mod hiding, other **admins** still see the line, tagged `Mod: <name> (hidden)` so staff oversight is never lost.
+
+```
+/admin hide      # ADMIN — hide your ADMIN role from other moderators
+/admin unhide    # ADMIN — reveal it again
+/admin status    # ADMIN — check whether you're currently hidden
+```
+
+The setting is keyed by the moderator's **account name** (not the live connection), so it survives a reconnect or re-login as the same account — it is cleared only by an explicit `/admin unhide` or a server restart (the state is in-memory only, never persisted to disk). Implemented in `internal/athena/admin_hide.go`; the display gate lives alongside the existing shadow-mod check in `writeEntry` inside `cmdPlayers` (`internal/athena/commands_moderation.go`).
+
 ### `/unpunish` Self-Removal Protection
 Punishments now record the issuer's permission tier (`IssuerSystem`/`IssuerMod`/`IssuerShadow`/`IssuerAdmin`) in the `PUNISHMENTS.ISSUER_TIER` column. A regular moderator cannot use `/unpunish` to lift a punishment that an admin or shadow mod applied to them — `/unpunish self`, `/unpunish -t <type> self`, and the self-target slice of `/unpunish all` are all gated. Admins and shadow mods bypass the gate. Persists across restarts via DB migration 18.
 
@@ -525,6 +545,16 @@ Each reloadable list lives behind a `sync/atomic.Pointer` (see `internal/athena/
 **`characters.txt` safety constraint — append-only.** Connected AO2 clients reference characters by **slot index**, so inserting in the middle, removing, reordering or renaming an existing slot would silently desync every connected player (the person on slot 2600 would suddenly be on whatever character used to be slot 2595). To prevent that, the reload **validates that every existing slot is unchanged** and only accepts entries appended at the end of the file. If the new file changes any pre-existing slot, the reload is rejected with a precise message naming the first bad slot (e.g. `"characters.txt: slot 12 changed from 'X' to 'Y' — character reload is append-only; add new characters at the END of the file (restart the server to reorder, rename or insert)"`). When new characters are appended, every area's character-slot table is grown first via a new `Area.GrowTaken(n)` method so newly-selectable slots can never panic the IC path with an out-of-bounds.
 
 **NOT reloaded** (would require invasive work and is unsafe without restart): areas, listener ports/addr, rate-limit windows, max_players, roles, the server name. These are still restart-only.
+
+### In-Game Console Log Viewer (`/terminal`)
+`/terminal [lines]` (`ADMIN`) prints the last N lines of the server's console/log output as a single OOC message, so an admin without shell access to the host can still check on the server. Defaults to 50 lines when no argument is given; capped at 500 per request.
+
+```
+/terminal          # last 50 lines
+/terminal 100      # last 100 lines
+```
+
+Backed by a bounded in-memory ring buffer (`logger.RecentLines`, capped at 2000 lines) that every `log()` call feeds independently of `LogStdOut`/`LogFile`/the TUI's own tap, so `/terminal` works whether or not stdout or file logging is enabled, and reflects the same `CurrentLevel` filtering as the real console. Implemented in `internal/athena/terminal_log.go` and `internal/logger/logger.go`.
 
 ### IPHub VPN Firewall
 When `iphub_api_key` is set, moderators can run `/firewall on|off` from in-game **or** from Discord (`/firewall on|off` slash command). New IPs are checked against IPHub; VPN/proxy IPs are rejected. Known IPs are never re-checked (respects 1,000 requests/day free tier).
