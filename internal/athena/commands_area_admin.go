@@ -1260,6 +1260,21 @@ func cmdUnlock(client *Client, _ []string, _ string) {
 	addToBuffer(client, "CMD", "Unlocked the area.", false)
 }
 
+// autoUnlockIfLastCMGone unlocks (or un-spectates) an area whose last CM just
+// left it, so a locked area is never sealed shut forever with nobody left to
+// manage entry. No-ops (returns false) when the area still has another CM,
+// isn't locked/spectatable, or is sealed by /adminlock — that seal is lifted
+// only by an admin. Caller is responsible for broadcasting the ARUP/message
+// afterward; this only touches the area's own state.
+func autoUnlockIfLastCMGone(a *area.Area) bool {
+	if len(a.CMs()) != 0 || a.Lock() == area.LockFree || a.AdminLocked() {
+		return false
+	}
+	a.SetLock(area.LockFree)
+	a.ClearInvited()
+	return true
+}
+
 // Handles /adminlock — an admin-only seal. Unlike /lock (which BYPASS_LOCK mods,
 // shadow mods, and invited players can all enter), an admin-locked area refuses
 // everyone but administrators. Toggles: seals an open area, reopens a sealed one.
