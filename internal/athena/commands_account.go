@@ -499,15 +499,6 @@ func cmdPlaytimeAdd(client *Client, args []string) {
 		"✅ Added %v of playtime to '%v'. New total: %v.",
 		formatPlaytime(addSeconds), targetUser, formatPlaytime(newTotal)))
 
-	// Notify the recipient if they are online right now.
-	clients.ForEach(func(c *Client) {
-		if c.ModName() == targetUser {
-			c.SendServerMessage(fmt.Sprintf(
-				"⏱ An admin granted you %v of playtime. New total: %v.",
-				formatPlaytime(addSeconds), formatPlaytime(newTotal)))
-		}
-	})
-
 	addToBuffer(client, "CMD",
 		fmt.Sprintf("Added %vs of playtime to '%v' (new total %vs).", addSeconds, targetUser, newTotal),
 		true)
@@ -571,14 +562,6 @@ func cmdPlaytimeRemove(client *Client, args []string) {
 		"✅ Removed %v of playtime from '%v'. New total: %v.",
 		formatPlaytime(removeSeconds), targetUser, formatPlaytime(newTotal)))
 
-	clients.ForEach(func(c *Client) {
-		if c.ModName() == targetUser {
-			c.SendServerMessage(fmt.Sprintf(
-				"⏱ An admin removed %v of playtime from your account. New total: %v.",
-				formatPlaytime(removeSeconds), formatPlaytime(newTotal)))
-		}
-	})
-
 	addToBuffer(client, "CMD",
 		fmt.Sprintf("Removed %vs of playtime from '%v' (new total %vs).", removeSeconds, targetUser, newTotal),
 		true)
@@ -638,13 +621,6 @@ func cmdPlaytimeSet(client *Client, args []string) {
 
 	client.SendServerMessage(fmt.Sprintf(
 		"✅ Set playtime for '%v' to %v.", targetUser, formatPlaytime(newTotal)))
-
-	clients.ForEach(func(c *Client) {
-		if c.ModName() == targetUser {
-			c.SendServerMessage(fmt.Sprintf(
-				"⏱ An admin set your playtime to %v.", formatPlaytime(newTotal)))
-		}
-	})
 
 	addToBuffer(client, "CMD",
 		fmt.Sprintf("Set playtime for '%v' to %vs.", targetUser, newTotal),
