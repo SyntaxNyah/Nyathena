@@ -2512,8 +2512,8 @@ func initCommands() {
 		"playtime": {
 			handler:  cmdPlaytimeTop,
 			minArgs:  0,
-			usage:    "Usage: /playtime [top] [page]\n       /playtime add <username> <duration>  (admin — e.g. 60h, 30m, 1h30m)",
-			desc:     "Show the playtime leaderboard. 25 entries per page; pass a page number to scroll. Includes player and moderator accounts. Admins can also use /playtime add <username> <duration> to grant playtime.",
+			usage:    "Usage: /playtime [top] [page]\n       /playtime add <username> <duration>  (admin)\n       /playtime remove <username> <duration>  (admin)\n       /playtime set <username> <duration>  (admin — e.g. 1000h, 3d12h30m, 90m)",
+			desc:     "Show the playtime leaderboard. 25 entries per page; pass a page number to scroll. Includes player and moderator accounts. Admins can also use /playtime add|remove|set <username> <duration> to grant, deduct, or overwrite playtime.",
 			reqPerms: permissions.PermissionField["NONE"],
 			category: "general",
 		},
