@@ -423,6 +423,13 @@ type Client struct {
 	// fresh connection defaults back to alerts on. See punishment_audit.go.
 	punishAuditOff atomic.Bool
 
+	// charProtectOn arms /charprotect for this moderator: if they change into
+	// an area where another player already holds their claimed character,
+	// that player is bumped to a random free character instead of the
+	// moderator being demoted to spectator. Session-only (resets to off on
+	// reconnect). See charprotect.go.
+	charProtectOn atomic.Bool
+
 	// /curserandomchar admin curse: forces this client to a random free
 	// character every 1-5 seconds until an admin lifts it with
 	// /uncurserandomchar. curseRandomCharActive is the live on/off flag the
@@ -1582,7 +1589,9 @@ func (client *Client) ChangeArea(a *area.Area) bool {
 		}
 	}
 	if a.IsTaken(client.CharID()) {
-		client.SetCharID(-1)
+		if !resolveCharProtectOnJoin(client, a) {
+			client.SetCharID(-1)
+		}
 	}
 	client.JoinArea(a)
 	broadcastToAll(&packet.PU{ID: client.Uid(), Type: 3, Data: strconv.Itoa(getAreaIndex(a))})
@@ -2011,7 +2020,9 @@ func (client *Client) forceChangeArea(a *area.Area) {
 		client.Area().RemoveVisiblePlayer()
 	}
 	if a.IsTaken(client.CharID()) {
-		client.SetCharID(-1)
+		if !resolveCharProtectOnJoin(client, a) {
+			client.SetCharID(-1)
+		}
 	}
 	client.JoinArea(a)
 	broadcastToAll(&packet.PU{ID: client.Uid(), Type: 3, Data: strconv.Itoa(getAreaIndex(a))})
