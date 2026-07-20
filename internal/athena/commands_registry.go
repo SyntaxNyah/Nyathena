@@ -203,6 +203,22 @@ func initCommands() {
 			reqPerms: permissions.PermissionField["KICK"],
 			category: "moderation",
 		},
+		"charsteal": {
+			handler:  cmdCharSteal,
+			minArgs:  1,
+			usage:    "Usage: /charsteal <uid>",
+			desc:     "Takes over the target's current character for yourself, then forces them onto a random free character.",
+			reqPerms: permissions.PermissionField["MUTE"],
+			category: "moderation",
+		},
+		"charprotect": {
+			handler:  cmdCharProtect,
+			minArgs:  0,
+			usage:    "Usage: /charprotect <on|off>",
+			desc:     "Toggles character protection: if you change into an area where someone else is using your claimed character, they get bumped to a random character instead of you.",
+			reqPerms: permissions.PermissionField["MUTE"],
+			category: "moderation",
+		},
 		"cm": {
 			handler:  cmdCM,
 			minArgs:  0,

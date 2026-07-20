@@ -319,6 +319,24 @@ One-time forced character swap (requires KICK). Target may freely change afterwa
 /charcurse <uid> <charname>
 ```
 
+### Character Steal (`/charsteal`)
+`/charsteal <uid>` (`MUTE`) takes the target's current character for the issuing moderator, then forces the target onto a random free character — the same `getRandomFreeChar` pool `/forcerandomchar`/`/randomchar` draw from. The target is moved off the character first (freeing the slot) before the moderator claims it, since `Area.SwitchChar` refuses to hand out a slot that's still marked taken. Requires the target to be in the caller's area and to actually be using a character (not spectating); a moderator can't target themselves. Not persisted — a one-shot swap, like `/forcepos`. Implemented in `internal/athena/charsteal.go` (`cmdCharSteal`).
+
+```
+/charsteal <uid>
+```
+
+### Character Protection (`/charprotect`)
+`/charprotect <on|off>` (`MUTE`) lets a moderator claim their current character as protected. Each area tracks its own taken-character slots independently, so it's normal for a player in one area and a moderator in another to both be using the same character — but when the protected moderator then changes into that player's area, `ChangeArea` would normally demote the *moderator* to spectator (their held slot is already taken there). With protection armed, the other player is force-moved to a random free character instead, so the moderator keeps their character.
+
+```
+/charprotect on
+/charprotect off
+/charprotect          # reports your current setting
+```
+
+Session-only (an `atomic.Bool` on `*Client`) — unlike `/curserandomchar`, there's nothing to persist by IPID, since there's no punishment to evade and a reconnect resetting the toggle is harmless (the moderator just re-enables it). The hook lives in `resolveCharProtectOnJoin` (`internal/athena/charprotect.go`), called from both `ChangeArea` and `forceChangeArea` (the jail-placement path) right before the normal "demote to spectator" branch; it no-ops (falling back to normal behavior) if protection is off, nobody else currently holds the character in the destination area, or there's no free character to bump the holder to.
+
 ### Forced Position (`/forcepos`)
 CM tool for staging a scene: pushes one or more players in the caller's own area into a specific courtroom position — the same `def`/`pro`/`wit`/`jud`/`hld`/`hlp`/`jur`/`sea` set `/pos` lets a player choose for themself. Gated on the `CM` permission, so both server CM-permission holders and area-designated CMs (`/cm`) can use it, same as `/invite`, `/lock`, and `/spectate`.
 
