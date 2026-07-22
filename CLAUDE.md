@@ -291,6 +291,7 @@ Self-applied fun effects accessed via `/potion <name>`. Duration defaults to **5
 | `cherri` | Capitalizes Every Word |
 | `omnidere` | Each line picks a random dere flavour |
 | `zalgo` | C̴o̷r̶r̸u̵p̷t̶s̸ your text with creeping zalgo marks |
+| `valleygirl` | Injects valley-girl filler words, vowel stretching, and dramatic tone |
 | `love` | 💘 Auto-sends a pair request to the next player who speaks in your area (consent preserved — they still accept with `/pair`; mutual interest completes instantly) |
 | `character` | Auto-rotates your character every 30 seconds |
 

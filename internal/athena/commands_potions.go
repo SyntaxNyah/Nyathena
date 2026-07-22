@@ -108,6 +108,12 @@ var potionRegistry = map[string]*potionDef{
 		desc:  "C̴o̷r̶r̸u̵p̷t̶s̸ your text with creeping zalgo marks. (default 5 min)",
 		pType: PunishmentZalgo,
 	},
+	"valleygirl": {
+		name:  "valleygirl",
+		emoji: "💅",
+		desc:  "Injects valley-girl filler words, vowel stretching, and dramatic tone. (default 5 min)",
+		pType: PunishmentValleyGirl,
+	},
 	// Special potion: not a punishment. The next player to speak in your area
 	// receives a pair request from you — they still choose to accept, so
 	// consent is preserved. Cleanup disarms the pending request.
