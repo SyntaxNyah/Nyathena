@@ -146,6 +146,9 @@ func contagionOnIC(client *Client, a *area.Area, punishments []PunishmentState, 
 	if permissions.IsModerator(client.Perms()) {
 		return
 	}
+	if a.PunishmentSafe() {
+		return
+	}
 	var remaining time.Duration
 	if !mark.until.IsZero() {
 		remaining = time.Until(mark.until)
@@ -256,11 +259,17 @@ func cmdContagious(client *Client, args []string, usage string) {
 
 	var count int
 	var report string
+	var skipped int
+	var skippedReport string
 	if strings.EqualFold(uidArg, "global") {
 		targetArea := client.Area()
 		issuerUID := client.Uid()
 		clients.ForEach(func(c *Client) {
 			if c.Area() != targetArea || c.Uid() == issuerUID || permissions.IsModerator(c.Perms()) {
+				return
+			}
+			if punishmentSafeBlocked(c) {
+				notePunishmentSafeSkip(&skipped, &skippedReport, c)
 				return
 			}
 			apply(c)
@@ -269,6 +278,10 @@ func cmdContagious(client *Client, args []string, usage string) {
 		})
 	} else {
 		for _, c := range getUidList(strings.Split(uidArg, ",")) {
+			if punishmentSafeBlocked(c) {
+				notePunishmentSafeSkip(&skipped, &skippedReport, c)
+				continue
+			}
 			apply(c)
 			count++
 			report += fmt.Sprintf("%v, ", c.Uid())
@@ -280,6 +293,7 @@ func cmdContagious(client *Client, args []string, usage string) {
 	if hidden {
 		summary += " (hidden)"
 	}
+	summary = appendPunishmentSafeNotice(summary, skipped, skippedReport)
 	client.SendServerMessage(summary)
 	if count > 0 && !hidden {
 		sendAreaServerMessage(client.Area(), "☣️ A sneeze echoes through the area. Someone in here doesn't look so good…")
@@ -292,6 +306,9 @@ func cmdContagious(client *Client, args []string, usage string) {
 
 func minefieldRoll(client *Client) {
 	if rand.Intn(6) != 0 {
+		return
+	}
+	if client.Area().PunishmentSafe() {
 		return
 	}
 	// Pick a mine the speaker isn't already wearing, like /megamaso does.
@@ -338,6 +355,10 @@ func bellTriggerOnIC(client *Client, a *area.Area, trap bellTrap) {
 	}
 	delete(areaBellTrap, a)
 	mechanicsMu.Unlock()
+
+	if a.PunishmentSafe() {
+		return
+	}
 
 	pick := trap.pType
 	if pick == PunishmentNone {
@@ -394,6 +415,11 @@ func cmdSilencebell(client *Client, args []string, usage string) {
 			client.SendServerMessage(fmt.Sprintf("🔔 A silence bell is armed here: effect '%v' for %v.", effect, trap.duration))
 			return
 		}
+	}
+
+	if a.PunishmentSafe() {
+		client.SendServerMessage("This area is punishment-safe; a silence bell cannot be armed here.")
+		return
 	}
 
 	pick := PunishmentNone

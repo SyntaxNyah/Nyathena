@@ -123,6 +123,7 @@ type Area struct {
 	mirrorArea          bool
 	punishmentArea      bool
 	dokiArea            bool
+	punishmentSafe      bool // /punishmentsafe: shields players here from moderator-issued punishment-system effects
 	judgeAllowed        bool               // whether the WT/CE judge buttons are usable in this area
 	icWarpGlobal        bool               // whether global icwarp is enabled
 	icWarpExemptUID     int                // UID exempt from global icwarp (-1 = none)
@@ -151,6 +152,13 @@ type AreaData struct {
 	Mirror_area       bool   `toml:"mirror_area"`
 	Punishment_area   bool   `toml:"punishment_area"`
 	Doki_area         bool   `toml:"doki_area"`
+	// Antipunish, when true, shields every player currently in this area from
+	// moderator-issued punishment-system effects: mods, shadow mods, and
+	// admins cannot apply text effects, dere archetypes, protocol/voice curses,
+	// traps, /stack, /charcurse, or any other punishment-system command to a
+	// player standing here. Real moderation enforcement — /ban, /mute, /kick —
+	// is unaffected.
+	Antipunish bool `toml:"antipunish"`
 	// Judge_allowed is tri-state: nil means "judge buttons enabled" (the
 	// default, preserving upstream behaviour), an explicit false in areas.toml
 	// disables the WT/CE judge buttons so they can't be spammed in that area.
@@ -222,6 +230,7 @@ func NewAreaWithVoiceDefault(data AreaData, charlen int, bufsize int, evi_mode E
 			punishment_area:   data.Punishment_area,
 		},
 		dokiArea:            data.Doki_area,
+		punishmentSafe:      data.Antipunish,
 		judgeAllowed:        judgeAllowed,
 		taken:               make([]bool, charlen),
 		defhp:               10,
@@ -1203,6 +1212,23 @@ func (a *Area) SetDokiArea(v bool) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	a.dokiArea = v
+}
+
+// PunishmentSafe reports whether this area shields the players in it from
+// moderator-issued punishment-system effects. Configured via
+// `antipunish = true` on the area's TOML entry, or toggled at runtime with
+// /punishmentsafe.
+func (a *Area) PunishmentSafe() bool {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return a.punishmentSafe
+}
+
+// SetPunishmentSafe toggles punishment-safe mode at runtime.
+func (a *Area) SetPunishmentSafe(v bool) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	a.punishmentSafe = v
 }
 
 // JudgeAllowed reports whether the WT/CE judge buttons (the RT packet) may be

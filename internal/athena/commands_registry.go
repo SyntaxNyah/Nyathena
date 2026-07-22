@@ -523,6 +523,14 @@ func initCommands() {
 			reqPerms: permissions.PermissionField["MODIFY_AREA"],
 			category: "area",
 		},
+		"punishmentsafe": {
+			handler:  cmdPunishmentSafeArea,
+			minArgs:  1,
+			usage:    "Usage: /punishmentsafe <true|false>",
+			desc:     "Toggles punishment-safe mode: mods/shadow mods/admins cannot punish players in this area (ban/mute/kick still work).",
+			reqPerms: permissions.PermissionField["ADMIN"],
+			category: "admin",
+		},
 		"musiclock": {
 			handler:  cmdMusicLock,
 			minArgs:  0,

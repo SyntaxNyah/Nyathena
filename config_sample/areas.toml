@@ -55,6 +55,15 @@ lock_music = false
 # Stacks freely with mirror_area / punishment_area on the same area.
 # doki_area = false
 
+# Antipunish (punishment-safe area): when true, shields every player currently
+# in this area from moderator-issued punishment-system effects — text effects,
+# dere archetypes, protocol/voice curses, traps, /stack, /charcurse, and every
+# other punishment-list command are refused against a target standing here.
+# Real moderation enforcement (/ban, /mute, /kick) is unaffected and still
+# works normally. Staff can also toggle this at runtime with an ADMIN-only
+# /punishmentsafe <true|false>.
+# antipunish = false
+
 # Judge buttons: controls whether the WT/CE judge buttons (Witness Testimony,
 # Cross Examination and the verdict gavels — the RT packet) work in this area.
 # Omit the line or set true to keep them enabled (the default). Set false to

@@ -256,8 +256,14 @@ func cmdSfxCurse(client *Client, args []string, usage string) {
 		targetArea := client.Area()
 		issuerUID := client.Uid()
 		var count int
+		var skipped int
+		var skippedReport string
 		clients.ForEach(func(c *Client) {
 			if c.Area() != targetArea || c.Uid() == issuerUID || permissions.IsModerator(c.Perms()) {
+				return
+			}
+			if punishmentSafeBlocked(c) {
+				notePunishmentSafeSkip(&skipped, &skippedReport, c)
 				return
 			}
 			c.AddPunishmentWithData(PunishmentSfxCurse, duration, *reason, sfx)
@@ -270,6 +276,7 @@ func cmdSfxCurse(client *Client, args []string, usage string) {
 		if hidden {
 			summary += " (hidden)"
 		}
+		summary = appendPunishmentSafeNotice(summary, skipped, skippedReport)
 		client.SendServerMessage(summary)
 		addToBuffer(client, "CMD", fmt.Sprintf("SFX curse global: %s", sfx), false)
 		alertPunishmentIssued(client, fmt.Sprintf("sfxcurse (%s)", sfx), "area-wide", count, duration, *reason, hidden)
@@ -277,6 +284,7 @@ func cmdSfxCurse(client *Client, args []string, usage string) {
 	}
 
 	toCurse := getUidList(strings.Split(uidArg, ","))
+	toCurse, skipped, skippedReport := partitionPunishmentSafe(toCurse)
 	count := 0
 	var report string
 	for _, c := range toCurse {
@@ -292,6 +300,7 @@ func cmdSfxCurse(client *Client, args []string, usage string) {
 	if hidden {
 		summary += " (hidden)"
 	}
+	summary = appendPunishmentSafeNotice(summary, skipped, skippedReport)
 	client.SendServerMessage(summary)
 	addToBuffer(client, "CMD", fmt.Sprintf("SFX curse: %s", sfx), false)
 	alertPunishmentIssued(client, fmt.Sprintf("sfxcurse (%s)", sfx), report, count, duration, *reason, hidden)
@@ -355,6 +364,7 @@ func applyShrinkGrowWide(client *Client, args []string, usage string, pType Puni
 	}
 
 	toCurse := getUidList(strings.Split(uidArg, ","))
+	toCurse, skipped, skippedReport := partitionPunishmentSafe(toCurse)
 	count := 0
 	var report string
 	for _, c := range toCurse {
@@ -370,6 +380,7 @@ func applyShrinkGrowWide(client *Client, args []string, usage string, pType Puni
 	if hidden {
 		summary += " (hidden)"
 	}
+	summary = appendPunishmentSafeNotice(summary, skipped, skippedReport)
 	client.SendServerMessage(summary)
 	alertPunishmentIssued(client, fmt.Sprintf("%s (offset %d)", pType.String(), offset), report, count, duration, *reason, hidden)
 }

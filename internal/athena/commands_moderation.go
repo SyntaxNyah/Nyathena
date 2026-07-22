@@ -1881,6 +1881,11 @@ func cmdCharCurse(client *Client, args []string, usage string) {
 		return
 	}
 
+	if punishmentSafeBlocked(target) {
+		client.SendServerMessage("That player is in a punishment-safe area and cannot be char-cursed.")
+		return
+	}
+
 	charName := strings.Join(args[1:], " ")
 	charID := getCharacterID(charName)
 	if charID == -1 {
