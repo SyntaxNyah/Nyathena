@@ -207,3 +207,27 @@ func TestInvited(t *testing.T) {
 		t.Errorf("unexpected value for invited length, got %d, want %d", len(a.invited), 0)
 	}
 }
+
+// TestPunishmentSafe verifies the antipunish TOML field seeds PunishmentSafe()
+// and that SetPunishmentSafe toggles it at runtime, mirroring DokiArea/
+// SetDokiArea.
+func TestPunishmentSafe(t *testing.T) {
+	a := NewArea(AreaData{Name: "Safe Zone", Antipunish: true}, 5, 0, EviAny)
+	if !a.PunishmentSafe() {
+		t.Errorf("expected antipunish = true in AreaData to seed PunishmentSafe() true")
+	}
+
+	b := NewArea(AreaData{Name: "Normal Zone"}, 5, 0, EviAny)
+	if b.PunishmentSafe() {
+		t.Errorf("expected PunishmentSafe() to default false when antipunish is omitted")
+	}
+
+	b.SetPunishmentSafe(true)
+	if !b.PunishmentSafe() {
+		t.Errorf("SetPunishmentSafe(true) did not take effect")
+	}
+	b.SetPunishmentSafe(false)
+	if b.PunishmentSafe() {
+		t.Errorf("SetPunishmentSafe(false) did not take effect")
+	}
+}

@@ -324,6 +324,9 @@ func (a *ServerAdapter) ApplyPunishment(uid int, punishmentName string, duration
 	if pType == PunishmentNone {
 		return fmt.Errorf("unknown punishment: %s", punishmentName)
 	}
+	if punishmentSafeBlocked(c) {
+		return fmt.Errorf("that player is in a punishment-safe area and cannot be punished")
+	}
 	// Discord-applied punishments come from a moderator with the configured
 	// mod_role_id. Tag as IssuerMod (lowest staff tier) — there's no shadow/admin
 	// distinction over the Discord bridge.

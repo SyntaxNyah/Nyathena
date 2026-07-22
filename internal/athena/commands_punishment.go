@@ -124,10 +124,16 @@ func cmdPunishment(client *Client, args []string, usage string, pType Punishment
 	if strings.EqualFold(flags.Arg(0), "global") {
 		var count int
 		var report string
+		var skipped int
+		var skippedReport string
 		targetArea := client.Area()
 		issuerUID := client.Uid()
 		clients.ForEach(func(c *Client) {
 			if c.Area() != targetArea || c.Uid() == issuerUID || permissions.IsModerator(c.Perms()) {
+				return
+			}
+			if punishmentSafeBlocked(c) {
+				notePunishmentSafeSkip(&skipped, &skippedReport, c)
 				return
 			}
 			c.AddPunishmentBy(pType, duration, *reason, tier)
@@ -149,6 +155,7 @@ func cmdPunishment(client *Client, args []string, usage string, pType Punishment
 		if hidden {
 			summary += " (hidden)"
 		}
+		summary = appendPunishmentSafeNotice(summary, skipped, skippedReport)
 		client.SendServerMessage(summary)
 		addToBuffer(client, "CMD", fmt.Sprintf("Applied '%v' punishment globally to %v.", pType.String(), report), false)
 		alertPunishmentIssued(client, pType.String(), report, count, duration, *reason, hidden)
@@ -158,8 +165,14 @@ func cmdPunishment(client *Client, args []string, usage string, pType Punishment
 	toPunish := getUidList(strings.Split(flags.Arg(0), ","))
 	var count int
 	var report string
+	var skipped int
+	var skippedReport string
 
 	for _, c := range toPunish {
+		if punishmentSafeBlocked(c) {
+			notePunishmentSafeSkip(&skipped, &skippedReport, c)
+			continue
+		}
 		c.AddPunishmentBy(pType, duration, *reason, tier)
 		var expires int64
 		if duration > 0 {
@@ -180,6 +193,7 @@ func cmdPunishment(client *Client, args []string, usage string, pType Punishment
 	if hidden {
 		summary += " (hidden)"
 	}
+	summary = appendPunishmentSafeNotice(summary, skipped, skippedReport)
 	client.SendServerMessage(summary)
 	addToBuffer(client, "CMD", fmt.Sprintf("Applied '%v' punishment to %v.", pType.String(), report), false)
 	alertPunishmentIssued(client, pType.String(), report, count, duration, *reason, hidden)
@@ -1085,6 +1099,8 @@ func cmdStack(client *Client, args []string, usage string) {
 
 	var count int
 	var report string
+	var skipped int
+	var skippedReport string
 
 	// "global" applies the stack to every non-moderator in the issuer's area.
 	if strings.EqualFold(uidStr, "global") {
@@ -1094,12 +1110,20 @@ func cmdStack(client *Client, args []string, usage string) {
 			if c.Area() != targetArea || c.Uid() == issuerUID || permissions.IsModerator(c.Perms()) {
 				return
 			}
+			if punishmentSafeBlocked(c) {
+				notePunishmentSafeSkip(&skipped, &skippedReport, c)
+				return
+			}
 			applyStack(c)
 			count++
 			report += fmt.Sprintf("%v, ", c.Uid())
 		})
 	} else {
 		for _, c := range getUidList(strings.Split(uidStr, ",")) {
+			if punishmentSafeBlocked(c) {
+				notePunishmentSafeSkip(&skipped, &skippedReport, c)
+				continue
+			}
 			applyStack(c)
 			count++
 			report += fmt.Sprintf("%v, ", c.Uid())
@@ -1112,6 +1136,7 @@ func cmdStack(client *Client, args []string, usage string) {
 	if hidden {
 		summary += " (hidden)"
 	}
+	summary = appendPunishmentSafeNotice(summary, skipped, skippedReport)
 	client.SendServerMessage(summary)
 	addToBuffer(client, "CMD", fmt.Sprintf("Applied stacked punishments [%v] to %v.", punishmentList, report), false)
 	alertPunishmentIssued(client, fmt.Sprintf("stack[%s]", punishmentList), report, count, duration, *reason, hidden)
@@ -1200,6 +1225,8 @@ func cmdLovebomb(client *Client, args []string, usage string) {
 		// /lovebomb global — apply to all non-moderators in area (excluding issuer)
 		var count int
 		var report string
+		var skipped int
+		var skippedReport string
 		issuerUID := client.Uid()
 		targetArea := client.Area()
 		clients.ForEach(func(c *Client) {
@@ -1207,6 +1234,10 @@ func cmdLovebomb(client *Client, args []string, usage string) {
 				return
 			}
 			if permissions.IsModerator(c.Perms()) {
+				return
+			}
+			if punishmentSafeBlocked(c) {
+				notePunishmentSafeSkip(&skipped, &skippedReport, c)
 				return
 			}
 			apply(c, -1)
@@ -1218,6 +1249,7 @@ func cmdLovebomb(client *Client, args []string, usage string) {
 		if hidden {
 			summary += " (hidden)"
 		}
+		summary = appendPunishmentSafeNotice(summary, skipped, skippedReport)
 		client.SendServerMessage(summary)
 		addToBuffer(client, "CMD", fmt.Sprintf("Applied area lovebomb to %v.", report), false)
 		alertPunishmentIssued(client, "lovebomb", report, count, duration, *reason, hidden)
@@ -1227,6 +1259,8 @@ func cmdLovebomb(client *Client, args []string, usage string) {
 	// ── UID-based forms ───────────────────────────────────────────────────────
 	var count int
 	var report string
+	var skipped int
+	var skippedReport string
 
 	switch len(fargs) {
 	case 0:
@@ -1236,6 +1270,10 @@ func cmdLovebomb(client *Client, args []string, usage string) {
 	case 1:
 		// Specific uid(s), random area target
 		for _, c := range getUidList(strings.Split(fargs[0], ",")) {
+			if punishmentSafeBlocked(c) {
+				notePunishmentSafeSkip(&skipped, &skippedReport, c)
+				continue
+			}
 			apply(c, -1)
 			count++
 			report += fmt.Sprintf("%v, ", c.Uid())
@@ -1252,6 +1290,10 @@ func cmdLovebomb(client *Client, args []string, usage string) {
 			return
 		}
 		for _, c := range getUidList(strings.Split(fargs[0], ",")) {
+			if punishmentSafeBlocked(c) {
+				notePunishmentSafeSkip(&skipped, &skippedReport, c)
+				continue
+			}
 			apply(c, targetUID)
 			count++
 			report += fmt.Sprintf("%v, ", c.Uid())
@@ -1266,6 +1308,7 @@ func cmdLovebomb(client *Client, args []string, usage string) {
 	if hidden {
 		summary += " (hidden)"
 	}
+	summary = appendPunishmentSafeNotice(summary, skipped, skippedReport)
 	client.SendServerMessage(summary)
 	addToBuffer(client, "CMD", fmt.Sprintf("Applied lovebomb punishment to %v.", report), false)
 	alertPunishmentIssued(client, "lovebomb", report, count, duration, *reason, hidden)
@@ -1875,6 +1918,8 @@ func cmdTranslator(client *Client, args []string, usage string) {
 		toPunish = getUidList(strings.Split(targetArg, ","))
 	}
 
+	toPunish, skipped, skippedReport := partitionPunishmentSafe(toPunish)
+
 	customData := strings.ToLower(language)
 	var count int
 	var report string
@@ -1915,6 +1960,7 @@ func cmdTranslator(client *Client, args []string, usage string) {
 	if hidden {
 		summary += " (hidden)"
 	}
+	summary = appendPunishmentSafeNotice(summary, skipped, skippedReport)
 	client.SendServerMessage(summary)
 	addToBuffer(client, "CMD", fmt.Sprintf("Applied translator (%v) punishment to %v.", language, report), false)
 	alertPunishmentIssued(client, fmt.Sprintf("translator (%s)", language), report, count, duration, *reason, hidden)
@@ -1988,6 +2034,11 @@ func cmdRandomPunishAll(client *Client, args []string, usage string) {
 
 	if !client.Area().RandomPunishEnabled() {
 		client.SendServerMessage("Random punishment is disabled in this area.")
+		return
+	}
+
+	if client.Area().PunishmentSafe() {
+		client.SendServerMessage("This area is punishment-safe; players here cannot be punished.")
 		return
 	}
 
@@ -2173,6 +2224,7 @@ func cmdICWarp(client *Client, args []string, usage string) {
 	}
 
 	toPunish := getUidList(strings.Split(flags.Arg(0), ","))
+	toPunish, skipped, skippedReport := partitionPunishmentSafe(toPunish)
 	targetArea := client.Area()
 	var count int
 	var report string
@@ -2199,6 +2251,7 @@ func cmdICWarp(client *Client, args []string, usage string) {
 	if hidden {
 		summary += " (hidden)"
 	}
+	summary = appendPunishmentSafeNotice(summary, skipped, skippedReport)
 	client.SendServerMessage(summary)
 	addToBuffer(client, "CMD", fmt.Sprintf("Applied 'icwarp' punishment to %v.", report), false)
 	alertPunishmentIssued(client, "icwarp", report, count, duration, *reason, hidden)

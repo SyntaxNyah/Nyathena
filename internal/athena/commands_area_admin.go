@@ -705,6 +705,30 @@ func cmdJudgeButtons(client *Client, args []string, _ string) {
 	addToBuffer(client, "CMD", fmt.Sprintf("Set judge buttons to %v.", args[0]), false)
 }
 
+// Handles /punishmentsafe <true|false> - toggles punishment-safe mode in this
+// area. While enabled, moderators, shadow mods, and admins cannot apply any
+// punishment-system effect (text effects, dere archetypes, protocol/voice
+// curses, traps, /stack, /charcurse, and the rest of the punishment list) to
+// a player currently standing in this area. Real moderation enforcement —
+// /ban, /mute, /kick — is unaffected and still works normally.
+
+func cmdPunishmentSafeArea(client *Client, args []string, _ string) {
+	var result string
+	switch args[0] {
+	case "true", "on":
+		client.Area().SetPunishmentSafe(true)
+		result = "enabled"
+	case "false", "off":
+		client.Area().SetPunishmentSafe(false)
+		result = "disabled"
+	default:
+		client.SendServerMessage("Argument not recognized. Usage: /punishmentsafe <true|false>")
+		return
+	}
+	sendAreaServerMessage(client.Area(), fmt.Sprintf("%v has %v punishment-safe mode in this area.", client.OOCName(), result))
+	addToBuffer(client, "CMD", fmt.Sprintf("Set punishment-safe mode to %v.", args[0]), false)
+}
+
 // Handles /musiclock - locks music so only moderators and CMs can change it.
 
 func cmdMusicLock(client *Client, _ []string, _ string) {

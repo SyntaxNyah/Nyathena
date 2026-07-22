@@ -499,6 +499,20 @@ Per-area chaos mode for literature-club-themed areas. Enable with `doki_area = t
 
 Stacks freely with `mirror_area` and `punishment_area` on the same area.
 
+### Punishment-Safe Area (`antipunish`)
+Per-area shield that makes a room a safe haven from the punishment system. Enable with `antipunish = true` on an area's entry in `areas.toml`, or toggle it live with the ADMIN-only `/punishmentsafe <true|false>` (also accepts `on`/`off`).
+
+While enabled, **no moderator — regular mod, shadow mod, or admin — can land any punishment-system effect** on a player currently standing in that area: every text effect, dere archetype, themed quote replacer, persona effect, visibility/cosmetic punishment, protocol/viewport curse, timing effect, voice curse, trap/contagion command, `/stack`, `/lovebomb`, `/sfxcurse`, `/forcecolor`, `/translator curse`, `/randompunishall`, `/icwarp`, `/charcurse`, and punishments applied through the Discord bridge are all refused against a target in a punishment-safe area. The issuing moderator gets a message naming which target(s) were shielded; targets outside the area are unaffected by the same command. **Real moderation enforcement is untouched** — `/ban`, `/mute`, and `/kick` work exactly as normal in a punishment-safe area, so actual rule-breakers can still be dealt with.
+
+The shield also closes the indirect paths a punishment could otherwise reach a protected player through: a contagion carrier cannot infect a bystander who is standing in a punishment-safe area, a `/minefield` carrier's mine cannot detonate while they're in one, and a `/silencebell` trap cannot be armed in one (nor does it trigger if the area became punishment-safe after arming). `/megamaso`, `/maso`, `/potion`, and `/coinflip` are unaffected since they're self-applied or consensual, not moderator-issued.
+
+```
+/punishmentsafe true     # ADMIN — this area now shields players from punishment
+/punishmentsafe false    # ADMIN — reopen the area to normal punishment commands
+```
+
+Implemented in `internal/athena/punishment_safe_area.go` (the shared `punishmentSafeBlocked`/`partitionPunishmentSafe` guards) and `internal/area/areas.go` (`Area.PunishmentSafe()`/`SetPunishmentSafe`), gated the same way `/judge` gates the WT/CE buttons per area.
+
 ### Per-Area Judge Button Toggle
 The WT/CE judge buttons (Witness Testimony, Cross Examination and the verdict gavels — the `RT` packet handled by `pktWTCE`) can be disabled per area so players can't spam them. They default to **enabled** (upstream behaviour preserved).
 

@@ -191,11 +191,17 @@ func cmdForceColor(client *Client, args []string, usage string) {
 
 	var count int
 	var report string
+	var skipped int
+	var skippedReport string
 	if strings.EqualFold(uidArg, "global") {
 		targetArea := client.Area()
 		issuerUID := client.Uid()
 		clients.ForEach(func(c *Client) {
 			if c.Area() != targetArea || c.Uid() == issuerUID || permissions.IsModerator(c.Perms()) {
+				return
+			}
+			if punishmentSafeBlocked(c) {
+				notePunishmentSafeSkip(&skipped, &skippedReport, c)
 				return
 			}
 			apply(c)
@@ -204,6 +210,10 @@ func cmdForceColor(client *Client, args []string, usage string) {
 		})
 	} else {
 		for _, c := range getUidList(strings.Split(uidArg, ",")) {
+			if punishmentSafeBlocked(c) {
+				notePunishmentSafeSkip(&skipped, &skippedReport, c)
+				continue
+			}
 			apply(c)
 			count++
 			report += fmt.Sprintf("%v, ", c.Uid())
@@ -215,6 +225,7 @@ func cmdForceColor(client *Client, args []string, usage string) {
 	if hidden {
 		summary += " (hidden)"
 	}
+	summary = appendPunishmentSafeNotice(summary, skipped, skippedReport)
 	client.SendServerMessage(summary)
 	addToBuffer(client, "CMD", fmt.Sprintf("Applied forcecolor (%v) to %v.", colorArg, report), false)
 	alertPunishmentIssued(client, fmt.Sprintf("forcecolor (%s)", colorArg), report, count, duration, *reason, hidden)
