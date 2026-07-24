@@ -512,6 +512,49 @@ func NewClient(conn net.Conn, ipid string) *Client {
 	}
 }
 
+// writeDeadlineNanos backs writeDeadline() below. An atomic, not a plain var:
+// runWriter goroutines from a prior test aren't always fully torn down by
+// the time the next test starts (existing t.Cleanup ordering elsewhere in
+// this package doesn't wait on every goroutine's exit), so a plain var
+// mutated by a test racing against a straggler's read trips -race. Storing
+// nanoseconds in an atomic.Int64 makes every access race-free regardless.
+var writeDeadlineNanos atomic.Int64
+
+// defaultWriteDeadline is writeDeadlineNanos' value outside of tests.
+//
+// It bounds a single outbound Write (runWriter and SendPacketSync). For a
+// plain TCP net.Conn, hitting this deadline only fails that one Write; the
+// socket itself is untouched, matching the "ignore transient errors"
+// handling below. For a WebSocket connection (client.conn is a
+// websocket.NetConn wrapping *websocket.Conn — every WebAO/WSS client), this
+// assumption does NOT hold: nhooyr.io/websocket documents that hitting any
+// deadline closes the underlying connection outright (see NetConn's doc
+// comment, and Conn.timeoutLoop → Conn.close → rwc.Close in
+// conn_notjs.go/netconn.go), rather than merely failing the one call. So for
+// WS clients this deadline doubles as a hard idle-write timeout: if the
+// client's OS isn't draining its socket receive buffer promptly — which is
+// exactly what happens to a minimized/backgrounded app under OS-level
+// throttling — the very next broadcast that happens to reach it (anyone
+// else's IC/OOC line, an ARUP update, etc., not just its own traffic) can
+// silently kill the connection the instant the write stalls past this
+// deadline, with no packet sent to explain why. 30s (vs. the original 5s)
+// gives real-world OS scheduling/backpressure room to clear on its own
+// before that happens, without weakening abuse defenses — stuck/malicious
+// connections are already reaped independently by the connection rate
+// limiter, raw-packet rate limiter, and ping-timeout paths, all of which
+// call conn.Close() directly.
+const defaultWriteDeadline = 30 * time.Second
+
+func init() {
+	writeDeadlineNanos.Store(int64(defaultWriteDeadline))
+}
+
+// writeDeadline returns the current single-Write deadline. A function, not a
+// plain var, so it's backed by an atomic (see writeDeadlineNanos).
+func writeDeadline() time.Duration {
+	return time.Duration(writeDeadlineNanos.Load())
+}
+
 // runWriter drains the client's outbound packet queue and performs the TCP
 // writes. One goroutine per client, started by HandleClient after the
 // early-reject checks. Decoupling the write from SendPacket means a stuck
@@ -523,12 +566,14 @@ func NewClient(conn net.Conn, ipid string) *Client {
 //
 // Write errors are deliberately tolerated to match the original SendPacket
 // behavior: a brief network blip (Wi-Fi roam, latency spike, momentary
-// rebuffer) can make a single Write hit its 5-second deadline without the
-// connection actually being dead. The old code ignored Write errors entirely
-// for exactly this reason. We do the same — the read loop in HandleClient
-// remains the authoritative signal for "this connection is gone", and when
-// it triggers cleanup, markClosed closes the conn, which makes our next
-// Write fail with net.ErrClosed and exits the goroutine.
+// rebuffer) can make a single Write hit its writeDeadline without the
+// connection actually being dead (true for raw TCP; see writeDeadline's doc
+// comment for why WebSocket connections don't get that same benefit). The
+// old code ignored Write errors entirely for exactly this reason. We do the
+// same — the read loop in HandleClient remains the authoritative signal for
+// "this connection is gone", and when it triggers cleanup, markClosed closes
+// the conn, which makes our next Write fail with net.ErrClosed and exits the
+// goroutine.
 //
 // Stuck raid bots are still reaped: they're caught by the existing
 // connection rate limiter, raw-packet rate limiter, and ping-timeout paths
@@ -538,7 +583,7 @@ func (client *Client) runWriter() {
 	for {
 		select {
 		case buf := <-client.sendCh:
-			client.conn.SetWriteDeadline(time.Now().Add(5 * time.Second)) //nolint:errcheck
+			client.conn.SetWriteDeadline(time.Now().Add(writeDeadline())) //nolint:errcheck
 			_, err := client.conn.Write(buf)
 			client.conn.SetWriteDeadline(time.Time{}) //nolint:errcheck
 			if logger.EnableNetworkLogging {
@@ -815,8 +860,8 @@ func (client *Client) SendPacket(header string, contents ...string) {
 // outbound queue. Use this only on paths that must guarantee the bytes reach
 // the kernel before the caller closes the connection — e.g. lockdown / ban
 // rejection messages that are immediately followed by conn.Close(). Blocks
-// the caller for up to the 5-second write deadline, so it must NOT be used
-// from a broadcast loop.
+// the caller for up to writeDeadline, so it must NOT be used from a
+// broadcast loop.
 func (client *Client) SendPacketSync(header string, contents ...string) {
 	if client.closed.Load() {
 		return
@@ -851,7 +896,7 @@ func (client *Client) SendPacketSync(header string, contents ...string) {
 	}
 
 	client.mu.Lock()
-	client.conn.SetWriteDeadline(time.Now().Add(5 * time.Second)) //nolint:errcheck
+	client.conn.SetWriteDeadline(time.Now().Add(writeDeadline())) //nolint:errcheck
 	if logger.EnableNetworkLogging {
 		msg := b.String()
 		client.conn.Write(b.Bytes()) //nolint:errcheck

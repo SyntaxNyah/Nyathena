@@ -169,10 +169,14 @@ func TestSendPacketBurstDoesNotDisconnectLegitimateClient(t *testing.T) {
 
 // TestSendPacketTransientWriteErrorDoesNotDisconnect guards the v2
 // regression that prompted reverting that PR: a brief network blip that
-// makes a single Write hit its 5-second deadline must NOT mark the client
+// makes a single Write hit its write deadline must NOT mark the client
 // closed. The old synchronous SendPacket explicitly ignored Write errors
 // for exactly this reason; v3 does the same.
 func TestSendPacketTransientWriteErrorDoesNotDisconnect(t *testing.T) {
+	orig := writeDeadlineNanos.Load()
+	writeDeadlineNanos.Store(int64(200 * time.Millisecond)) // shrink so the test doesn't take 30s+
+	t.Cleanup(func() { writeDeadlineNanos.Store(orig) })
+
 	a, b := net.Pipe()
 	c := NewClient(a, "flaky-network-player")
 
@@ -182,11 +186,12 @@ func TestSendPacketTransientWriteErrorDoesNotDisconnect(t *testing.T) {
 		close(writerExited)
 	}()
 
-	// Don't drain `b` — the writer's first Write will hit the 5s deadline
-	// (net.Pipe respects deadlines). The writer must NOT proactively kick
-	// the client; only an explicit conn close should do that.
+	// Don't drain `b` — the writer's first Write will hit the (shrunk)
+	// deadline (net.Pipe respects deadlines). The writer must NOT
+	// proactively kick the client; only an explicit conn close should do
+	// that.
 	c.SendPacket("MS", "filler")
-	time.Sleep(6 * time.Second)
+	time.Sleep(400 * time.Millisecond)
 
 	if c.closed.Load() {
 		t.Fatalf("transient Write error caused the writer to disconnect the client — the v2 regression that kicked legitimate users on flaky networks returned")
