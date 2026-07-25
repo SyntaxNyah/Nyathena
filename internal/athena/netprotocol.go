@@ -293,6 +293,8 @@ func pktReqDone(client *Client, _ *packet.Packet) {
 	client.Send(&packet.IDClient{PlayerNumber: client.Uid(), Software: "Nyathena", Version: encode(version)})
 	sendPlayerListToClient(client)
 	broadcastPlayerJoin(client)
+	sendModIPIDsToClient(client) // no-op unless this connection is already BAN_INFO-permissioned at join
+	broadcastIPIDToMods(client.Uid(), client.Ipid())
 	if motd := GetMotd(); motd != "" {
 		client.SendMotd(motd)
 	}
