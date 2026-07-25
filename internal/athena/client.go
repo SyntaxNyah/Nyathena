@@ -1003,7 +1003,8 @@ func (client *Client) clientCleanup() {
 
 		// Dissolve any pairing involving this client so a partner is never left
 		// with a stale pair pointing at this (soon-to-be-recycled) UID/CharID.
-		// Runs while client.Uid() is still valid, before uids.ReleaseUid below.
+		// Runs while client.Uid() is still valid, well before the UID is
+		// released for reuse at the end of this function.
 		clearPairLinksOnDisconnect(client)
 
 		// Clear possession links if this client was possessing someone. If it was
@@ -1051,7 +1052,6 @@ func (client *Client) clientCleanup() {
 			}
 		}
 		clearVoiceRateStateForUID(client.Uid())
-		uids.ReleaseUid(client.Uid())
 		players.RemovePlayer()
 		if config.Advertise {
 			updatePlayers <- players.GetPlayerCount()
@@ -1074,6 +1074,17 @@ func (client *Client) clientCleanup() {
 	stopLovePotion(client)
 	client.markClosed()
 	clients.RemoveClient(client)
+
+	// Release the UID for reuse only now that every teardown step that
+	// broadcasts or indexes by it (PR removal, ARUP, the client registry) has
+	// already run. Releasing it earlier let a concurrently-joining client pop
+	// this same UID from the heap and broadcast its own PR/PU "add" before
+	// this client's PR "remove" went out (or before it was dropped from
+	// clients.uidIndex), so observers could see the new occupant's join
+	// clobbered by the old occupant's belated leave on the same UID.
+	if uid := client.Uid(); uid != -1 {
+		uids.ReleaseUid(uid)
+	}
 }
 
 // SendServerMessage sends a server OOC message to the client.

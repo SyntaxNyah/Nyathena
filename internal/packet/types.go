@@ -530,7 +530,12 @@ func (p *PR) Args() []string { return []string{itoa(p.ID), itoa(p.Type)} }
 
 // PU updates a player-list field. Wire: PU#{id}#{type}#{data}#%.
 //
-// Type values: 0=OOC name, 1=character name, 2=showname, 3=area id.
+// Type values: 0=OOC name, 1=character name, 2=showname, 3=area id,
+// 4=IPID. Type 4 is never sent via a broadcast-to-everyone helper — the
+// server only emits it to individual recipients it has itself verified hold
+// the BAN_INFO permission (see broadcastIPIDToMods / sendModIPIDsToClient in
+// internal/athena), mirroring the same per-viewer gate /gas already uses for
+// its own IPID reveal. Every other type is public and broadcast to all.
 type PU struct {
 	ID   int
 	Type int

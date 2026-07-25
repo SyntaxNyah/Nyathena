@@ -52,3 +52,10 @@ func (u *UidManager) ReleaseUid(uid int) {
 	heap.Push(&u.heap, uid)
 	u.mu.Unlock()
 }
+
+// Len returns the number of uids currently available in the pool.
+func (u *UidManager) Len() int {
+	u.mu.Lock()
+	defer u.mu.Unlock()
+	return len(u.heap)
+}

@@ -985,6 +985,39 @@ func broadcastPlayerJoin(client *Client) {
 	broadcastToAll(&packet.PU{ID: uid, Type: 3, Data: strconv.Itoa(getAreaIndex(client.Area()))})
 }
 
+// broadcastIPIDToMods sends a player's IPID (PU type 4) to every currently
+// connected client the server has itself verified holds BAN_INFO —
+// moderators. This must never go through broadcastToAll: that fans one
+// identical packet to every client with no per-recipient check, which would
+// leak IPID to non-moderators regardless of client-side display intent.
+// Mirrors the same per-viewer permission gate /gas already uses
+// (hasBanInfo in cmdPlayers) before including IPID in its own reply.
+func broadcastIPIDToMods(uid int, ipid string) {
+	clients.ForEach(func(c *Client) {
+		if c.Uid() != -1 && permissions.HasPermission(c.Perms(), permissions.PermissionField["BAN_INFO"]) {
+			c.Send(&packet.PU{ID: uid, Type: 4, Data: ipid})
+		}
+	})
+}
+
+// sendModIPIDsToClient backfills every currently-joined, non-hidden player's
+// IPID to newClient — but only if newClient itself is server-verified to
+// hold BAN_INFO; it's a no-op otherwise. Called both when a
+// BAN_INFO-permissioned client finishes joining and whenever a connection is
+// granted BAN_INFO mid-session (/login, /setrole), so a moderator's live
+// roster never needs a /gas poll to fill in IPID.
+func sendModIPIDsToClient(newClient *Client) {
+	if !permissions.HasPermission(newClient.Perms(), permissions.PermissionField["BAN_INFO"]) {
+		return
+	}
+	clients.ForEach(func(c *Client) {
+		if c.Uid() == -1 || c == newClient || c.Hidden() {
+			return
+		}
+		newClient.Send(&packet.PU{ID: c.Uid(), Type: 4, Data: c.Ipid()})
+	})
+}
+
 // sendPlayerArup sends a player ARUP to all connected clients.
 // Visible (non-hidden) player counts are read from each area's pre-maintained counter.
 func sendPlayerArup() {

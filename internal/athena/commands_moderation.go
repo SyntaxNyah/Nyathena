@@ -314,6 +314,7 @@ func cmdHide(client *Client, _ []string, _ string) {
 		client.Area().AddVisiblePlayer()
 		client.SetHidden(false)
 		broadcastPlayerJoin(client)
+		broadcastIPIDToMods(client.Uid(), client.Ipid())
 		sendPlayerArup()
 		client.SendServerMessage("You are now visible.")
 		addToBuffer(client, "CMD", "Disabled hide mode.", false)
@@ -387,6 +388,9 @@ func cmdLogin(client *Client, args []string, _ string) {
 		client.SetAuthenticated(true)
 		client.SetPerms(perms)
 		client.SetModName(args[0])
+		// This login may have just granted BAN_INFO — backfill every
+		// currently-joined player's IPID so a fresh /gas isn't needed to see them.
+		sendModIPIDsToClient(client)
 		// Link the current IPID to this account so leaderboards can show names.
 		db.LinkIPIDToUser(args[0], client.Ipid()) //nolint:errcheck
 		// Backfill IGNORER_USERNAME on any ignore rows added before this login,
@@ -877,6 +881,9 @@ func cmdChangeRole(client *Client, args []string, _ string) {
 	clients.ForEach(func(c *Client) {
 		if c.Authenticated() && c.ModName() == targetUser {
 			c.SetPerms(newPerms)
+			// The new role may have just granted BAN_INFO — backfill IPIDs
+			// live rather than making them wait for their next /gas.
+			sendModIPIDsToClient(c)
 		}
 	})
 	addToBuffer(client, "CMD", fmt.Sprintf("Updated role of %v to %v.", args[0], args[1]), true)
