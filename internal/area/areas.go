@@ -30,6 +30,19 @@ type icMsg struct {
 	at   time.Time
 }
 
+// reportLine pairs a formatted area-log line (IC, OOC, MOD, CMD, MUSIC, ...)
+// with the time it was recorded. Area.buffer keeps every line from the past
+// reportBufferWindow instead of a fixed entry count, so a busy area's buffer
+// still covers the full window mods expect when reviewing a /modcall report
+// instead of rotating out after just a few hours of activity.
+type reportLine struct {
+	text string
+	at   time.Time
+}
+
+// reportBufferWindow is how far back Area.buffer retains lines for.
+const reportBufferWindow = 24 * time.Hour
+
 type EvidenceMode int
 type Status int
 type Lock int
@@ -93,7 +106,8 @@ type Area struct {
 	defhp               int
 	prohp               int
 	evidence            []string
-	buffer              []string
+	buffer              []reportLine
+	bufCap              int // safety cap on retained report lines; <= 0 means unlimited (bounded only by reportBufferWindow)
 	cms                 map[int]struct{}
 	last_msg            int
 	evi_mode            EvidenceMode
@@ -235,7 +249,7 @@ func NewAreaWithVoiceDefault(data AreaData, charlen int, bufsize int, evi_mode E
 		taken:               make([]bool, charlen),
 		defhp:               10,
 		prohp:               10,
-		buffer:              make([]string, bufsize),
+		bufCap:              bufsize,
 		last_msg:            -1,
 		evi_mode:            evi_mode,
 		description:         data.Description,
@@ -423,24 +437,45 @@ func (a *Area) SwapEvidence(x int, y int) bool {
 	return true
 }
 
-// UpdateBuffer adds a new line to the area's log buffer.
+// UpdateBuffer appends a new line to the area's report buffer, then prunes
+// entries older than reportBufferWindow so the buffer reflects a rolling
+// 24-hour window rather than a fixed entry count. bufCap acts as a safety
+// valve bounding memory in an extremely active area; <= 0 means no cap, so
+// retention is governed purely by age.
 func (a *Area) UpdateBuffer(s string) {
 	a.mu.Lock()
-	a.buffer = append(a.buffer[1:], s)
-	a.mu.Unlock()
+	defer a.mu.Unlock()
+
+	a.buffer = append(a.buffer, reportLine{text: s, at: time.Now()})
+
+	cutoff := time.Now().Add(-reportBufferWindow)
+	start := 0
+	for start < len(a.buffer) && a.buffer[start].at.Before(cutoff) {
+		start++
+	}
+	if a.bufCap > 0 && len(a.buffer)-start > a.bufCap {
+		start = len(a.buffer) - a.bufCap
+	}
+	if start > 0 {
+		a.buffer = append(a.buffer[:0], a.buffer[start:]...)
+	}
 }
 
-// Buffer returns the area's log buffer.
+// Buffer returns every line in the area's report buffer, oldest first --
+// every action logged in this area within the past reportBufferWindow (or
+// fewer, if bufCap trimmed it further). Backs /modcall reports, /log, and
+// the Discord bot's per-player log lookup.
 func (a *Area) Buffer() []string {
-	var returnList []string
 	a.mu.Lock()
-	for _, s := range a.buffer {
-		if strings.TrimSpace(s) != "" {
-			returnList = append(returnList, s)
-		}
+	defer a.mu.Unlock()
+	if len(a.buffer) == 0 {
+		return nil
 	}
-	a.mu.Unlock()
-	return returnList
+	out := make([]string, len(a.buffer))
+	for i, e := range a.buffer {
+		out[i] = e.text
+	}
+	return out
 }
 
 // CMs returns a slice of UID values for all CMs in the area.

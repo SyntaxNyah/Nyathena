@@ -17,7 +17,9 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>. */
 package area
 
 import (
+	"fmt"
 	"testing"
+	"time"
 )
 
 func TestJoin(t *testing.T) {
@@ -229,5 +231,67 @@ func TestPunishmentSafe(t *testing.T) {
 	b.SetPunishmentSafe(false)
 	if b.PunishmentSafe() {
 		t.Errorf("SetPunishmentSafe(false) did not take effect")
+	}
+}
+
+// TestReportBufferRetainsBeyondFixedCount verifies the /modcall report
+// buffer no longer rotates out on a fixed entry count: with no cap (0), an
+// area busy enough to log more lines than the old default (150) in quick
+// succession must still retain all of them, since none are older than the
+// 24-hour window.
+func TestReportBufferRetainsBeyondFixedCount(t *testing.T) {
+	a := NewArea(AreaData{Name: "Busy Courtroom"}, 5, 0, EviAny)
+	const lines = 300
+	for i := 0; i < lines; i++ {
+		a.UpdateBuffer(fmt.Sprintf("line %d", i))
+	}
+	got := a.Buffer()
+	if len(got) != lines {
+		t.Fatalf("Buffer() returned %d lines, want %d (fixed-size rotation should no longer apply)", len(got), lines)
+	}
+	if got[0] != "line 0" || got[lines-1] != fmt.Sprintf("line %d", lines-1) {
+		t.Errorf("Buffer() did not preserve chronological order: first=%q last=%q", got[0], got[lines-1])
+	}
+}
+
+// TestReportBufferPrunesOldEntries verifies entries older than
+// reportBufferWindow (24h) are dropped on the next write, while recent
+// entries survive -- the core fix for mod call reports not actually dating
+// back 24 hours.
+func TestReportBufferPrunesOldEntries(t *testing.T) {
+	a := NewArea(AreaData{Name: "Stale Courtroom"}, 5, 0, EviAny)
+	a.buffer = append(a.buffer,
+		reportLine{text: "ancient", at: time.Now().Add(-25 * time.Hour)},
+		reportLine{text: "recent", at: time.Now().Add(-1 * time.Hour)},
+	)
+
+	// A fresh write triggers the prune pass.
+	a.UpdateBuffer("newest")
+
+	got := a.Buffer()
+	for _, line := range got {
+		if line == "ancient" {
+			t.Errorf("Buffer() still contains an entry older than reportBufferWindow: %v", got)
+		}
+	}
+	if len(got) != 2 || got[0] != "recent" || got[1] != "newest" {
+		t.Errorf("Buffer() = %v, want [recent newest]", got)
+	}
+}
+
+// TestReportBufferSafetyCap verifies bufCap (log_buffer_size) still bounds
+// memory when explicitly set, even for entries within the 24-hour window.
+func TestReportBufferSafetyCap(t *testing.T) {
+	a := NewArea(AreaData{Name: "Capped Courtroom"}, 5, 2, EviAny)
+	a.UpdateBuffer("first")
+	a.UpdateBuffer("second")
+	a.UpdateBuffer("third")
+
+	got := a.Buffer()
+	if len(got) != 2 {
+		t.Fatalf("Buffer() returned %d lines, want 2 (bufCap=2 should still apply)", len(got))
+	}
+	if got[0] != "second" || got[1] != "third" {
+		t.Errorf("Buffer() = %v, want [second third]", got)
 	}
 }

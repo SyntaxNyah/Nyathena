@@ -447,6 +447,9 @@ Format: `[HH:MM:SS] | ACTION | CHARACTER | IPID | HDID | SHOWNAME | OOC_NAME | M
 Actions: IC, OOC, AREA, MUSIC, CMD, AUTH, MOD, JUD, EVI.
 Enabled with `enable_area_logging = true` in `[Logging]`.
 
+### Modcall Report Buffer: Time-Based Retention (Bug Fix)
+Separate from the persistent per-area daily log files above, each area also keeps an in-memory buffer of recent action lines (IC, OOC, MOD calls, CMD, MUSIC, ...) that gets flushed to a `report-<timestamp>-<area>.log` file (and posted to the report webhook) whenever a player calls a moderator (`/modcall`) — the same buffer backs the in-game `/log <area>` command and the Discord bot's per-player log lookup. It previously kept a fixed number of lines (`log_buffer_size`, default 150), so a busy area could rotate through that many lines in well under an hour, leaving mod call reports covering only a few hours instead of the intended full day of context. The buffer now retains every line from the past **24 hours** regardless of count; `log_buffer_size` becomes a safety-valve cap on top of that (`0` = no cap, the new default) to bound memory in an extremely active area. Implemented in `Area.UpdateBuffer`/`Area.Buffer` (`internal/area/areas.go`).
+
 ### AutoMod
 Word-list-based automatic enforcement. Covers IC message text, IC showname, OOC message text, and OOC username — slurs in any of those fields trigger the configured action.
 

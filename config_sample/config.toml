@@ -632,9 +632,13 @@ max_connection_goroutines = 0
 enable_tui = false
 
 [Logging]
-# Sets the number of actions (IC chat messages, OOC chat messages, judge actions, etc.) each area should store.
-# When a user calls a mod, this buffer will be flushed to a report file for review.
-log_buffer_size = 150
+# When a user calls a mod, each area's buffer of recent actions (IC chat, OOC
+# chat, judge actions, etc.) is flushed to a report file for review. That
+# buffer retains a rolling 24-hour window of actions regardless of how many
+# lines that is. log_buffer_size caps the number of lines kept, as a safety
+# valve against unbounded memory use in an extremely active area.
+# 0 = no cap -- the 24-hour window alone governs retention (recommended).
+log_buffer_size = 0
 
 # Sets the log level. Events of lower levels will not be logged.
 # Valid levels: info, warning, error, fatal
