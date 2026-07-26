@@ -204,6 +204,9 @@ func cmdMegamaso(client *Client, args []string, _ string) {
 // field. The IC packet path consults HasPunishment(PunishmentSfxCurse) and
 // rewrites the SFX/SFXANIM fields when present.
 func cmdSfxCurse(client *Client, args []string, usage string) {
+	if punishmentsSystemDisabled(client) {
+		return
+	}
 	// -h suppresses the per-target OOC notification so the curse applies silently.
 	args, hidden := extractHiddenFlag(args)
 
@@ -326,6 +329,9 @@ func cmdUnSfx(client *Client, args []string, _ string) {
 // (capped at the AO2 protocol limit of ±100), and stores the offset as the
 // punishment's CustomData. The IC packet path applies the offset on send.
 func applyShrinkGrowWide(client *Client, args []string, usage string, pType PunishmentType, defaultOffset int) {
+	if punishmentsSystemDisabled(client) {
+		return
+	}
 	// -h suppresses the per-target OOC notification so the offset lock applies silently.
 	args, hidden := extractHiddenFlag(args)
 

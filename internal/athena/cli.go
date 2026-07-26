@@ -30,9 +30,10 @@ func ListenInput() {
 	input := bufio.NewScanner(os.Stdin)
 	for input.Scan() {
 		cmd := strings.Split(input.Text(), " ")
+		cmd[0] = strings.TrimPrefix(cmd[0], "/")
 		switch cmd[0] {
 		case "help":
-			logger.LogInfo("Recognized commands: help, mkusr, rmusr, players, getlog, say, reload.")
+			logger.LogInfo("Recognized commands: help, mkusr, rmusr, players, getlog, say, reload, punishment.")
 		case "reload":
 			// Full hot-reload: characters.txt (append-only), music.txt, cdns.txt,
 			// backgrounds.txt, parrot.txt, 8ball.txt, banned_words.txt and the
@@ -91,6 +92,30 @@ func ListenInput() {
 				if a.Name() == cmd[1] {
 					logger.LogInfo(strings.Join(a.Buffer(), "\n"))
 				}
+			}
+		case "punishment":
+			// Console-only global kill switch for the punishment system.
+			// Outranks every in-game authority tier — there is deliberately
+			// no in-game or Discord command that can reach this.
+			if len(cmd) < 2 {
+				logger.LogInfo("Usage: punishment <enable|disable|status>")
+				break
+			}
+			switch strings.ToLower(cmd[1]) {
+			case "disable":
+				SetPunishmentsGloballyDisabled(true)
+				logger.LogInfo("Punishment system globally DISABLED. Only /ban, /kick, and /mute remain active for moderators.")
+			case "enable":
+				SetPunishmentsGloballyDisabled(false)
+				logger.LogInfo("Punishment system globally ENABLED.")
+			case "status":
+				if PunishmentsGloballyDisabled() {
+					logger.LogInfo("Punishment system is currently DISABLED (console override).")
+				} else {
+					logger.LogInfo("Punishment system is currently ENABLED.")
+				}
+			default:
+				logger.LogInfo("Usage: punishment <enable|disable|status>")
 			}
 		case "say":
 			if len(cmd) < 2 {

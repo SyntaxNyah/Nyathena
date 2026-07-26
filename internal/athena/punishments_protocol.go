@@ -128,6 +128,9 @@ var forceColorNames = map[string]int{
 // punishment's customData and persisted via the 0x1F reason convention so it
 // survives reconnects (same mechanism as /translator's target language).
 func cmdForceColor(client *Client, args []string, usage string) {
+	if punishmentsSystemDisabled(client) {
+		return
+	}
 	args, hidden := extractHiddenFlag(args)
 
 	flags := flag.NewFlagSet("", 0)

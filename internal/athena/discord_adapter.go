@@ -324,6 +324,9 @@ func (a *ServerAdapter) ApplyPunishment(uid int, punishmentName string, duration
 	if pType == PunishmentNone {
 		return fmt.Errorf("unknown punishment: %s", punishmentName)
 	}
+	if punishmentsGloballyDisabled.Load() {
+		return fmt.Errorf("punishments are globally disabled server-wide right now (console override)")
+	}
 	if punishmentSafeBlocked(c) {
 		return fmt.Errorf("that player is in a punishment-safe area and cannot be punished")
 	}
