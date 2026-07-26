@@ -154,6 +154,10 @@ type ServerConfig struct {
 }
 
 type LogConfig struct {
+	// BufSize caps the number of lines retained in each area's /modcall
+	// report buffer, as a safety valve against unbounded memory use in an
+	// extremely active area. Retention is otherwise governed by a rolling
+	// 24-hour window (see Area.UpdateBuffer); <= 0 means no cap.
 	BufSize              int      `toml:"log_buffer_size"`
 	LogLevel             string   `toml:"log_level"`
 	LogDir               string   `toml:"log_directory"`
@@ -265,7 +269,7 @@ func DefaultConfig() *Config {
 			YouTubeCookiesPath:         "",
 		},
 		LogConfig{
-			BufSize:              150,
+			BufSize:              0,
 			LogLevel:             "info",
 			LogDir:               "logs",
 			LogMethods:           []string{"stdout"},
