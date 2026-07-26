@@ -17,6 +17,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>. */
 package athena
 
 import (
+	"strings"
 	"testing"
 	"time"
 )
@@ -137,6 +138,42 @@ func TestGiveawayStartBlocksBannedWord(t *testing.T) {
 
 	if active {
 		t.Error("expected giveaway containing a banned word to be blocked, but it started")
+	}
+}
+
+// TestGiveawayStartBlocksTooLongItem verifies an item over the character cap
+// is rejected and never opens a giveaway.
+func TestGiveawayStartBlocksTooLongItem(t *testing.T) {
+	resetGiveawayState()
+
+	client := &Client{conn: &testConn{}, uid: 101, ipid: "ip-giveaway-test-long", area: makeTestArea("GiveawayTestArea3")}
+
+	giveawayStart(client, strings.Repeat("a", giveawayItemMaxLen+1))
+
+	giveaway.mu.Lock()
+	active := giveaway.active
+	giveaway.mu.Unlock()
+
+	if active {
+		t.Error("expected an over-length giveaway item to be blocked, but it started")
+	}
+}
+
+// TestGiveawayStartAllowsMaxLenItem verifies an item exactly at the cap is
+// still allowed (guards against an off-by-one).
+func TestGiveawayStartAllowsMaxLenItem(t *testing.T) {
+	resetGiveawayState()
+
+	client := &Client{conn: &testConn{}, uid: 102, ipid: "ip-giveaway-test-maxlen", area: makeTestArea("GiveawayTestArea4")}
+
+	giveawayStart(client, strings.Repeat("a", giveawayItemMaxLen))
+
+	giveaway.mu.Lock()
+	active := giveaway.active
+	giveaway.mu.Unlock()
+
+	if !active {
+		t.Error("expected an item exactly at the length cap to start normally")
 	}
 }
 
