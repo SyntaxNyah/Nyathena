@@ -28,7 +28,7 @@ import (
 // punishment-system commands (text effects, dere archetypes, protocol/voice
 // curses, traps, /stack, /charcurse, and the rest of the punishment list).
 func punishmentSafeBlocked(target *Client) bool {
-	return target.Area().PunishmentSafe()
+	return punishmentSafeArea(target.Area())
 }
 
 // notePunishmentSafeSkip records that a target was shielded by a
@@ -61,6 +61,9 @@ func partitionPunishmentSafe(targets []*Client) (allowed []*Client, skipped int,
 func appendPunishmentSafeNotice(summary string, skipped int, skippedReport string) string {
 	if skipped == 0 {
 		return summary
+	}
+	if punishmentsGloballyDisabled.Load() {
+		return summary + " Punishments are globally disabled server-wide right now."
 	}
 	return summary + fmt.Sprintf(" %d client(s) could not be punished (punishment-safe area): %v.", skipped, strings.TrimSuffix(skippedReport, ", "))
 }

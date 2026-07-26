@@ -79,6 +79,9 @@ func extractHiddenFlag(args []string) ([]string, bool) {
 }
 
 func cmdPunishment(client *Client, args []string, usage string, pType PunishmentType) {
+	if punishmentsSystemDisabled(client) {
+		return
+	}
 	// -h suppresses the per-target OOC notification so the punishment applies
 	// silently. Extracted before flag.Parse because Go's flag package stops at
 	// the first positional, so trailing "-h" (e.g. "/tsundere 7 -h") would
@@ -268,6 +271,9 @@ func cmdFastspammer(client *Client, args []string, usage string) {
 // effects as the automod torment action: ghost/delayed IC and OOC messages and
 // a silent random disconnect timer. Requires MUTE permission.
 func cmdLag(client *Client, args []string, usage string) {
+	if punishmentsSystemDisabled(client) {
+		return
+	}
 	if len(args) == 0 {
 		client.SendServerMessage("Not enough arguments:\n" + usage)
 		return
@@ -1014,6 +1020,9 @@ func parsePunishmentType(s string) PunishmentType {
 
 // cmdStack applies multiple punishment effects to user(s) simultaneously
 func cmdStack(client *Client, args []string, usage string) {
+	if punishmentsSystemDisabled(client) {
+		return
+	}
 	// -h suppresses the per-target OOC notification so the stack applies silently.
 	args, hidden := extractHiddenFlag(args)
 
@@ -1156,6 +1165,9 @@ func cmdStack(client *Client, args []string, usage string) {
 //
 // No arguments: displays usage information.
 func cmdLovebomb(client *Client, args []string, usage string) {
+	if punishmentsSystemDisabled(client) {
+		return
+	}
 	// -h suppresses the per-target OOC notification so the lovebomb applies silently.
 	args, hidden := extractHiddenFlag(args)
 
@@ -1855,6 +1867,9 @@ func cmdTranslator(client *Client, args []string, usage string) {
 				"Set translator_api_key in config.toml under [Server] and restart the server.")
 		return
 	}
+	if punishmentsSystemDisabled(client) {
+		return
+	}
 
 	// -h suppresses the per-target OOC notification so the curse applies silently.
 	args, hidden := extractHiddenFlag(args)
@@ -2037,6 +2052,10 @@ func cmdRandomPunishAll(client *Client, args []string, usage string) {
 		return
 	}
 
+	if punishmentsSystemDisabled(client) {
+		return
+	}
+
 	if client.Area().PunishmentSafe() {
 		client.SendServerMessage("This area is punishment-safe; players here cannot be punished.")
 		return
@@ -2174,6 +2193,9 @@ func cmdDreamSequence(client *Client, args []string, usage string) {
 // Global: applies the same effect to every player in the area except the
 // moderator who issued the command.
 func cmdICWarp(client *Client, args []string, usage string) {
+	if punishmentsSystemDisabled(client) {
+		return
+	}
 	// Global mode: /icwarp global on|off
 	if strings.ToLower(args[0]) == "global" {
 		if len(args) < 2 {

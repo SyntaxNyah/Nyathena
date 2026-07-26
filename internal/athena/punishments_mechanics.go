@@ -146,7 +146,7 @@ func contagionOnIC(client *Client, a *area.Area, punishments []PunishmentState, 
 	if permissions.IsModerator(client.Perms()) {
 		return
 	}
-	if a.PunishmentSafe() {
+	if punishmentSafeArea(a) {
 		return
 	}
 	var remaining time.Duration
@@ -201,6 +201,9 @@ func infectClient(client *Client, pType PunishmentType, remaining time.Duration,
 
 // cmdContagious handles /contagious <type> [-d] [-r] [-h] global|<uids>.
 func cmdContagious(client *Client, args []string, usage string) {
+	if punishmentsSystemDisabled(client) {
+		return
+	}
 	args, hidden := extractHiddenFlag(args)
 
 	flags := flag.NewFlagSet("", 0)
@@ -308,7 +311,7 @@ func minefieldRoll(client *Client) {
 	if rand.Intn(6) != 0 {
 		return
 	}
-	if client.Area().PunishmentSafe() {
+	if punishmentSafeArea(client.Area()) {
 		return
 	}
 	// Pick a mine the speaker isn't already wearing, like /megamaso does.
@@ -356,7 +359,7 @@ func bellTriggerOnIC(client *Client, a *area.Area, trap bellTrap) {
 	delete(areaBellTrap, a)
 	mechanicsMu.Unlock()
 
-	if a.PunishmentSafe() {
+	if punishmentSafeArea(a) {
 		return
 	}
 
@@ -417,6 +420,9 @@ func cmdSilencebell(client *Client, args []string, usage string) {
 		}
 	}
 
+	if punishmentsSystemDisabled(client) {
+		return
+	}
 	if a.PunishmentSafe() {
 		client.SendServerMessage("This area is punishment-safe; a silence bell cannot be armed here.")
 		return
