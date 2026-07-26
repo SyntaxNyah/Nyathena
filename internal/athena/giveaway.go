@@ -22,14 +22,18 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode/utf8"
+
+	"github.com/MangosArentLiterature/Athena/internal/logger"
 )
 
 // ── Timing constants ─────────────────────────────────────────────────────────
 
 const (
-	giveawayDuration = 10 * time.Minute // how long the giveaway runs
-	giveawayCooldown = 10 * time.Minute // global delay between giveaways
-	giveawayReminder = 9 * time.Minute  // send reminder when 1 minute remains
+	giveawayDuration   = 10 * time.Minute // how long the giveaway runs
+	giveawayCooldown   = 10 * time.Minute // global delay between giveaways
+	giveawayReminder   = 9 * time.Minute  // send reminder when 1 minute remains
+	giveawayItemMaxLen = 100              // max characters in a giveaway item description
 )
 
 // ── State ────────────────────────────────────────────────────────────────────
@@ -99,6 +103,18 @@ func cmdGiveaway(client *Client, args []string, usage string) {
 // and avoid holding two locks (client.mu + giveaway.mu) simultaneously.
 // State is mutated under the lock; all I/O follows after the lock is released.
 func giveawayStart(client *Client, item string) {
+	if n := utf8.RuneCountInString(item); n > giveawayItemMaxLen {
+		client.SendServerMessage(fmt.Sprintf("Giveaway item is too long (%d/%d characters).", n, giveawayItemMaxLen))
+		return
+	}
+
+	if matched, ok := matchBannedWord(normalizeForFilter(item)); ok {
+		client.SendServerMessage("Your giveaway item contains prohibited language and cannot be posted.")
+		alertCensorTrip(client, "giveaway item", matched, item, "The giveaway was blocked.")
+		logger.LogInfof("giveaway: blocked giveaway item from %v (uid %d) — matched word %q", client.Ipid(), client.Uid(), matched)
+		return
+	}
+
 	// Read client fields outside giveaway.mu to keep the critical section short.
 	uid := client.Uid()
 	hostName := client.Showname()
