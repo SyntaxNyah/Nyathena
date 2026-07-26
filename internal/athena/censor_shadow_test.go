@@ -71,6 +71,46 @@ func TestAutoModCheckShadowAction(t *testing.T) {
 	tormentedIPIDs.mu.Unlock()
 }
 
+// The word filter itself is independent of automod_enabled — only the
+// full punitive action set (kick/mute/ban) is gated behind the toggle, and
+// even then it defaults to the safe shadow-drop action (autoModActionShadow
+// is the zero value) rather than doing nothing. This covers OOC messages, so
+// a server that never turned on automod_enabled still can't be used to blast
+// slurs into OOC once a wordlist is loaded.
+func TestAutoModCheckFiresWithAutomodDisabled(t *testing.T) {
+	defer setupShownameCensorTestDB(t)()
+
+	origConfig := config
+	origAction := autoModAction
+	origWords := getBannedWords()
+	t.Cleanup(func() {
+		config = origConfig
+		autoModAction = origAction
+		setBannedWords(origWords)
+	})
+	config = &settings.Config{ServerConfig: settings.ServerConfig{AutoModEnabled: false}}
+	autoModAction = autoModActionShadow
+	setBannedWords([]string{"zqvexo"})
+
+	client := &Client{conn: &testConn{}, uid: 78, ipid: "ip-disabled-automod-test"}
+
+	if got := autoModCheck(client, "totally clean message", "OOC message"); got != autoModPass {
+		t.Fatalf("clean message: expected autoModPass, got %v", got)
+	}
+
+	if got := autoModCheck(client, "well zqvexo to you too", "OOC message"); got != autoModShadow {
+		t.Fatalf("banned word with automod disabled: expected autoModShadow, got %v", got)
+	}
+	if !isIPIDTormented(client.Ipid()) {
+		t.Error("expected the censor trip to add the speaker's IPID to the torment list even with automod disabled")
+	}
+
+	time.Sleep(20 * time.Millisecond)
+	tormentedIPIDs.mu.Lock()
+	delete(tormentedIPIDs.set, client.Ipid())
+	tormentedIPIDs.mu.Unlock()
+}
+
 // /untorment all: clearAllTormentedIPs wipes the whole in-memory set and
 // reports how many entries it removed.
 func TestClearAllTormentedIPs(t *testing.T) {

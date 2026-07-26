@@ -263,9 +263,13 @@ func ReloadConfig() (string, error) {
 		haveEight = true
 	}
 
+	// The banned-word list is reloaded regardless of automod_enabled — like
+	// censored_names.txt below, other features (e.g. the giveaway item
+	// filter) match against it independently of automod's own IC/OOC
+	// enforcement toggle.
 	var newBanned []string
 	haveBanned := false
-	if config != nil && config.AutoModEnabled {
+	if config != nil {
 		path := filepath.Join(settings.ConfigPath, config.AutoModWordlist)
 		if loaded, werr := loadWordListFile(path); werr == nil {
 			newBanned = loaded

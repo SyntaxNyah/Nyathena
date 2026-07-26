@@ -22,6 +22,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/MangosArentLiterature/Athena/internal/logger"
 )
 
 // ── Timing constants ─────────────────────────────────────────────────────────
@@ -99,6 +101,13 @@ func cmdGiveaway(client *Client, args []string, usage string) {
 // and avoid holding two locks (client.mu + giveaway.mu) simultaneously.
 // State is mutated under the lock; all I/O follows after the lock is released.
 func giveawayStart(client *Client, item string) {
+	if matched, ok := matchBannedWord(normalizeForFilter(item)); ok {
+		client.SendServerMessage("Your giveaway item contains prohibited language and cannot be posted.")
+		alertCensorTrip(client, "giveaway item", matched, item, "The giveaway was blocked.")
+		logger.LogInfof("giveaway: blocked giveaway item from %v (uid %d) — matched word %q", client.Ipid(), client.Uid(), matched)
+		return
+	}
+
 	// Read client fields outside giveaway.mu to keep the critical section short.
 	uid := client.Uid()
 	hostName := client.Showname()

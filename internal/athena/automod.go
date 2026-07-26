@@ -157,12 +157,14 @@ func loadWordListFile(path string) ([]string, error) {
 	return words, nil
 }
 
-// initAutoMod loads the banned-word list and caches the configured action when
-// automod is enabled. Called once during server startup.
+// initAutoMod loads the banned-word list and caches the configured action.
+// Called once during server startup. The word list itself is loaded
+// regardless of automod_enabled — like censored_names.txt and
+// punishment_names.txt, other features (e.g. the giveaway item filter) match
+// against it independently of whether automod's IC/OOC enforcement is on.
+// autoModCheck still gates its own enforcement on cfg.AutoModEnabled, so
+// leaving automod disabled continues to leave IC/OOC/showname checks off.
 func initAutoMod(cfg *settings.Config) {
-	if !cfg.AutoModEnabled {
-		return
-	}
 	path := filepath.Join(settings.ConfigPath, cfg.AutoModWordlist)
 	words, err := loadWordListFile(path)
 	if err != nil {
@@ -171,6 +173,10 @@ func initAutoMod(cfg *settings.Config) {
 	}
 	setBannedWords(words)
 	logger.LogInfof("automod: loaded %d banned word(s) from %q", len(getBannedWords()), path)
+
+	if !cfg.AutoModEnabled {
+		return
+	}
 
 	// Parse the action once so the hot path never allocates.
 	switch strings.ToLower(strings.TrimSpace(cfg.AutoModAction)) {
@@ -195,8 +201,14 @@ func initAutoMod(cfg *settings.Config) {
 // The caller acts on the result: autoModBlocked aborts packet processing
 // outright, while autoModShadow means the message must be echoed back to the
 // sender only — it looks sent on their side but never reaches another client.
+//
+// This check runs whenever a banned-word list is loaded, regardless of
+// automod_enabled — like censored_names.txt and the giveaway item filter, the
+// word filter itself is not gated behind the automod toggle, only the
+// wordlist-driven action is (autoModAction defaults to the safe shadow-drop
+// behavior, autoModActionShadow, when automod is disabled — see initAutoMod).
 func autoModCheck(client *Client, msg string, source string) autoModResult {
-	if !config.AutoModEnabled || len(getBannedWords()) == 0 {
+	if len(getBannedWords()) == 0 {
 		return autoModPass
 	}
 

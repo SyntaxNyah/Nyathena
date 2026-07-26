@@ -115,3 +115,49 @@ func TestGiveawayOnlyOneActive(t *testing.T) {
 		t.Error("expected start to be blocked while giveaway is active")
 	}
 }
+
+// TestGiveawayStartBlocksBannedWord verifies that a giveaway item containing a
+// banned word is rejected and never opens a giveaway, regardless of whether
+// automod's own IC/OOC enforcement is enabled — the word list is loaded
+// independently of automod_enabled (see initAutoMod).
+func TestGiveawayStartBlocksBannedWord(t *testing.T) {
+	resetGiveawayState()
+
+	origWords := getBannedWords()
+	t.Cleanup(func() { setBannedWords(origWords) })
+	setBannedWords([]string{normalizeForFilter("nigger")})
+
+	client := &Client{conn: &testConn{}, uid: 99, ipid: "ip-giveaway-test", area: makeTestArea("GiveawayTestArea")}
+
+	giveawayStart(client, "fuck niggers")
+
+	giveaway.mu.Lock()
+	active := giveaway.active
+	giveaway.mu.Unlock()
+
+	if active {
+		t.Error("expected giveaway containing a banned word to be blocked, but it started")
+	}
+}
+
+// TestGiveawayStartAllowsCleanItem verifies a clean item still opens a
+// giveaway (guards against the filter over-blocking).
+func TestGiveawayStartAllowsCleanItem(t *testing.T) {
+	resetGiveawayState()
+
+	origWords := getBannedWords()
+	t.Cleanup(func() { setBannedWords(origWords) })
+	setBannedWords([]string{normalizeForFilter("nigger")})
+
+	client := &Client{conn: &testConn{}, uid: 100, ipid: "ip-giveaway-test-clean", area: makeTestArea("GiveawayTestArea2")}
+
+	giveawayStart(client, "a shiny rock")
+
+	giveaway.mu.Lock()
+	active := giveaway.active
+	giveaway.mu.Unlock()
+
+	if !active {
+		t.Error("expected a clean giveaway item to start normally")
+	}
+}
