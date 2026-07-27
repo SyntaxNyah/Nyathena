@@ -40,6 +40,9 @@ func (c *Client) SetShuffledOrigCharID(id int) {
 // etc. Players already on character-select are skipped. The original IDs
 // are remembered so /uncharshuffle can put everyone back exactly.
 func cmdCharShuffle(client *Client, _ []string, _ string) {
+	if punishmentsSystemDisabled(client) {
+		return
+	}
 	targetArea := client.Area()
 	if targetArea.PlayerCount() < 2 {
 		client.SendServerMessage("There are not enough players in this area to shuffle characters (need at least 2).")
