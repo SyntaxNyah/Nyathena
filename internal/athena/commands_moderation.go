@@ -1190,6 +1190,9 @@ func cmdUnforceName(client *Client, args []string, _ string) {
 // Each player receives another player's effective showname so that every name
 // is displaced but none is lost.
 func cmdNameShuffle(client *Client, _ []string, _ string) {
+	if punishmentsSystemDisabled(client) {
+		return
+	}
 	targetArea := client.Area()
 
 	// Fast path: skip the full client-list scan when the area clearly lacks
@@ -1313,6 +1316,9 @@ func cmdTung(client *Client, args []string, usage string) {
 	}
 
 	disable := len(args) >= 2 && strings.EqualFold(args[1], "off")
+	if !disable && punishmentsSystemDisabled(client) {
+		return
+	}
 	// Resolve the char_id that corresponds to tungForcedCharacterName so that
 	// observers' IC packets have a matching char_name/char_id pair. WebAO
 	// validates these fields and renders the character invisible when they
@@ -1437,6 +1443,10 @@ func cmdAreaIniswap(client *Client, args []string, usage string) {
 		affected := len(uids)
 		client.SendServerMessage(fmt.Sprintf("Removed area iniswap effect from %d client(s).", affected))
 		addToBuffer(client, "CMD", fmt.Sprintf("Removed area iniswap effect from %d clients in area %v.", affected, targetArea.Name()), true)
+		return
+	}
+
+	if punishmentsSystemDisabled(client) {
 		return
 	}
 

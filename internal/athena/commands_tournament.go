@@ -37,6 +37,9 @@ func cmdTournament(client *Client, args []string, usage string) {
 
 	switch action {
 	case "start":
+		if punishmentsSystemDisabled(client) {
+			return
+		}
 		tournamentMutex.Lock()
 		defer tournamentMutex.Unlock()
 
