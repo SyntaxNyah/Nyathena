@@ -145,6 +145,10 @@ func cmdForcePair(client *Client, args []string, _ string) {
 		return
 	}
 
+	if punishmentsSystemDisabled(client) {
+		return
+	}
+
 	if target1.CharID() < 0 {
 		client.SendServerMessage(fmt.Sprintf("UID %v has not selected a character.", uid1))
 		return
@@ -325,6 +329,10 @@ func cmdPossess(client *Client, args []string, _ string) {
 		return
 	}
 
+	if punishmentsSystemDisabled(client) {
+		return
+	}
+
 	// Validate CharID is within bounds
 	if target.CharID() < 0 || target.CharID() >= len(getCharacters()) {
 		client.SendServerMessage("Target has an invalid character.")
@@ -461,6 +469,10 @@ func beginPossession(client *Client, args []string, label string) {
 	target, err := getClientByUid(uid)
 	if err != nil {
 		client.SendServerMessage("Client does not exist.")
+		return
+	}
+
+	if punishmentsSystemDisabled(client) {
 		return
 	}
 
