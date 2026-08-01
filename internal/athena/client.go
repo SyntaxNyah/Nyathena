@@ -355,6 +355,7 @@ type Client struct {
 	case_prefs          [5]bool
 	muted               MuteState
 	muteuntil           time.Time
+	areaMuteOrigin      *area.Area // Area whose /area mute produced the client's current ICOOCMuted state; nil if the mute (if any) isn't area-scoped
 	showname            string
 	narrator            bool
 	jailedUntil         time.Time
@@ -1628,6 +1629,7 @@ func (client *Client) ChangeArea(a *area.Area) bool {
 		}
 	}
 	if client.Area() != nil {
+		client.liftAreaMuteOnDeparture(a)
 		addToBuffer(client, "AREA", "Left area.", false)
 		leaveVoiceForClient(client)
 		if client.Area().PlayerCount() <= 1 {
@@ -1664,6 +1666,25 @@ func (client *Client) ChangeArea(a *area.Area) bool {
 	client.Send(&packet.BN{Background: a.Background()})
 	addToBuffer(client, "AREA", "Joined area.", false)
 	return true
+}
+
+// liftAreaMuteOnDeparture auto-lifts an /area mute the moment the client
+// leaves the area that applied it. /area mute is meant to silence someone
+// only while they're in that specific room — without this, the mute is a
+// plain persistent ICOOCMuted state indistinguishable from a real /mute, so
+// it would otherwise follow the player to every other area with no way back,
+// since /area unmute only reaches players currently in the CM's area.
+func (client *Client) liftAreaMuteOnDeparture(dest *area.Area) {
+	origin := client.AreaMuteOrigin()
+	if origin == nil || origin != client.Area() || origin == dest || client.Muted() != ICOOCMuted {
+		return
+	}
+	client.SetMuted(Unmuted)
+	client.SetUnmuteTime(time.Time{})
+	if err := db.DeleteMute(client.Ipid()); err != nil {
+		logger.LogErrorf("Failed to remove persistent area mute for %v: %v", client.Ipid(), err)
+	}
+	client.SendServerMessage("You've left the area that muted you; you can speak again.")
 }
 
 // HasCMPermission returns whether the client has CM permissions in it's area.
@@ -1852,11 +1873,33 @@ func (client *Client) Muted() MuteState {
 	return client.muted
 }
 
-// SetMuted sets the client's mute state.
+// SetMuted sets the client's mute state. This always clears any recorded
+// /area mute origin — SetMuted is used for ordinary, non-area-scoped mutes
+// (including lifting a mute entirely), while an /area mute is applied via
+// SetAreaMuted so the two can be told apart later.
 func (client *Client) SetMuted(m MuteState) {
 	client.mu.Lock()
 	client.muted = m
+	client.areaMuteOrigin = nil
 	client.mu.Unlock()
+}
+
+// SetAreaMuted marks the client as muted (IC and OOC) by /area mute in a, so
+// the mute can be told apart from an ordinary /mute and auto-lifted once the
+// client leaves a.
+func (client *Client) SetAreaMuted(a *area.Area) {
+	client.mu.Lock()
+	client.muted = ICOOCMuted
+	client.areaMuteOrigin = a
+	client.mu.Unlock()
+}
+
+// AreaMuteOrigin returns the area whose /area mute produced the client's
+// current mute state, or nil if the current mute (if any) isn't area-scoped.
+func (client *Client) AreaMuteOrigin() *area.Area {
+	client.mu.Lock()
+	defer client.mu.Unlock()
+	return client.areaMuteOrigin
 }
 
 // UnmuteTime returns the time when the client should be unmuted.
@@ -2061,6 +2104,7 @@ func (client *Client) SetGambleHide(h bool) {
 // the jailed-player area-lock and area invitation checks that ChangeArea enforces.
 // Used to place a jailed player into their designated cell (both at jail time and on reconnect).
 func (client *Client) forceChangeArea(a *area.Area) {
+	client.liftAreaMuteOnDeparture(a)
 	addToBuffer(client, "AREA", "Left area.", false)
 	if client.Area().PlayerCount() <= 1 {
 		client.Area().Reset()
