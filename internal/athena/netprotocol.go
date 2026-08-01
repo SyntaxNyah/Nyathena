@@ -295,9 +295,6 @@ func pktReqDone(client *Client, _ *packet.Packet) {
 	broadcastPlayerJoin(client)
 	sendModIPIDsToClient(client) // no-op unless this connection is already BAN_INFO-permissioned at join
 	broadcastIPIDToMods(client.Uid(), client.Ipid())
-	if motd := GetMotd(); motd != "" {
-		client.SendMotd(motd)
-	}
 	client.restorePunishments()
 	client.restoreRandomCharCurse()
 	client.restoreShownamePunishStain()
@@ -318,6 +315,12 @@ func pktReqDone(client *Client, _ *packet.Packet) {
 		}
 	} else if config.EnableAccounts && !client.Authenticated() {
 		client.SendServerMessage(accountWelcomeMsg)
+	}
+
+	// Sent last (after the account/casino welcome message) so the MOTD lands
+	// at the bottom of the join sequence, where it's easiest to spot.
+	if motd := GetMotd(); motd != "" {
+		client.SendMotd(motd)
 	}
 
 	logger.LogInfof("Client (IPID:%v UID:%v) joined the server", client.Ipid(), client.Uid())
