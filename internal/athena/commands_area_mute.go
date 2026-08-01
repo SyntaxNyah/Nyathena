@@ -45,8 +45,11 @@ func cmdArea(client *Client, args []string, usage string) {
 // areaMuteAll mutes (or, when unmute is true, unmutes) every player in the
 // caller's area except CMs and moderators. Muting applies both IC and OOC
 // (ICOOCMuted) and persists by IPID exactly like /mute, so it survives a
-// reconnect until it is lifted with "/area unmute". The caller is never
-// affected, nor is any CM or moderator in the room.
+// reconnect for as long as the target stays in the area — but unlike a real
+// /mute, it's scoped to the room: leaving the area (client.liftAreaMuteOnDeparture,
+// hooked into ChangeArea/forceChangeArea) automatically lifts it, since /area
+// mute is meant to silence someone only while they're actually in that room.
+// The caller is never affected, nor is any CM or moderator in the room.
 func areaMuteAll(client *Client, unmute bool) {
 	a := client.Area()
 
@@ -66,10 +69,11 @@ func areaMuteAll(client *Client, unmute bool) {
 	var count int
 	for _, c := range targets {
 		if unmute {
-			// Only cancel out an /area mute: lift the ICOOCMuted state it sets,
-			// and leave any separate individual mute (IC-only, OOC-only, music,
-			// etc.) untouched so /area unmute is a clean inverse of /area mute.
-			if c.Muted() != ICOOCMuted {
+			// Only cancel out an /area mute that *this* area applied: lift the
+			// ICOOCMuted state it set, and leave a separate individual mute
+			// (IC-only, OOC-only, music, etc.) — or one from another area —
+			// untouched so /area unmute is a clean inverse of /area mute.
+			if c.Muted() != ICOOCMuted || c.AreaMuteOrigin() != a {
 				continue
 			}
 			c.SetMuted(Unmuted)
@@ -85,12 +89,12 @@ func areaMuteAll(client *Client, unmute bool) {
 			if c.Muted() != Unmuted {
 				continue
 			}
-			c.SetMuted(ICOOCMuted)
+			c.SetAreaMuted(a)
 			c.SetUnmuteTime(time.Time{})
 			if err := db.UpsertMute(c.Ipid(), int(ICOOCMuted), 0); err != nil {
 				logger.LogErrorf("Failed to persist mute for %v: %v", c.Ipid(), err)
 			}
-			c.SendServerMessage("This area has been muted by staff; you cannot speak IC or OOC until the mute is lifted.")
+			c.SendServerMessage("This area has been muted by staff; you cannot speak IC or OOC until you leave, or until the mute is lifted.")
 		}
 		count++
 	}

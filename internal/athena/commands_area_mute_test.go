@@ -95,3 +95,64 @@ func TestAreaMuteExemptsStaffAndOtherAreas(t *testing.T) {
 		t.Fatalf("expected individually-muted player to keep their ICMuted state after /area unmute, got %v", individuallyMuted.Muted())
 	}
 }
+
+// TestAreaMuteLiftedOnDeparture verifies that /area mute is scoped to the
+// room it was applied in: a muted player who moves to a different area is
+// automatically unmuted (both in memory and in the persisted DB row),
+// instead of the mute silently following them around the rest of the server
+// until a moderator manually /unmutes them.
+func TestAreaMuteLiftedOnDeparture(t *testing.T) {
+	defer setupAreaMuteTestDB(t)()
+
+	origChars := getCharacters()
+	t.Cleanup(func() { setCharacters(origChars) })
+	setCharacters([]string{"Phoenix Wright", "Miles Edgeworth"})
+
+	origClients := clients
+	t.Cleanup(func() { clients = origClients })
+	clients = &ClientList{list: make(map[*Client]struct{}), uidIndex: make(map[int]*Client), ipidCounts: make(map[string]int)}
+
+	origAreas := areas
+	t.Cleanup(func() { areas = origAreas })
+
+	courtroom := area.NewArea(area.AreaData{Name: "Courtroom"}, len(getCharacters()), 10, area.EviAny)
+	lobby := area.NewArea(area.AreaData{Name: "Lobby"}, len(getCharacters()), 10, area.EviAny)
+	areas = []*area.Area{courtroom, lobby}
+
+	caller := &Client{conn: &testConn{}, uid: 1, ipid: "ip-caller", area: courtroom, char: -1, possessing: -1, pair: ClientPairInfo{wanted_id: -1}}
+	courtroom.AddCM(caller.Uid())
+	target := &Client{conn: &testConn{}, uid: 2, ipid: "ip-target", area: courtroom, char: -1, possessing: -1, pair: ClientPairInfo{wanted_id: -1}}
+	for _, c := range []*Client{caller, target} {
+		clients.AddClient(c)
+		clients.RegisterUID(c)
+	}
+
+	areaMuteAll(caller, false)
+	if target.Muted() != ICOOCMuted {
+		t.Fatalf("expected target to be ICOOCMuted after /area mute, got %v", target.Muted())
+	}
+	if target.AreaMuteOrigin() != courtroom {
+		t.Fatal("expected target's area mute origin to be the courtroom")
+	}
+
+	if !target.ChangeArea(lobby) {
+		t.Fatal("target should be able to move to the lobby")
+	}
+
+	if target.Muted() != Unmuted {
+		t.Fatalf("expected target to be auto-unmuted after leaving the muting area, got %v", target.Muted())
+	}
+	if target.AreaMuteOrigin() != nil {
+		t.Fatal("expected area mute origin to be cleared after departure")
+	}
+
+	punishments, err := db.GetPunishments(target.Ipid())
+	if err != nil {
+		t.Fatalf("GetPunishments: %v", err)
+	}
+	for _, p := range punishments {
+		if p.Kind == db.PunishKindMute {
+			t.Fatal("expected the persisted mute to be removed after the target left the area")
+		}
+	}
+}
