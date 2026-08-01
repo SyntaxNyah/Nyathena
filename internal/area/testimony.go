@@ -115,7 +115,11 @@ func (a *Area) TstAdvance() {
 		if len(a.tr.Testimony) > 1 {
 			a.tr.Index = 1
 		} else {
-			a.tr.Index = 0
+			// Only the title has been recorded so far (len == 0 or 1). Move
+			// past it instead of wrapping back to 0, otherwise the next
+			// statement sent during /testify recording is mistaken for the
+			// title again and recorded twice.
+			a.tr.Index = len(a.tr.Testimony)
 		}
 	} else {
 		a.tr.Index++
