@@ -90,6 +90,24 @@ func TestTestimonyRemoveLast(t *testing.T) {
 	_ = a.CurrentTstStatement()
 }
 
+// TestTestimonyRecordingAdvancePastTitle verifies that advancing right after
+// the title is the only recorded statement moves past index 0, so the next
+// statement sent during /testify recording is not mistaken for the title
+// and recorded a second time.
+func TestTestimonyRecordingAdvancePastTitle(t *testing.T) {
+	a := NewArea(AreaData{}, 50, 0, EviAny)
+
+	a.TstAppend("title")
+	if a.CurrentTstIndex() != 0 {
+		t.Fatalf("expected index 0 before advance, got %d", a.CurrentTstIndex())
+	}
+
+	a.TstAdvance()
+	if a.CurrentTstIndex() == 0 {
+		t.Fatalf("index should no longer be 0 after advancing past the title, got %d", a.CurrentTstIndex())
+	}
+}
+
 // TestTestimonyJumpClamp verifies TstJump clamps out-of-range indices.
 func TestTestimonyJumpClamp(t *testing.T) {
 	a := NewArea(AreaData{}, 50, 0, EviAny)
