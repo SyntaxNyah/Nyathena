@@ -98,9 +98,10 @@ func TestAreaMuteExemptsStaffAndOtherAreas(t *testing.T) {
 
 // TestAreaMuteLiftedOnDeparture verifies that /area mute is scoped to the
 // room it was applied in: a muted player who moves to a different area is
-// automatically unmuted (both in memory and in the persisted DB row),
-// instead of the mute silently following them around the rest of the server
-// until a moderator manually /unmutes them.
+// automatically unmuted, instead of the mute silently following them around
+// the rest of the server until a moderator manually /unmutes them. It also
+// pins that /area mute is never written to the DB — persisting it was the
+// cause of the "forever muted by a CM" bug.
 func TestAreaMuteLiftedOnDeparture(t *testing.T) {
 	defer setupAreaMuteTestDB(t)()
 
@@ -135,6 +136,18 @@ func TestAreaMuteLiftedOnDeparture(t *testing.T) {
 		t.Fatal("expected target's area mute origin to be the courtroom")
 	}
 
+	// /area mute must be in-memory only: nothing may be persisted, otherwise a
+	// reconnect restores an origin-less ICOOCMuted that can never be cleared.
+	muteRows, err := db.GetPunishments(target.Ipid())
+	if err != nil {
+		t.Fatalf("GetPunishments: %v", err)
+	}
+	for _, p := range muteRows {
+		if p.Kind == db.PunishKindMute {
+			t.Fatal("/area mute must not persist a mute to the DB")
+		}
+	}
+
 	if !target.ChangeArea(lobby) {
 		t.Fatal("target should be able to move to the lobby")
 	}
@@ -154,5 +167,60 @@ func TestAreaMuteLiftedOnDeparture(t *testing.T) {
 		if p.Kind == db.PunishKindMute {
 			t.Fatal("expected the persisted mute to be removed after the target left the area")
 		}
+	}
+}
+
+// TestAreaMuteNotPersistedAcrossReconnect is the direct regression test for the
+// "forever muted by a CM" bug. /area mute must live only in memory: if it were
+// persisted, a reconnect would restore an origin-less ICOOCMuted (SetMuted
+// clears the area origin) that leaving the area couldn't lift, /area unmute
+// couldn't match on origin, and a CM — who has no MUTE permission — couldn't
+// /unmute. The player would be stuck muted forever.
+func TestAreaMuteNotPersistedAcrossReconnect(t *testing.T) {
+	defer setupAreaMuteTestDB(t)()
+
+	origClients := clients
+	t.Cleanup(func() { clients = origClients })
+	clients = &ClientList{list: make(map[*Client]struct{}), uidIndex: make(map[int]*Client), ipidCounts: make(map[string]int)}
+
+	origAreas := areas
+	t.Cleanup(func() { areas = origAreas })
+	courtroom := area.NewArea(area.AreaData{Name: "Courtroom"}, 5, 10, area.EviAny)
+	areas = []*area.Area{courtroom}
+
+	caller := &Client{conn: &testConn{}, uid: 1, ipid: "ip-caller", area: courtroom, jailAreaID: -1}
+	courtroom.AddCM(caller.Uid())
+	target := &Client{conn: &testConn{}, uid: 2, ipid: "ip-target", area: courtroom, jailAreaID: -1}
+	for _, c := range []*Client{caller, target} {
+		clients.AddClient(c)
+		clients.RegisterUID(c)
+	}
+
+	areaMuteAll(caller, false)
+	if target.Muted() != ICOOCMuted {
+		t.Fatalf("expected target to be ICOOCMuted after /area mute, got %v", target.Muted())
+	}
+
+	// Positive control: restorePunishments really is wired to the DB, so a
+	// genuinely persisted /mute DOES come back on reconnect. This proves the
+	// negative assertion below isn't vacuously passing.
+	if err := db.UpsertMute("ip-realmute", int(ICOOCMuted), 0); err != nil {
+		t.Fatalf("UpsertMute: %v", err)
+	}
+	realReconnect := &Client{conn: &testConn{}, uid: 3, ipid: "ip-realmute", area: courtroom, char: -1, jailAreaID: -1}
+	realReconnect.restorePunishments()
+	if realReconnect.Muted() != ICOOCMuted {
+		t.Fatalf("a real persisted /mute should restore on reconnect, got %v", realReconnect.Muted())
+	}
+
+	// The actual regression: a fresh connection for the area-muted IPID must
+	// come back able to speak, because /area mute is never persisted.
+	reconnected := &Client{conn: &testConn{}, uid: 4, ipid: "ip-target", area: courtroom, char: -1, jailAreaID: -1}
+	reconnected.restorePunishments()
+	if reconnected.Muted() != Unmuted {
+		t.Fatalf("area-muted player must reconnect able to speak (forever-mute bug), got %v", reconnected.Muted())
+	}
+	if reconnected.AreaMuteOrigin() != nil {
+		t.Fatal("reconnected client must not carry an area-mute origin")
 	}
 }
