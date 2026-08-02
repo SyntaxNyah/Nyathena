@@ -943,7 +943,7 @@ func cmdPlay(client *Client, args []string, _ string) {
 			return
 		}
 	}
-	broadcastToArea(client.Area(), &packet.MCToClient{
+	playAreaMusic(client.Area(), &packet.MCToClient{
 		Name: s, CharID: client.CharID(), Showname: client.Showname(),
 		Looping: "1", Channel: "0", Effects: "0",
 	})
@@ -993,7 +993,7 @@ func cmdRandomSong(client *Client, _ []string, _ string) {
 		return
 	}
 	song := playable[rand.Intn(len(playable))]
-	broadcastToArea(client.Area(), &packet.MCToClient{
+	playAreaMusic(client.Area(), &packet.MCToClient{
 		Name: song, CharID: client.CharID(), Showname: client.Showname(),
 		Looping: "1", Channel: "0", Effects: "0",
 	})

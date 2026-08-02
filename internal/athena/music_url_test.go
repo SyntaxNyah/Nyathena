@@ -199,3 +199,57 @@ func TestMCURLWithQueryStringNotMangled(t *testing.T) {
 		t.Errorf("round-trip mangled the URL: decode(%q) = %q, want %q", wireName, got, originalURL)
 	}
 }
+
+// TestPlayCommandRecordsCurrentSong is the trash-pit bug: a custom track
+// started with /play (a Discord/CDN URL, or a YouTube link once cached) used to
+// broadcast the MC packet without recording it as the area's current song, so
+// the area kept pointing at whatever jukebox entry was played before it.
+// Walking out of the area and back in then resynced the joiner to that stale
+// jukebox track instead of the custom one that was actually playing.
+func TestPlayCommandRecordsCurrentSong(t *testing.T) {
+	origCDNs := getCDNs()
+	t.Cleanup(func() { setCDNs(origCDNs) })
+	setCDNs([]string{"host.com"})
+	client, _ := newMusicTestClient(t)
+
+	// A jukebox track plays first — this is the song the area used to get
+	// stuck on.
+	client.Area().SetCurrentSong("[aatnt] godot.opus")
+
+	const url = "https://host.com/custom.mp3"
+	cmdPlay(client, []string{url}, "")
+
+	if got := client.Area().CurrentSong(); got != url {
+		t.Fatalf("CurrentSong = %q, want %q (the custom /play track)", got, url)
+	}
+
+	// A client walking back into the area must be synced to the custom track.
+	origAreas := areas
+	t.Cleanup(func() { areas = origAreas })
+	areas = []*area.Area{client.Area()}
+	conn := &captureConn{}
+	joiner := &Client{conn: conn, uid: 2, char: 1, possessing: -1, pair: ClientPairInfo{wanted_id: -1}}
+	clients.AddClient(joiner)
+	joiner.JoinArea(client.Area())
+
+	if out := conn.String(); !strings.Contains(out, "MC#"+url+"#") {
+		t.Fatalf("joiner should be synced to %q, got %q", url, out)
+	}
+}
+
+// TestRandomSongRecordsCurrentSong covers the same regression for /randomsong,
+// which also broadcast without recording the track.
+func TestRandomSongRecordsCurrentSong(t *testing.T) {
+	origMusic := getMusicList()
+	t.Cleanup(func() { setMusicList(origMusic) })
+	setMusicList([]string{"Category", "[aatnt] pursuit.opus"})
+
+	client, _ := newMusicTestClient(t)
+	client.Area().SetCurrentSong("[aatnt] godot.opus")
+
+	cmdRandomSong(client, nil, "")
+
+	if got := client.Area().CurrentSong(); got != "[aatnt] pursuit.opus" {
+		t.Fatalf("CurrentSong = %q, want the song /randomsong just played", got)
+	}
+}
