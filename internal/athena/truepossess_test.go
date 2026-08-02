@@ -259,14 +259,8 @@ func TestPossessionCommandsRegistered(t *testing.T) {
 		t.Error("a regular (non-shadow) mod should NOT be able to run /truepossess")
 	}
 
-	if hide := Commands["hide"]; hide.reqPerms != admin {
-		t.Errorf("hide reqPerms = %v, want ADMIN (%v) so shadow mods can no longer vanish", hide.reqPerms, admin)
-	}
-	if permissions.HasPermission(shadow, Commands["hide"].reqPerms) {
-		t.Error("a shadow mod should NOT be able to run /hide")
-	}
-	if permissions.HasPermission(regularMod, Commands["hide"].reqPerms) {
-		t.Error("a regular (non-shadow) mod should NOT be able to run /hide")
+	if _, ok := Commands["hide"]; ok {
+		t.Error("the /hide command should no longer be registered")
 	}
 	if pos := Commands["possess"]; pos.reqPerms != admin {
 		t.Errorf("possess reqPerms = %v, want ADMIN (%v)", pos.reqPerms, admin)

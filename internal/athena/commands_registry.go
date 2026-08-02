@@ -347,14 +347,6 @@ func initCommands() {
 			reqPerms: permissions.PermissionField["NONE"],
 			category: "general",
 		},
-		"hide": {
-			handler:  cmdHide,
-			minArgs:  0,
-			usage:    "Usage: /hide",
-			desc:     "Toggles hiding yourself from the player list, /players, /gas, and room player counts.",
-			reqPerms: permissions.PermissionField["ADMIN"],
-			category: "moderation",
-		},
 		"invite": {
 			handler:  cmdInvite,
 			minArgs:  1,

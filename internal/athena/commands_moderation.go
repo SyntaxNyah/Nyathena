@@ -307,26 +307,6 @@ func cmdGlobal(client *Client, args []string, _ string) {
 	broadcastToAll(&packet.CTToClient{Name: fmt.Sprintf("[GLOBAL] [UID %d] %s%v", client.Uid(), tag, oocDisplayName(client)), Message: strings.Join(args, " "), IsFromServer: "1"})
 }
 
-// Handles /hide
-
-func cmdHide(client *Client, _ []string, _ string) {
-	if client.Hidden() {
-		client.Area().AddVisiblePlayer()
-		client.SetHidden(false)
-		broadcastPlayerJoin(client)
-		broadcastIPIDToMods(client.Uid(), client.Ipid())
-		sendPlayerArup()
-		client.SendServerMessage("You are now visible.")
-		addToBuffer(client, "CMD", "Disabled hide mode.", false)
-	} else {
-		client.Area().RemoveVisiblePlayer()
-		client.SetHidden(true)
-		broadcastToAll(&packet.PR{ID: client.Uid(), Type: 1})
-		sendPlayerArup()
-		client.SendServerMessage("You are now hidden from the player list and room counts.")
-		addToBuffer(client, "CMD", "Enabled hide mode.", false)
-	}
-}
 
 // Handles /invite
 
