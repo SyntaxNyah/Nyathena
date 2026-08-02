@@ -21,8 +21,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/MangosArentLiterature/Athena/internal/db"
-	"github.com/MangosArentLiterature/Athena/internal/logger"
 	"github.com/MangosArentLiterature/Athena/internal/permissions"
 )
 
@@ -44,12 +42,16 @@ func cmdArea(client *Client, args []string, usage string) {
 
 // areaMuteAll mutes (or, when unmute is true, unmutes) every player in the
 // caller's area except CMs and moderators. Muting applies both IC and OOC
-// (ICOOCMuted) and persists by IPID exactly like /mute, so it survives a
-// reconnect for as long as the target stays in the area — but unlike a real
-// /mute, it's scoped to the room: leaving the area (client.liftAreaMuteOnDeparture,
-// hooked into ChangeArea/forceChangeArea) automatically lifts it, since /area
-// mute is meant to silence someone only while they're actually in that room.
-// The caller is never affected, nor is any CM or moderator in the room.
+// (ICOOCMuted) but is scoped to the room and lives purely in memory — unlike a
+// real /mute it is NEVER persisted to the DB. Leaving the area
+// (client.liftAreaMuteOnDeparture, hooked into ChangeArea/forceChangeArea) or
+// disconnecting entirely lifts it, since /area mute is meant to silence someone
+// only while they're actually in that room. Persisting it was the cause of the
+// "forever muted by a CM" bug: a reconnect restored the mute via SetMuted (which
+// clears the in-memory area origin), leaving an origin-less ICOOCMuted that
+// neither /area unmute nor leaving the area could clear, and that a CM (who has
+// no MUTE permission) could not /unmute. The caller is never affected, nor is
+// any CM or moderator in the room.
 func areaMuteAll(client *Client, unmute bool) {
 	a := client.Area()
 
@@ -78,9 +80,6 @@ func areaMuteAll(client *Client, unmute bool) {
 			}
 			c.SetMuted(Unmuted)
 			c.SetUnmuteTime(time.Time{})
-			if err := db.DeleteMute(c.Ipid()); err != nil {
-				logger.LogErrorf("Failed to remove persistent mute for %v: %v", c.Ipid(), err)
-			}
 			c.SendServerMessage("The area mute has been lifted; you can speak again.")
 		} else {
 			// Don't clobber a player who already carries a separate individual
@@ -91,9 +90,6 @@ func areaMuteAll(client *Client, unmute bool) {
 			}
 			c.SetAreaMuted(a)
 			c.SetUnmuteTime(time.Time{})
-			if err := db.UpsertMute(c.Ipid(), int(ICOOCMuted), 0); err != nil {
-				logger.LogErrorf("Failed to persist mute for %v: %v", c.Ipid(), err)
-			}
 			c.SendServerMessage("This area has been muted by staff; you cannot speak IC or OOC until you leave, or until the mute is lifted.")
 		}
 		count++

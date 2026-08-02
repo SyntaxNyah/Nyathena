@@ -1680,11 +1680,14 @@ func (client *Client) ChangeArea(a *area.Area) bool {
 }
 
 // liftAreaMuteOnDeparture auto-lifts an /area mute the moment the client
-// leaves the area that applied it. /area mute is meant to silence someone
-// only while they're in that specific room — without this, the mute is a
-// plain persistent ICOOCMuted state indistinguishable from a real /mute, so
-// it would otherwise follow the player to every other area with no way back,
-// since /area unmute only reaches players currently in the CM's area.
+// leaves the area that applied it. /area mute is meant to silence someone only
+// while they're in that specific room, and it lives purely in memory (it is
+// never persisted). Without this, the in-memory ICOOCMuted state would follow
+// the player to every other area for the rest of the session with no way back,
+// since /area unmute only reaches players currently in the CM's area. A full
+// disconnect ends the mute too, since the *Client (and its area-mute state) is
+// gone and nothing restores it — which is what fixes the "forever muted by a
+// CM" bug that persisting the mute used to cause.
 func (client *Client) liftAreaMuteOnDeparture(dest *area.Area) {
 	origin := client.AreaMuteOrigin()
 	if origin == nil || origin != client.Area() || origin == dest || client.Muted() != ICOOCMuted {
@@ -1692,9 +1695,6 @@ func (client *Client) liftAreaMuteOnDeparture(dest *area.Area) {
 	}
 	client.SetMuted(Unmuted)
 	client.SetUnmuteTime(time.Time{})
-	if err := db.DeleteMute(client.Ipid()); err != nil {
-		logger.LogErrorf("Failed to remove persistent area mute for %v: %v", client.Ipid(), err)
-	}
 	client.SendServerMessage("You've left the area that muted you; you can speak again.")
 }
 
@@ -1897,7 +1897,8 @@ func (client *Client) SetMuted(m MuteState) {
 
 // SetAreaMuted marks the client as muted (IC and OOC) by /area mute in a, so
 // the mute can be told apart from an ordinary /mute and auto-lifted once the
-// client leaves a.
+// client leaves a. This state is in-memory only — /area mute is deliberately
+// never persisted, so a reconnect ends it (see liftAreaMuteOnDeparture).
 func (client *Client) SetAreaMuted(a *area.Area) {
 	client.mu.Lock()
 	client.muted = ICOOCMuted
