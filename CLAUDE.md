@@ -535,8 +535,6 @@ The WT/CE judge buttons (Witness Testimony, Cross Examination and the verdict ga
 ### Shadow Mod Visibility
 Shadow moderators (`SHADOW` perm bit, no `ADMIN`) are completely hidden from `/gas`/`/players` for non-admin viewers — no "Mod:" line is shown at all. Only admins see them, labelled as `Mod: <name> (shadow)`. Previously the line still rendered as `Mod: Moderator`, which let other moderators infer staff status.
 
-`/hide` — vanishing entirely from `/players`, `/gas`, and room player counts (toggle) — is `ADMIN`-only. Shadow mods do not carry the ADMIN sentinel, so despite their other stealth traits they cannot `/hide`; only full admins can go invisible.
-
 **Shadow mods are `/ignore`-able.** Real moderators and admins can never be silenced with `/ignore` (the command refuses, and their IC/OOC messages bypass every recipient's ignore list). Shadow mods are deliberately exempt from that protection: an un-ignorable sender betrays staff status, so to anyone who ignores them a shadow mod must disappear exactly like a normal player. The single source of truth is `senderBypassesIgnore(perm)` (`internal/athena/client.go`) — `IsModerator(perm) && !IsShadow(perm)` — applied at the `/ignore` guard (`cmdIgnore`) and at all three ignore-list bypass sites (IC broadcast, OOC broadcast, and the buffered `/lifo` release). Pinned by `TestSenderBypassesIgnore`.
 
 ### Admin Role Hiding (`/admin hide`)
