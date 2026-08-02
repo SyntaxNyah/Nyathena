@@ -1301,9 +1301,8 @@ func pktAM(client *Client, p *packet.Packet) {
 		// Re-broadcast the URL byte-for-byte as it arrived (mc.Name, still in
 		// AO2 wire form) so the server never mangles it — recipients decode it
 		// back to the exact URL the sender chose.
-		client.Area().SetCurrentSong(mc.Name)
 		addToBuffer(client, "MUSIC", fmt.Sprintf("Changed music to %v.", decodedSong), false)
-		broadcastToArea(client.Area(), &packet.MCToClient{
+		playAreaMusic(client.Area(), &packet.MCToClient{
 			Name: mc.Name, CharID: mc.CharID, Showname: name,
 			Looping: "1", Channel: "0", Effects: effects,
 		})
@@ -1331,8 +1330,7 @@ func pktAM(client *Client, p *packet.Packet) {
 		}
 		// Track the current song so /getmusic can re-fetch it for clients
 		// whose audio dropped or who joined mid-track.
-		client.Area().SetCurrentSong(song)
-		broadcastToArea(client.Area(), &packet.MCToClient{
+		playAreaMusic(client.Area(), &packet.MCToClient{
 			Name: song, CharID: mc.CharID, Showname: name,
 			Looping: "1", Channel: "0", Effects: effects,
 		})

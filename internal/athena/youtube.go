@@ -255,7 +255,7 @@ func downloadYouTubeAudio(ctx context.Context, rawURL, id, destDir string) error
 // song with them. ext is the on-disk extension (".opus" or ".mp3") of the
 // cached file the area will fetch.
 func broadcastYouTubeReady(targetArea *area.Area, id, ext string, charID int, showname string) {
-	broadcastToArea(targetArea, &packet.MCToClient{
+	playAreaMusic(targetArea, &packet.MCToClient{
 		Name: youTubePlayURL(id, ext), CharID: charID, Showname: showname,
 		Looping: "1", Channel: "0", Effects: "0",
 	})
