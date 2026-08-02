@@ -1570,14 +1570,25 @@ func (client *Client) JoinArea(area *area.Area) {
 	if desc := area.Description(); desc != "" {
 		client.SendServerMessage("📍 " + desc)
 	}
-	// Sync the joining client to whatever is already playing in the area.
-	// Without this, a client that connects or walks into an area mid-track
-	// never receives an MC packet for that track and simply plays nothing
-	// until someone changes the music again (or the player thinks to run
-	// /getmusic, which does the same resend by hand).
-	if song := area.CurrentSong(); song != "" {
-		client.Send(&packet.MCToClient{Name: song, CharID: client.CharID(), Showname: "Server", Looping: "1", Channel: "0", Effects: "0"})
+	// Sync the joining client to the area's music state.
+	//
+	// If a track is playing, send it so a client that connects or walks into
+	// the area mid-track hears it instead of sitting in silence until someone
+	// changes the music again (or the player thinks to run /getmusic by hand).
+	//
+	// If nothing is playing — the area has never played a track (CurrentSong
+	// == "") or its music was explicitly stopped ("~stop.mp3") — send an
+	// explicit ~stop.mp3 so the joiner's client stops whatever track it was
+	// still playing from its previous area. Without this stop, walking out of a
+	// room with music into a silent room left the old track playing forever:
+	// the server never told the client to stop, so it had no way to know it
+	// should. (The explicit-stop case already worked because "~stop.mp3" is a
+	// non-empty CurrentSong; the gap was only the never-played "" case.)
+	song := area.CurrentSong()
+	if song == "" {
+		song = "~stop.mp3"
 	}
+	client.Send(&packet.MCToClient{Name: song, CharID: client.CharID(), Showname: "Server", Looping: "1", Channel: "0", Effects: "0"})
 	sendPlayerArup()
 }
 

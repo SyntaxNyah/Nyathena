@@ -155,9 +155,12 @@ func TestJoinAreaSyncsCurrentMusic(t *testing.T) {
 	}
 }
 
-// TestJoinAreaNoCurrentMusicSendsNoMC verifies that joining an area where
-// nothing has played yet does not emit a spurious MC packet.
-func TestJoinAreaNoCurrentMusicSendsNoMC(t *testing.T) {
+// TestJoinAreaNoCurrentMusicSendsStop verifies that joining an area where
+// nothing is playing (never played a track, or the music was stopped) sends an
+// explicit ~stop.mp3 MC packet. Without it, a client walking in from a room
+// with music kept playing that old track forever — the server never told it to
+// stop, so it had no way to know it should.
+func TestJoinAreaNoCurrentMusicSendsStop(t *testing.T) {
 	newTestClients(t)
 	origAreas := areas
 	t.Cleanup(func() { areas = origAreas })
@@ -171,8 +174,9 @@ func TestJoinAreaNoCurrentMusicSendsNoMC(t *testing.T) {
 
 	client.JoinArea(a)
 
-	if out := conn.String(); strings.Contains(out, "MC#") {
-		t.Fatalf("expected no MC packet when area has no current song, got %q", out)
+	const wantMC = "MC#~stop.mp3#0#Server#1#0#0#%"
+	if out := conn.String(); !strings.Contains(out, wantMC) {
+		t.Fatalf("expected a ~stop.mp3 MC packet when area has no current song, got %q", out)
 	}
 }
 
