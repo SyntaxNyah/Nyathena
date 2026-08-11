@@ -623,6 +623,17 @@ func (client *Client) HandleClient() {
 		return
 	}
 
+	// Defense in depth: the accept-loop checks in ListenTCP/HandleWS already
+	// reject a shadow-disconnected IPID before a *Client ever exists, but a
+	// connection already past that point when /shadowdisconnect is issued
+	// mid-handshake would otherwise slip through. No packet is sent -- see
+	// shadowdisconnect.go for why shadowDisconnectNow forces an abrupt close
+	// rather than a clean one.
+	if isShadowDisconnected(client.Ipid()) {
+		client.shadowDisconnectNow()
+		return
+	}
+
 	// If this IPID has been tormented by automod, schedule a random disconnect.
 	if isIPIDTormented(client.Ipid()) {
 		go startTormentDisconnect(client)
