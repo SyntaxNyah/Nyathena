@@ -505,6 +505,7 @@ func NewServer(conf *settings.Config) (*Server, error) {
 	initCvote(conf)
 	initHotConfig(conf)
 	initMusicBans()
+	initShadowDisconnects()
 	// Initialise the goroutine pool if a limit is configured.
 	if conf.MaxConnectionGoroutines > 0 {
 		connPool = make(chan struct{}, conf.MaxConnectionGoroutines)
@@ -577,6 +578,14 @@ func (s *Server) ListenTCP() {
 		}
 		rawAddr := conn.RemoteAddr().String()
 		ipid := getIpid(rawAddr)
+		if isShadowDisconnected(ipid) {
+			// No packet, no reason -- an instant, silent drop that looks
+			// exactly like a network failure or a server that isn't there,
+			// not a deliberate rejection.
+			logger.LogInfof("Connection from %v rejected (shadow-disconnected)", ipid)
+			conn.Close()
+			continue
+		}
 		if reject, autoban := checkConnRateLimit(ipid); reject {
 			logger.LogInfof("Connection from %v rejected (connection rate limit exceeded)", ipid)
 			if autoban {
@@ -720,6 +729,15 @@ func webaoAcceptOptions() *websocket.AcceptOptions {
 func HandleWS(w http.ResponseWriter, r *http.Request) {
 	rawIP := getRealIP(r)
 	ipid := getIpid(rawIP)
+	if isShadowDisconnected(ipid) {
+		// Refuse the WebSocket upgrade outright, with a generic response and
+		// no body -- to a browser this reads as an ordinary failed handshake
+		// ("Error during WebSocket handshake: Unexpected response code..."),
+		// not a deliberate, explained rejection.
+		logger.LogInfof("Connection from %v rejected (shadow-disconnected)", ipid)
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
 	if reject, autoban := checkConnRateLimit(ipid); reject {
 		logger.LogInfof("Connection from %v rejected (connection rate limit exceeded)", ipid)
 		if autoban {

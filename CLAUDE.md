@@ -562,6 +562,24 @@ Punishments now record the issuer's permission tier (`IssuerSystem`/`IssuerMod`/
 | `/musicunban <uid\|ipid>` | `MUTE` | Lift a music-ban. Accepts a connected target's UID or a raw IPID, so offline players can still be unbanned. |
 | `/musicbans` | `MUTE` | List every active music-ban with reason, issuer and timestamp (newest first). |
 
+### Shadow Disconnect / Stealth Ban (`/shadowdisconnect`)
+`ADMIN`-only stealth ban, distinct from `/ban`: the target is never told why — or that — they're blocked. Every current and future connection attempt from the target's IPID is dropped with **no packet and no reason**, forever, until an admin lifts it. Persisted by IPID via the `SHADOW_DISCONNECTS` table (DB migration 24), the same way `/musicban`/`/curserandomchar` persist — an in-memory-only flag would vanish the instant the target reconnects.
+
+| Command | Behaviour |
+|---------|-----------|
+| `/shadowdisconnect <uid\|ipid> [-r reason]` | Persistently shadow-bans the target's IPID. Accepts a connected target's UID or a raw IPID, so an offline player can be preemptively listed. Drops every live connection sharing that IPID immediately, and every future one silently. Idempotent; re-issuing overwrites the reason/issuer. |
+| `/shadowundisconnect <uid\|ipid\|all>` | Lifts a shadow-disconnect. Accepts a UID, a raw IPID (so offline players can be lifted too), or the literal `all` to clear the entire list at once. |
+| `/shadowdisconnectlist` | Lists every active shadow-disconnect entry with reason, issuer and timestamp (newest first). |
+
+**Why this isn't just `conn.Close()`.** Every other disconnect path in this codebase (`/kick`, `/ban`, `CheckBanned`) sends a typed packet (`KK`/`KB`/`BD`) naming the reason before closing — the opposite of what a shadow ban needs. For a raw TCP AO2 client, a bare `conn.Close()` with nothing sent first is already indistinguishable from a network drop. For a WebAO/WSS client it is not: `client.conn` wraps `nhooyr.io/websocket`, and `conn.Close()` on it performs a *clean* WebSocket closing handshake (status 1000, "Normal Closure") — a browser reports that as a deliberate, well-behaved close, not an error. `shadowDisconnectNow()` (`internal/athena/shadowdisconnect.go`) forces the library's abrupt path instead — an already-expired write deadline plus a doomed `Write` — which closes the raw connection with no Close frame, surfacing to a browser as a generic, unexplained connection error ("a typical websocket error"). The same helper is used whether disconnecting an online target immediately or rejecting a reconnect attempt.
+
+**Where the block is enforced (defense in depth, mirroring how the torment list re-checks at multiple points):**
+- `ListenTCP`'s accept loop (`internal/athena/server.go`) — the IPID is checked the instant it's computed from the raw connection, before any other rate-limit/firewall work, before a `*Client` even exists. A match is a silent `conn.Close()`.
+- `HandleWS` (`internal/athena/server.go`) — checked before the WebSocket upgrade is even attempted; a match responds with a bare `500` and no body, so the browser sees a generic failed handshake rather than an explained rejection.
+- `Client.HandleClient` (`internal/athena/client.go`) — a defense-in-depth re-check right alongside `CheckBanned`/the torment check, for a connection that was already past the accept-loop gate when `/shadowdisconnect` was issued mid-handshake.
+
+The in-memory set (`internal/athena/shadowdisconnect.go`) is a `map[string]struct{}` behind an `RWMutex`, seeded from the DB at startup, so every one of the above checks is a single lock-free-ish map lookup — cheap enough to run before any handshake work. A moderator target cannot be shadow-disconnected via UID (mirrors `/musicban`'s guard); an offline IPID has no such check, matching `/ban`'s offline-IPID path.
+
 ### Hot Config Reload (`/reload`)
 `/reload` (in-game, `ADMIN`) atomically re-reads every supported config/data file from disk and swaps it in without restarting the server. Also available as the `reload` CLI command on stdin and via `SIGHUP`.
 

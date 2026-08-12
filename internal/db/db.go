@@ -344,6 +344,15 @@ func Open() error {
 	if err != nil {
 		return err
 	}
+	_, err = db.Exec(`CREATE TABLE IF NOT EXISTS SHADOW_DISCONNECTS(
+		IPID      TEXT    PRIMARY KEY,
+		REASON    TEXT    NOT NULL DEFAULT '',
+		ISSUED_BY TEXT    NOT NULL DEFAULT '',
+		ISSUED_AT INTEGER NOT NULL DEFAULT 0
+	)`)
+	if err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -707,6 +716,25 @@ func upgradeDB(v int) error {
 			return err
 		}
 		if _, err := db.Exec("PRAGMA user_version = 23"); err != nil {
+			return err
+		}
+		fallthrough
+	case 23:
+		// SHADOW_DISCONNECTS persists /shadowdisconnect: each row silently and
+		// permanently bars one IPID from ever completing a connection again —
+		// every future join attempt is dropped with no explanation, until an
+		// admin lifts it with /shadowundisconnect. Fresh databases get the
+		// table from the CREATE TABLE in Open(); this migration is a
+		// no-op-safe CREATE for upgrades.
+		if _, err := db.Exec(`CREATE TABLE IF NOT EXISTS SHADOW_DISCONNECTS(
+			IPID      TEXT    PRIMARY KEY,
+			REASON    TEXT    NOT NULL DEFAULT '',
+			ISSUED_BY TEXT    NOT NULL DEFAULT '',
+			ISSUED_AT INTEGER NOT NULL DEFAULT 0
+		)`); err != nil {
+			return err
+		}
+		if _, err := db.Exec("PRAGMA user_version = 24"); err != nil {
 			return err
 		}
 	}
@@ -2721,4 +2749,94 @@ func IsRandomCharCursed(ipid string) (bool, error) {
 		return false, err
 	}
 	return n > 0, nil
+}
+
+// ShadowDisconnectInfo describes one /shadowdisconnect entry.
+type ShadowDisconnectInfo struct {
+	Ipid     string
+	Reason   string
+	IssuedBy string
+	IssuedAt int64
+}
+
+// AddShadowDisconnect upserts a /shadowdisconnect entry for the given IPID.
+// Re-issuing against an already-listed IPID overwrites the reason/issuer/
+// timestamp rather than creating a duplicate row.
+func AddShadowDisconnect(ipid, reason, issuedBy string, issuedAt int64) error {
+	if db == nil {
+		return nil
+	}
+	_, err := db.Exec("INSERT OR REPLACE INTO SHADOW_DISCONNECTS(IPID, REASON, ISSUED_BY, ISSUED_AT) VALUES(?, ?, ?, ?)",
+		ipid, reason, issuedBy, issuedAt)
+	return err
+}
+
+// RemoveShadowDisconnect deletes the /shadowdisconnect entry for the given
+// IPID. Returns sql.ErrNoRows if no such entry existed so callers can
+// distinguish "lifted a real listing" from "no listing was present".
+func RemoveShadowDisconnect(ipid string) error {
+	if db == nil {
+		return nil
+	}
+	res, err := db.Exec("DELETE FROM SHADOW_DISCONNECTS WHERE IPID = ?", ipid)
+	if err != nil {
+		return err
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if n == 0 {
+		return sql.ErrNoRows
+	}
+	return nil
+}
+
+// ClearAllShadowDisconnects deletes every /shadowdisconnect entry, for the
+// /shadowundisconnect all bulk-lift form. Returns the number of entries
+// removed.
+func ClearAllShadowDisconnects() (int64, error) {
+	if db == nil {
+		return 0, nil
+	}
+	res, err := db.Exec("DELETE FROM SHADOW_DISCONNECTS")
+	if err != nil {
+		return 0, err
+	}
+	return res.RowsAffected()
+}
+
+// IsShadowDisconnected reports whether the given IPID currently carries an
+// active /shadowdisconnect listing.
+func IsShadowDisconnected(ipid string) (bool, error) {
+	if db == nil {
+		return false, nil
+	}
+	var n int
+	if err := db.QueryRow("SELECT COUNT(*) FROM SHADOW_DISCONNECTS WHERE IPID = ?", ipid).Scan(&n); err != nil {
+		return false, err
+	}
+	return n > 0, nil
+}
+
+// ListShadowDisconnects returns every active /shadowdisconnect entry,
+// newest-first by ISSUED_AT. Used by /shadowdisconnectlist.
+func ListShadowDisconnects() ([]ShadowDisconnectInfo, error) {
+	if db == nil {
+		return nil, nil
+	}
+	rows, err := db.Query("SELECT IPID, REASON, ISSUED_BY, ISSUED_AT FROM SHADOW_DISCONNECTS ORDER BY ISSUED_AT DESC")
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []ShadowDisconnectInfo
+	for rows.Next() {
+		var sd ShadowDisconnectInfo
+		if err := rows.Scan(&sd.Ipid, &sd.Reason, &sd.IssuedBy, &sd.IssuedAt); err != nil {
+			return nil, err
+		}
+		out = append(out, sd)
+	}
+	return out, rows.Err()
 }
