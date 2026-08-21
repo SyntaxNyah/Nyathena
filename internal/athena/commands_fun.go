@@ -537,13 +537,20 @@ func cmdRoll(client *Client, args []string, _ string) {
 		return
 	}
 	var result []string
+	sum := 0
 	for i := 0; i < num; i++ {
-		result = append(result, fmt.Sprint(rand.Intn(sides)+1))
+		roll := rand.Intn(sides) + 1
+		sum += roll
+		result = append(result, fmt.Sprint(roll))
+	}
+	resultStr := strings.Join(result, ", ")
+	if num > 1 {
+		resultStr = fmt.Sprintf("%v (Total: %v)", resultStr, sum)
 	}
 	if *private {
-		client.SendServerMessage(fmt.Sprintf("Results: %v.", strings.Join(result, ", ")))
+		client.SendServerMessage(fmt.Sprintf("Results: %v.", resultStr))
 	} else {
-		sendAreaServerMessage(client.Area(), fmt.Sprintf("%v rolled %v. Results: %v.", oocDisplayName(client), flags.Arg(0), strings.Join(result, ", ")))
+		sendAreaServerMessage(client.Area(), fmt.Sprintf("%v rolled %v. Results: %v.", oocDisplayName(client), flags.Arg(0), resultStr))
 	}
 	addToBuffer(client, "CMD", fmt.Sprintf("Rolled %v.", flags.Arg(0)), false)
 }
