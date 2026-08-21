@@ -1032,7 +1032,7 @@ func initCommands() {
 		"roll": {
 			handler:  cmdRoll,
 			minArgs:  1,
-			usage:    "Usage: /roll [-p] <dice>d<sides>\n-p: Sets the roll to be private.",
+			usage:    "Usage: /roll [-p] <dice>d<sides>[+/-<modifier>]\n-p: Sets the roll to be private.",
 			desc:     "Rolls dice.",
 			reqPerms: permissions.PermissionField["NONE"],
 			category: "general",

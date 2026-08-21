@@ -519,19 +519,26 @@ func cmdDance(client *Client, _ []string, _ string) {
 	client.ToggleDance()
 }
 
+// rollRegex matches "<dice>d<sides>" with an optional trailing "+<mod>"/"-<mod>",
+// e.g. "2d6" or "1d20+10".
+var rollRegex = regexp.MustCompile(`^([[:digit:]]+)d([[:digit:]]+)([+-][[:digit:]]+)?$`)
+
 func cmdRoll(client *Client, args []string, _ string) {
 	flags := flag.NewFlagSet("", 0)
 	flags.SetOutput(io.Discard)
 	private := flags.Bool("p", false, "")
 	flags.Parse(args)
-	b, _ := regexp.MatchString("([[:digit:]])d([[:digit:]])", flags.Arg(0))
-	if !b {
+	m := rollRegex.FindStringSubmatch(flags.Arg(0))
+	if m == nil {
 		client.SendServerMessage("Argument not recognized.")
 		return
 	}
-	s := strings.Split(flags.Arg(0), "d")
-	num, _ := strconv.Atoi(s[0])
-	sides, _ := strconv.Atoi(s[1])
+	num, _ := strconv.Atoi(m[1])
+	sides, _ := strconv.Atoi(m[2])
+	var modifier int
+	if m[3] != "" {
+		modifier, _ = strconv.Atoi(m[3])
+	}
 	if num <= 0 || num > config.MaxDice || sides <= 0 || sides > config.MaxSide {
 		client.SendServerMessage("Invalid num/side.")
 		return
@@ -544,8 +551,13 @@ func cmdRoll(client *Client, args []string, _ string) {
 		result = append(result, fmt.Sprint(roll))
 	}
 	resultStr := strings.Join(result, ", ")
-	if num > 1 {
-		resultStr = fmt.Sprintf("%v (Total: %v)", resultStr, sum)
+	if num > 1 || modifier != 0 {
+		total := sum + modifier
+		if modifier != 0 {
+			resultStr = fmt.Sprintf("%v (%+d) (Total: %v)", resultStr, modifier, total)
+		} else {
+			resultStr = fmt.Sprintf("%v (Total: %v)", resultStr, total)
+		}
 	}
 	if *private {
 		client.SendServerMessage(fmt.Sprintf("Results: %v.", resultStr))
