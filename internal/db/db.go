@@ -353,6 +353,14 @@ func Open() error {
 	if err != nil {
 		return err
 	}
+	_, err = db.Exec(`CREATE TABLE IF NOT EXISTS LOCKDOWN_EXEMPT(
+		IPID      TEXT    PRIMARY KEY,
+		ISSUED_BY TEXT    NOT NULL DEFAULT '',
+		ISSUED_AT INTEGER NOT NULL DEFAULT 0
+	)`)
+	if err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -735,6 +743,24 @@ func upgradeDB(v int) error {
 			return err
 		}
 		if _, err := db.Exec("PRAGMA user_version = 24"); err != nil {
+			return err
+		}
+		fallthrough
+	case 24:
+		// LOCKDOWN_EXEMPT persists a verified /lockdown whitelist passkey:
+		// each row permanently exempts one IPID from the lockdown playtime
+		// purge/silence, regardless of actual playtime, on top of the
+		// existing "known IP" join-gate bypass. Fresh databases get the
+		// table from the CREATE TABLE in Open(); this migration is a
+		// no-op-safe CREATE for upgrades.
+		if _, err := db.Exec(`CREATE TABLE IF NOT EXISTS LOCKDOWN_EXEMPT(
+			IPID      TEXT    PRIMARY KEY,
+			ISSUED_BY TEXT    NOT NULL DEFAULT '',
+			ISSUED_AT INTEGER NOT NULL DEFAULT 0
+		)`); err != nil {
+			return err
+		}
+		if _, err := db.Exec("PRAGMA user_version = 25"); err != nil {
 			return err
 		}
 	}
@@ -2837,6 +2863,70 @@ func ListShadowDisconnects() ([]ShadowDisconnectInfo, error) {
 			return nil, err
 		}
 		out = append(out, sd)
+	}
+	return out, rows.Err()
+}
+
+// LockdownExemptInfo describes one verified /lockdown whitelist passkey entry.
+type LockdownExemptInfo struct {
+	Ipid     string
+	IssuedBy string
+	IssuedAt int64
+}
+
+// AddLockdownExempt upserts a permanent lockdown-purge exemption for the
+// given IPID, granted after /lockdown whitelist verifies a passkey for it.
+// Re-verifying the same IPID's passkey overwrites the issuer/timestamp
+// rather than creating a duplicate row.
+func AddLockdownExempt(ipid, issuedBy string, issuedAt int64) error {
+	if db == nil {
+		return nil
+	}
+	_, err := db.Exec("INSERT OR REPLACE INTO LOCKDOWN_EXEMPT(IPID, ISSUED_BY, ISSUED_AT) VALUES(?, ?, ?)",
+		ipid, issuedBy, issuedAt)
+	return err
+}
+
+// RemoveLockdownExempt deletes the lockdown-purge exemption for the given
+// IPID. Returns sql.ErrNoRows if no such exemption existed so callers can
+// distinguish "removed a real exemption" from "none was present".
+func RemoveLockdownExempt(ipid string) error {
+	if db == nil {
+		return nil
+	}
+	res, err := db.Exec("DELETE FROM LOCKDOWN_EXEMPT WHERE IPID = ?", ipid)
+	if err != nil {
+		return err
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if n == 0 {
+		return sql.ErrNoRows
+	}
+	return nil
+}
+
+// ListLockdownExempts returns every permanently-exempted IPID, newest-first
+// by ISSUED_AT. Used by /lockdown exemptlist and to seed the in-memory set
+// at startup.
+func ListLockdownExempts() ([]LockdownExemptInfo, error) {
+	if db == nil {
+		return nil, nil
+	}
+	rows, err := db.Query("SELECT IPID, ISSUED_BY, ISSUED_AT FROM LOCKDOWN_EXEMPT ORDER BY ISSUED_AT DESC")
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []LockdownExemptInfo
+	for rows.Next() {
+		var le LockdownExemptInfo
+		if err := rows.Scan(&le.Ipid, &le.IssuedBy, &le.IssuedAt); err != nil {
+			return nil, err
+		}
+		out = append(out, le)
 	}
 	return out, rows.Err()
 }

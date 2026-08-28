@@ -1555,9 +1555,13 @@ func cmdTormentList(client *Client, _ []string, _ string) {
 // cmdLockdown toggles server lockdown mode, or manages the lockdown whitelist.
 // Subcommands:
 //
-//	/lockdown           - toggle lockdown on/off
-//	/lockdown add <UID> - whitelist a connected player's IPID so they can join during lockdown
-//	/lockdown whitelist all - whitelist all IPIDs currently connected to the server
+//	/lockdown                    - toggle lockdown on/off
+//	/lockdown add <UID>          - whitelist a connected player's IPID so they can join during lockdown
+//	/lockdown whitelist all      - whitelist all IPIDs currently connected to the server
+//	/lockdown whitelist <passkey> - verify a lockdown passkey (see lockdown_passkey.go): whitelists
+//	                                 the IPID it certifies and permanently exempts it from the playtime purge
+//	/lockdown unwhitelist <uid|ipid> - remove a previously-verified passkey exemption
+//	/lockdown exemptlist         - list every IPID currently exempt via a verified passkey
 func cmdLockdown(client *Client, args []string, usage string) {
 	// Subcommand dispatch.
 	if len(args) >= 1 {
@@ -1586,8 +1590,14 @@ func cmdLockdown(client *Client, args []string, usage string) {
 			addToBuffer(client, "CMD", fmt.Sprintf("Whitelisted IPID %v (UID %v) for lockdown.", ipid, uid), true)
 			return
 		case "whitelist":
-			if len(args) < 2 || args[1] != "all" {
+			if len(args) < 2 {
 				client.SendServerMessage("Not enough arguments:\n" + usage)
+				return
+			}
+			if args[1] != "all" {
+				// Not the "whitelist all" form -- treat the argument as a
+				// lockdown passkey (see lockdown_passkey.go).
+				cmdLockdownWhitelistPasskey(client, args[1])
 				return
 			}
 			count := 0
@@ -1603,6 +1613,16 @@ func cmdLockdown(client *Client, args []string, usage string) {
 			})
 			client.SendServerMessage(fmt.Sprintf("Whitelisted %v IPID(s) from the server for lockdown.", count))
 			addToBuffer(client, "CMD", fmt.Sprintf("Whitelisted %v IPID(s) server-wide for lockdown.", count), true)
+			return
+		case "unwhitelist":
+			if len(args) < 2 {
+				client.SendServerMessage("Not enough arguments:\n" + usage)
+				return
+			}
+			cmdLockdownUnwhitelist(client, args[1])
+			return
+		case "exemptlist":
+			cmdLockdownExemptList(client)
 			return
 		default:
 			client.SendServerMessage("Unknown subcommand:\n" + usage)
