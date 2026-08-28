@@ -551,8 +551,8 @@ func initCommands() {
 			handler:  cmdLog,
 			minArgs:  1,
 			usage:    "Usage: /log <area>",
-			desc:     "Prints an area's log buffer.",
-			reqPerms: permissions.PermissionField["LOG"],
+			desc:     "Admin: Prints an area's log buffer.",
+			reqPerms: permissions.PermissionField["ADMIN"],
 			category: "moderation",
 		},
 		"login": {
