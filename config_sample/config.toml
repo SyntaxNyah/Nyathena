@@ -436,6 +436,15 @@ ping_timeout = 0
 # Set to 0 to disable. Default: 10 seconds.
 new_ipid_ooc_cooldown = 10
 
+# New IPID IC cooldown: Number of seconds a brand-new IPID must wait before being allowed
+# to speak in-character. Unlike the OOC cooldown, this check runs AFTER the message rate
+# limit and AutoMod/censor checks in pktIC (not before) -- so a flood or slur burst from a
+# fresh connection during the cooldown window still gets judged, and can still be
+# kicked/banned, by those checks instead of being silently shielded by the cooldown. The
+# cooldown itself only ever rejects an otherwise-clean message sent too early.
+# Set to 0 to disable. Default: 10 seconds.
+new_ipid_ic_cooldown = 10
+
 # New IPID modcall cooldown: Number of seconds a brand-new IPID must wait before being
 # allowed to send a modcall. This prevents throwaway connections from flooding moderators.
 # Set to 0 to disable. Default: 60 seconds.

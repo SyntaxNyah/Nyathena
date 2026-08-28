@@ -90,6 +90,7 @@ type ServerConfig struct {
 	PingRateLimit                        int      `toml:"ping_rate_limit"`
 	PingRateLimitWindow                  int      `toml:"ping_rate_limit_window"`
 	NewIPIDOOCCooldown                   int      `toml:"new_ipid_ooc_cooldown"`
+	NewIPIDICCooldown                    int      `toml:"new_ipid_ic_cooldown"`
 	NewIPIDModcallCooldown               int      `toml:"new_ipid_modcall_cooldown"`
 	GlobalNewIPRateLimit                 int      `toml:"global_new_ip_rate_limit"`
 	GlobalNewIPRateLimitWindow           int      `toml:"global_new_ip_rate_limit_window"`
@@ -284,6 +285,7 @@ func DefaultConfig() *Config {
 			PingRateLimit:                        10,
 			PingRateLimitWindow:                  5,
 			NewIPIDOOCCooldown:                   10,
+			NewIPIDICCooldown:                    10,
 			NewIPIDModcallCooldown:               60,
 			GlobalNewIPRateLimit:                 5,
 			GlobalNewIPRateLimitWindow:           10,

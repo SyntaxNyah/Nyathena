@@ -1095,27 +1095,58 @@ func pktIC(client *Client, p *packet.Packet) {
 	// must never reach the room, not even through the delayed 50/50 torment
 	// rebroadcast in handleTormentedIC.
 	censorShadow := false
-	switch autoModCheck(client, msgText, "IC message") {
-	case autoModBlocked:
+	// pendingCensorKick is set when a censor trip above requires an escalating kick
+	// (see autoModCheck's kickAfter return) but the connection must stay open a
+	// little longer -- through the shadow-echo/broadcast below -- so the kick is
+	// applied once, at the very end of this function, via client.KickForCensorTrip().
+	pendingCensorKick := false
+	if result, kick := autoModCheck(client, msgText, "IC message"); result == autoModBlocked {
+		if kick {
+			client.KickForCensorTrip()
+		}
 		return
-	case autoModShadow:
+	} else if result == autoModShadow {
 		censorShadow = true
+		pendingCensorKick = kick
 	}
 	if !censorShadow && ms.Showname != "" {
-		switch autoModCheck(client, decode(ms.Showname), "IC showname") {
-		case autoModBlocked:
+		if result, kick := autoModCheck(client, decode(ms.Showname), "IC showname"); result == autoModBlocked {
+			if kick {
+				client.KickForCensorTrip()
+			}
 			return
-		case autoModShadow:
+		} else if result == autoModShadow {
 			censorShadow = true
+			pendingCensorKick = kick
 		}
 	}
 	if !censorShadow && ms.Showname != "" && checkCensoredShowname(client, decode(ms.Showname)) {
+		// checkCensoredShowname has exactly one outcome on a match (shadow-drop +
+		// torment-list), unlike autoModCheck's multiple configurable actions, so a
+		// match always also warrants the same escalating kick.
+		pendingCensorKick = true
 		censorShadow = true
 	}
 
 	// Torment: ghost or delay the message without the client noticing.
 	if !censorShadow && isIPIDTormented(client.Ipid()) {
 		handleTormentedIC(client, ms)
+		return
+	}
+
+	// New-IPID IC cooldown: a brand-new connection must wait before speaking IC.
+	// Placed AFTER the rate-limit check at the top of this function and the
+	// automod/censor and torment checks above -- NOT before them -- so a flood or
+	// slur burst from a fresh connection during the cooldown window still gets
+	// judged (and can still be kicked/banned) by those checks instead of being
+	// silently shielded by the cooldown. The cooldown itself only ever rejects an
+	// otherwise-clean message sent too early.
+	if limited, remaining := checkNewIPIDICCooldown(client.Ipid()); limited {
+		unit := "seconds"
+		if remaining == 1 {
+			unit = "second"
+		}
+		client.SendServerMessage(fmt.Sprintf("New users must wait %d %s before speaking in-character.", remaining, unit))
 		return
 	}
 
@@ -1231,6 +1262,13 @@ func pktIC(client *Client, p *packet.Packet) {
 		addToBuffer(client, "IC", "\""+ms.Message+"\" (censored)", false)
 	default:
 		addToBuffer(client, "IC", "\""+ms.Message+"\"", false)
+	}
+
+	// Apply the deferred censor-trip kick (see pendingCensorKick above) now that
+	// the shadow echo and buffer log are done -- KickForCensorTrip closes the
+	// connection, so nothing below this point may touch client again.
+	if pendingCensorKick {
+		client.KickForCensorTrip()
 	}
 }
 
@@ -1490,8 +1528,11 @@ func pktOOC(client *Client, p *packet.Packet) {
 	// configured action consistently. On a shadow trip the message is echoed
 	// back to only the sender (under the offending name, so their client
 	// looks normal) and dropped for everyone else.
-	switch autoModCheck(client, username, "OOC username") {
+	switch result, kick := autoModCheck(client, username, "OOC username"); result {
 	case autoModBlocked:
+		if kick {
+			client.KickForCensorTrip()
+		}
 		return
 	case autoModShadow:
 		display := username
@@ -1503,6 +1544,9 @@ func pktOOC(client *Client, p *packet.Packet) {
 		}
 		client.Send(&packet.CTToClient{Name: encode(display), Message: ct.Message, IsFromServer: "0"})
 		addToBuffer(client, "OOC", "\""+ct.Message+"\" (censored username)", false)
+		if kick {
+			client.KickForCensorTrip()
+		}
 		return
 	}
 	if utf8.RuneCountInString(ct.Message) > config.MaxMsg {
@@ -1588,12 +1632,18 @@ func pktOOC(client *Client, p *packet.Packet) {
 	// sent on their side while no other client ever receives it. This runs
 	// before the torment branch so a censored message can never leak out
 	// through handleTormentedOOC's delayed rebroadcast.
-	switch autoModCheck(client, decode(msg), "OOC message") {
+	switch result, kick := autoModCheck(client, decode(msg), "OOC message"); result {
 	case autoModBlocked:
+		if kick {
+			client.KickForCensorTrip()
+		}
 		return
 	case autoModShadow:
 		client.Send(&packet.CTToClient{Name: encode(displayUsername), Message: msg, IsFromServer: "0"})
 		addToBuffer(client, "OOC", "\""+msg+"\" (censored)", false)
+		if kick {
+			client.KickForCensorTrip()
+		}
 		return
 	}
 	// Torment: ghost or delay the OOC message without the client noticing.
