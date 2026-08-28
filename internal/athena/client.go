@@ -1111,6 +1111,47 @@ func (client *Client) SendMotd(motd string) {
 	client.SendServerMessage(strings.TrimRight(motd, "\r\n"))
 }
 
+// escalatingKick is the shared engine behind every "repeat offender" kick in the
+// server -- currently KickForRateLimit (message-based rate limit kicks) and
+// KickForCensorTrip (AutoMod shadow/torment censor trips). It registers one more kick
+// against the client's IPID in the same spree counter (registerRateLimitKick) and,
+// once the client's playtime tier's threshold is reached (rateLimitAutobanThresholdFor),
+// escalates to the shared short automatic ban (autobanFlooderFor) instead of a plain
+// kick. The counter and tiers are shared across both violation kinds on purpose: a
+// player who racks up one rate-limit kick and one censor-trip kick is just as much a
+// repeat offender as one who trips the same check twice, so they escalate the same way
+// -- one counter, one leniency system, regardless of which rule they kept breaking.
+//
+// violation is a short noun phrase describing the offense (e.g. "spamming",
+// "prohibited language"), used to build both the player-facing kick/ban messages and
+// the info log lines. banReason is the short description recorded on the ban itself
+// (via autobanFlooderFor) and the audit log line.
+func (client *Client) escalatingKick(banReason, violation string) {
+	ipid := client.Ipid()
+	uid := client.Uid()
+
+	if count := registerRateLimitKick(ipid); count > 0 && count >= config.RateLimitKickAutobanThreshold {
+		if threshold, bannable := rateLimitAutobanThresholdFor(client); bannable && count >= threshold {
+			if dur, ok := rateLimitKickAutobanDuration(); ok {
+				// Committed synchronously, like the raw-packet-flood ban, so the ban is on
+				// record before the connection closes and a fast reconnect attempt can't
+				// slip in ahead of it.
+				autobanFlooderFor(ipid, banReason, dur)
+				client.SendServerMessage(fmt.Sprintf("You have been kicked and temporarily banned for repeated %v (%v).", violation, dur))
+				logger.LogInfof("Client (IPID:%v UID:%v) auto-banned for %v after %v kicks for %v", ipid, uid, dur, count, violation)
+				logger.WriteAudit(fmt.Sprintf("%v | RATE_LIMIT_AUTOBAN | IPID:%v | UID:%v | Auto-banned for %v after %v kicks for %v",
+					time.Now().UTC().Format("15:04:05"), ipid, uid, dur, count, violation))
+				client.conn.Close()
+				return
+			}
+		}
+	}
+
+	client.SendServerMessage(fmt.Sprintf("You have been kicked for %v.", violation))
+	logger.LogInfof("Client (IPID:%v UID:%v) kicked for %v", ipid, uid, violation)
+	client.conn.Close()
+}
+
 // KickForRateLimit kicks the client for exceeding a message-based rate limit (IC,
 // character-select, music/area-change, or either OOC rate limit -- every call site
 // checks the rate limit before doing anything else, so the offending message is never
@@ -1132,29 +1173,24 @@ func (client *Client) SendMotd(motd string) {
 // with no such leniency, since no legitimate client ever sends at that rate (see
 // CheckRawPacketRateLimit).
 func (client *Client) KickForRateLimit() {
-	ipid := client.Ipid()
-	uid := client.Uid()
+	client.escalatingKick("repeated rate-limit violations", "spamming")
+}
 
-	if count := registerRateLimitKick(ipid); count > 0 && count >= config.RateLimitKickAutobanThreshold {
-		if threshold, bannable := rateLimitAutobanThresholdFor(client); bannable && count >= threshold {
-			if dur, ok := rateLimitKickAutobanDuration(); ok {
-				// Committed synchronously, like the raw-packet-flood ban, so the ban is on
-				// record before the connection closes and a fast reconnect attempt can't
-				// slip in ahead of it.
-				autobanFlooderFor(ipid, "repeated rate-limit violations", dur)
-				client.SendServerMessage(fmt.Sprintf("You have been kicked and temporarily banned for repeated spamming (%v).", dur))
-				logger.LogInfof("Client (IPID:%v UID:%v) auto-banned for %v after %v repeated rate-limit kicks", ipid, uid, dur, count)
-				logger.WriteAudit(fmt.Sprintf("%v | RATE_LIMIT_AUTOBAN | IPID:%v | UID:%v | Auto-banned for %v after %v repeated rate-limit kicks",
-					time.Now().UTC().Format("15:04:05"), ipid, uid, dur, count))
-				client.conn.Close()
-				return
-			}
-		}
-	}
-
-	client.SendServerMessage("You have been kicked for spamming.")
-	logger.LogInfof("Client (IPID:%v UID:%v) kicked for exceeding rate limit", ipid, uid)
-	client.conn.Close()
+// KickForCensorTrip kicks the client after an AutoMod censor trip under the shadow or
+// torment action (see autoModCheck in automod.go). Those two actions already drop the
+// offending message and torment-list the IPID, but previously left the connection open
+// with no immediate consequence -- nothing told the sender their message had failed, so
+// a determined troll could keep hammering slurs indefinitely (this is what
+// KickForCensorTrip fixes). Uses the exact same spree counter and playtime-tiered
+// leniency as KickForRateLimit, so repeated censor trips escalate to the same short
+// automatic ban that repeated rate-limit kicks do.
+//
+// This is only ever called from the automatic, server-triggered censor path
+// (autoModCheck's shadow/torment cases) -- never from a moderator's manual /lag, which
+// calls addTormentedIP directly and is a deliberate staff action, not something that
+// should also count toward an automatic ban.
+func (client *Client) KickForCensorTrip() {
+	client.escalatingKick("repeated censor violations", "prohibited language")
 }
 
 // CurrentCharacter returns the client's current character name.

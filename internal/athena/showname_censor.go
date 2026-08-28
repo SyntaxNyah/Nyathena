@@ -75,6 +75,11 @@ func matchCensoredName(s string) (string, bool) {
 // until a moderator lifts it), but every message sent under a censored
 // showname is swallowed and re-trips the censor. Returns true if a match
 // fired, so the caller silences the very message that triggered it.
+//
+// A match also warrants the same escalating kick as an AutoMod shadow/torment
+// trip (see autoModCheck's kickAfter and Client.KickForCensorTrip) -- the
+// caller applies it after finishing the current message, since this function
+// has exactly one outcome on a match (no action tiers to check).
 func checkCensoredShowname(client *Client, showname string) bool {
 	if showname == "" || len(getCensoredNames()) == 0 {
 		return false

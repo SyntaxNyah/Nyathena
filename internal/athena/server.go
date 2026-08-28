@@ -1702,6 +1702,30 @@ func checkNewIPIDOOCCooldown(ipid string) (bool, int) {
 	return false, 0
 }
 
+// checkNewIPIDICCooldown checks whether a newly-seen IPID is still within the IC
+// speaking cooldown (new_ipid_ic_cooldown). Mirrors checkNewIPIDOOCCooldown exactly,
+// but callers must place this check AFTER the rate-limit and automod/censor checks in
+// pktIC, not before -- see the call site's comment. Returns true (and remaining
+// seconds, rounded up) if the IPID must wait, false otherwise.
+func checkNewIPIDICCooldown(ipid string) (bool, int) {
+	if config.NewIPIDICCooldown <= 0 {
+		return false, 0
+	}
+	ipFirstSeenTracker.mu.Lock()
+	defer ipFirstSeenTracker.mu.Unlock()
+	t, exists := ipFirstSeenTracker.times[ipid]
+	if !exists {
+		return false, 0
+	}
+	cooldown := time.Duration(config.NewIPIDICCooldown) * time.Second
+	elapsed := time.Since(t)
+	if elapsed < cooldown {
+		remaining := int(math.Ceil((cooldown - elapsed).Seconds()))
+		return true, remaining
+	}
+	return false, 0
+}
+
 // checkNewIPIDModcallCooldown checks whether a newly-seen IPID is still within the modcall cooldown.
 // Returns true (and remaining seconds, rounded up) if the IPID must wait, false otherwise.
 func checkNewIPIDModcallCooldown(ipid string) (bool, int) {

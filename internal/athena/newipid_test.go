@@ -98,6 +98,74 @@ func TestNewIPIDOOCCooldownExpires(t *testing.T) {
 	}
 }
 
+// TestNewIPIDICCooldownDisabled tests that the IC cooldown is skipped when set to 0.
+func TestNewIPIDICCooldownDisabled(t *testing.T) {
+	oldConfig := config
+	defer func() { config = oldConfig }()
+
+	config = &settings.Config{}
+	config.NewIPIDICCooldown = 0
+
+	resetFirstSeenTracker()
+
+	ipid := "testNewIPIDICDisabled"
+	recordIPFirstSeen(ipid)
+
+	// With cooldown disabled, should never be limited.
+	if limited, _ := checkNewIPIDICCooldown(ipid); limited {
+		t.Errorf("IC was blocked when new IPID IC cooldown is disabled")
+	}
+}
+
+// TestNewIPIDICCooldownEnforced tests that a brand-new IPID is blocked from speaking IC.
+func TestNewIPIDICCooldownEnforced(t *testing.T) {
+	oldConfig := config
+	defer func() { config = oldConfig }()
+
+	config = &settings.Config{}
+	config.NewIPIDICCooldown = 10
+
+	resetFirstSeenTracker()
+
+	ipid := "testNewIPIDICEnforced"
+	recordIPFirstSeen(ipid)
+
+	// Should be blocked immediately after first-seen.
+	if limited, remaining := checkNewIPIDICCooldown(ipid); !limited {
+		t.Errorf("New IPID was not blocked from speaking IC immediately after joining")
+	} else if remaining <= 0 || remaining > 10 {
+		t.Errorf("Unexpected remaining seconds: %d (expected 1-10)", remaining)
+	}
+}
+
+// TestNewIPIDICCooldownExpires tests that the IC cooldown expires correctly.
+func TestNewIPIDICCooldownExpires(t *testing.T) {
+	oldConfig := config
+	defer func() { config = oldConfig }()
+
+	config = &settings.Config{}
+	config.NewIPIDICCooldown = 1 // 1-second cooldown for a fast test
+
+	resetFirstSeenTracker()
+
+	ipid := "testNewIPIDICExpires"
+	recordIPFirstSeen(ipid)
+
+	// Should be blocked immediately.
+	if limited, _ := checkNewIPIDICCooldown(ipid); !limited {
+		t.Errorf("New IPID was not blocked from speaking IC during cooldown")
+		return
+	}
+
+	// Wait for cooldown to expire.
+	time.Sleep(1100 * time.Millisecond)
+
+	// Should be allowed after cooldown expires.
+	if limited, _ := checkNewIPIDICCooldown(ipid); limited {
+		t.Errorf("New IPID was still blocked from speaking IC after cooldown expired")
+	}
+}
+
 // TestNewIPIDModcallCooldownDisabled tests that the modcall cooldown is skipped when set to 0.
 func TestNewIPIDModcallCooldownDisabled(t *testing.T) {
 	oldConfig := config
@@ -201,6 +269,7 @@ func TestNewIPIDUnseenIsNotBlocked(t *testing.T) {
 
 	config = &settings.Config{}
 	config.NewIPIDOOCCooldown = 10
+	config.NewIPIDICCooldown = 10
 	config.NewIPIDModcallCooldown = 60
 
 	resetFirstSeenTracker()
@@ -210,6 +279,9 @@ func TestNewIPIDUnseenIsNotBlocked(t *testing.T) {
 
 	if limited, _ := checkNewIPIDOOCCooldown(ipid); limited {
 		t.Errorf("Unseen IPID was blocked from OOC chat unexpectedly")
+	}
+	if limited, _ := checkNewIPIDICCooldown(ipid); limited {
+		t.Errorf("Unseen IPID was blocked from speaking IC unexpectedly")
 	}
 	if limited, _ := checkNewIPIDModcallCooldown(ipid); limited {
 		t.Errorf("Unseen IPID was blocked from modcall unexpectedly")

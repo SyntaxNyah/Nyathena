@@ -202,20 +202,28 @@ func initAutoMod(cfg *settings.Config) {
 // outright, while autoModShadow means the message must be echoed back to the
 // sender only — it looks sent on their side but never reaches another client.
 //
+// The second return value, kickAfter, is true only for the shadow and torment
+// actions, which (unlike kick/mute/ban) don't otherwise give the offender any
+// immediate consequence -- without a kick, nothing tells them their message
+// failed, so a determined troll can keep hammering slurs indefinitely. The
+// caller MUST call client.KickForCensorTrip() when kickAfter is true, but only
+// once it is done using the connection for this packet (e.g. after echoing a
+// shadow trip back to the sender) -- KickForCensorTrip closes the connection.
+//
 // This check runs whenever a banned-word list is loaded, regardless of
 // automod_enabled — like censored_names.txt and the giveaway item filter, the
 // word filter itself is not gated behind the automod toggle, only the
 // wordlist-driven action is (autoModAction defaults to the safe shadow-drop
 // behavior, autoModActionShadow, when automod is disabled — see initAutoMod).
-func autoModCheck(client *Client, msg string, source string) autoModResult {
+func autoModCheck(client *Client, msg string, source string) (result autoModResult, kickAfter bool) {
 	if len(getBannedWords()) == 0 {
-		return autoModPass
+		return autoModPass, false
 	}
 
 	normalized := normalizeForFilter(msg)
 	matched, ok := matchBannedWord(normalized)
 	if !ok {
-		return autoModPass
+		return autoModPass, false
 	}
 
 	switch autoModAction {
@@ -224,46 +232,46 @@ func autoModCheck(client *Client, msg string, source string) autoModResult {
 		client.conn.Close()
 		alertCensorTrip(client, source, matched, msg, "They were kicked.")
 		logger.LogInfof("automod: kicked %v (uid %d) — matched word %q", client.Ipid(), client.Uid(), matched)
-		return autoModBlocked
+		return autoModBlocked, false
 
 	case autoModActionMute:
 		// expires = 0 means permanent in the PUNISHMENTS table.
 		if err := db.UpsertMute(client.Ipid(), int(ICOOCMuted), 0); err != nil {
 			logger.LogErrorf("automod: failed to mute %v: %v", client.Ipid(), err)
-			return autoModPass
+			return autoModPass, false
 		}
 		client.SetMuted(ICOOCMuted)
 		client.SetUnmuteTime(time.Time{}) // zero = permanent
 		client.SendServerMessage("You have been muted for prohibited language.")
 		alertCensorTrip(client, source, matched, msg, "They were permanently muted.")
 		logger.LogInfof("automod: permanently muted %v (uid %d) — matched word %q", client.Ipid(), client.Uid(), matched)
-		return autoModBlocked
+		return autoModBlocked, false
 
 	case autoModActionTorment:
 		addCensorTripToTormentList(client)
-		alertCensorTrip(client, source, matched, msg, "The message was dropped and they were added to the torment list.")
-		logger.LogInfof("automod: added %v (uid %d) to torment list — matched word %q", client.Ipid(), client.Uid(), matched)
-		return autoModBlocked
+		alertCensorTrip(client, source, matched, msg, "The message was dropped, they were added to the torment list, and they were kicked.")
+		logger.LogInfof("automod: added %v (uid %d) to torment list and kicked — matched word %q", client.Ipid(), client.Uid(), matched)
+		return autoModBlocked, true
 
 	case autoModActionBan:
 		banTime := time.Now().UTC().Unix()
 		id, err := db.AddBan(client.Ipid(), client.Hdid(), banTime, -1, "Automatic ban: prohibited language", "Server")
 		if err != nil {
 			logger.LogErrorf("automod: failed to ban %v: %v", client.Ipid(), err)
-			return autoModPass
+			return autoModPass, false
 		}
 		forgetIP(client.Ipid())
 		client.SendSync(&packet.KB{Reason: fmt.Sprintf("Banned for prohibited language.\nUntil: ∞\nID: %d", id)})
 		client.conn.Close()
 		alertCensorTrip(client, source, matched, msg, "They were permanently banned.")
 		logger.LogInfof("automod: permanently banned %v (uid %d) — matched word %q", client.Ipid(), client.Uid(), matched)
-		return autoModBlocked
+		return autoModBlocked, false
 
 	default: // autoModActionShadow
 		addCensorTripToTormentList(client)
-		alertCensorTrip(client, source, matched, msg, "The message was shadow-dropped (only they can see it) and they were added to the torment list.")
-		logger.LogInfof("automod: shadow-dropped %s from %v (uid %d) — matched word %q", source, client.Ipid(), client.Uid(), matched)
-		return autoModShadow
+		alertCensorTrip(client, source, matched, msg, "The message was shadow-dropped (only they can see it), they were added to the torment list, and they were kicked.")
+		logger.LogInfof("automod: shadow-dropped %s from %v (uid %d) and kicked — matched word %q", source, client.Ipid(), client.Uid(), matched)
+		return autoModShadow, true
 	}
 }
 
