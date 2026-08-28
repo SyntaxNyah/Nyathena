@@ -363,7 +363,18 @@ func TestApplyBird(t *testing.T) {
 func TestApplyCow(t *testing.T) {
 	input := "hello world"
 	result := applyCow(input)
-	if !strings.Contains(strings.ToLower(result), "moo") && !strings.Contains(result, "*chews cud*") {
+	// Check against the actual source list (cowSounds) rather than a hand-picked
+	// substring, since "muu" is a valid pick that contains neither "moo" nor
+	// "*chews cud*" -- a hardcoded substring check here flakes whenever both
+	// randomly-chosen words land on it.
+	found := false
+	for _, sound := range cowSounds {
+		if strings.Contains(result, sound) {
+			found = true
+			break
+		}
+	}
+	if !found {
 		t.Errorf("applyCow failed: got %q, expected cow sounds", result)
 	}
 }
@@ -371,7 +382,9 @@ func TestApplyCow(t *testing.T) {
 func TestApplyFrog(t *testing.T) {
 	input := "hello world"
 	result := applyFrog(input)
-	frogSounds := []string{"ribbit", "croak", "brrr-ribbit", "riiibbit", "*jumps*", "crrroak"}
+	// Check against the actual source list (frogSounds) rather than a hand-copied
+	// one, so the test can't silently drift out of sync with what applyFrog can
+	// actually produce.
 	found := false
 	for _, sound := range frogSounds {
 		if strings.Contains(result, sound) {
@@ -387,7 +400,18 @@ func TestApplyFrog(t *testing.T) {
 func TestApplyDuck(t *testing.T) {
 	input := "hello world"
 	result := applyDuck(input)
-	if !strings.Contains(strings.ToLower(result), "quack") && !strings.Contains(result, "*waddles*") {
+	// Check against the actual source list (duckSounds) rather than a hand-picked
+	// substring -- every current entry happens to contain "quack" or be
+	// "*waddles*", but that's incidental, not guaranteed, so check the real list
+	// the same way TestApplyCow now does.
+	found := false
+	for _, sound := range duckSounds {
+		if strings.Contains(result, sound) {
+			found = true
+			break
+		}
+	}
+	if !found {
 		t.Errorf("applyDuck failed: got %q, expected duck sounds", result)
 	}
 }
