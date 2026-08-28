@@ -128,6 +128,19 @@ var (
 		timestamps: make(map[string][]time.Time),
 	}
 
+	// rateLimitKickTracker counts message-based rate-limit kicks (IC/CC/MC/OOC spam --
+	// see Client.KickForRateLimit) per IPID, across connections. Used to auto-ban repeat
+	// offenders: a bot that just reconnects and immediately spams again right after being
+	// kicked racks this up instead of getting an endless kick-reconnect-spam loop.
+	rateLimitKickTracker = struct {
+		mu     sync.Mutex
+		counts map[string]int       // ipid -> kicks within the current spree
+		last   map[string]time.Time // ipid -> time of the last counted kick
+	}{
+		counts: make(map[string]int),
+		last:   make(map[string]time.Time),
+	}
+
 	// ipFirstSeenTracker records the first time each IPID connected to this server session.
 	// Entries are never deleted so that returning IPIDs are never treated as "new" again.
 	ipFirstSeenTracker = struct {
@@ -369,6 +382,10 @@ func NewServer(conf *settings.Config) (*Server, error) {
 	_, err = str2duration.ParseDuration(conf.BanLen)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse default_ban_duration: %v", err.Error())
+	}
+	_, err = str2duration.ParseDuration(conf.RateLimitKickAutobanDuration)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse rate_limit_kick_autoban_duration: %v", err.Error())
 	}
 
 	// Webhook setup: set server name once for all webhook functions.
@@ -1249,6 +1266,44 @@ func checkConnRateLimit(ipid string) (rejected, autoban bool) {
 	return true, autoban
 }
 
+// registerRateLimitKick records a message-based rate-limit kick (see
+// Client.KickForRateLimit, which covers IC, character-select, music/area-change, and
+// both OOC rate limits) against ipid, and returns the number of kicks counted within
+// the current spree. Returns 0 if rate_limit_kick_autoban is disabled or its threshold
+// is 0, so the caller can skip the rest of the escalation path entirely.
+//
+// A kick that arrives more than rate_limit_kick_autoban_window after the previous one
+// restarts the count at 1, so an IPID has to earn a threshold within a single spam
+// spree rather than accumulating kicks over its entire lifetime on the server.
+func registerRateLimitKick(ipid string) int {
+	if !config.RateLimitKickAutoban || config.RateLimitKickAutobanThreshold <= 0 {
+		return 0
+	}
+
+	rateLimitKickTracker.mu.Lock()
+	defer rateLimitKickTracker.mu.Unlock()
+
+	now := time.Now()
+	if window := time.Duration(config.RateLimitKickAutobanWindow) * time.Second; window > 0 {
+		if last, ok := rateLimitKickTracker.last[ipid]; ok && now.Sub(last) > window {
+			rateLimitKickTracker.counts[ipid] = 0
+		}
+	}
+	rateLimitKickTracker.last[ipid] = now
+	rateLimitKickTracker.counts[ipid]++
+
+	return rateLimitKickTracker.counts[ipid]
+}
+
+// rateLimitKickAutobanDuration parses the configured cooldown duration for the
+// rate-limit-kick autoban. Returns ok=false if the config value is invalid, so the
+// caller can skip banning rather than apply a garbage duration; in practice this
+// can't happen at runtime since InitServer validates the value at startup.
+func rateLimitKickAutobanDuration() (dur time.Duration, ok bool) {
+	dur, err := str2duration.ParseDuration(config.RateLimitKickAutobanDuration)
+	return dur, err == nil
+}
+
 // forgetIP removes an IPID from the in-memory first-seen tracker and clears its
 // known-IP status in the database. This is called when an IP is banned so that, once
 // the ban expires, the IP will be treated as new again (subject to cooldowns and rate
@@ -1262,6 +1317,11 @@ func forgetIP(ipid string) {
 	connTracker.mu.Lock()
 	delete(connTracker.rejections, ipid)
 	connTracker.mu.Unlock()
+
+	rateLimitKickTracker.mu.Lock()
+	delete(rateLimitKickTracker.counts, ipid)
+	delete(rateLimitKickTracker.last, ipid)
+	rateLimitKickTracker.mu.Unlock()
 
 	go func() {
 		if err := db.RemoveKnownIP(ipid); err != nil {
@@ -1347,12 +1407,28 @@ func isIPIDTormented(ipid string) bool {
 // duration. reason should be a short description, e.g. "packet flooding".
 // No-op if the IP is already banned or the ban cannot be recorded.
 func autobanFlooder(ipid, reason string) {
-	banned, _, err := db.IsBanned(db.IPID, ipid)
-	if err != nil || banned {
-		return
-	}
 	dur, err := str2duration.ParseDuration(config.BanLen)
 	if err != nil {
+		return
+	}
+	autobanFlooderFor(ipid, reason, dur)
+}
+
+// autobanFlooderFor bans an IP for the given flood reason using an explicit duration,
+// rather than the configured default ban length. Used by autoban paths that
+// intentionally apply a shorter cooldown than a moderator-issued ban -- e.g. the
+// rate-limit-kick autoban in Client.KickForRateLimit -- so a genuine player who trips
+// it by accident isn't shut out nearly as long as a real ban would shut out an abuser.
+// No-op if the IP is already banned or the ban cannot be recorded.
+//
+// Same as a moderator-issued /ban, this alerts online staff (alertBannedAccountLinks)
+// if the banned IPID turns out to be linked to a registered player account -- purely
+// informational, the account itself is never touched -- so an automatic ban that catches
+// the wrong person (a real, if not yet well-established, player rather than a bot) is
+// immediately visible to staff and easy to catch and reverse with /unban.
+func autobanFlooderFor(ipid, reason string, dur time.Duration) {
+	banned, _, err := db.IsBanned(db.IPID, ipid)
+	if err != nil || banned {
 		return
 	}
 	now := time.Now().UTC()
@@ -1362,14 +1438,16 @@ func autobanFlooder(ipid, reason string) {
 		return
 	}
 	forgetIP(ipid)
-	logger.LogInfof("Auto-banned %v for %s", ipid, reason)
+	alertBannedAccountLinks(map[string]struct{}{ipid: {}})
+	logger.LogInfof("Auto-banned %v for %s (%v)", ipid, reason, dur)
 }
 
 // autoBanPacketFlooder bans an IP that exceeded the raw packet rate limit.
 // This is only triggered by raw packet flooding (sending hundreds of packets per second),
-// which is characteristic of bots/DDoS tools. IC/OOC/music message rate limit violations
-// result in a kick, not a ban (see KickForRateLimit).
-// If the IP is already banned, no additional ban is added.
+// which is characteristic of bots/DDoS tools. If the IP is already banned, no additional
+// ban is added. A single IC/OOC/music message rate limit violation still results in just
+// a kick -- see KickForRateLimit -- but repeated violations escalate to a ban too, via
+// registerRateLimitKick/autobanFlooderFor above.
 func autoBanPacketFlooder(ipid string) {
 	autobanFlooder(ipid, "packet flooding")
 }
@@ -1452,6 +1530,21 @@ func startConnTrackerCleanup() {
 				}
 			}
 			ipPingTracker.mu.Unlock()
+		}
+
+		// Clean up stale rate-limit-kick entries, so an IPID that stops tripping the
+		// rate limit doesn't hold a slot in the tracker forever.
+		if config.RateLimitKickAutobanWindow > 0 {
+			kickWindow := time.Duration(config.RateLimitKickAutobanWindow) * time.Second
+			kickCutoff := time.Now().Add(-kickWindow)
+			rateLimitKickTracker.mu.Lock()
+			for ipid, last := range rateLimitKickTracker.last {
+				if !last.After(kickCutoff) {
+					delete(rateLimitKickTracker.last, ipid)
+					delete(rateLimitKickTracker.counts, ipid)
+				}
+			}
+			rateLimitKickTracker.mu.Unlock()
 		}
 
 		// Clean up stale global new-IP rate limit entries.
@@ -1701,6 +1794,65 @@ func lockdownPurgeEligible(totalPlaytimeSeconds, thresholdSeconds int64) bool {
 		return false
 	}
 	return totalPlaytimeSeconds < thresholdSeconds
+}
+
+// rateLimitAutobanThresholdFor returns the number of spree kicks c must reach before
+// Client.KickForRateLimit escalates to the rate_limit_kick_autoban ban, and whether c
+// is bannable by this mechanism at all. Three tiers, based on c's accumulated all-time
+// playtime on its IPID (KNOWN_IPS.PLAYTIME, the same figure /playtime and the Lockdown
+// Playtime Purge read):
+//
+//   - Moderators, and any IPID at or above rate_limit_kick_autoban_min_playtime
+//     (default 20h): fully exempt (bannable=false) -- an established regular is never
+//     banned by this mechanism, no matter how many times it trips the rate limit.
+//   - At or above rate_limit_kick_autoban_lenient_playtime (default 2h): the lenient
+//     tier -- needs rate_limit_kick_autoban_lenient_threshold kicks (default 5,
+//     clamped up to at least the base threshold so a misconfigured value can't make
+//     this tier *more* aggressive than the base one) rather than the base threshold.
+//     Not immune, just harder to trip by accident than a brand-new connection.
+//   - Below that, including a brand-new connection with no playtime at all: the base
+//     rate_limit_kick_autoban_threshold (default 2) -- the aggressive tier aimed at
+//     connections that are purely there to spam.
+//
+// Reuses lockdownPurgeEligible's exact playtime-threshold comparison for the same
+// reason the Lockdown Playtime Purge uses it: both features are answering the same
+// underlying question -- "is this a real player, or a brand-new connection with
+// nothing vouching for it." A DB error while checking playtime fails open
+// (bannable=false) -- never bans a real player on a hiccup. An exempt/not-yet-eligible
+// IPID still gets the ordinary kick from KickForRateLimit; only the autoban escalation
+// is gated by this.
+func rateLimitAutobanThresholdFor(c *Client) (threshold int, bannable bool) {
+	base := config.RateLimitKickAutobanThreshold
+	if base <= 0 {
+		return 0, false
+	}
+	if permissions.IsModerator(c.Perms()) {
+		return 0, false
+	}
+
+	minPlaytime := int64(config.RateLimitKickAutobanMinPlaytime) * 60
+	lenientPlaytime := int64(config.RateLimitKickAutobanLenientPlaytime) * 60
+	if minPlaytime <= 0 && lenientPlaytime <= 0 {
+		return base, true // no playtime tiers configured -- flat threshold for everyone
+	}
+
+	playtime, err := db.GetPlaytime(c.Ipid())
+	if err != nil {
+		logger.LogErrorf("rate-limit autoban: failed to get playtime for IPID %v: %v", c.Ipid(), err)
+		return 0, false // fail open: never auto-ban a real player on a DB hiccup
+	}
+
+	if minPlaytime > 0 && playtime >= minPlaytime {
+		return 0, false
+	}
+	if lenientPlaytime > 0 && playtime >= lenientPlaytime {
+		lenient := config.RateLimitKickAutobanLenientThreshold
+		if lenient < base {
+			lenient = base
+		}
+		return lenient, true
+	}
+	return base, true
 }
 
 // lockdownShouldSilence reports whether, while lockdown is active, c's IC/OOC

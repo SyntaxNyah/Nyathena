@@ -269,6 +269,72 @@ message_rate_limit = 20
 # Default: 10 seconds
 message_rate_limit_window = 10
 
+# Whether to automatically ban an IPID that gets kicked for exceeding a message-based
+# rate limit (message_rate_limit or ooc_rate_limit) repeatedly in a short span -- e.g. a
+# bot that reconnects and immediately spams again right after being kicked. This is
+# separate from packet_flood_autoban/conn_flood_autoban, which cover raw packet floods
+# and connection floods respectively; this one covers ordinary IC/OOC/music spam kicks.
+# Set to false to disable. Default: true
+rate_limit_kick_autoban = true
+
+# Base number of message-rate-limit kicks (within rate_limit_kick_autoban_window) before
+# an IPID is automatically banned -- this is the AGGRESSIVE tier, applied to a brand-new
+# connection with little to no playtime (below rate_limit_kick_autoban_lenient_playtime).
+# For example, with the default value of 2, a fresh connection that gets kicked for
+# spamming twice in a row is banned on the second kick. See the playtime tiers below for
+# how established players get more slack instead of this base value.
+# Only takes effect when rate_limit_kick_autoban = true.
+# Default: 2
+rate_limit_kick_autoban_threshold = 2
+
+# Rolling window in seconds used to count rate-limit kicks toward a threshold (base or
+# lenient). A kick that arrives more than this many seconds after the previous one starts
+# a fresh count instead of adding to the old one, so the autoban targets a spam spree
+# rather than accumulating kicks earned far apart over a player's whole time on the server.
+# Default: 600 (10 minutes)
+rate_limit_kick_autoban_window = 600
+
+# How long the automatic ban from rate_limit_kick_autoban lasts. Accepts any duration
+# string (e.g. "15m", "1h").
+# Default: 15m
+rate_limit_kick_autoban_duration = "15m"
+
+# --- Playtime leniency tiers for rate_limit_kick_autoban ---
+#
+# The autoban is meant to be aggressive against fresh connections that are purely there
+# to spam, but lenient toward a real player who trips the rate limit from a bad
+# connection rather than actually spamming. It reads each IPID's accumulated ALL-TIME
+# playtime (the same figure /playtime and the Lockdown Playtime Purge use) and applies
+# one of three tiers:
+#   - below rate_limit_kick_autoban_lenient_playtime: AGGRESSIVE -- the base
+#     rate_limit_kick_autoban_threshold above applies (default 2 kicks).
+#   - at or above rate_limit_kick_autoban_lenient_playtime, but below
+#     rate_limit_kick_autoban_min_playtime: LENIENT -- needs
+#     rate_limit_kick_autoban_lenient_threshold kicks instead (default 5). Not immune,
+#     just harder to trip by accident than a brand-new connection.
+#   - at or above rate_limit_kick_autoban_min_playtime: FULLY EXEMPT -- never auto-banned
+#     by this mechanism, no matter how many times it trips the rate limit. Still gets the
+#     ordinary kick every time, same as a single violation.
+# Moderators are always fully exempt regardless of playtime. A DB error while checking
+# playtime fails open (never bans a real player on a hiccup).
+
+# Minutes of accumulated playtime for the LENIENT tier to kick in.
+# Default: 120 (2 hours)
+rate_limit_kick_autoban_lenient_playtime = 120
+
+# Number of rate-limit kicks needed to trigger the autoban at the lenient tier. Clamped
+# up to at least rate_limit_kick_autoban_threshold, so a misconfigured value here can
+# never make this tier *more* aggressive than the base one.
+# Default: 5
+rate_limit_kick_autoban_lenient_threshold = 5
+
+# Minutes of accumulated playtime for FULL exemption -- an established regular, never
+# auto-banned by this mechanism. Mirrors lockdown_min_playtime's exact rationale. Set to
+# 0 (along with rate_limit_kick_autoban_lenient_playtime = 0) to disable the playtime
+# tiers entirely and apply the base threshold flatly to everyone.
+# Default: 1200 (20 hours)
+rate_limit_kick_autoban_min_playtime = 1200
+
 # Modcall cooldown: Minimum number of seconds a user must wait between modcalls.
 # Set to 0 to disable the cooldown (allow unlimited modcalls).
 # Example: setting this to 60 means a user can only send one modcall per 60 seconds.

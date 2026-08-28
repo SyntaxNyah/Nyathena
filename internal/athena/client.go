@@ -1111,12 +1111,49 @@ func (client *Client) SendMotd(motd string) {
 	client.SendServerMessage(strings.TrimRight(motd, "\r\n"))
 }
 
-// KickForRateLimit kicks the client for exceeding the message (IC/OOC/music) rate limit.
-// Message-based rate limits always result in a kick, not a ban. Only raw packet flooding
-// (handled separately) results in an automatic ban.
+// KickForRateLimit kicks the client for exceeding a message-based rate limit (IC,
+// character-select, music/area-change, or either OOC rate limit -- every call site
+// checks the rate limit before doing anything else, so the offending message is never
+// broadcast). A single violation always results in just a kick. But if the same IPID
+// racks up enough kicks within rate_limit_kick_autoban_window -- e.g. a bot that
+// reconnects and immediately spams again right after being kicked -- it is additionally
+// handed a short automatic ban (rate_limit_kick_autoban_duration), so it can't cycle
+// through kick-reconnect-spam forever.
+//
+// How many kicks is "enough" depends on rateLimitAutobanThresholdFor's playtime tier:
+// aggressive (the base rate_limit_kick_autoban_threshold, default 2) for a brand-new
+// connection, lenient (default 5) for a connection with a couple hours on it, and fully
+// exempt -- kick only, never banned -- for moderators and established regulars. That
+// keeps this aggressive against the intended target (a fresh connection that's purely
+// there to spam) while staying lenient toward a real, if not yet well-established,
+// player who trips the limit from a bad connection rather than actually spamming.
+//
+// Raw packet flooding is unrelated and always bans on its own, much stricter counter,
+// with no such leniency, since no legitimate client ever sends at that rate (see
+// CheckRawPacketRateLimit).
 func (client *Client) KickForRateLimit() {
+	ipid := client.Ipid()
+	uid := client.Uid()
+
+	if count := registerRateLimitKick(ipid); count > 0 && count >= config.RateLimitKickAutobanThreshold {
+		if threshold, bannable := rateLimitAutobanThresholdFor(client); bannable && count >= threshold {
+			if dur, ok := rateLimitKickAutobanDuration(); ok {
+				// Committed synchronously, like the raw-packet-flood ban, so the ban is on
+				// record before the connection closes and a fast reconnect attempt can't
+				// slip in ahead of it.
+				autobanFlooderFor(ipid, "repeated rate-limit violations", dur)
+				client.SendServerMessage(fmt.Sprintf("You have been kicked and temporarily banned for repeated spamming (%v).", dur))
+				logger.LogInfof("Client (IPID:%v UID:%v) auto-banned for %v after %v repeated rate-limit kicks", ipid, uid, dur, count)
+				logger.WriteAudit(fmt.Sprintf("%v | RATE_LIMIT_AUTOBAN | IPID:%v | UID:%v | Auto-banned for %v after %v repeated rate-limit kicks",
+					time.Now().UTC().Format("15:04:05"), ipid, uid, dur, count))
+				client.conn.Close()
+				return
+			}
+		}
+	}
+
 	client.SendServerMessage("You have been kicked for spamming.")
-	logger.LogInfof("Client (IPID:%v UID:%v) kicked for exceeding rate limit", client.Ipid(), client.Uid())
+	logger.LogInfof("Client (IPID:%v UID:%v) kicked for exceeding rate limit", ipid, uid)
 	client.conn.Close()
 }
 

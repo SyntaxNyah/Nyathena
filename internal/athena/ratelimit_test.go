@@ -25,6 +25,7 @@ import (
 	"github.com/MangosArentLiterature/Athena/internal/area"
 	"github.com/MangosArentLiterature/Athena/internal/permissions"
 	"github.com/MangosArentLiterature/Athena/internal/settings"
+	str2duration "github.com/xhit/go-str2duration/v2"
 )
 
 // TestRateLimitDisabled tests that rate limiting can be disabled
@@ -1467,5 +1468,257 @@ func TestRawPacketRateLimitIndependentFromMessage(t *testing.T) {
 	// Raw packet rate limit (10 packets) should not be exceeded yet.
 	if client.CheckRawPacketRateLimit() {
 		t.Errorf("Raw packet rate limit should not be exceeded just because message rate limit was")
+	}
+}
+
+// resetRateLimitKickTracker resets the rate-limit-kick tracker for a clean test.
+func resetRateLimitKickTracker() {
+	rateLimitKickTracker.mu.Lock()
+	rateLimitKickTracker.counts = make(map[string]int)
+	rateLimitKickTracker.last = make(map[string]time.Time)
+	rateLimitKickTracker.mu.Unlock()
+}
+
+// TestRateLimitKickAutobanDefaultConfig verifies the default configuration enables the
+// rate-limit-kick autoban with sane, parseable values, including the playtime tiers.
+func TestRateLimitKickAutobanDefaultConfig(t *testing.T) {
+	oldConfig := config
+	defer func() { config = oldConfig }()
+
+	config = settings.DefaultConfig()
+
+	if !config.RateLimitKickAutoban {
+		t.Errorf("RateLimitKickAutoban should default to true")
+	}
+	if config.RateLimitKickAutobanThreshold != 2 {
+		t.Errorf("RateLimitKickAutobanThreshold should default to 2, got %d", config.RateLimitKickAutobanThreshold)
+	}
+	if _, err := str2duration.ParseDuration(config.RateLimitKickAutobanDuration); err != nil {
+		t.Errorf("default RateLimitKickAutobanDuration %q should parse: %v", config.RateLimitKickAutobanDuration, err)
+	}
+	if config.RateLimitKickAutobanLenientThreshold < config.RateLimitKickAutobanThreshold {
+		t.Errorf("default lenient threshold (%d) should be at least the base threshold (%d)",
+			config.RateLimitKickAutobanLenientThreshold, config.RateLimitKickAutobanThreshold)
+	}
+	if config.RateLimitKickAutobanMinPlaytime <= config.RateLimitKickAutobanLenientPlaytime {
+		t.Errorf("default full-exemption playtime (%d) should be higher than the lenient-tier playtime (%d)",
+			config.RateLimitKickAutobanMinPlaytime, config.RateLimitKickAutobanLenientPlaytime)
+	}
+}
+
+// TestRateLimitKickAutobanCounting verifies that registerRateLimitKick returns the
+// running spree count, incrementing by one on each call.
+func TestRateLimitKickAutobanCounting(t *testing.T) {
+	oldConfig := config
+	defer func() { config = oldConfig }()
+
+	config = &settings.Config{}
+	config.RateLimitKickAutoban = true
+	config.RateLimitKickAutobanThreshold = 3
+	config.RateLimitKickAutobanWindow = 600
+
+	resetRateLimitKickTracker()
+
+	ipid := "testKickCounting"
+	for i := 1; i <= 5; i++ {
+		if count := registerRateLimitKick(ipid); count != i {
+			t.Errorf("kick %d: got count=%d, want %d", i, count, i)
+			return
+		}
+	}
+}
+
+// TestRateLimitKickAutobanReachesDefaultThresholdOnSecondKick verifies that, under the
+// default configuration, a second kick's spree count reaches the base autoban threshold
+// -- the exact scenario requested: getting kicked twice for the rate limit.
+func TestRateLimitKickAutobanReachesDefaultThresholdOnSecondKick(t *testing.T) {
+	oldConfig := config
+	defer func() { config = oldConfig }()
+
+	config = settings.DefaultConfig() // threshold defaults to 2
+	resetRateLimitKickTracker()
+
+	ipid := "testKickTwice"
+
+	if count := registerRateLimitKick(ipid); count != 1 {
+		t.Errorf("first kick: got count=%d, want 1", count)
+		return
+	}
+	count := registerRateLimitKick(ipid)
+	if count != 2 {
+		t.Errorf("second kick: got count=%d, want 2", count)
+		return
+	}
+	if count < config.RateLimitKickAutobanThreshold {
+		t.Errorf("second kick's count (%d) should reach the default base threshold (%d)", count, config.RateLimitKickAutobanThreshold)
+	}
+}
+
+// TestRateLimitKickAutobanDisabled verifies that kicks are not counted at all (count
+// stays 0) when rate_limit_kick_autoban is disabled.
+func TestRateLimitKickAutobanDisabled(t *testing.T) {
+	oldConfig := config
+	defer func() { config = oldConfig }()
+
+	config = &settings.Config{}
+	config.RateLimitKickAutoban = false
+	config.RateLimitKickAutobanThreshold = 1
+
+	resetRateLimitKickTracker()
+
+	ipid := "testKickDisabled"
+	for i := 0; i < 20; i++ {
+		if count := registerRateLimitKick(ipid); count != 0 {
+			t.Errorf("kick %d: got count=%d, want 0 (autoban disabled)", i+1, count)
+			return
+		}
+	}
+}
+
+// TestRateLimitKickAutobanZeroThreshold verifies that kicks are not counted at all when
+// rate_limit_kick_autoban_threshold is 0.
+func TestRateLimitKickAutobanZeroThreshold(t *testing.T) {
+	oldConfig := config
+	defer func() { config = oldConfig }()
+
+	config = &settings.Config{}
+	config.RateLimitKickAutoban = true
+	config.RateLimitKickAutobanThreshold = 0
+
+	resetRateLimitKickTracker()
+
+	ipid := "testKickZeroThreshold"
+	for i := 0; i < 20; i++ {
+		if count := registerRateLimitKick(ipid); count != 0 {
+			t.Errorf("kick %d: got count=%d, want 0 (threshold is 0)", i+1, count)
+			return
+		}
+	}
+}
+
+// TestRateLimitKickAutobanIsolation verifies that kick counts are tracked per IPID and
+// one IPID's count does not affect another's.
+func TestRateLimitKickAutobanIsolation(t *testing.T) {
+	oldConfig := config
+	defer func() { config = oldConfig }()
+
+	config = &settings.Config{}
+	config.RateLimitKickAutoban = true
+	config.RateLimitKickAutobanThreshold = 2
+	config.RateLimitKickAutobanWindow = 600
+
+	resetRateLimitKickTracker()
+
+	ipid1 := "testKickIso1"
+	ipid2 := "testKickIso2"
+
+	registerRateLimitKick(ipid1) // count 1 for ipid1
+	registerRateLimitKick(ipid1) // count 2 for ipid1
+	if count := registerRateLimitKick(ipid2); count != 1 {
+		t.Errorf("ipid2's first kick should start its own count at 1 regardless of ipid1's count, got %d", count)
+	}
+}
+
+// TestRateLimitKickAutobanWindowExpiry verifies that a kick arriving after the spree
+// window has elapsed restarts the count at 1 instead of continuing to accumulate.
+func TestRateLimitKickAutobanWindowExpiry(t *testing.T) {
+	oldConfig := config
+	defer func() { config = oldConfig }()
+
+	config = &settings.Config{}
+	config.RateLimitKickAutoban = true
+	config.RateLimitKickAutobanThreshold = 2
+	config.RateLimitKickAutobanWindow = 1 // 1 second spree window
+
+	resetRateLimitKickTracker()
+
+	ipid := "testKickWindowExpiry"
+
+	if count := registerRateLimitKick(ipid); count != 1 {
+		t.Errorf("first kick: got count=%d, want 1", count)
+		return
+	}
+
+	// Wait for the spree window to expire.
+	time.Sleep(time.Duration(config.RateLimitKickAutobanWindow)*time.Second + 100*time.Millisecond)
+
+	// This kick starts a fresh spree, so the count must restart at 1, not continue to 2.
+	if count := registerRateLimitKick(ipid); count != 1 {
+		t.Errorf("kick after window expiry should restart the count at 1, got %d", count)
+	}
+}
+
+// TestRateLimitAutobanThresholdModeratorExempt verifies that a moderator is always fully
+// exempt from the rate-limit-kick autoban (bannable=false), regardless of playtime.
+func TestRateLimitAutobanThresholdModeratorExempt(t *testing.T) {
+	oldConfig := config
+	defer func() { config = oldConfig }()
+
+	config = &settings.Config{}
+	config.RateLimitKickAutobanThreshold = 2
+	config.RateLimitKickAutobanMinPlaytime = 1200
+
+	c := &Client{ipid: "rateLimitTierModIP", perms: permissions.PermissionField["BAN"]}
+	if threshold, bannable := rateLimitAutobanThresholdFor(c); bannable {
+		t.Errorf("Expected moderator to be fully exempt (bannable=false), got threshold=%d bannable=%v", threshold, bannable)
+	}
+}
+
+// TestRateLimitAutobanThresholdDisabledBase verifies that a base threshold of 0 disables
+// the autoban entirely (bannable=false) even for a non-moderator.
+func TestRateLimitAutobanThresholdDisabledBase(t *testing.T) {
+	oldConfig := config
+	defer func() { config = oldConfig }()
+
+	config = &settings.Config{}
+	config.RateLimitKickAutobanThreshold = 0
+
+	c := &Client{ipid: "rateLimitTierBaseZeroIP", perms: permissions.PermissionField["NONE"]}
+	if _, bannable := rateLimitAutobanThresholdFor(c); bannable {
+		t.Errorf("Expected bannable=false when the base threshold is 0")
+	}
+}
+
+// TestRateLimitAutobanThresholdFlatWhenTiersDisabled verifies that with both playtime
+// tiers disabled (0), every non-moderator gets the flat base threshold -- and, just as
+// importantly, that this path never touches the database (both playtime configs are 0,
+// so rateLimitAutobanThresholdFor must return before calling db.GetPlaytime).
+func TestRateLimitAutobanThresholdFlatWhenTiersDisabled(t *testing.T) {
+	oldConfig := config
+	defer func() { config = oldConfig }()
+
+	config = &settings.Config{}
+	config.RateLimitKickAutobanThreshold = 2
+	config.RateLimitKickAutobanMinPlaytime = 0
+	config.RateLimitKickAutobanLenientPlaytime = 0
+
+	c := &Client{ipid: "rateLimitTierFlatIP", perms: permissions.PermissionField["NONE"]}
+	threshold, bannable := rateLimitAutobanThresholdFor(c)
+	if !bannable || threshold != 2 {
+		t.Errorf("Expected flat threshold=2 bannable=true when playtime tiers are disabled, got threshold=%d bannable=%v", threshold, bannable)
+	}
+}
+
+// TestRateLimitKickAutobanDurationFallback verifies that rateLimitKickAutobanDuration
+// reports ok=false for an unparseable duration string, so callers can skip banning rather
+// than apply a garbage duration.
+func TestRateLimitKickAutobanDurationFallback(t *testing.T) {
+	oldConfig := config
+	defer func() { config = oldConfig }()
+
+	config = &settings.Config{}
+	config.RateLimitKickAutobanDuration = "not-a-duration"
+
+	if _, ok := rateLimitKickAutobanDuration(); ok {
+		t.Errorf("expected ok=false for an unparseable rate_limit_kick_autoban_duration")
+	}
+
+	config.RateLimitKickAutobanDuration = "15m"
+	dur, ok := rateLimitKickAutobanDuration()
+	if !ok {
+		t.Errorf("expected ok=true for a valid rate_limit_kick_autoban_duration")
+	}
+	if dur != 15*time.Minute {
+		t.Errorf("expected 15m, got %v", dur)
 	}
 }
