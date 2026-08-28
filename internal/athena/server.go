@@ -512,6 +512,7 @@ func NewServer(conf *settings.Config) (*Server, error) {
 	initHotConfig(conf)
 	initMusicBans()
 	initShadowDisconnects()
+	initLockdownExempt()
 	// Initialise the goroutine pool if a limit is configured.
 	if conf.MaxConnectionGoroutines > 0 {
 		connPool = make(chan struct{}, conf.MaxConnectionGoroutines)
@@ -605,7 +606,7 @@ func (s *Server) ListenTCP() {
 		if checkGlobalNewIPRateLimit(ipid) {
 			if lockdownReject := serverLockdownRejection(ipid); lockdownReject {
 				logger.LogInfof("Connection from new IP %v rejected (server lockdown active)", ipid)
-				NewClient(conn, ipid).SendSync(&packet.BD{Reason: lockdownJoinMsg})
+				NewClient(conn, ipid).SendSync(&packet.BD{Reason: lockdownRejectionMessage(lockdownJoinMsg, ipid)})
 			} else {
 				logger.LogInfof("Connection from new IP %v rejected (global new IP rate limit exceeded)", ipid)
 			}
@@ -775,11 +776,11 @@ func HandleWS(w http.ResponseWriter, r *http.Request) {
 			c, wsErr := websocket.Accept(w, r, webaoAcceptOptions())
 			if wsErr != nil {
 				logger.LogError(wsErr.Error())
-				http.Error(w, lockdownJoinMsg, http.StatusServiceUnavailable)
+				http.Error(w, lockdownRejectionMessage(lockdownJoinMsg, ipid), http.StatusServiceUnavailable)
 				return
 			}
 			client := NewClient(websocket.NetConn(r.Context(), c, websocket.MessageText), ipid)
-			client.SendSync(&packet.BD{Reason: lockdownJoinMsg})
+			client.SendSync(&packet.BD{Reason: lockdownRejectionMessage(lockdownJoinMsg, ipid)})
 			client.conn.Close()
 		} else {
 			logger.LogInfof("Connection from new IP %v rejected (global new IP rate limit exceeded)", ipid)
@@ -1632,7 +1633,10 @@ func checkNewIPIDModcallCooldown(ipid string) (bool, int) {
 // checkGlobalNewIPRateLimit checks whether too many new unique IPs have arrived within
 // the configured time window. If so, connections from IPs that have never been seen before
 // are rejected to protect the server against distributed floods using many unique IPs.
-// Already-known IPs (those with an entry in ipFirstSeenTracker) are always permitted.
+// Already-known IPs (those with an entry in ipFirstSeenTracker) are always permitted, as
+// is any IPID holding a verified lockdown whitelist passkey (see lockdown_passkey.go) --
+// that exemption must hold even if ipFirstSeenTracker has no entry for it (e.g. right
+// after a restart, before the IPID has reconnected).
 // Also enforces lockdown mode: while lockdown is active, all new (unseen) IPs are rejected.
 // Returns true if the connection should be rejected.
 func checkGlobalNewIPRateLimit(ipid string) bool {
@@ -1640,7 +1644,7 @@ func checkGlobalNewIPRateLimit(ipid string) bool {
 	ipFirstSeenTracker.mu.Lock()
 	_, known := ipFirstSeenTracker.times[ipid]
 	ipFirstSeenTracker.mu.Unlock()
-	if known {
+	if known || isLockdownExempt(ipid) {
 		return false
 	}
 
@@ -1717,6 +1721,9 @@ func lockdownShouldSilence(c *Client) bool {
 	if permissions.IsModerator(c.Perms()) {
 		return false
 	}
+	if isLockdownExempt(c.Ipid()) {
+		return false
+	}
 	playtime, err := db.GetPlaytime(c.Ipid())
 	if err != nil {
 		logger.LogErrorf("lockdown: failed to get playtime for IPID %v: %v", c.Ipid(), err)
@@ -1749,7 +1756,7 @@ func purgeLockdownFloodClients() {
 	if threshold <= 0 {
 		return
 	}
-	reason := fmt.Sprintf("Server lockdown: connections with under %d minute(s) of total playtime are being cleared.", threshold/60)
+	baseReason := fmt.Sprintf("Server lockdown: connections with under %d minute(s) of total playtime are being cleared.", threshold/60)
 
 	var wg sync.WaitGroup
 	var kicked int32
@@ -1763,7 +1770,7 @@ func purgeLockdownFloodClients() {
 			if !lockdownShouldSilence(c) {
 				return
 			}
-			c.SendSync(&packet.KK{Reason: reason})
+			c.SendSync(&packet.KK{Reason: lockdownRejectionMessage(baseReason, c.Ipid())})
 			c.conn.Close()
 			forgetIP(c.Ipid())
 			atomic.AddInt32(&kicked, 1)

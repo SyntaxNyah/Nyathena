@@ -156,6 +156,27 @@ type ServerConfig struct {
 	// Mods can change this at runtime with /setlockdownplaytime.
 	LockdownMinPlaytime int `toml:"lockdown_min_playtime"`
 
+	// SecretSeed is a server-private key used to derive lockdown whitelist
+	// passkeys (HMAC-SHA256 of an IPID, keyed by this value) -- a per-IPID
+	// credential shown to a player blocked by lockdown that staff can redeem
+	// with /lockdown whitelist <passkey> to let them in and permanently
+	// exempt them from the playtime purge, without needing them online or
+	// needing staff to know their IPID up front. Treat this like a password:
+	// anyone who has it can mint a valid passkey for ANY IPID. Leave blank to
+	// disable the whole passkey system (the "not a ban" message and
+	// /lockdown whitelist <passkey> both go inert; /lockdown add and
+	// /lockdown whitelist all are unaffected). Changing this invalidates
+	// every previously-issued passkey.
+	SecretSeed string `toml:"secretseed"`
+
+	// LockdownString is the message template shown to a player blocked by
+	// lockdown (rejected at connect, or kicked by the playtime purge),
+	// explaining that it's not a ban and giving them their passkey to relay
+	// to staff. The literal token "{id}" is replaced with their passkey; if
+	// omitted, the passkey is appended to the end instead. Only used when
+	// SecretSeed is set.
+	LockdownString string `toml:"lockdownstring"`
+
 	// EnableTUI, when true, starts the read-only terminal dashboard at server
 	// launch -- the same effect as passing the -tui CLI flag. The flag still
 	// wins if it is explicitly set; this entry is for operators who want the

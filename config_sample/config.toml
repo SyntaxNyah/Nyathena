@@ -148,6 +148,29 @@ player_lockdown_threshold = 0
 # Set to 0 to disable (lockdown will only block new IPIDs, same as before).
 lockdown_min_playtime = 30
 
+# Server-private key used to derive lockdown whitelist passkeys. Each IPID has a
+# unique passkey (HMAC-SHA256 of the IPID, keyed by this value) shown to them in
+# the message they get when lockdown blocks them (rejected at connect, or kicked
+# by the playtime purge above). It reads like "this is not a ban, give this code
+# to staff", and staff runs /lockdown whitelist <passkey> to both let that IPID
+# back in during lockdown AND permanently exempt it from the playtime purge from
+# then on -- a self-service way to vouch for a legitimate player without staff
+# needing to know their IPID or them needing to still be connected.
+#
+# Treat this exactly like a password: anyone who has it can mint a valid
+# passkey for ANY IPID, including ones that were never actually blocked. Leave
+# blank to disable the whole passkey system -- the blocked-message text and
+# /lockdown whitelist <passkey> both go inert (/lockdown add and /lockdown
+# whitelist all are unaffected). Changing this invalidates every
+# previously-issued passkey.
+secretseed = ""
+
+# Message template shown to a player blocked by lockdown, explaining that it's
+# not a ban. The literal text "{id}" is replaced with their passkey; if you
+# leave "{id}" out, the passkey is appended to the end instead. Only used when
+# secretseed is set above.
+lockdownstring = "This is not a ban. The server is temporarily in lockdown -- give this code to staff to be let in: {id}"
+
 # The maximum amount of bytes that players can send in a message. Long messages can slow down clients, 
 # so don't make this too large.
 max_message_length = 256

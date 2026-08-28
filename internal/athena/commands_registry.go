@@ -446,8 +446,8 @@ func initCommands() {
 		"lockdown": {
 			handler:  cmdLockdown,
 			minArgs:  0,
-			usage:    "Usage: /lockdown | /lockdown add <uid> | /lockdown whitelist all",
-			desc:     "Toggles server lockdown, or whitelists IPIDs. While active, only previously-known IPIDs can connect. Turning lockdown ON also instantly kicks every connected non-moderator whose total playtime is under the /setlockdownplaytime threshold (0 = that part is off). 'whitelist all' covers every area on the server. Lockdown status is broadcast to mods only.",
+			usage:    "Usage: /lockdown | /lockdown add <uid> | /lockdown whitelist all|<passkey> | /lockdown unwhitelist <uid|ipid> | /lockdown exemptlist",
+			desc:     "Toggles server lockdown, or whitelists IPIDs. While active, only previously-known IPIDs can connect. Turning lockdown ON also instantly kicks every connected non-moderator whose total playtime is under the /setlockdownplaytime threshold (0 = that part is off). 'whitelist all' covers every area on the server; 'whitelist <passkey>' verifies a lockdown passkey (see secretseed in config.toml), letting that IPID in and permanently exempting it from the playtime purge -- 'unwhitelist'/'exemptlist' manage those exemptions. Lockdown status is broadcast to mods only.",
 			reqPerms: permissions.PermissionField["BAN"],
 			category: "moderation",
 		},

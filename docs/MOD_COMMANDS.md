@@ -53,6 +53,9 @@ Permission bits are configured in `config/roles.toml`. Multiple bits are granted
 | `/lockdown [add <uid>\|whitelist all]` | BAN | Toggle server lockdown, or whitelist players. Turning it ON also instantly kicks every connected non-moderator whose total playtime is under the `/setlockdownplaytime` threshold, and for as long as lockdown stays active, silently drops (never broadcasts) any IC/OOC message from anyone still under that threshold. |
 | `/setplayerlimit <n>` | BAN | Set the player-capacity lockdown threshold (new joins rejected once this many are connected; 0 = off) |
 | `/setlockdownplaytime <minutes>` | BAN | Set the lockdown purge's minimum total-playtime threshold; 0 disables the purge |
+| `/lockdown whitelist <passkey>` | BAN | Verify a lockdown passkey (see `secretseed` in config.toml) — whitelists the IPID it certifies and permanently exempts it from the playtime purge |
+| `/lockdown unwhitelist <uid\|ipid>` | BAN | Revoke a previously-verified passkey exemption |
+| `/lockdown exemptlist` | BAN | List every IPID currently exempt via a verified passkey |
 | `/tormentlist` | MUTE | List every IPID on the torment/lag list, with any connected sessions |
 | `/untorment <ipid\|all>` | BAN | Remove one IPID from the torment list, or `all` to purge the entire list |
 | `/censoralerts [on\|off]` | MOD_CHAT | Toggle the OOC alerts you receive when a player trips the word censor (per-session; defaults to on) |
