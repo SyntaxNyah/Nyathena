@@ -155,6 +155,12 @@ var (
 	// Mods can change this at runtime with /setplayerlimit.
 	playerLockdownThreshold atomic.Int32
 
+	// lockdownMinPlaytime holds the runtime-adjustable minimum total playtime
+	// (in seconds) a connected IPID needs to survive the purge that runs when
+	// lockdown is switched on. 0 means the purge is disabled.
+	// Mods can change this at runtime with /setlockdownplaytime.
+	lockdownMinPlaytime atomic.Int64
+
 	// areaLastOOCMsg stores the last OOC message body (raw, as received) sent in each area.
 	// Used to prevent consecutive identical OOC messages from different clients in the same area.
 	// Key: *area.Area, Value: string. sync.Map is zero-value ready; no initialisation required.
@@ -514,6 +520,8 @@ func NewServer(conf *settings.Config) (*Server, error) {
 	}
 	// Initialize the player-capacity lockdown threshold from config.
 	playerLockdownThreshold.Store(int32(conf.PlayerLockdownThreshold))
+	// Initialize the lockdown min-playtime purge threshold from config (minutes -> seconds).
+	lockdownMinPlaytime.Store(int64(conf.LockdownMinPlaytime) * 60)
 	go startConnTrackerCleanup()
 	if conf.EnableCasino {
 		go startHourlyChipAward()
@@ -1677,6 +1685,104 @@ func serverLockdownRejection(ipid string) bool {
 	_, known := ipFirstSeenTracker.times[ipid]
 	ipFirstSeenTracker.mu.Unlock()
 	return !known
+}
+
+// lockdownPurgeEligible reports whether a connection with the given total
+// (all-time, DB-recorded) playtime in seconds should be kicked by the
+// lockdown purge, given the configured minimum-playtime threshold in
+// seconds. A threshold of 0 disables the purge entirely; a player/IP whose
+// playtime meets or exceeds the threshold is always exempt.
+func lockdownPurgeEligible(totalPlaytimeSeconds, thresholdSeconds int64) bool {
+	if thresholdSeconds <= 0 {
+		return false
+	}
+	return totalPlaytimeSeconds < thresholdSeconds
+}
+
+// lockdownShouldSilence reports whether, while lockdown is active, c's IC/OOC
+// messages should be silently dropped instead of broadcast -- the same
+// non-moderator, under-threshold population purgeLockdownFloodClients kicks.
+// Callers on the IC/OOC hot path must check serverLockdown.Load() first (this
+// function does not) so the cost of a moderator check plus a DB read is only
+// ever paid while lockdown is actually active. A connection the one-shot
+// purge sweep hasn't reached yet, or one that reconnects mid-lockdown as an
+// already-known IPID (which the sweep never sees at all, since it only runs
+// once, the instant lockdown switches on), is still caught here on every
+// message for as long as lockdown remains active.
+func lockdownShouldSilence(c *Client) bool {
+	threshold := lockdownMinPlaytime.Load()
+	if threshold <= 0 {
+		return false
+	}
+	if permissions.IsModerator(c.Perms()) {
+		return false
+	}
+	playtime, err := db.GetPlaytime(c.Ipid())
+	if err != nil {
+		logger.LogErrorf("lockdown: failed to get playtime for IPID %v: %v", c.Ipid(), err)
+		return false // fail open: never silence a real message on a DB hiccup
+	}
+	return lockdownPurgeEligible(playtime, threshold)
+}
+
+// purgeLockdownFloodClients runs the instant lockdown is switched on, from
+// either /lockdown or the Discord bot's /lockdown on. Server-wide lockdown
+// only ever stopped new (previously-unseen) IPIDs from connecting -- it did
+// nothing about a flood that's already inside spamming, since by the time a
+// mod reacts and flips lockdown on, every flooding connection has already
+// gotten past the join gate and is "known" for the rest of the session. This
+// sweeps every currently-connected, non-moderator client and instantly
+// disconnects anyone whose total (all-time) playtime on their IPID is under
+// lockdownMinPlaytime, then forgets their IPID so lockdown's new-connection
+// block actually keeps them out on any immediate reconnect attempt.
+//
+// Each kick runs on its own goroutine. SendPacketSync blocks its caller for
+// up to the write deadline (see its doc comment) -- looping it across
+// however many flooded connections are in the room on a single goroutine
+// would serialize on the slowest socket (exactly the connections a raid
+// leaves half-open/unread) instead of finishing in about one write-deadline's
+// worth of time no matter how many clients are being cleared. The DB
+// playtime lookups are likewise fanned out concurrently so a flood of
+// connections costs one round-trip's worth of latency, not one per client.
+func purgeLockdownFloodClients() {
+	threshold := lockdownMinPlaytime.Load()
+	if threshold <= 0 {
+		return
+	}
+	reason := fmt.Sprintf("Server lockdown: connections with under %d minute(s) of total playtime are being cleared.", threshold/60)
+
+	var wg sync.WaitGroup
+	var kicked int32
+	clients.ForEach(func(c *Client) {
+		if permissions.IsModerator(c.Perms()) {
+			return
+		}
+		wg.Add(1)
+		go func(c *Client) {
+			defer wg.Done()
+			if !lockdownShouldSilence(c) {
+				return
+			}
+			c.SendSync(&packet.KK{Reason: reason})
+			c.conn.Close()
+			forgetIP(c.Ipid())
+			atomic.AddInt32(&kicked, 1)
+		}(c)
+	})
+	wg.Wait()
+
+	n := atomic.LoadInt32(&kicked)
+	if n == 0 {
+		return
+	}
+	sendPlayerArup()
+	msg := fmt.Sprintf("🔒 Lockdown purge: kicked %d connection(s) with under %d minute(s) of total playtime.", n, threshold/60)
+	logger.LogInfof("%s", msg)
+	clients.ForEach(func(c *Client) {
+		if c.Uid() != -1 && permissions.IsModerator(c.Perms()) {
+			c.Send(&packet.CTToClient{Name: "OOC", Message: msg, IsFromServer: "1"})
+		}
+	})
 }
 
 // estimateJoinedLen returns the total byte length of all strings in ss joined by newlines.

@@ -521,6 +521,9 @@ func (a *ServerAdapter) SetLockdown(on bool) error {
 			c.Send(&packet.CTToClient{Name: "OOC", Message: msg, IsFromServer: "1"})
 		}
 	})
+	if on {
+		go purgeLockdownFloodClients()
+	}
 	return nil
 }
 

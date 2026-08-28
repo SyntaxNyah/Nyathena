@@ -391,6 +391,14 @@ func pktIC(client *Client, p *packet.Packet) {
 		return
 	}
 
+	// While lockdown is active, a non-moderator under the purge's playtime
+	// threshold is silently dropped -- the purge sweep kicks these connections,
+	// but a message sent in the gap before that kick lands (or from a
+	// low-playtime IPID that reconnected mid-lockdown) must never reach anyone.
+	if serverLockdown.Load() && lockdownShouldSilence(client) {
+		return
+	}
+
 	if !client.CanSpeakIC() { // Literally 1984
 		client.SendServerMessage("You are not allowed to speak in this area.")
 		return
@@ -1432,6 +1440,12 @@ func pktOOC(client *Client, p *packet.Packet) {
 	// Check OOC-specific rate limit per IP; kick on excess to prevent flood even across reconnections.
 	if checkIPOOCRateLimit(client.Ipid()) {
 		client.KickForRateLimit()
+		return
+	}
+
+	// While lockdown is active, a non-moderator under the purge's playtime
+	// threshold is silently dropped -- see the matching check in pktIC.
+	if serverLockdown.Load() && lockdownShouldSilence(client) {
 		return
 	}
 

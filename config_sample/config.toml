@@ -137,6 +137,17 @@ max_players = 100
 # Set to 0 to disable (only the hard max_players cap applies).
 player_lockdown_threshold = 0
 
+# Lockdown purge threshold, in minutes of TOTAL accumulated playtime (not current
+# session length). The instant a moderator switches lockdown ON (in-game /lockdown,
+# or the Discord bot's /lockdown on), every currently-connected, non-moderator client
+# whose all-time playtime on their IPID is below this is instantly kicked -- lockdown's
+# new-connection block only keeps the next wave of a flood out, it does nothing about
+# the flood that's already inside spamming. A player/IP with a lot of accumulated
+# playtime (e.g. 500 hours) is always exempt no matter how this is set.
+# Moderators can change this at any time with /setlockdownplaytime <minutes>.
+# Set to 0 to disable (lockdown will only block new IPIDs, same as before).
+lockdown_min_playtime = 30
+
 # The maximum amount of bytes that players can send in a message. Long messages can slow down clients, 
 # so don't make this too large.
 max_message_length = 256

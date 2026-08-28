@@ -166,6 +166,33 @@ func cmdBan(client *Client, args []string, usage string) {
 	}
 	sendPlayerArup()
 	addToBuffer(client, "CMD", fmt.Sprintf("Banned %v from server for %v: %v.", report, *duration, reason), true)
+	alertBannedAccountLinks(seenIPIDs)
+}
+
+// alertBannedAccountLinks looks up whether any freshly-banned IPID is linked
+// to a registered player account and, if so, tells every online moderator in
+// OOC which account it is. This is purely informational -- nothing about the
+// account itself is touched (not purged, not banned, not locked); a ban only
+// ever affects the IPID/HDID pair, and staff sometimes need to know an
+// account was riding along on it (e.g. to watch for the same account
+// resurfacing on a new IP) without the ban silently deciding that for them.
+func alertBannedAccountLinks(ipids map[string]struct{}) {
+	for ipid := range ipids {
+		username, err := db.GetUsernameByIPID(ipid)
+		if err != nil {
+			logger.LogErrorf("ban: failed to look up linked account for IPID %v: %v", ipid, err)
+			continue
+		}
+		if username == "" {
+			continue
+		}
+		msg := fmt.Sprintf("[BAN] IPID %v is linked to registered account \"%v\".", ipid, username)
+		clients.ForEach(func(c *Client) {
+			if c.Uid() != -1 && permissions.IsModerator(c.Perms()) {
+				c.Send(&packet.CTToClient{Name: "OOC", Message: msg, IsFromServer: "1"})
+			}
+		})
+	}
 }
 
 // Handles /bg
@@ -1594,6 +1621,7 @@ func cmdLockdown(client *Client, args []string, usage string) {
 		})
 		client.SendServerMessage("Lockdown enabled. New IPIDs will be rejected.")
 		addToBuffer(client, "CMD", "Enabled server lockdown.", true)
+		go purgeLockdownFloodClients()
 	} else {
 		clients.ForEach(func(c *Client) {
 			if c.Uid() != -1 && permissions.IsModerator(c.Perms()) {
@@ -1749,6 +1777,26 @@ func cmdSetPlayerLimit(client *Client, args []string, usage string) {
 	} else {
 		client.SendServerMessage(fmt.Sprintf("Player capacity lockdown set to %v. New connections will be rejected once %v player(s) are connected.", val, val))
 		addToBuffer(client, "CMD", fmt.Sprintf("Set player capacity lockdown threshold to %v.", val), true)
+	}
+}
+
+// cmdSetLockdownPlaytime updates the lockdown purge's minimum-playtime
+// threshold at runtime. The instant lockdown is switched on, every
+// currently-connected, non-moderator client whose total (all-time) playtime
+// is below this many minutes is immediately kicked. Use 0 to disable the purge.
+func cmdSetLockdownPlaytime(client *Client, args []string, usage string) {
+	val, err := strconv.Atoi(args[0])
+	if err != nil || val < 0 || val > math.MaxInt32 {
+		client.SendServerMessage("Invalid value. Must be a non-negative integer, in minutes (0 = disabled).\n" + usage)
+		return
+	}
+	lockdownMinPlaytime.Store(int64(val) * 60)
+	if val == 0 {
+		client.SendServerMessage("Lockdown purge disabled. Turning lockdown on will no longer kick anyone already connected.")
+		addToBuffer(client, "CMD", "Disabled the lockdown playtime purge.", true)
+	} else {
+		client.SendServerMessage(fmt.Sprintf("Lockdown purge threshold set to %v minute(s). Turning lockdown on will instantly kick every connected non-moderator with under %v minute(s) of total playtime.", val, val))
+		addToBuffer(client, "CMD", fmt.Sprintf("Set lockdown playtime purge threshold to %v minute(s).", val), true)
 	}
 }
 

@@ -23,6 +23,7 @@ import (
 	"time"
 
 	"github.com/MangosArentLiterature/Athena/internal/area"
+	"github.com/MangosArentLiterature/Athena/internal/permissions"
 	"github.com/MangosArentLiterature/Athena/internal/settings"
 )
 
@@ -1232,6 +1233,71 @@ func TestServerLockdownRejectionDisabled(t *testing.T) {
 	}
 	if serverLockdownRejection("lockdownDisabledKnown") {
 		t.Errorf("Did not expect known IPID to be treated as lockdown rejection when lockdown is disabled")
+	}
+}
+
+// TestLockdownPurgeEligibleDisabledThreshold verifies that a threshold of 0
+// disables the lockdown purge entirely, regardless of playtime.
+func TestLockdownPurgeEligibleDisabledThreshold(t *testing.T) {
+	if lockdownPurgeEligible(0, 0) {
+		t.Errorf("Expected purge to be disabled when threshold is 0")
+	}
+	if lockdownPurgeEligible(999999, 0) {
+		t.Errorf("Expected purge to be disabled when threshold is 0, even with high playtime")
+	}
+}
+
+// TestLockdownPurgeEligibleBelowThreshold verifies that a connection with less
+// total (all-time) playtime than the configured threshold is eligible for the purge.
+func TestLockdownPurgeEligibleBelowThreshold(t *testing.T) {
+	threshold := int64(30 * 60) // 30 minutes
+	if !lockdownPurgeEligible(0, threshold) {
+		t.Errorf("Expected a brand new IPID (0 playtime) to be purge-eligible")
+	}
+	if !lockdownPurgeEligible(threshold-1, threshold) {
+		t.Errorf("Expected playtime just under the threshold to be purge-eligible")
+	}
+}
+
+// TestLockdownPurgeEligibleAtOrAboveThreshold verifies that a connection with
+// total (all-time) playtime at or above the threshold is exempt from the purge --
+// a player/IP with a lot of accumulated playtime (e.g. 500 hours) must never be
+// kicked by it, no matter how the threshold is configured.
+func TestLockdownPurgeEligibleAtOrAboveThreshold(t *testing.T) {
+	threshold := int64(30 * 60) // 30 minutes
+	if lockdownPurgeEligible(threshold, threshold) {
+		t.Errorf("Expected playtime exactly at the threshold to be exempt")
+	}
+	fiveHundredHours := int64(500 * 60 * 60)
+	if lockdownPurgeEligible(fiveHundredHours, threshold) {
+		t.Errorf("Expected a long-time player (500 hours) to be exempt from the purge")
+	}
+}
+
+// TestLockdownShouldSilenceDisabledThreshold verifies that lockdownShouldSilence
+// never silences anyone when the purge threshold is disabled (0), regardless
+// of permissions or playtime.
+func TestLockdownShouldSilenceDisabledThreshold(t *testing.T) {
+	old := lockdownMinPlaytime.Load()
+	lockdownMinPlaytime.Store(0)
+	defer lockdownMinPlaytime.Store(old)
+
+	c := &Client{ipid: "silenceDisabledIP", perms: permissions.PermissionField["NONE"]}
+	if lockdownShouldSilence(c) {
+		t.Errorf("Expected lockdownShouldSilence to return false when the purge threshold is disabled")
+	}
+}
+
+// TestLockdownShouldSilenceExemptsModerators verifies that a moderator is never
+// silenced by the lockdown live-message gate, regardless of playtime.
+func TestLockdownShouldSilenceExemptsModerators(t *testing.T) {
+	old := lockdownMinPlaytime.Load()
+	lockdownMinPlaytime.Store(30 * 60)
+	defer lockdownMinPlaytime.Store(old)
+
+	c := &Client{ipid: "silenceModIP", perms: permissions.PermissionField["BAN"]}
+	if lockdownShouldSilence(c) {
+		t.Errorf("Expected lockdownShouldSilence to exempt a moderator")
 	}
 }
 
