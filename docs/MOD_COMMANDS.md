@@ -50,7 +50,7 @@ Permission bits are configured in `config/roles.toml`. Multiple bits are granted
 | `/kick <uid>` | KICK | Disconnect a player |
 | `/kickother` | NONE | Kick stale ghost connections sharing your HDID |
 | `/firewall on\|off` | BAN | Toggle the IPHub VPN/proxy firewall (requires `iphub_api_key` in config). Also exposed as a Discord slash command. |
-| `/lockdown [add <uid>\|whitelist all]` | BAN | Toggle server lockdown, or whitelist players. Turning it ON also instantly kicks every connected non-moderator whose total playtime is under the `/setlockdownplaytime` threshold. |
+| `/lockdown [add <uid>\|whitelist all]` | BAN | Toggle server lockdown, or whitelist players. Turning it ON also instantly kicks every connected non-moderator whose total playtime is under the `/setlockdownplaytime` threshold, and for as long as lockdown stays active, silently drops (never broadcasts) any IC/OOC message from anyone still under that threshold. |
 | `/setplayerlimit <n>` | BAN | Set the player-capacity lockdown threshold (new joins rejected once this many are connected; 0 = off) |
 | `/setlockdownplaytime <minutes>` | BAN | Set the lockdown purge's minimum total-playtime threshold; 0 disables the purge |
 | `/tormentlist` | MUTE | List every IPID on the torment/lag list, with any connected sessions |
@@ -281,7 +281,7 @@ Each reloadable list lives behind a `sync/atomic.Pointer` so a swap is a single 
 | `/forcemove /cleararea /lock /unlock` | Area control |
 | `/logs /auditlog /banlist` | Audit & logs |
 | `/firewall on\|off` | Toggle IPHub VPN screening |
-| `/lockdown on\|off\|whitelist_all` | Toggle server lockdown / whitelist all currently-connected players. `on` also instantly kicks every connected non-moderator under the lockdown playtime purge threshold (`/setlockdownplaytime` in-game, 0 = off). |
+| `/lockdown on\|off\|whitelist_all` | Toggle server lockdown / whitelist all currently-connected players. `on` also instantly kicks every connected non-moderator under the lockdown playtime purge threshold (`/setlockdownplaytime` in-game, 0 = off), and silently drops messages from anyone still under it for as long as lockdown stays on. |
 | `/restart` | Restart the server (Admin only) |
 
 ---

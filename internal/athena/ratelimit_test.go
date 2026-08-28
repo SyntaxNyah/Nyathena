@@ -23,6 +23,7 @@ import (
 	"time"
 
 	"github.com/MangosArentLiterature/Athena/internal/area"
+	"github.com/MangosArentLiterature/Athena/internal/permissions"
 	"github.com/MangosArentLiterature/Athena/internal/settings"
 )
 
@@ -1270,6 +1271,33 @@ func TestLockdownPurgeEligibleAtOrAboveThreshold(t *testing.T) {
 	fiveHundredHours := int64(500 * 60 * 60)
 	if lockdownPurgeEligible(fiveHundredHours, threshold) {
 		t.Errorf("Expected a long-time player (500 hours) to be exempt from the purge")
+	}
+}
+
+// TestLockdownShouldSilenceDisabledThreshold verifies that lockdownShouldSilence
+// never silences anyone when the purge threshold is disabled (0), regardless
+// of permissions or playtime.
+func TestLockdownShouldSilenceDisabledThreshold(t *testing.T) {
+	old := lockdownMinPlaytime.Load()
+	lockdownMinPlaytime.Store(0)
+	defer lockdownMinPlaytime.Store(old)
+
+	c := &Client{ipid: "silenceDisabledIP", perms: permissions.PermissionField["NONE"]}
+	if lockdownShouldSilence(c) {
+		t.Errorf("Expected lockdownShouldSilence to return false when the purge threshold is disabled")
+	}
+}
+
+// TestLockdownShouldSilenceExemptsModerators verifies that a moderator is never
+// silenced by the lockdown live-message gate, regardless of playtime.
+func TestLockdownShouldSilenceExemptsModerators(t *testing.T) {
+	old := lockdownMinPlaytime.Load()
+	lockdownMinPlaytime.Store(30 * 60)
+	defer lockdownMinPlaytime.Store(old)
+
+	c := &Client{ipid: "silenceModIP", perms: permissions.PermissionField["BAN"]}
+	if lockdownShouldSilence(c) {
+		t.Errorf("Expected lockdownShouldSilence to exempt a moderator")
 	}
 }
 

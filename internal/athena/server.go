@@ -1699,6 +1699,32 @@ func lockdownPurgeEligible(totalPlaytimeSeconds, thresholdSeconds int64) bool {
 	return totalPlaytimeSeconds < thresholdSeconds
 }
 
+// lockdownShouldSilence reports whether, while lockdown is active, c's IC/OOC
+// messages should be silently dropped instead of broadcast -- the same
+// non-moderator, under-threshold population purgeLockdownFloodClients kicks.
+// Callers on the IC/OOC hot path must check serverLockdown.Load() first (this
+// function does not) so the cost of a moderator check plus a DB read is only
+// ever paid while lockdown is actually active. A connection the one-shot
+// purge sweep hasn't reached yet, or one that reconnects mid-lockdown as an
+// already-known IPID (which the sweep never sees at all, since it only runs
+// once, the instant lockdown switches on), is still caught here on every
+// message for as long as lockdown remains active.
+func lockdownShouldSilence(c *Client) bool {
+	threshold := lockdownMinPlaytime.Load()
+	if threshold <= 0 {
+		return false
+	}
+	if permissions.IsModerator(c.Perms()) {
+		return false
+	}
+	playtime, err := db.GetPlaytime(c.Ipid())
+	if err != nil {
+		logger.LogErrorf("lockdown: failed to get playtime for IPID %v: %v", c.Ipid(), err)
+		return false // fail open: never silence a real message on a DB hiccup
+	}
+	return lockdownPurgeEligible(playtime, threshold)
+}
+
 // purgeLockdownFloodClients runs the instant lockdown is switched on, from
 // either /lockdown or the Discord bot's /lockdown on. Server-wide lockdown
 // only ever stopped new (previously-unseen) IPIDs from connecting -- it did
@@ -1734,12 +1760,7 @@ func purgeLockdownFloodClients() {
 		wg.Add(1)
 		go func(c *Client) {
 			defer wg.Done()
-			playtime, err := db.GetPlaytime(c.Ipid())
-			if err != nil {
-				logger.LogErrorf("lockdown purge: failed to get playtime for IPID %v: %v", c.Ipid(), err)
-				return
-			}
-			if !lockdownPurgeEligible(playtime, threshold) {
+			if !lockdownShouldSilence(c) {
 				return
 			}
 			c.SendSync(&packet.KK{Reason: reason})

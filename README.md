@@ -93,7 +93,7 @@ A full Discord bot with slash commands, mod-bridge embeds, area/player listings,
 | Discord slash | Effect |
 |---------------|--------|
 | `/firewall on\|off` | Toggle IPHub VPN/proxy firewall |
-| `/lockdown on\|off` | Toggle server-wide new-IPID lockdown. `on` also instantly kicks every connected non-moderator under the configured minimum-playtime threshold — the flood that's already inside, not just the next wave trying to join. |
+| `/lockdown on\|off` | Toggle server-wide new-IPID lockdown. `on` also instantly kicks every connected non-moderator under the configured minimum-playtime threshold — the flood that's already inside, not just the next wave trying to join — and silently drops (never broadcasts) messages from anyone still under that threshold for as long as lockdown stays active. |
 | `/lockdown whitelist_all` | Whitelist every currently-connected IPID |
 
 ### Mafia Social Deduction Minigame
