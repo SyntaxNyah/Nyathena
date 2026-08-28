@@ -146,6 +146,16 @@ type ServerConfig struct {
 	// Mods can change this at runtime with /setplayerlimit.
 	PlayerLockdownThreshold int `toml:"player_lockdown_threshold"`
 
+	// LockdownMinPlaytime is the minimum accumulated playtime, in minutes, a
+	// connected IPID needs to survive the purge that runs the instant lockdown
+	// is switched on (in-game /lockdown or the Discord bot's /lockdown on).
+	// Every currently-connected, non-moderator client below this is kicked
+	// immediately -- lockdown's new-connection block only stops the next wave
+	// of a flood, it does nothing about the flood that's already inside.
+	// 0 disables the purge (lockdown still only blocks new IPIDs, as before).
+	// Mods can change this at runtime with /setlockdownplaytime.
+	LockdownMinPlaytime int `toml:"lockdown_min_playtime"`
+
 	// EnableTUI, when true, starts the read-only terminal dashboard at server
 	// launch -- the same effect as passing the -tui CLI flag. The flag still
 	// wins if it is explicitly set; this entry is for operators who want the

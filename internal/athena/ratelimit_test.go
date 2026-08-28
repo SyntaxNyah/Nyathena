@@ -1235,6 +1235,44 @@ func TestServerLockdownRejectionDisabled(t *testing.T) {
 	}
 }
 
+// TestLockdownPurgeEligibleDisabledThreshold verifies that a threshold of 0
+// disables the lockdown purge entirely, regardless of playtime.
+func TestLockdownPurgeEligibleDisabledThreshold(t *testing.T) {
+	if lockdownPurgeEligible(0, 0) {
+		t.Errorf("Expected purge to be disabled when threshold is 0")
+	}
+	if lockdownPurgeEligible(999999, 0) {
+		t.Errorf("Expected purge to be disabled when threshold is 0, even with high playtime")
+	}
+}
+
+// TestLockdownPurgeEligibleBelowThreshold verifies that a connection with less
+// total (all-time) playtime than the configured threshold is eligible for the purge.
+func TestLockdownPurgeEligibleBelowThreshold(t *testing.T) {
+	threshold := int64(30 * 60) // 30 minutes
+	if !lockdownPurgeEligible(0, threshold) {
+		t.Errorf("Expected a brand new IPID (0 playtime) to be purge-eligible")
+	}
+	if !lockdownPurgeEligible(threshold-1, threshold) {
+		t.Errorf("Expected playtime just under the threshold to be purge-eligible")
+	}
+}
+
+// TestLockdownPurgeEligibleAtOrAboveThreshold verifies that a connection with
+// total (all-time) playtime at or above the threshold is exempt from the purge --
+// a player/IP with a lot of accumulated playtime (e.g. 500 hours) must never be
+// kicked by it, no matter how the threshold is configured.
+func TestLockdownPurgeEligibleAtOrAboveThreshold(t *testing.T) {
+	threshold := int64(30 * 60) // 30 minutes
+	if lockdownPurgeEligible(threshold, threshold) {
+		t.Errorf("Expected playtime exactly at the threshold to be exempt")
+	}
+	fiveHundredHours := int64(500 * 60 * 60)
+	if lockdownPurgeEligible(fiveHundredHours, threshold) {
+		t.Errorf("Expected a long-time player (500 hours) to be exempt from the purge")
+	}
+}
+
 // TestPacketFloodAutobanDefaultTrue verifies that the PacketFloodAutoban config
 // field defaults to true so packet flooders are banned without any manual configuration.
 func TestPacketFloodAutobanDefaultTrue(t *testing.T) {
