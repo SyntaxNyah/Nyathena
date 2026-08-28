@@ -42,93 +42,100 @@ type Config struct {
 }
 
 type ServerConfig struct {
-	Addr                  string `toml:"addr"`
-	Port                  int    `toml:"port"`
-	AdvertiseHostname     string `toml:"advertise_hostname"`
-	Name                  string `toml:"name"`
-	Desc                  string `toml:"description"`
-	MaxPlayers            int    `toml:"max_players"`
-	MaxMsg                int    `toml:"max_message_length"`
-	BanLen                string `toml:"default_ban_duration"`
-	EnableWS              bool   `toml:"enable_webao"`
-	WSPort                int    `toml:"webao_port"`
-	EnableWSS             bool   `toml:"enable_webao_secure"`
-	WSSPort               int    `toml:"webao_secure_port"`
-	TLSCertPath           string `toml:"tls_cert_path"`
-	TLSKeyPath            string `toml:"tls_key_path"`
-	ReverseProxyMode      bool   `toml:"reverse_proxy_mode"`
-	ReverseProxyHTTPPort  int    `toml:"reverse_proxy_http_port"`
-	ReverseProxyHTTPSPort int    `toml:"reverse_proxy_https_port"`
-	MCLimit               int    `toml:"multiclient_limit"`
-	AssetURL              string `toml:"asset_url"`
-	WebhookURL            string `toml:"webhook_url"`
-	WebhookPingRoleID     string `toml:"webhook_ping_role_id"`
-	PunishmentWebhookURL  string `toml:"punishment_webhook_url"`
-	MaxDice               int    `toml:"max_dice"`
-	MaxSide               int    `toml:"max_side"`
-	Motd                  string `toml:"motd"`
-	MaxStatement          int    `toml:"max_testimony"`
-	RateLimit             int    `toml:"message_rate_limit"`
-	RateLimitWindow       int    `toml:"message_rate_limit_window"`
-	ModcallCooldown       int    `toml:"modcall_cooldown"`
-	ConnRateLimit              int    `toml:"connection_rate_limit"`
-	ConnRateLimitWindow        int    `toml:"connection_rate_limit_window"`
-	ConnFloodAutoban           bool   `toml:"conn_flood_autoban"`
-	ConnFloodAutobanThreshold  int    `toml:"conn_flood_autoban_threshold"`
-	PacketFloodAutoban         bool   `toml:"packet_flood_autoban"`
-	RawPacketRateLimit         int    `toml:"raw_packet_rate_limit"`
-	RawPacketRateLimitWindow   float64 `toml:"raw_packet_rate_limit_window"`
-	OOCRateLimit          int    `toml:"ooc_rate_limit"`
-	OOCRateLimitWindow    int    `toml:"ooc_rate_limit_window"`
-	PingRateLimit             int    `toml:"ping_rate_limit"`
-	PingRateLimitWindow       int    `toml:"ping_rate_limit_window"`
-	NewIPIDOOCCooldown        int    `toml:"new_ipid_ooc_cooldown"`
-	NewIPIDModcallCooldown    int    `toml:"new_ipid_modcall_cooldown"`
-	GlobalNewIPRateLimit      int    `toml:"global_new_ip_rate_limit"`
-	GlobalNewIPRateLimitWindow int   `toml:"global_new_ip_rate_limit_window"`
-	IPRetentionDays           int    `toml:"ip_retention_days"`
-	WebAOAllowedOrigin        string `toml:"webao_allowed_origin"`
-	AutoModEnabled             bool   `toml:"automod_enabled"`
-	AutoModWordlist            string `toml:"automod_wordlist"`
-	AutoModAction              string `toml:"automod_action"`
-	RandomSongCooldown         int    `toml:"random_song_cooldown"`
-	RandomSongCooldownDJ       int    `toml:"random_song_cooldown_dj"`
-	RandomSongCooldownMod      int    `toml:"random_song_cooldown_mod"`
-	BotBanPlaytimeThreshold    int    `toml:"botban_playtime_threshold"`
-	IPHubAPIKey                string `toml:"iphub_api_key"`
-	EnableTranslator           bool   `toml:"enable_translator_punishment"`
-	TranslatorAPIURL           string `toml:"translator_api_url"`
-	TranslatorAPIKey           string `toml:"translator_api_key"`
-	TranslateCooldown          int    `toml:"translate_cooldown"`
-	EnableCasino               bool     `toml:"enable_casino"`
-	EnableAccounts             bool     `toml:"enable_accounts"`
-	RegisterCaptcha            bool     `toml:"register_captcha"`
-	EnableCommunityVote        bool     `toml:"enable_community_vote"`
-	VoteThreshold              int      `toml:"vote_threshold"`
-	VoteDuration               int      `toml:"vote_duration"`
-	VoteActions                []string `toml:"vote_actions"`
-	VoteMuteDuration           int      `toml:"vote_mute_duration"`
-	TypingRacePhrases          []string `toml:"typing_race_phrases"`
-	EnableNewspaper            bool     `toml:"enable_newspaper"`
-	NewspaperInterval          string   `toml:"newspaper_interval"`
-	NewspaperSections          []string `toml:"newspaper_sections"`
+	Addr                                 string   `toml:"addr"`
+	Port                                 int      `toml:"port"`
+	AdvertiseHostname                    string   `toml:"advertise_hostname"`
+	Name                                 string   `toml:"name"`
+	Desc                                 string   `toml:"description"`
+	MaxPlayers                           int      `toml:"max_players"`
+	MaxMsg                               int      `toml:"max_message_length"`
+	BanLen                               string   `toml:"default_ban_duration"`
+	EnableWS                             bool     `toml:"enable_webao"`
+	WSPort                               int      `toml:"webao_port"`
+	EnableWSS                            bool     `toml:"enable_webao_secure"`
+	WSSPort                              int      `toml:"webao_secure_port"`
+	TLSCertPath                          string   `toml:"tls_cert_path"`
+	TLSKeyPath                           string   `toml:"tls_key_path"`
+	ReverseProxyMode                     bool     `toml:"reverse_proxy_mode"`
+	ReverseProxyHTTPPort                 int      `toml:"reverse_proxy_http_port"`
+	ReverseProxyHTTPSPort                int      `toml:"reverse_proxy_https_port"`
+	MCLimit                              int      `toml:"multiclient_limit"`
+	AssetURL                             string   `toml:"asset_url"`
+	WebhookURL                           string   `toml:"webhook_url"`
+	WebhookPingRoleID                    string   `toml:"webhook_ping_role_id"`
+	PunishmentWebhookURL                 string   `toml:"punishment_webhook_url"`
+	MaxDice                              int      `toml:"max_dice"`
+	MaxSide                              int      `toml:"max_side"`
+	Motd                                 string   `toml:"motd"`
+	MaxStatement                         int      `toml:"max_testimony"`
+	RateLimit                            int      `toml:"message_rate_limit"`
+	RateLimitWindow                      int      `toml:"message_rate_limit_window"`
+	RateLimitKickAutoban                 bool     `toml:"rate_limit_kick_autoban"`
+	RateLimitKickAutobanThreshold        int      `toml:"rate_limit_kick_autoban_threshold"`
+	RateLimitKickAutobanWindow           int      `toml:"rate_limit_kick_autoban_window"`
+	RateLimitKickAutobanDuration         string   `toml:"rate_limit_kick_autoban_duration"`
+	RateLimitKickAutobanMinPlaytime      int      `toml:"rate_limit_kick_autoban_min_playtime"`
+	RateLimitKickAutobanLenientPlaytime  int      `toml:"rate_limit_kick_autoban_lenient_playtime"`
+	RateLimitKickAutobanLenientThreshold int      `toml:"rate_limit_kick_autoban_lenient_threshold"`
+	ModcallCooldown                      int      `toml:"modcall_cooldown"`
+	ConnRateLimit                        int      `toml:"connection_rate_limit"`
+	ConnRateLimitWindow                  int      `toml:"connection_rate_limit_window"`
+	ConnFloodAutoban                     bool     `toml:"conn_flood_autoban"`
+	ConnFloodAutobanThreshold            int      `toml:"conn_flood_autoban_threshold"`
+	PacketFloodAutoban                   bool     `toml:"packet_flood_autoban"`
+	RawPacketRateLimit                   int      `toml:"raw_packet_rate_limit"`
+	RawPacketRateLimitWindow             float64  `toml:"raw_packet_rate_limit_window"`
+	OOCRateLimit                         int      `toml:"ooc_rate_limit"`
+	OOCRateLimitWindow                   int      `toml:"ooc_rate_limit_window"`
+	PingRateLimit                        int      `toml:"ping_rate_limit"`
+	PingRateLimitWindow                  int      `toml:"ping_rate_limit_window"`
+	NewIPIDOOCCooldown                   int      `toml:"new_ipid_ooc_cooldown"`
+	NewIPIDModcallCooldown               int      `toml:"new_ipid_modcall_cooldown"`
+	GlobalNewIPRateLimit                 int      `toml:"global_new_ip_rate_limit"`
+	GlobalNewIPRateLimitWindow           int      `toml:"global_new_ip_rate_limit_window"`
+	IPRetentionDays                      int      `toml:"ip_retention_days"`
+	WebAOAllowedOrigin                   string   `toml:"webao_allowed_origin"`
+	AutoModEnabled                       bool     `toml:"automod_enabled"`
+	AutoModWordlist                      string   `toml:"automod_wordlist"`
+	AutoModAction                        string   `toml:"automod_action"`
+	RandomSongCooldown                   int      `toml:"random_song_cooldown"`
+	RandomSongCooldownDJ                 int      `toml:"random_song_cooldown_dj"`
+	RandomSongCooldownMod                int      `toml:"random_song_cooldown_mod"`
+	BotBanPlaytimeThreshold              int      `toml:"botban_playtime_threshold"`
+	IPHubAPIKey                          string   `toml:"iphub_api_key"`
+	EnableTranslator                     bool     `toml:"enable_translator_punishment"`
+	TranslatorAPIURL                     string   `toml:"translator_api_url"`
+	TranslatorAPIKey                     string   `toml:"translator_api_key"`
+	TranslateCooldown                    int      `toml:"translate_cooldown"`
+	EnableCasino                         bool     `toml:"enable_casino"`
+	EnableAccounts                       bool     `toml:"enable_accounts"`
+	RegisterCaptcha                      bool     `toml:"register_captcha"`
+	EnableCommunityVote                  bool     `toml:"enable_community_vote"`
+	VoteThreshold                        int      `toml:"vote_threshold"`
+	VoteDuration                         int      `toml:"vote_duration"`
+	VoteActions                          []string `toml:"vote_actions"`
+	VoteMuteDuration                     int      `toml:"vote_mute_duration"`
+	TypingRacePhrases                    []string `toml:"typing_race_phrases"`
+	EnableNewspaper                      bool     `toml:"enable_newspaper"`
+	NewspaperInterval                    string   `toml:"newspaper_interval"`
+	NewspaperSections                    []string `toml:"newspaper_sections"`
 	// YouTubePlayPrefix, when non-empty and starting with "http", turns on the
 	// /play <youtube-link> integration. The prefix is the URL stem that
 	// clients fetch the downloaded MP3 from (e.g. "https://cdn.example.com/yt/").
 	// The literal token "{ASSET_URL}" is expanded to ServerConfig.AssetURL at
 	// use time so operators don't have to repeat the asset host.
-	YouTubePlayPrefix          string   `toml:"youtube_play_prefix"`
+	YouTubePlayPrefix string `toml:"youtube_play_prefix"`
 	// YouTubeDownloadDestination is the destination URI for downloaded mp3s.
 	// Only file:// (local filesystem) is supported right now — e.g.
 	// "file:///var/lib/athena/yt".
-	YouTubeDownloadDestination string   `toml:"youtube_download_destination"`
+	YouTubeDownloadDestination string `toml:"youtube_download_destination"`
 	// YouTubeMaxDurationSeconds rejects videos longer than this when probed.
 	// 0 falls back to 600 (10 minutes).
-	YouTubeMaxDurationSeconds  int      `toml:"youtube_max_duration_seconds"`
+	YouTubeMaxDurationSeconds int `toml:"youtube_max_duration_seconds"`
 	// YouTubeCookiesPath, when non-empty, is passed to yt-dlp as
 	// --cookies <path>. Used to bypass YouTube's bot-detection / age-gate
 	// walls by presenting a logged-in session.
-	YouTubeCookiesPath         string   `toml:"youtube_cookies_path"`
+	YouTubeCookiesPath string `toml:"youtube_cookies_path"`
 	// MaxConnectionGoroutines caps the number of concurrent connection-handling
 	// goroutines.  When the pool is full, new connections wait until a slot
 	// becomes available rather than spinning up an unbounded number of goroutines.
@@ -234,70 +241,77 @@ func defaultConfig() *Config {
 func DefaultConfig() *Config {
 	return &Config{
 		ServerConfig{
-			Addr:                  "",
-			Port:                  27016,
-			AdvertiseHostname:     "",
-			Name:                  "Unnamed Server",
-			Desc:                  "",
-			MaxPlayers:            100,
-			MaxMsg:                256,
-			BanLen:                "3d",
-			EnableWS:              false,
-			WSPort:                27017,
-			EnableWSS:             false,
-			WSSPort:               443,
-			TLSCertPath:           "",
-			TLSKeyPath:            "",
-			ReverseProxyMode:      false,
-			ReverseProxyHTTPPort:  80,
-			ReverseProxyHTTPSPort: 443,
-			MCLimit:               16,
-			MaxDice:               100,
-			MaxSide:               100,
-			MaxStatement:          10,
-			RateLimit:             20,
-			RateLimitWindow:       10,
-			ModcallCooldown:       0,
-			ConnRateLimit:              10,
-			ConnRateLimitWindow:        10,
-			ConnFloodAutoban:           true,
-			ConnFloodAutobanThreshold:  6,
-			PacketFloodAutoban:         true,
-			RawPacketRateLimit:         20,
-			RawPacketRateLimitWindow:   2,
-			OOCRateLimit:          4,
-			OOCRateLimitWindow:    1,
-			PingRateLimit:             10,
-			PingRateLimitWindow:       5,
-			NewIPIDOOCCooldown:        10,
-			NewIPIDModcallCooldown:    60,
-			GlobalNewIPRateLimit:      5,
-			GlobalNewIPRateLimitWindow: 10,
-			IPRetentionDays:           0,
-			WebAOAllowedOrigin:        "web.aceattorneyonline.com",
-			AutoModEnabled:             false,
-			AutoModWordlist:            "banned_words.txt",
-			AutoModAction:              "shadow",
-			RandomSongCooldown:         20,
-			RandomSongCooldownDJ:       5,
-			RandomSongCooldownMod:      0,
-			BotBanPlaytimeThreshold:    120,
-			EnableTranslator:           false,
-			TranslatorAPIURL:           "https://api-free.deepl.com/v2/translate",
-			TranslatorAPIKey:           "",
-			TranslateCooldown:          25,
-			EnableCasino:               false,
-			EnableAccounts:             true,
-			RegisterCaptcha:            true,
-			EnableCommunityVote:        false,
-			VoteThreshold:              3,
-			VoteDuration:               120,
-			VoteActions:                []string{"kick"},
-			VoteMuteDuration:           300,
-			YouTubePlayPrefix:          "",
-			YouTubeDownloadDestination: "",
-			YouTubeMaxDurationSeconds:  600,
-			YouTubeCookiesPath:         "",
+			Addr:                                 "",
+			Port:                                 27016,
+			AdvertiseHostname:                    "",
+			Name:                                 "Unnamed Server",
+			Desc:                                 "",
+			MaxPlayers:                           100,
+			MaxMsg:                               256,
+			BanLen:                               "3d",
+			EnableWS:                             false,
+			WSPort:                               27017,
+			EnableWSS:                            false,
+			WSSPort:                              443,
+			TLSCertPath:                          "",
+			TLSKeyPath:                           "",
+			ReverseProxyMode:                     false,
+			ReverseProxyHTTPPort:                 80,
+			ReverseProxyHTTPSPort:                443,
+			MCLimit:                              16,
+			MaxDice:                              100,
+			MaxSide:                              100,
+			MaxStatement:                         10,
+			RateLimit:                            20,
+			RateLimitWindow:                      10,
+			RateLimitKickAutoban:                 true,
+			RateLimitKickAutobanThreshold:        2,
+			RateLimitKickAutobanWindow:           600,
+			RateLimitKickAutobanDuration:         "15m",
+			RateLimitKickAutobanMinPlaytime:      1200, // 20 hours
+			RateLimitKickAutobanLenientPlaytime:  120,  // 2 hours
+			RateLimitKickAutobanLenientThreshold: 5,
+			ModcallCooldown:                      0,
+			ConnRateLimit:                        10,
+			ConnRateLimitWindow:                  10,
+			ConnFloodAutoban:                     true,
+			ConnFloodAutobanThreshold:            6,
+			PacketFloodAutoban:                   true,
+			RawPacketRateLimit:                   20,
+			RawPacketRateLimitWindow:             2,
+			OOCRateLimit:                         4,
+			OOCRateLimitWindow:                   1,
+			PingRateLimit:                        10,
+			PingRateLimitWindow:                  5,
+			NewIPIDOOCCooldown:                   10,
+			NewIPIDModcallCooldown:               60,
+			GlobalNewIPRateLimit:                 5,
+			GlobalNewIPRateLimitWindow:           10,
+			IPRetentionDays:                      0,
+			WebAOAllowedOrigin:                   "web.aceattorneyonline.com",
+			AutoModEnabled:                       false,
+			AutoModWordlist:                      "banned_words.txt",
+			AutoModAction:                        "shadow",
+			RandomSongCooldown:                   20,
+			RandomSongCooldownDJ:                 5,
+			RandomSongCooldownMod:                0,
+			BotBanPlaytimeThreshold:              120,
+			EnableTranslator:                     false,
+			TranslatorAPIURL:                     "https://api-free.deepl.com/v2/translate",
+			TranslatorAPIKey:                     "",
+			TranslateCooldown:                    25,
+			EnableCasino:                         false,
+			EnableAccounts:                       true,
+			RegisterCaptcha:                      true,
+			EnableCommunityVote:                  false,
+			VoteThreshold:                        3,
+			VoteDuration:                         120,
+			VoteActions:                          []string{"kick"},
+			VoteMuteDuration:                     300,
+			YouTubePlayPrefix:                    "",
+			YouTubeDownloadDestination:           "",
+			YouTubeMaxDurationSeconds:            600,
+			YouTubeCookiesPath:                   "",
 		},
 		LogConfig{
 			BufSize:              0,
