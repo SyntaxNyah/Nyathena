@@ -776,10 +776,9 @@ func pktIC(client *Client, p *packet.Packet) {
 		logger.LogWarningf("dropped MS from IPID:%v UID:%v — EmoteModifier not in {0,1,2,5,6}; value=%d", client.Ipid(), client.Uid(), emote_mod)
 		return
 	}
-	objStr, _, _ := strings.Cut(ms.ShoutModifier, "&")
-	objection, err := strconv.Atoi(objStr)
+	objection, err := ms.Shout()
 	if err != nil {
-		logger.LogWarningf("dropped MS from IPID:%v UID:%v — ShoutModifier not an integer; value=%q (raw=%q)", client.Ipid(), client.Uid(), objStr, ms.ShoutModifier)
+		logger.LogWarningf("dropped MS from IPID:%v UID:%v — ShoutModifier not an integer; raw=%q", client.Ipid(), client.Uid(), ms.ShoutModifier)
 		return
 	}
 	evi, err := strconv.Atoi(ms.Evidence)
@@ -1241,7 +1240,7 @@ func pktIC(client *Client, p *packet.Packet) {
 	// still catch this very message via the restricted/silenced routing that
 	// switch reads. objection is the ShoutModifier already parsed above --
 	// see raidGuardOnIC's doc comment for why it isn't re-parsed here.
-	raidGuardOnIC(client, ms, msgText, objection)
+	raidGuardOnIC(client, ms, msgText)
 
 	stealthMuted := hasPunishmentType(punishments, PunishmentStealthMute) || censorShadow
 	// A /truepossess target is silenced exactly like a stealthmute: the packet

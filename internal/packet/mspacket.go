@@ -16,7 +16,10 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>. */
 
 package packet
 
-import "strings"
+import (
+	"strconv"
+	"strings"
+)
 
 // MSPacket is the structured form of the AO2 in-character ("MS") packet.
 //
@@ -220,6 +223,20 @@ func ParseMSServerString(s string) *MSPacket {
 		return &MSPacket{}
 	}
 	return ParseMSServer(strings.Split(s, "#"))
+}
+
+// Shout parses the shout/objection modifier (wire field 10) as an integer.
+//
+// The field can carry an "&"-suffixed sub-value naming a custom objection
+// ("2&myshout"), so the numeric part has to be split off before parsing --
+// a plain Atoi on the raw field fails on every custom shout. This lives here,
+// on the packet, so every reader of the field agrees on what it says: the IC
+// handler validates against it and the raid guard scores against it, and a
+// second hand-rolled parse in either place could silently disagree with the
+// other.
+func (ms *MSPacket) Shout() (int, error) {
+	objStr, _, _ := strings.Cut(ms.ShoutModifier, "&")
+	return strconv.Atoi(objStr)
 }
 
 // ServerArgs returns the MS packet body in server wire format — 30 fields

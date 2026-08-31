@@ -101,19 +101,55 @@ const (
 // requires at least three independent signals.
 var raidSignalWeight = [numRaidSignals]int{
 	// A client that sent RC/RM/RD before its own askchaa is not following the
-	// protocol any real client implements. Highest weight, but still below the
-	// watch threshold's neighbours -- on its own it only raises an alert.
+	// protocol any real client implements. Highest weight, but on its own it
+	// still only raises an alert.
+	//
+	// Confirmed against the LemmyAO client source rather than assumed from the
+	// capture. Each of those three sends lives inside the handler for the server
+	// packet that answers the previous step: RC is sent from the SI handler
+	// (client/fetchLists.ts applyServerCounts), RM from the character-list
+	// handler (client/handleCharacterInfo.ts), RD from the SM handler
+	// (client/addTrack.ts applyMusicListBatch), and askchaa itself from the PN
+	// handler (client/handshake.ts applyServerInfo). SI only arrives in reply to
+	// askchaa, so the chain askchaa -> SI -> RC -> SC -> RM -> SM -> RD is
+	// causal, not conventional: there is no code path that emits any of the three
+	// earlier, and no ordering a real client can be coaxed into that inverts it.
 	SigHandshakeAnomaly: 50,
 	// The same text from N distinct IPIDs inside a few seconds. The single
 	// clearest fan-out signal, and one no per-IPID limiter can see.
 	SigDupeAcrossIPIDs: 45,
 	// Sustained objection shouts. Bimodal in the capture: raiders who used it
 	// used it on 100% of their messages, real players on none of theirs.
+	//
+	// Checked against the LemmyAO client source, because a client that latched
+	// the shout on would manufacture exactly this pattern from an innocent
+	// player. It does not: the shout is held in client state and sent with every
+	// message (dom/onICEnter.ts), but resetICParams() clears it the moment the
+	// client sees its own message echoed back (viewport/utils/handleICSpeaking.ts),
+	// so ordinary play resets after every line.
+	//
+	// The residual case is a player whose messages are being dropped WITHOUT an
+	// echo, who would keep re-sending the latched shout. Nyathena's own drop
+	// paths (censor shadow-send, stealthmute, captcha restriction, and this
+	// guard's own silence) all echo to the sender, so they reset it; only a
+	// packet failing IC validation outright leaves it set. Reaching the signal
+	// still needs three such messages at an 80% shout rate, and the tiers and
+	// the three-signal disconnect floor sit underneath. Worth knowing about
+	// rather than assuming away.
 	SigObjectionSpam: 35,
 	SigOOCNameChurn:  30,
 	SigShownameChurn: 30,
-	SigFastCharPick:  25,
-	SigCharChurn:     25,
+	// Bounded by protocol physics rather than by observed timings. A real
+	// client cannot pick a character before it has received the character list,
+	// because it builds the picker from that list -- including LemmyAO's
+	// ?char= share-link auto-pick, which fires on DONE and looks up the index in
+	// client.chars. The fastest full handshake in the clean capture was 330ms,
+	// so a threshold below that cannot be reached by any legitimate pick,
+	// auto or manual. (1000ms, the obvious-looking value, was wrong: 6 of 19
+	// real handshakes completed inside it, so an auto-picking player on a fast
+	// connection would have tripped it.)
+	SigFastCharPick: 25,
+	SigCharChurn:    25,
 	// Weakest timing signal: a returning player with a saved character can
 	// legitimately be quick, so this is a nudge, not an accusation.
 	SigFastFirstSpeech: 20,

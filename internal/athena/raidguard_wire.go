@@ -143,13 +143,14 @@ func raidGuardOnCharPick(client *Client) {
 // gates have already let the message through, so the guard only ever scores a
 // message that would otherwise have reached the room unmodified.
 //
-// objection is the caller's already-parsed ShoutModifier (see pktIC's own
-// `strings.Cut(ms.ShoutModifier, "&")` + Atoi a few lines above the call
-// site) -- deliberately a parameter rather than re-derived here, since
-// ShoutModifier can carry an "&"-suffixed sub-value and any simpler parse
-// would silently disagree with what pktIC already validated the packet
-// against.
-func raidGuardOnIC(client *Client, ms *packet.MSPacket, text string, objection int) {
+// The shout modifier is read off the packet here via ms.Shout() rather than
+// passed in by the caller. It is the same parse pktIC validates against, and
+// taking it as a parameter meant a wiring mistake at the call site -- passing a
+// constant, or the wrong local -- would disable the guard's headline signal
+// silently, in a way no test that exercises this function could ever catch.
+// Deriving it from the packet removes the parameter and the failure mode with
+// it; the cost is one Cut and one Atoi per scored message.
+func raidGuardOnIC(client *Client, ms *packet.MSPacket, text string) {
 	if raidGuardExempt(client) {
 		return
 	}
@@ -157,6 +158,9 @@ func raidGuardOnIC(client *Client, ms *packet.MSPacket, text string, objection i
 	if rs == nil {
 		return
 	}
+	// A malformed modifier cannot reach here (pktIC drops the packet first), and
+	// treating an unparseable one as "no shout" is the safe direction anyway.
+	objection, _ := ms.Shout()
 	now := time.Now()
 	sinceConnect, sinceCharPick := raidGuardTimings(client, now)
 	fired, _ := rs.observe(Observation{

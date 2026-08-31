@@ -326,7 +326,7 @@ func DefaultConfig() *Config {
 			RaidGuardScoreBan:                    160,
 			RaidGuardObjectionMinMsgs:            3,
 			RaidGuardObjectionFraction:           0.8,
-			RaidGuardFastCharPickMs:              1000,
+			RaidGuardFastCharPickMs:              250,
 			RaidGuardFastSpeechMs:                1500,
 			RaidGuardCharChurnMs:                 1000,
 			RaidGuardNameChurnMax:                3,
