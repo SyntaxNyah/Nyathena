@@ -384,6 +384,8 @@ type Client struct {
 	forcedIniswapChar   string         // Character name forced for iniswap-style IC output ("" = none)
 	forcedIniswapIDStr  string         // Pre-computed strconv.Itoa(charID) matching forcedIniswapChar ("" = none)
 	connectedAt         time.Time      // Time the client joined the server (uid assigned); zero if not yet joined
+	acceptedAt          time.Time      // Raw TCP/WS accept time, set in NewClient -- covers the whole handshake window, unlike connectedAt (only set once RD assigns a UID). See raidguard_wire.go.
+	charPickedAt        time.Time      // Time of this connection's FIRST character pick (CC); zero until then. See raidguard_wire.go.
 	jailAreaID          int            // Area index where this client is jailed; -1 = no specific jail area
 	emergencyBypassArea *area.Area     // Locked area the client most recently tried to enter as a mod; nil = no pending bypass
 	emergencyBypassAt   time.Time      // Time of the first locked-area attempt; used with emergencyBypassArea to confirm an emergency override
@@ -427,6 +429,12 @@ type Client struct {
 	captchaRestricted    atomic.Bool
 	captchaStrikes       atomic.Int32
 	pendingJoinChallenge joinChallenge
+
+	// raid is this connection's accumulated raid-guard evidence, created lazily
+	// on first observation so a server with the guard disabled never allocates
+	// one. Guarded by client.mu; the raidState is itself self-synchronised, so
+	// callers only hold client.mu long enough to fetch the pointer.
+	raid *raidState
 
 	// censorAlertsOff mutes the staff censor-trip OOC alerts for this session
 	// (/censoralerts off). Only consulted for clients holding MOD_CHAT; every
@@ -521,7 +529,8 @@ func NewClient(conn net.Conn, ipid string) *Client {
 		possessing:         -1,
 		jailAreaID:         -1,
 		charStuckCharID:    -1,
-		shuffledOrigCharID: -2, // -2 = "not shuffled" sentinel; -1 = shuffled but original was charselect
+		shuffledOrigCharID: -2,         // -2 = "not shuffled" sentinel; -1 = shuffled but original was charselect
+		acceptedAt:         time.Now(), // raw accept time; see the acceptedAt field comment above
 		sendCh:             make(chan []byte, sendQueueSize),
 		done:               make(chan struct{}),
 	}
@@ -3248,6 +3257,47 @@ func (client *Client) ConnectedAt() time.Time {
 func (client *Client) SetConnectedAt(t time.Time) {
 	client.mu.Lock()
 	client.connectedAt = t
+	client.mu.Unlock()
+}
+
+// AcceptedAt returns the raw TCP/WS accept time recorded when this
+// connection's *Client was constructed (NewClient), before any handshake
+// packet has been read. Unlike ConnectedAt -- only set once RD assigns a UID,
+// well after a raid-guard signal like the fast-character-pick one would need
+// to measure against -- this covers the whole handshake window.
+func (client *Client) AcceptedAt() time.Time {
+	client.mu.Lock()
+	defer client.mu.Unlock()
+	return client.acceptedAt
+}
+
+// SetAcceptedAt overrides the recorded accept time. NewClient already sets
+// this for every real connection; exposed mainly so tests can backdate it to
+// exercise the raid guard's timing signals without a real sleep.
+func (client *Client) SetAcceptedAt(t time.Time) {
+	client.mu.Lock()
+	client.acceptedAt = t
+	client.mu.Unlock()
+}
+
+// CharPickedAt returns the time of this connection's first character pick, or
+// the zero Time if it has not picked one yet.
+func (client *Client) CharPickedAt() time.Time {
+	client.mu.Lock()
+	defer client.mu.Unlock()
+	return client.charPickedAt
+}
+
+// SetCharPickedAt records a character-pick time. Callers that only want the
+// FIRST pick recorded (the raid guard's fast-charpick signal cares about
+// "just connected -> already playing", not every later re-pick) guard the
+// call with CharPickedAt().IsZero() themselves -- see raidGuardOnCharPick in
+// raidguard_wire.go. That check-then-set is race-free because one
+// connection's packets are handled strictly sequentially by its own
+// HandleClient read loop; nothing else ever writes this field concurrently.
+func (client *Client) SetCharPickedAt(t time.Time) {
+	client.mu.Lock()
+	client.charPickedAt = t
 	client.mu.Unlock()
 }
 

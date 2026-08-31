@@ -212,6 +212,7 @@ type raidState struct {
 	mu sync.Mutex
 
 	msgCount       int
+	icCount        int
 	objectionCount int
 
 	oocNames  map[string]struct{}
@@ -314,8 +315,11 @@ func (rs *raidState) observe(obs Observation) (fired []SignalKind, score int) {
 	defer rs.mu.Unlock()
 
 	rs.msgCount++
-	if obs.Objection != 0 {
-		rs.objectionCount++
+	if obs.IsIC {
+		rs.icCount++
+		if obs.Objection != 0 {
+			rs.objectionCount++
+		}
 	}
 
 	mark := func(k SignalKind) {
@@ -332,7 +336,12 @@ func (rs *raidState) observe(obs Observation) (fired []SignalKind, score int) {
 	if frac <= 0 || frac > 1 {
 		frac = 0.8
 	}
-	if rs.msgCount >= minMsgs && float64(rs.objectionCount)/float64(rs.msgCount) >= frac {
+	// Measured over IC messages only. The objection modifier is a field on the
+	// IC packet and does not exist on OOC at all, so counting OOC in the
+	// denominator lets a raider dilute their own shout rate below the threshold
+	// just by spamming both channels -- which is exactly what the capture shows
+	// them doing, and it hid several of them from this signal entirely.
+	if rs.icCount >= minMsgs && float64(rs.objectionCount)/float64(rs.icCount) >= frac {
 		mark(SigObjectionSpam)
 	}
 
@@ -656,6 +665,32 @@ func raidGuardEnforce(client *Client, rs *raidState, want Verdict, trigger strin
 	logger.WriteAudit(fmt.Sprintf("%v | RAID_GUARD | IPID:%v | UID:%v | action=%v | score=%d | signals=%v",
 		time.Now().UTC().Format("15:04:05"), client.Ipid(), client.Uid(), want, score, reason))
 	alertRaidGuard(client, want, score, signals)
+}
+
+// raidGuard returns this connection's raid-guard state, creating it on first
+// use. Returns nil when the guard is disabled, so every caller on the hot path
+// can bail on a nil check without allocating anything.
+func (client *Client) raidGuard() *raidState {
+	if client == nil || !raidGuardActive.Load() {
+		return nil
+	}
+	client.mu.Lock()
+	defer client.mu.Unlock()
+	if client.raid == nil {
+		client.raid = newRaidState()
+	}
+	return client.raid
+}
+
+// resetRaidGuard clears a connection's accumulated evidence. Used by
+// /raidguard clear, the escape hatch for a connection the guard misjudged.
+func (client *Client) resetRaidGuard() {
+	if client == nil {
+		return
+	}
+	client.mu.Lock()
+	client.raid = nil
+	client.mu.Unlock()
 }
 
 // raidBanAllowed is the guard's central safety invariant, factored out so it can

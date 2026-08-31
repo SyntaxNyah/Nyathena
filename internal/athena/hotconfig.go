@@ -31,8 +31,14 @@ import (
 // changing it mid-session leaves the server inconsistent.
 //
 // Currently whitelisted:
-//   - Motd         : shown to clients when they finish login
-//   - Desc         : shown in the PN (player-count) packet on initial handshake
+//   - Motd            : shown to clients when they finish login
+//   - Desc            : shown in the PN (player-count) packet on initial handshake
+//   - RaidGuardEnabled: the raid guard's master switch (raidGuardActive, see
+//     raidguard.go) -- a plain atomic.Bool gate read at the
+//     top of every hot-path hook, not cached here like
+//     Motd/Desc. Safe to flip live for the same reason
+//     those are: it can never desync a connected client,
+//     it only changes whether new traffic gets scored.
 //
 // Explicitly NOT whitelisted (would require careful, invasive work):
 //   - Name        : baked into encodedServerName and every server-to-client CT
@@ -93,6 +99,17 @@ func ReloadHotConfig() (int, error) {
 		changed++
 	}
 	hotConfigMu.Unlock()
+
+	// Raid guard's on/off switch isn't part of the hotConfigMu-guarded cache
+	// above -- it already lives behind its own atomic.Bool (raidGuardActive,
+	// raidguard.go) that every hot-path hook reads directly -- so it's synced
+	// here as a plain compare-and-store rather than through hotMotd/hotDesc's
+	// pattern.
+	if raidGuardActive.Load() != conf.RaidGuardEnabled {
+		raidGuardActive.Store(conf.RaidGuardEnabled)
+		changed++
+	}
+
 	if changed > 0 {
 		logger.LogInfof("hot-reload: applied %d changed field(s) from config.toml", changed)
 	} else {

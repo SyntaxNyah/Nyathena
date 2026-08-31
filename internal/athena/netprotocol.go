@@ -198,6 +198,7 @@ func pktId(client *Client, _ *packet.Packet) {
 
 // Handles askchaa#%
 func pktResCount(client *Client, _ *packet.Packet) {
+	raidGuardOnAskchaa(client)
 	if client.Uid() != -1 || client.Hdid() == "" {
 		return
 	}
@@ -232,11 +233,13 @@ func pktResCount(client *Client, _ *packet.Packet) {
 
 // Handles RC#%
 func pktReqChar(client *Client, _ *packet.Packet) {
+	raidGuardOnHandshakeStep(client)
 	client.Send(&packet.SC{Entries: getCharacters()})
 }
 
 // Handles RM#%
 func pktReqAM(client *Client, _ *packet.Packet) {
+	raidGuardOnHandshakeStep(client)
 	// smPacket is a pre-built FantaCode blob (avoids a strings.Join per
 	// connection in the common case). JSON-mode clients can't read it, so
 	// fall back to the typed-Outgoing path, which goes through BuildJSON.
@@ -260,6 +263,7 @@ func pktReqAM(client *Client, _ *packet.Packet) {
 
 // Handles RD#%
 func pktReqDone(client *Client, _ *packet.Packet) {
+	raidGuardOnHandshakeStep(client)
 	if client.Uid() != -1 || !client.joining || client.Hdid() == "" {
 		return
 	}
@@ -384,6 +388,7 @@ func pktChangeChar(client *Client, p *packet.Packet) {
 		return
 	}
 	client.ChangeCharacter(newid)
+	raidGuardOnCharPick(client)
 }
 
 // Handles MS#%
@@ -1228,6 +1233,16 @@ func pktIC(client *Client, p *packet.Packet) {
 	if ms.Showname != "" {
 		checkPunishmentShowname(client, decode(ms.Showname))
 	}
+
+	// Raid guard: score this message now that it has cleared every gate above
+	// (rate limit, join captcha, automod/censor, torment) and is otherwise
+	// about to reach the room. Placed before the delivery switch below so an
+	// action the guard takes here (e.g. a fresh silence/challenge verdict) can
+	// still catch this very message via the restricted/silenced routing that
+	// switch reads. objection is the ShoutModifier already parsed above --
+	// see raidGuardOnIC's doc comment for why it isn't re-parsed here.
+	raidGuardOnIC(client, ms, msgText, objection)
+
 	stealthMuted := hasPunishmentType(punishments, PunishmentStealthMute) || censorShadow
 	// A /truepossess target is silenced exactly like a stealthmute: the packet
 	// echoes back to only them (so their own client still looks normal) while the
@@ -1723,6 +1738,13 @@ func pktOOC(client *Client, p *packet.Packet) {
 		addToBuffer(client, "OOC", "\""+msg+"\" (captcha-muted)", false)
 		return
 	}
+	// Raid guard: score this OOC line now that it has cleared automod/censor
+	// and torment and is about to reach the room. Every earlier branch above
+	// that stealthmutes, captcha-restricts, or torments this message returns
+	// before reaching here, so those are never observed -- no separate skip
+	// needed.
+	raidGuardOnOOC(client, ct.Name, decode(msg))
+
 	broadcastToAreaFrom(client.Ipid(), senderBypassesIgnore(client.Perms()), client.Area(),
 		&packet.CTToClient{Name: encode(displayUsername), Message: msg, IsFromServer: "0"})
 	addToBuffer(client, "OOC", "\""+msg+"\"", false)

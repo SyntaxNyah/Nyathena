@@ -331,7 +331,7 @@ func DefaultConfig() *Config {
 			RaidGuardCharChurnMs:                 1000,
 			RaidGuardNameChurnMax:                3,
 			RaidGuardCorrWindow:                  10,
-			RaidGuardCorrIPIDs:                   4,
+			RaidGuardCorrIPIDs:                   3,
 			RaidGuardCorrMinLen:                  15,
 			RaidGuardCorrMaxEntries:              4096,
 			RaidGuardArrivalBurst:                12,

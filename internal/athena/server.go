@@ -548,6 +548,9 @@ func NewServer(conf *settings.Config) (*Server, error) {
 	}
 	// Initialize the player-capacity lockdown threshold from config.
 	playerLockdownThreshold.Store(int32(conf.PlayerLockdownThreshold))
+	// Raid guard's master switch (see raidguard.go). Off by default; every hot
+	// IC/OOC/handshake hook gates on this single atomic load first.
+	raidGuardActive.Store(conf.RaidGuardEnabled)
 	// Initialize the lockdown min-playtime purge threshold from config (minutes -> seconds).
 	lockdownMinPlaytime.Store(int64(conf.LockdownMinPlaytime) * 60)
 	go startConnTrackerCleanup()
@@ -1689,6 +1692,14 @@ func recordIPFirstSeen(ipid string) {
 	globalNewIPTracker.mu.Lock()
 	globalNewIPTracker.timestamps = append(globalNewIPTracker.timestamps, time.Now())
 	globalNewIPTracker.mu.Unlock()
+
+	// Raid guard layer 2: feed this genuinely-new IPID into the arrival-burst
+	// signal (raidguard_corr.go) alongside the global-new-IP tracking above --
+	// same event, a different question ("is this a raid" vs. "should we rate
+	// limit"). One atomic load when the guard is off.
+	if raidGuardActive.Load() {
+		raidObserveArrival(time.Now())
+	}
 }
 
 // checkNewIPIDOOCCooldown checks whether a newly-seen IPID is still within the OOC chat cooldown.
