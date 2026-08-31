@@ -687,6 +687,16 @@ func raidGuardEnforce(client *Client, rs *raidState, want Verdict, trigger strin
 	// the pending captcha, is as far as two signals can go.
 	want = clampDisconnect(want, rs.firedCount())
 
+	// The challenge rung borrows the join captcha's machinery, so it cannot work
+	// when the operator has turned that off. Degrade it to an alert rather than
+	// silently handing out captchas on a server whose owner disabled them --
+	// and specifically NOT to silence, which without a pending question the
+	// player could answer is harsher than the rung above it, not gentler. If the
+	// behaviour continues the score keeps climbing to kick or ban on its own.
+	if want == VerdictChallenge && !joinCaptchaEnabled() {
+		want = VerdictWatch
+	}
+
 	// Watch is only an alert, so it is safe for anyone; every punitive verdict is
 	// clamped to the operator's configured ceiling and to the connection's
 	// playtime tier. A fully-exempt player (moderator, or an established regular)
@@ -794,6 +804,12 @@ func raidBanAllowed(correlatedAcrossIPIDs, serverUnderAttack bool) bool {
 // IPID before". A client already awaiting or restricted by the captcha is left
 // alone rather than being handed a fresh question.
 func raidGuardChallenge(client *Client) {
+	// Also checked by raidGuardEnforce, which degrades the verdict before
+	// getting here; repeated so no future caller can hand out a captcha on a
+	// server that has the feature switched off.
+	if !joinCaptchaEnabled() {
+		return
+	}
 	if client.awaitingCaptcha.Load() || client.captchaRestricted.Load() {
 		return
 	}
@@ -834,10 +850,17 @@ func alertRaidGuard(client *Client, v Verdict, score int, signals []string) {
 	if a := client.Area(); a != nil {
 		areaName = a.Name()
 	}
-	msg := fmt.Sprintf("%s (UID %d, IPID %s) in %s — raid guard: %s (score %d).\nSignals: %s\n"+
+	selfService := ""
+	if v == VerdictSilence && !joinCaptchaEnabled() {
+		// Normally a quarantined player frees themselves by answering the
+		// pending captcha. With the captcha switched off there is no question to
+		// answer, so staff are the only way out and need to know that.
+		selfService = "\nThe join captcha is off, so they CANNOT free themselves — this needs staff."
+	}
+	msg := fmt.Sprintf("%s (UID %d, IPID %s) in %s — raid guard: %s (score %d).\nSignals: %s%s\n"+
 		"If this is a real player, clear them with /raidguard clear %d.",
 		oocDisplayName(client), client.Uid(), client.Ipid(), areaName, v, score,
-		strings.Join(signals, "; "), client.Uid())
+		strings.Join(signals, "; "), selfService, client.Uid())
 	out := &packet.CTToClient{Name: "[RAIDGUARD]", Message: encode(msg), IsFromServer: "1"}
 	clients.ForEach(func(c *Client) {
 		if !permissions.HasPermission(c.Perms(), permissions.PermissionField["MOD_CHAT"]) {

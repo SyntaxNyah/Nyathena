@@ -363,3 +363,52 @@ func TestPacketFloodAutobanIsHonoured(t *testing.T) {
 		t.Error("the raw-packet-flood branch no longer bans at all; the flag should gate the ban, not remove it")
 	}
 }
+
+// TestChallengeRungRespectsCaptchaToggle checks that an operator who turns the
+// join captcha off does not keep getting captchas from the raid guard. The
+// challenge rung borrows the captcha's machinery, so with that switched off it
+// degrades to an alert -- and specifically not to silence, which without a
+// question the player can answer is harsher than the rung above it.
+func TestChallengeRungRespectsCaptchaToggle(t *testing.T) {
+	withRaidConfig(t)
+	oldClients := clients
+	t.Cleanup(func() { clients = oldClients })
+	clients = &ClientList{
+		list:       make(map[*Client]struct{}),
+		uidIndex:   make(map[int]*Client),
+		ipidCounts: make(map[string]int),
+	}
+
+	config.JoinCaptcha = false
+	config.RaidGuardMaxAction = "ban"
+
+	c := &Client{conn: &testConn{}, uid: 1, ipid: "captcha-off-ipid"}
+	rs := newRaidState()
+	rs.mu.Lock()
+	rs.score = config.RaidGuardScoreChallenge
+	rs.mu.Unlock()
+
+	raidGuardEnforce(c, rs, VerdictChallenge, "test")
+	if _, _, acted := rs.snapshot(); acted != VerdictWatch {
+		t.Errorf("with the captcha off, a challenge verdict acted as %v; want watch", acted)
+	}
+	if c.awaitingCaptcha.Load() {
+		t.Error("the guard put a client into the captcha flow on a server with join_captcha = false")
+	}
+	if c.captchaRestricted.Load() {
+		t.Error("the guard silenced a client that should only have been alerted on")
+	}
+}
+
+// TestBanStillWorksWithCaptchaOff checks the thing an operator actually cares
+// about when turning the captcha off: the autoban half is untouched by it.
+func TestBanStillWorksWithCaptchaOff(t *testing.T) {
+	withRaidConfig(t)
+	config.JoinCaptcha = false
+	if v := verdictForTier(config.RaidGuardScoreBan, raidGuardScaleBase); v != VerdictBan {
+		t.Errorf("ban verdict = %v with the captcha off; the two features must be independent", v)
+	}
+	if v := verdictForTier(config.RaidGuardScoreKick, raidGuardScaleBase); v != VerdictKick {
+		t.Errorf("kick verdict = %v with the captcha off", v)
+	}
+}
