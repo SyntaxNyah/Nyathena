@@ -335,6 +335,284 @@ rate_limit_kick_autoban_lenient_threshold = 5
 # Default: 1200 (20 hours)
 rate_limit_kick_autoban_min_playtime = 1200
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Raid Guard (behavioural raid detection)
+# ─────────────────────────────────────────────────────────────────────────────
+# Every rate limit above is keyed on one identity -- an IPID, a connection --
+# which is structurally blind to what a raid actually looks like: dozens of
+# distinct IPIDs arriving at once, each one individually staying under any
+# per-IPID limit. Raid guard instead scores BEHAVIOUR: how a connection
+# handshakes, how fast it picks a character and starts talking, whether its
+# OOC name or showname keeps changing message to message, whether its
+# objection shouts never let up -- plus, server-wide, whether the same text is
+# arriving from many different IPIDs at once and whether new IPIDs are
+# bursting in. See internal/athena/raidguard.go and raidguard_corr.go for the
+# full design rationale and the exact weight given to each signal.
+#
+# OFF BY DEFAULT (raid_guard_enabled = false below). With it off, every hot
+# IC/OOC/handshake path costs exactly one atomic-bool load and nothing else is
+# evaluated, allocated, or tracked. It is still a detector making automatic
+# judgement calls about real connections, so read through every setting below
+# -- especially raid_guard_max_action -- before turning it on.
+#
+# No single signal, and no accumulation of signals from ONE connection acting
+# alone, can ever produce a ban. A ban additionally requires that connection's
+# own text be corroborated by several OTHER IPIDs saying the same thing while
+# the server is concurrently seeing raid-shaped traffic -- something a lone
+# player, however oddly they behave, cannot manufacture. raid_guard_max_action
+# defaults to "captcha", not "ban": banning is an explicit, separate opt-in
+# (see that setting below) even after every other setting here is tuned.
+#
+# Moderators are never observed or scored by any of this, at any tier, for
+# any signal.
+#
+# Every action raid guard takes sends a "[RAIDGUARD]" OOC alert to every
+# moderator holding MOD_CHAT, naming the signals that fired, so a false
+# positive is visible immediately and can be reversed with
+# "/raidguard clear <uid>" (or "/raidguard clear all"). "/raidguard status"
+# reports the live configuration plus every connection currently carrying a
+# nonzero score; "/raidguard test <text>" previews what the correlation layer
+# would make of a line of text without recording anything.
+
+# Master switch for the whole feature.
+# Default: false
+raid_guard_enabled = false
+
+# The STRONGEST action an operator has opted into -- raid guard will never do
+# more than this, no matter how high a connection's score climbs. A verdict
+# above this ceiling is clamped down to it (e.g. a would-be kick becomes a
+# captcha challenge instead); everything at or below the ceiling still applies
+# normally. Accepted values, weakest to strongest:
+#   "watch"    -- alert staff only; never restricts the connection.
+#   "captcha"  -- (default) force a fresh join-captcha question onto the
+#                 connection, exactly like an unverified new IPID gets, even
+#                 if it would otherwise have been exempt from one. A real
+#                 player clears themselves just by answering it.
+#   "silence"  -- quarantine the connection: its own IC/OOC still looks sent
+#                 on its own screen but reaches nobody else, using the same
+#                 restricted-delivery path the join captcha's "mute" action
+#                 uses. Any pending captcha challenge is left in place so the
+#                 connection can still free itself by answering it.
+#   "kick"     -- disconnect the connection outright (not banned; free to
+#                 reconnect).
+#   "ban"      -- autoban the IPID for raid_guard_ban_duration. THIS IS AN
+#                 OPT-IN, separate from every threshold below: even at this
+#                 ceiling, a ban additionally requires the cross-IPID
+#                 corroboration described above, so raising the ceiling to
+#                 "ban" does not by itself make single-connection behaviour
+#                 bannable -- it only allows the ban outcome to be reached
+#                 once that stronger evidence exists.
+# Default: "captcha"
+raid_guard_max_action = "captcha"
+
+# How long a raid_guard_max_action = "ban" autoban lasts. Accepts any duration
+# string (e.g. "30m", "1h"). Recorded and lifted exactly like a moderator-
+# issued ban -- /getban and /unban both work on it.
+# Default: "30m"
+raid_guard_ban_duration = "30m"
+
+# --- Playtime tiers ---
+#
+# Raid guard reads each IPID's accumulated ALL-TIME playtime -- the same
+# KNOWN_IPS.PLAYTIME figure /playtime, the Lockdown Playtime Purge, the join
+# captcha and the repeat-offender autoban above all already use -- and scales
+# every score threshold below by it, in BOTH directions: a brand-new
+# connection (what a raid is actually made of) is judged MORE strictly than
+# baseline, and an established player is judged MORE leniently. Four tiers,
+# checked in this order:
+#   - moderator, or raid_guard_min_playtime minutes and up: EXEMPT.
+#     Never acted on, no matter how the connection behaves. Staff still get
+#     the alert, so a compromised regular's account is visible without the
+#     server automatically doing anything to it.
+#   - raid_guard_lenient_playtime minutes and up: LENIENT.
+#     Thresholds scaled by raid_guard_lenient_scale (a percentage above 100).
+#   - raid_guard_strict_playtime minutes and up: BASELINE.
+#     Thresholds exactly as configured below.
+#   - under raid_guard_strict_playtime minutes (including a brand-new
+#     connection with zero playtime): STRICT.
+#     Thresholds scaled by raid_guard_strict_scale (a percentage below 100) --
+#     this is the tier a raid actually arrives in.
+# A DB error while reading playtime is treated as "not punishable" (fails
+# OPEN) -- the opposite of the join captcha's fail-closed rule, and
+# deliberately so: a query hiccup here must never be able to ban a real
+# player.
+
+# Minutes of accumulated playtime at/above which an IPID is FULLY EXEMPT.
+# Moderators are always exempt regardless of this value. Set to 0 to disable
+# this tier by playtime (moderators are still always exempt).
+# Default: 1200 (20 hours)
+raid_guard_min_playtime = 1200
+
+# Minutes of accumulated playtime at/above which the LENIENT tier applies.
+# Default: 120 (2 hours)
+raid_guard_lenient_playtime = 120
+
+# Threshold scale for the lenient tier, as a PERCENTAGE. 200 means every score
+# threshold below is doubled, i.e. an established player needs twice the
+# evidence a brand-new connection does before the same action fires. Keep
+# this above 100 -- at or below it, this tier would stop being more lenient
+# than baseline.
+# Default: 200 (needs 2x the evidence)
+raid_guard_lenient_scale = 200
+
+# Minutes of accumulated playtime BELOW which the STRICT tier applies. A
+# brand-new connection with zero playtime is always judged at this tier --
+# it is the tier a raid actually arrives in, since a raid is made of
+# connections with no history at all.
+# Default: 15 minutes
+raid_guard_strict_playtime = 15
+
+# Threshold scale for the strict tier, as a PERCENTAGE. 70 means every score
+# threshold below needs only 70% of the configured value to fire, i.e. 30%
+# less evidence than baseline. Keep this below 100 -- at or above it, this
+# tier would stop being stricter than baseline.
+# Default: 70 (needs 30% less evidence)
+raid_guard_strict_scale = 70
+
+# --- Score thresholds ---
+#
+# Raid guard accumulates a score for one connection out of independent
+# behavioural signals (see raidSignalWeight in raidguard.go for the full list
+# and the exact weight given to each one), and compares that score -- scaled
+# by the playtime tier above -- against the five thresholds below to decide
+# the strongest action so far justified. The engine only ever escalates
+# (never downgrades) a connection it has already acted on, and every verdict
+# is still clamped by both raid_guard_max_action and the playtime-exemption
+# tier before anything actually happens to the connection. No single signal,
+# and no pair of signals, reaches the ban threshold on its own -- reaching it
+# requires several independent things to be true about the same connection at
+# once.
+
+# Score at which raid guard sends staff an alert but takes no action on the
+# connection itself.
+# Default: 40
+raid_guard_score_watch = 40
+
+# Score at which raid guard forces a fresh join-captcha challenge onto the
+# connection (subject to raid_guard_max_action).
+# Default: 60
+raid_guard_score_challenge = 60
+
+# Score at which raid guard quarantines the connection -- its own messages
+# look sent on its own screen but reach nobody else (subject to
+# raid_guard_max_action).
+# Default: 80
+raid_guard_score_silence = 80
+
+# Score at which raid guard disconnects the connection outright, without a
+# ban (subject to raid_guard_max_action).
+# Default: 100
+raid_guard_score_kick = 100
+
+# Score at which raid guard would autoban the IPID -- gated behind BOTH
+# raid_guard_max_action = "ban" AND the cross-IPID corroboration described
+# above. Short of either one, this ceiling instead applies whatever the next
+# strongest allowed action is.
+# Default: 160
+raid_guard_score_ban = 160
+
+# --- Individual signal tuning ---
+#
+# These tune exactly when specific behavioural signals fire. Every signal
+# fires AT MOST ONCE per connection (so repeating one behaviour can't inflate
+# a score without bound), and every one is individually weighted well below
+# the thresholds above -- reaching an action always takes several different
+# signals together, never one repeated.
+
+# Minimum number of IC messages a connection must have sent before the
+# sustained-objection-shout signal is even considered. Guards against one
+# dramatic "Objection!" entrance -- the whole point of AO2 -- tripping it.
+# Default: 3
+raid_guard_objection_min_msgs = 3
+
+# Fraction (0.0-1.0) of a connection's IC messages that must be objection
+# shouts for the sustained-objection signal to fire. A real trial interleaves
+# dialogue with shouts and never approaches this; a raider spamming nothing
+# but "OBJECTION" on every message does.
+# Default: 0.8 (80% of messages)
+raid_guard_objection_fraction = 0.8
+
+# Milliseconds after a connection is ACCEPTED (not after its handshake
+# completes -- the whole handshake window counts) within which picking a
+# character is considered implausibly fast for a human reading a character
+# list.
+# Default: 1000 (1 second)
+raid_guard_fast_charpick_ms = 1000
+
+# Milliseconds after a connection's FIRST character pick within which sending
+# its first IC message is considered implausibly fast. The weakest timing
+# signal on purpose -- a returning player with a saved character can
+# legitimately be this quick, so on its own it only ever nudges a score, never
+# decides one.
+# Default: 1500
+raid_guard_fast_speech_ms = 1500
+
+# Milliseconds between consecutive character picks (CC packets) within which
+# re-rolling characters is considered faster than a person could plausibly be
+# reading the character list between picks.
+# Default: 1000
+raid_guard_char_churn_ms = 1000
+
+# Number of DISTINCT OOC names, or distinct shownames, a single connection can
+# use before the name-churn signal fires. Counts distinct VALUES seen, not how
+# often the field appears on the wire (a real client resends its current name
+# on every single packet).
+# Default: 3
+raid_guard_name_churn_max = 3
+
+# --- Cross-IPID content correlation (layer 2) ---
+#
+# Separate from the per-connection signals above: this tracks whether the
+# SAME text is arriving from several DIFFERENT IPIDs within a short window --
+# exactly the fan-out shape a raid produces, and something no per-IPID rate
+# limit can ever see. Matching is by overlapping token "shingle", not exact
+# text equality, so a raider varying a line slightly between sends
+# (prepending "/g ", appending another slur) still correlates against their
+# earlier messages. This layer is also the ONLY thing that can ever make a
+# ban reachable -- see raid_guard_max_action above.
+
+# Seconds a piece of text is tracked for cross-IPID correlation before it
+# ages out of the window.
+# Default: 10
+raid_guard_corr_window = 10
+
+# Number of DISTINCT IPIDs that must say the same (or near-identical, via
+# shingling) text within raid_guard_corr_window seconds before it counts as
+# coordinated.
+# Default: 4
+raid_guard_corr_ipids = 4
+
+# Minimum normalized-character length a message must reach before it is even
+# considered for correlation at all. Short lines (two players independently
+# typing "/gas", say) are extremely common and are NOT evidence of
+# coordination -- this floor exists specifically to exclude them (measured at
+# 57% of a clean baseline capture before the floor was added).
+# Default: 15
+raid_guard_corr_min_len = 15
+
+# Hard cap on the number of distinct text fingerprints the correlation window
+# tracks at once. Bounds memory use under an actual raid -- which is exactly
+# the traffic that feeds this structure -- by clearing the window wholesale
+# rather than growing it further once this many entries are held. Losing
+# detection state under extreme load is acceptable; running the server out of
+# memory is not.
+# Default: 4096
+raid_guard_corr_max_entries = 4096
+
+# Number of distinct NEW IPIDs arriving within one second that counts as an
+# arrival burst -- the "many strangers show up at once" half of the raid
+# shape, tracked independently of the content correlation above.
+# Default: 12
+raid_guard_arrival_burst = 12
+
+# Reserved for a future integration with the server's /lockdown system (see
+# "Lockdown Playtime Purge" above) -- automatically flipping the server into
+# lockdown the moment raid guard's server-wide "under attack" state trips.
+# Present here for forward compatibility; not yet consumed by this build, so
+# changing it currently has no effect.
+# Default: false
+raid_guard_auto_lockdown = false
+
 # Modcall cooldown: Minimum number of seconds a user must wait between modcalls.
 # Set to 0 to disable the cooldown (allow unlimited modcalls).
 # Example: setting this to 60 means a user can only send one modcall per 60 seconds.

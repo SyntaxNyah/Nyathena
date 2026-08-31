@@ -273,3 +273,32 @@ func TestSignalsFireOnce(t *testing.T) {
 	}
 	t.Logf("200 identical messages -> score %d, signals %v", score, signals)
 }
+
+// TestTwoSignalsCannotDisconnect checks that no pair of signals, at any playtime
+// tier, can take an action the player cannot undo themselves.
+//
+// The weights are calibrated on two captures, and the handshake-ordering signal
+// in particular is an empirical observation that was never confirmed against
+// real client source. This test is what makes that acceptable: even if that
+// weight is wrong, two signals can reach a quarantine the player lifts by
+// answering the pending captcha, and no further.
+func TestTwoSignalsCannotDisconnect(t *testing.T) {
+	withRaidConfig(t)
+	for a := SignalKind(0); a < numRaidSignals; a++ {
+		for b := a + 1; b < numRaidSignals; b++ {
+			rs := newRaidState()
+			rs.markFired(a)
+			rs.markFired(b)
+			if n := rs.firedCount(); n != 2 {
+				t.Fatalf("expected 2 fired signals, got %d", n)
+			}
+			for _, scale := range []int{config.RaidGuardStrictScale, raidGuardScaleBase, config.RaidGuardLenientScale} {
+				v := clampDisconnect(verdictForTier(rs.score, scale), rs.firedCount())
+				if v >= VerdictKick {
+					t.Errorf("signals %q+%q at scale %d reach %v with only 2 signals fired",
+						raidSignalName[a], raidSignalName[b], scale, v)
+				}
+			}
+		}
+	}
+}

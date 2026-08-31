@@ -395,6 +395,19 @@ func (rs *raidState) snapshot() (score int, signals []string, acted Verdict) {
 	return rs.score, rs.firedSignals(), rs.acted
 }
 
+// firedCount reports how many distinct signals have fired.
+func (rs *raidState) firedCount() int {
+	rs.mu.Lock()
+	defer rs.mu.Unlock()
+	n := 0
+	for k := SignalKind(0); k < numRaidSignals; k++ {
+		if rs.hasFired(k) {
+			n++
+		}
+	}
+	return n
+}
+
 // firedSignal reports whether a signal has fired, taking the lock. Used by the
 // ban gate in raidGuardEnforce, which runs outside observe().
 func (rs *raidState) firedSignal(k SignalKind) bool {
@@ -622,6 +635,22 @@ func raidGuardEnforce(client *Client, rs *raidState, want Verdict, trigger strin
 		want = VerdictSilence
 	}
 
+	// Disconnecting somebody is the first action they cannot undo themselves, so
+	// it takes corroboration that no weighting can shortcut: at least
+	// minSignalsToDisconnect distinct signals must have fired, independent of
+	// the score they add up to.
+	//
+	// This exists because the signal weights are calibrated on two captures, and
+	// one of them -- handshake ordering -- is an empirical observation (67% of
+	// raid connections, 0% of baseline) that was never confirmed against real
+	// client source. If some client somewhere does emit RC/RM/RD before its own
+	// askchaa, that signal plus one unlucky content match would otherwise be
+	// enough to kick a real player off a brand-new connection. Requiring a third
+	// independent signal means a single mis-calibrated weight cannot cost anyone
+	// their session; a quarantine, which they can lift themselves by answering
+	// the pending captcha, is as far as two signals can go.
+	want = clampDisconnect(want, rs.firedCount())
+
 	// Watch is only an alert, so it is safe for anyone; every punitive verdict is
 	// clamped to the operator's configured ceiling and to the connection's
 	// playtime tier. A fully-exempt player (moderator, or an established regular)
@@ -691,6 +720,19 @@ func (client *Client) resetRaidGuard() {
 	client.mu.Lock()
 	client.raid = nil
 	client.mu.Unlock()
+}
+
+// minSignalsToDisconnect is how many distinct signals must fire before the guard
+// will take an action the player cannot reverse on their own.
+const minSignalsToDisconnect = 3
+
+// clampDisconnect enforces minSignalsToDisconnect, factored out so the property
+// can be asserted directly rather than inferred from enforcement behaviour.
+func clampDisconnect(want Verdict, firedCount int) Verdict {
+	if want >= VerdictKick && firedCount < minSignalsToDisconnect {
+		return VerdictSilence
+	}
+	return want
 }
 
 // raidBanAllowed is the guard's central safety invariant, factored out so it can
