@@ -2555,6 +2555,14 @@ func initCommands() {
 			reqPerms: permissions.PermissionField["BAN"],
 			category: "moderation",
 		},
+		"raidguard": {
+			handler:  cmdRaidGuard,
+			minArgs:  1,
+			usage:    "Usage: /raidguard status | clear <uid|all> | test <text>",
+			desc:     "Inspect the raid guard, clear a false positive's score, or test how it reads a piece of text.",
+			reqPerms: permissions.PermissionField["BAN"],
+			category: "moderation",
+		},
 		"captcha": {
 			handler:    cmdCaptcha,
 			minArgs:    1,
