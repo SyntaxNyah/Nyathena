@@ -1,0 +1,29 @@
+# Your own join-captcha questions.
+#
+# Anything in this file is NOT in the public repository, so questions written
+# here cannot be worked out by reading the server's source. Set
+# join_captcha_custom_only = true in config.toml to use only these.
+#
+# Format, one per line:
+#
+#     question text | answer
+#     question text | answer, alternative answer, another
+#
+# Answers ignore case, spacing and punctuation, so "Twelve", "twelve" and
+# " twelve. " all match an answer of "twelve". List alternatives when a question
+# has more than one reasonable form ("12" and "twelve").
+#
+# One rule is enforced at load time: the answer must not appear inside its own
+# question. An entry like "Type the word cheese | cheese" is rejected with a
+# warning, because a bot can pass that by copying rather than reading -- which
+# is the exact failure this whole feature exists to avoid.
+#
+# Edit and run /reload to apply without restarting.
+#
+# Delete or empty this file to use only the built-in questions.
+#
+# Examples -- replace these with your own, since these ARE public:
+#
+# What colour is the sky on a clear day? | blue
+# How many days are in a week? | 7, seven
+# Type the third month of the year. | march

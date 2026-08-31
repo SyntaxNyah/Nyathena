@@ -296,6 +296,16 @@ func NewServer(conf *settings.Config) (*Server, error) {
 		}
 	}
 
+	// Join captcha: load stored verifications, the operator question file and
+	// the captcha plugin (each is a no-op when the feature is unconfigured).
+	seedJoinCaptchaVerified()
+	initCustomChallenges()
+	initCaptchaPlugin()
+	if bad := validateJoinCaptchaKinds(conf.JoinCaptchaKinds); len(bad) > 0 {
+		logger.LogWarningf("config: join_captcha_kinds contains unknown challenge kind(s) %v -- valid kinds are %v",
+			bad, joinChallengeKindList())
+	}
+
 	// Pre-populate the in-memory tormented IPID set from the database.
 	if tormentedIPs, err := db.LoadTormentedIPs(); err != nil {
 		logger.LogErrorf("Failed to load tormented IPs from database: %v", err)

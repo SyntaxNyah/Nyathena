@@ -361,6 +361,14 @@ func Open() error {
 	if err != nil {
 		return err
 	}
+	_, err = db.Exec(`CREATE TABLE IF NOT EXISTS JOIN_CAPTCHA_VERIFIED(
+		IPID        TEXT    PRIMARY KEY,
+		VERIFIED_AT INTEGER NOT NULL DEFAULT 0,
+		KIND        TEXT    NOT NULL DEFAULT ''
+	)`)
+	if err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -761,6 +769,24 @@ func upgradeDB(v int) error {
 			return err
 		}
 		if _, err := db.Exec("PRAGMA user_version = 25"); err != nil {
+			return err
+		}
+		fallthrough
+	case 25:
+		// JOIN_CAPTCHA_VERIFIED records the IPIDs that have solved the
+		// join captcha. Verification must outlive the connection: a
+		// purely in-memory flag would be cleared by the disconnect it is
+		// meant to survive, so a bot could reconnect straight past the
+		// gate. Fresh databases get the table from the CREATE TABLE in
+		// Open(); this migration is a no-op-safe CREATE for upgrades.
+		if _, err := db.Exec(`CREATE TABLE IF NOT EXISTS JOIN_CAPTCHA_VERIFIED(
+			IPID        TEXT    PRIMARY KEY,
+			VERIFIED_AT INTEGER NOT NULL DEFAULT 0,
+			KIND        TEXT    NOT NULL DEFAULT ''
+		)`); err != nil {
+			return err
+		}
+		if _, err := db.Exec("PRAGMA user_version = 26"); err != nil {
 			return err
 		}
 	}
@@ -2927,6 +2953,83 @@ func ListLockdownExempts() ([]LockdownExemptInfo, error) {
 			return nil, err
 		}
 		out = append(out, le)
+	}
+	return out, rows.Err()
+}
+
+// JoinCaptchaInfo describes one IPID that has solved the join captcha.
+type JoinCaptchaInfo struct {
+	Ipid       string
+	VerifiedAt int64
+	Kind       string // challenge kind solved, kept for staff diagnostics
+}
+
+// AddJoinCaptchaVerified records that an IPID solved the join captcha.
+// Idempotent: re-solving (after /joincaptcha reset, say) overwrites the timestamp.
+func AddJoinCaptchaVerified(ipid string, verifiedAt int64, kind string) error {
+	if db == nil {
+		return nil
+	}
+	_, err := db.Exec("INSERT OR REPLACE INTO JOIN_CAPTCHA_VERIFIED(IPID, VERIFIED_AT, KIND) VALUES(?, ?, ?)",
+		ipid, verifiedAt, kind)
+	return err
+}
+
+// RemoveJoinCaptchaVerified clears an IPID's join-captcha verification, so it
+// is challenged again on its next connection. Returns sql.ErrNoRows when the
+// IPID was not verified, so callers can distinguish "cleared something" from
+// "there was nothing to clear".
+func RemoveJoinCaptchaVerified(ipid string) error {
+	if db == nil {
+		return nil
+	}
+	res, err := db.Exec("DELETE FROM JOIN_CAPTCHA_VERIFIED WHERE IPID = ?", ipid)
+	if err != nil {
+		return err
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if n == 0 {
+		return sql.ErrNoRows
+	}
+	return nil
+}
+
+// ClearJoinCaptchaVerified drops every join-captcha verification, forcing all
+// returning players to solve a fresh challenge. Returns the number of rows
+// removed. Used by /joincaptcha reset all when an operator wants to re-gate the
+// whole known population mid-incident.
+func ClearJoinCaptchaVerified() (int64, error) {
+	if db == nil {
+		return 0, nil
+	}
+	res, err := db.Exec("DELETE FROM JOIN_CAPTCHA_VERIFIED")
+	if err != nil {
+		return 0, err
+	}
+	return res.RowsAffected()
+}
+
+// LoadJoinCaptchaVerified returns every verified IPID, used to seed the
+// in-memory set at startup so the hot-path check is a map lookup.
+func LoadJoinCaptchaVerified() ([]string, error) {
+	if db == nil {
+		return nil, nil
+	}
+	rows, err := db.Query("SELECT IPID FROM JOIN_CAPTCHA_VERIFIED")
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []string
+	for rows.Next() {
+		var ipid string
+		if err := rows.Scan(&ipid); err != nil {
+			return nil, err
+		}
+		out = append(out, ipid)
 	}
 	return out, rows.Err()
 }

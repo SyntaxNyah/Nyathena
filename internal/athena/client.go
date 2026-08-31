@@ -414,6 +414,23 @@ type Client struct {
 	dcLastActivityNano atomic.Int64
 	dcWatcherStarted   atomic.Bool
 
+	// Join captcha (see joincaptcha.go). awaitingCaptcha is the hot-path gate:
+	// a single atomic load on every IC/OOC/command packet, true only while this
+	// connection still owes an answer, so a server with the feature off -- or a
+	// player who has already verified -- pays nothing beyond that load.
+	// captchaStrikes counts failed attempts (blocked messages and wrong
+	// answers alike) toward the configured kick threshold. The challenge
+	// itself lives under the client mutex in pendingJoinChallenge.
+	// captchaQuarantined marks a connection that ran out of captcha attempts
+	// under the default 'quarantine' action: it keeps receiving the room and
+	// keeps seeing its own messages echoed back, but nothing it sends reaches
+	// a real player. Deliberately never surfaced to the client -- see
+	// joincaptcha.go for why silence beats a kick here.
+	awaitingCaptcha      atomic.Bool
+	captchaQuarantined   atomic.Bool
+	captchaStrikes       atomic.Int32
+	pendingJoinChallenge joinChallenge
+
 	// censorAlertsOff mutes the staff censor-trip OOC alerts for this session
 	// (/censoralerts off). Only consulted for clients holding MOD_CHAT; every
 	// fresh connection defaults back to alerts on. See censor_alerts.go.
@@ -1011,6 +1028,13 @@ func (client *Client) clientCleanup() {
 					}
 				}()
 			}
+		}
+
+		// Release the captcha-quarantine hot-path gate if this connection was
+		// holding it, so a disconnect can never leak the counter and leave
+		// every message paying for a lookup that matches nobody.
+		if client.captchaQuarantined.CompareAndSwap(true, false) {
+			activeCaptchaQuarantine.Add(-1)
 		}
 
 		// Dissolve any pairing involving this client so a partner is never left

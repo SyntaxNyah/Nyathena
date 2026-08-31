@@ -358,6 +358,16 @@ func ReloadConfig() (string, error) {
 		changes = append(changes, "punishment_names.txt")
 	}
 
+	// captcha_questions.txt (operator-written join-captcha questions) is
+	// optional and independent of every other list; a parse error fails the
+	// reload loudly rather than silently emptying the set.
+	beforeCustom := len(getCustomChallenges())
+	if cerr := reloadCustomChallenges(); cerr != nil {
+		logger.LogWarningf("reload: %v", cerr)
+	} else if len(getCustomChallenges()) != beforeCustom {
+		changes = append(changes, "captcha_questions.txt")
+	}
+
 	// config.toml hot fields (motd / description).
 	if n, cerr := ReloadHotConfig(); cerr != nil {
 		logger.LogWarningf("reload: config.toml hot fields not reloaded: %v", cerr)

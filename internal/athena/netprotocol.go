@@ -323,6 +323,11 @@ func pktReqDone(client *Client, _ *packet.Packet) {
 		client.SendMotd(motd)
 	}
 
+	// Join captcha: issued last so the question is the final thing in the join
+	// sequence, sitting at the bottom of the OOC log where a new player will
+	// actually see it rather than scrolled off above the MOTD.
+	issueJoinCaptcha(client)
+
 	logger.LogInfof("Client (IPID:%v UID:%v) joined the server", client.Ipid(), client.Uid())
 
 	// Torment reconnect cycle: if this IPID is lagged, restart the disconnect timer
@@ -401,6 +406,15 @@ func pktIC(client *Client, p *packet.Packet) {
 
 	if !client.CanSpeakIC() { // Literally 1984
 		client.SendServerMessage("You are not allowed to speak in this area.")
+		return
+	}
+
+	// Join captcha: an unverified new IPID cannot speak in character yet. One
+	// atomic load when the gate is not up. Placed after the rate-limit and
+	// lockdown checks -- which are cheaper and apply to everyone -- but before
+	// any packet parsing, so a message from an unverified connection costs the
+	// server nothing beyond the nudge.
+	if client.joinCaptchaBlocked("speak in character") {
 		return
 	}
 
@@ -1219,14 +1233,23 @@ func pktIC(client *Client, p *packet.Packet) {
 	// echoes back to only them (so their own client still looks normal) while the
 	// room hears nothing — they cannot contest or expose the possession.
 	silenced := stealthMuted || trueMuted
+	// A captcha-quarantined connection is delivered like a stealthmute, except
+	// that the packet also reaches any other quarantined client in the same
+	// area -- the shadow copy of the room. It is counted as silenced from here
+	// on so it triggers no traps, contagion or love potions, exactly like any
+	// other message the room never actually heard.
+	quarantined := activeCaptchaQuarantine.Load() > 0 && client.captchaQuarantined.Load()
 	switch {
 	case silenced:
 		client.Send(ms)
+	case quarantined:
+		broadcastToQuarantine(client, client.Area(), ms)
 	case hasPunishmentType(punishments, PunishmentLifo):
 		lifoEnqueueIC(client, ms)
 	default:
 		broadcastToAreaFrom(client.Ipid(), senderBypassesIgnore(client.Perms()), client.Area(), ms)
 	}
+	silenced = silenced || quarantined
 	// SFX curse MC fallback: for external http(s) URLs the sfx_name field alone
 	// is not enough because standard AO2 desktop clients look for a local file
 	// and WebAO concatenates the asset URL with the sound name (producing a
@@ -1260,6 +1283,11 @@ func pktIC(client *Client, p *packet.Packet) {
 		addToBuffer(client, "IC", "\""+ms.Message+"\" (truepossessed)", false)
 	case censorShadow:
 		addToBuffer(client, "IC", "\""+ms.Message+"\" (censored)", false)
+	case quarantined:
+		// Logged so staff can read what a quarantined connection was saying --
+		// the whole point of quarantining rather than kicking is that the
+		// traffic keeps arriving where it can be looked at.
+		addToBuffer(client, "IC", "\""+ms.Message+"\" (captcha-quarantined)", false)
 	default:
 		addToBuffer(client, "IC", "\""+ms.Message+"\"", false)
 	}
@@ -1318,6 +1346,18 @@ func pktAM(client *Client, p *packet.Packet) {
 				addToBuffer(client, "MUSIC", "Blocked by /musicban.", false)
 				return
 			}
+		}
+	}
+
+	// Join captcha: block music plays from an unverified connection. Area
+	// changes fall through to the areaNames branch untouched -- moving between
+	// rooms broadcasts nothing and is exactly what a confused new player should
+	// still be able to do while they work the question out. The atomic load
+	// comes first so a verified client never pays for the music-list scan.
+	if client.awaitingCaptcha.Load() &&
+		(isMusicURL(decodedSong) || sliceutil.ContainsString(getMusicList(), decodedSong)) {
+		if client.joinCaptchaBlocked("change the music") {
+			return
 		}
 	}
 
@@ -1511,8 +1551,29 @@ func pktOOC(client *Client, p *packet.Packet) {
 		match := commandRegex.FindString(decoded)
 		command := strings.ToLower(strings.TrimPrefix(match, "/"))
 		args := strings.Split(decoded, " ")[1:]
+		// Join captcha: an unverified connection may only run the handful of
+		// commands it needs to get verified or get help. Everything else is
+		// gated because plenty of commands broadcast (/global, /pm, /roll),
+		// and a bot that can reach those has not been stopped by the gate.
+		if client.awaitingCaptcha.Load() && !joinCaptchaCommandAllowed(command) &&
+			client.joinCaptchaBlocked("use that command") {
+			return
+		}
 		ParseCommand(client, command, args)
 		return
+	}
+
+	// Join captcha: a plain OOC message from an unverified connection is
+	// blocked -- but if the player simply typed the answer without the
+	// command, take it. The captcha's difficulty is meant to be the question,
+	// not remembering to prefix it with /verify.
+	if client.awaitingCaptcha.Load() {
+		if client.tryJoinCaptchaAnswer(decode(ct.Message)) {
+			return
+		}
+		if client.joinCaptchaBlocked("talk in OOC") {
+			return
+		}
 	}
 
 	// A real (non-command) OOC message counts as activity for the /dc idle timer.
@@ -1657,6 +1718,14 @@ func pktOOC(client *Client, p *packet.Packet) {
 	if client.HasActivePunishment(PunishmentStealthMute) {
 		client.Send(&packet.CTToClient{Name: encode(displayUsername), Message: msg, IsFromServer: "0"})
 		addToBuffer(client, "OOC", "\""+msg+"\" (stealthmuted)", false)
+		return
+	}
+	// Captcha quarantine: same shadow copy of the room the IC path uses -- the
+	// sender and any other quarantined client in the area, nobody else.
+	if activeCaptchaQuarantine.Load() > 0 && client.captchaQuarantined.Load() {
+		broadcastToQuarantine(client, client.Area(),
+			&packet.CTToClient{Name: encode(displayUsername), Message: msg, IsFromServer: "0"})
+		addToBuffer(client, "OOC", "\""+msg+"\" (captcha-quarantined)", false)
 		return
 	}
 	broadcastToAreaFrom(client.Ipid(), senderBypassesIgnore(client.Perms()), client.Area(),
