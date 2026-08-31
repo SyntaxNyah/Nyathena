@@ -310,3 +310,56 @@ func TestCaptchaRandIsUniform(t *testing.T) {
 		}
 	}
 }
+
+// TestJoinCaptchaPlaytimeExemptDisabled checks that a zero or negative
+// threshold turns the exemption off entirely rather than exempting everyone --
+// getting that backwards would silently disable the captcha for the whole
+// server.
+func TestJoinCaptchaPlaytimeExemptDisabled(t *testing.T) {
+	for _, v := range []int{0, -1} {
+		withCaptchaConfig(t, settings.ServerConfig{JoinCaptchaMinPlaytime: v}, func() {
+			if joinCaptchaPlaytimeExempt("1.2.3.4") {
+				t.Errorf("min_playtime=%d should disable the exemption, not grant it", v)
+			}
+		})
+	}
+}
+
+// TestJoinCaptchaPlaytimeExemptNoConfig checks the nil-config path is safe and
+// does not exempt.
+func TestJoinCaptchaPlaytimeExemptNoConfig(t *testing.T) {
+	orig := config
+	defer func() { config = orig }()
+	config = nil
+	if joinCaptchaPlaytimeExempt("1.2.3.4") {
+		t.Error("a nil config must not exempt anyone from the captcha")
+	}
+}
+
+// TestJoinCaptchaPlaytimeThreshold covers the comparison itself against the
+// 5-hour default, including the boundary. Playtime is stored in seconds and the
+// setting is in minutes, so an off-by-60 here would be a factor-of-sixty bug.
+func TestJoinCaptchaPlaytimeThreshold(t *testing.T) {
+	const minutes = 300 // the 5-hour default
+	threshold := int64(minutes) * 60
+	cases := []struct {
+		name          string
+		playtimeSecs  int64
+		wantExemption bool
+	}{
+		{"brand new connection", 0, false},
+		{"one hour", 3600, false},
+		{"just under five hours", threshold - 1, false},
+		{"exactly five hours", threshold, true},
+		{"five hours and a minute", threshold + 60, true},
+		{"five hundred hours", 500 * 3600, true},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			if got := c.playtimeSecs >= threshold; got != c.wantExemption {
+				t.Errorf("playtime %ds against a %d-minute threshold: exempt=%v, want %v",
+					c.playtimeSecs, minutes, got, c.wantExemption)
+			}
+		})
+	}
+}

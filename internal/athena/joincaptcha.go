@@ -185,6 +185,9 @@ func issueJoinCaptcha(client *Client) {
 	if isJoinCaptchaVerified(client.Ipid()) {
 		return
 	}
+	if joinCaptchaPlaytimeExempt(client.Ipid()) {
+		return
+	}
 
 	// A configured plugin owns challenge generation entirely; the built-in
 	// generators are the fallback for when none is configured or it is down.
@@ -204,6 +207,38 @@ func issueJoinCaptcha(client *Client) {
 	client.sendCaptchaPopup(c)
 
 	go client.joinCaptchaTimeoutWatch()
+}
+
+// joinCaptchaPlaytimeExempt reports whether an IPID has enough accumulated
+// all-time playtime (join_captcha_min_playtime, in minutes) to skip the captcha
+// outright. Reads the same KNOWN_IPS.PLAYTIME figure /playtime, the lockdown
+// purge and the repeat-offender autoban tiers use, so all four agree on what
+// "an established player" means.
+//
+// The point is that the captcha exists to sort brand-new connections during a
+// raid, and someone who has already spent hours on the server is not what it is
+// looking for. Hours of playtime is a far stronger statement about being a real
+// person than any puzzle, so asking them anything is pure friction.
+//
+// A DB error means "not exempt", i.e. show the captcha. That is deliberately the
+// opposite of the autoban's fail-open rule, and for the opposite reason: there,
+// failing closed would ban a real player over a hiccup, so the safe direction is
+// to do nothing. Here, failing open would drop the gate mid-incident, and the
+// worst case of failing closed is that a regular answers one question.
+func joinCaptchaPlaytimeExempt(ipid string) bool {
+	if config == nil {
+		return false
+	}
+	minPlaytime := int64(config.JoinCaptchaMinPlaytime) * 60
+	if minPlaytime <= 0 {
+		return false // 0 disables the exemption -- everyone unverified is asked
+	}
+	playtime, err := db.GetPlaytime(ipid)
+	if err != nil {
+		logger.LogErrorf("join captcha: failed to read playtime for IPID %v, challenging them anyway: %v", ipid, err)
+		return false
+	}
+	return playtime >= minPlaytime
 }
 
 // captchaBanner heads the challenge message.
@@ -540,6 +575,12 @@ func joinCaptchaStatus(client *Client) {
 	})
 	var sb strings.Builder
 	sb.WriteString(fmt.Sprintf("🔐 Join captcha: on, action '%v', %v strike(s) allowed.\n", joinCaptchaAction(), joinCaptchaStrikeLimit()))
+	if config != nil && config.JoinCaptchaMinPlaytime > 0 {
+		sb.WriteString(fmt.Sprintf("Skipped for IPIDs with %v+ of playtime, and for anyone who has passed it before.\n",
+			(time.Duration(config.JoinCaptchaMinPlaytime) * time.Minute).String()))
+	} else {
+		sb.WriteString("No playtime exemption; only a previous pass skips it.\n")
+	}
 	if n := len(getCustomChallenges()); n > 0 {
 		mode := "mixed with the built-in generators"
 		if config != nil && config.JoinCaptchaCustomOnly {

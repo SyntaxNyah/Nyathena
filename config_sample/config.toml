@@ -695,6 +695,18 @@ join_captcha_popup = true
 # Default: true
 join_captcha_remember = true
 
+# Skip the captcha entirely for any IPID with at least this much accumulated
+# all-time playtime, in minutes. Reads the same figure /playtime shows.
+#
+# Hours on the server is a far stronger statement about being a real person than
+# any puzzle, and the captcha is there to sort brand-new connections during a
+# raid -- so asking a regular anything is pure friction. Between this and
+# join_captcha_remember, an established player should never see a question.
+#
+# 0 disables the exemption (everyone unverified is asked).
+# Default: 300 (5 hours)
+join_captcha_min_playtime = 300
+
 # Which question kinds to use. Leave empty for all of them. Naming a subset lets
 # you rotate the mix from config if someone ever does build a solver, which
 # invalidates their work without a rebuild.

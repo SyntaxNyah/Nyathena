@@ -116,6 +116,7 @@ type ServerConfig struct {
 	JoinCaptchaTimeout                   int      `toml:"join_captcha_timeout"`
 	JoinCaptchaKinds                     []string `toml:"join_captcha_kinds"`
 	JoinCaptchaRemember                  bool     `toml:"join_captcha_remember"`
+	JoinCaptchaMinPlaytime               int      `toml:"join_captcha_min_playtime"`
 	JoinCaptchaAction                    string   `toml:"join_captcha_action"`
 	JoinCaptchaQuestions                 string   `toml:"join_captcha_questions"`
 	JoinCaptchaCustomOnly                bool     `toml:"join_captcha_custom_only"`
@@ -323,6 +324,7 @@ func DefaultConfig() *Config {
 			JoinCaptchaTimeout:                   180,
 			JoinCaptchaKinds:                     nil,
 			JoinCaptchaRemember:                  true,
+			JoinCaptchaMinPlaytime:               300,
 			JoinCaptchaAction:                    "quarantine",
 			JoinCaptchaQuestions:                 "captcha_questions.txt",
 			JoinCaptchaCustomOnly:                false,

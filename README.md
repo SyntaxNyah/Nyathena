@@ -155,6 +155,10 @@ connections can do is answer a question.
   [docs/CAPTCHA_PLUGIN.md](docs/CAPTCHA_PLUGIN.md). In the plugin's token mode
   the answer never enters the server process at all.
 
+**Regulars are never asked.** Moderators, anyone who has passed it once (stored
+by IPID, surviving restarts), and any IPID with 5+ hours of accumulated playtime
+(`join_captcha_min_playtime`) skip it outright.
+
 The question is shown in OOC and in a client-side popup (desktop AO2 and WebAO).
 Players answer with `/verify <answer>`, or by just typing the answer in OOC.
 Signing in with `/login` clears it. Staff use `/joincaptcha status`, and
