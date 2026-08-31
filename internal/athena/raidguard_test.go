@@ -2,6 +2,8 @@ package athena
 
 import (
 	"fmt"
+	"os"
+	"strings"
 	"testing"
 	"time"
 
@@ -330,5 +332,34 @@ func TestAutoLockdownIsOptIn(t *testing.T) {
 	markRaidAttack(time.Now())
 	if !serverLockdown.Load() {
 		t.Error("a detected raid did not engage lockdown with raid_guard_auto_lockdown on")
+	}
+}
+
+// TestPacketFloodAutobanIsHonoured pins the flag that gates the raw-packet-flood
+// ban. It was documented and settable for a long time while nothing read it, so
+// an operator who turned it off still got 173-year bans out of that path. A
+// config switch that silently does nothing is worse than no switch, because it
+// is trusted.
+func TestPacketFloodAutobanIsHonoured(t *testing.T) {
+	withRaidConfig(t)
+	src, err := os.ReadFile("client.go")
+	if err != nil {
+		t.Fatalf("reading client.go: %v", err)
+	}
+	body := string(src)
+	i := strings.Index(body, "if client.CheckRawPacketRateLimit() {")
+	if i < 0 {
+		t.Fatal("could not find the raw-packet-flood branch in client.go")
+	}
+	block := body[i:]
+	if j := strings.Index(block, "\n\t\tvar pkt"); j > 0 {
+		block = block[:j]
+	}
+	if !strings.Contains(block, "config.PacketFloodAutoban") {
+		t.Error("the raw-packet-flood branch does not read config.PacketFloodAutoban; " +
+			"setting packet_flood_autoban = false would silently still ban")
+	}
+	if !strings.Contains(block, "autoBanPacketFlooder") {
+		t.Error("the raw-packet-flood branch no longer bans at all; the flag should gate the ban, not remove it")
 	}
 }

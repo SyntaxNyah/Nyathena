@@ -743,15 +743,29 @@ func (client *Client) HandleClient() {
 			logger.WriteNetworkLog(client.ipid, client.Hdid(), "RECV", rawPacket)
 		}
 
-		// Raw packet rate limit: ban bots/flooders that send far more packets per second
-		// than any legitimate client ever would. The ban is committed synchronously before
-		// the connection closes so the flooder cannot immediately reconnect.
+		// Raw packet rate limit: disconnect bots/flooders that send far more packets per
+		// second than any legitimate client ever would.
+		//
+		// packet_flood_autoban decides whether that disconnect is also a ban. It is
+		// honoured here rather than assumed: the flag existed and was documented for a
+		// long time while nothing read it, so this path banned unconditionally and an
+		// operator who set it to false got a ban anyway. Disconnecting without banning
+		// still fully protects the server -- the flood is off the socket either way, and
+		// the rate limit keeps rejecting it on every reconnect -- so the flag only
+		// controls whether a mistake is durable.
 		if client.CheckRawPacketRateLimit() {
-			client.SendServerMessage("You have been banned for packet flooding.")
-			logger.LogInfof("Client (IPID:%v UID:%v) banned for raw packet flooding", client.Ipid(), client.Uid())
-			logger.WriteAudit(fmt.Sprintf("%v | PACKET_FLOOD | IPID:%v | UID:%v | Auto-banned for packet flooding", time.Now().UTC().Format("15:04:05"), client.Ipid(), client.Uid()))
-			autoBanPacketFlooder(client.Ipid())
-			if enableDiscord {
+			banning := config.PacketFloodAutoban
+			if banning {
+				client.SendServerMessage("You have been banned for packet flooding.")
+				logger.LogInfof("Client (IPID:%v UID:%v) banned for raw packet flooding", client.Ipid(), client.Uid())
+				logger.WriteAudit(fmt.Sprintf("%v | PACKET_FLOOD | IPID:%v | UID:%v | Auto-banned for packet flooding", time.Now().UTC().Format("15:04:05"), client.Ipid(), client.Uid()))
+				autoBanPacketFlooder(client.Ipid())
+			} else {
+				client.SendServerMessage("You have been disconnected for packet flooding.")
+				logger.LogInfof("Client (IPID:%v UID:%v) disconnected for raw packet flooding (packet_flood_autoban is off)", client.Ipid(), client.Uid())
+				logger.WriteAudit(fmt.Sprintf("%v | PACKET_FLOOD | IPID:%v | UID:%v | Disconnected for packet flooding (no ban)", time.Now().UTC().Format("15:04:05"), client.Ipid(), client.Uid()))
+			}
+			if enableDiscord && banning {
 				ipid, uid := client.Ipid(), client.Uid()
 				go func() {
 					if err := webhook.PostPacketFlood(ipid, uid); err != nil {
