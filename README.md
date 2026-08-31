@@ -137,14 +137,9 @@ connections can do is answer a question.
   a randomised wrapper around all of them. The property is enforced at
   generation time, not just intended: a draw that would leak its own answer is
   re-rolled.
-- **Failing is invisible.** After three strikes the connection is not kicked but
-  **shadow-quarantined**: it keeps receiving the room and keeps seeing its own
-  messages echoed back, so the sender sees a chat that appears to work, while
-  nothing it sends reaches a real player. Other quarantined connections in the
-  same area *do* see each other, so an attacker who opens two clients to check
-  still sees their messages arrive. A kick would tell them exactly which attempt
-  was caught; this tells them nothing. (`join_captcha_action = "kick"` if you
-  would rather disconnect them.)
+- **Running out of strikes mutes rather than kicks.** A kick is a loud,
+  immediate signal, and there is no reason to hand one out for free. Set
+  `join_captcha_action = "kick"` if you would rather disconnect them.
 - **Can't be rerolled.** Challenges are derived as HMAC-SHA256(secret, IPID +
   time window), so reconnecting returns the *same* question — a bot whose solver
   only handles arithmetic can't reconnect until it draws one.
@@ -162,8 +157,8 @@ by IPID, surviving restarts), and any IPID with 5+ hours of accumulated playtime
 The question is shown in OOC and in a client-side popup (desktop AO2 and WebAO).
 Players answer with `/verify <answer>`, or by just typing the answer in OOC.
 Signing in with `/login` clears it. Staff use `/joincaptcha status`, and
-`/joincaptcha verify <uid>` to release a false positive — quarantined messages
-are kept in the area log, tagged, and staff are alerted whenever it acts.
+`/joincaptcha verify <uid>` to release a false positive — messages are kept in
+the area log, tagged, and staff are alerted whenever it acts.
 
 ### IPHub VPN Firewall
 

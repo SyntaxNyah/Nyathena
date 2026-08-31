@@ -659,23 +659,15 @@ join_captcha_strikes = 3
 
 # What happens when a connection runs out of strikes.
 #
-#   "quarantine"  (default) Silently shadow-quarantine it. Nothing is said. The
-#                 connection keeps receiving the room and keeps seeing its own
-#                 messages echoed back, so the sender sees a chat that appears
-#                 to work -- but nothing it sends reaches a real player. Other
-#                 quarantined connections in the same area DO see each other, so
-#                 an attacker who opens two clients to check still sees their
-#                 messages arrive, and learns nothing.
+#   "mute"  (default) Stop its messages reaching the room.
+#   "kick"  Disconnect it with an explanation instead.
 #
-#   "kick"        Disconnect it with an explanation instead.
-#
-# Quarantine is the default because a kick is a free signal: it tells an attacker
-# exactly which attempt was caught, which is precisely what they need to iterate
-# a solver. Staff are alerted either way (and quarantined messages are kept in
-# the area log, tagged), so a real player caught by mistake is visible and can be
-# released with /joincaptcha verify <uid>.
-# Default: "quarantine"
-join_captcha_action = "quarantine"
+# Muting is the default because a kick is a loud, immediate signal and there is
+# no reason to hand one out for free. Staff are alerted either way, and the
+# messages are kept in the area log tagged, so a real player caught by mistake
+# is visible and can be released with /joincaptcha verify <uid>.
+# Default: "mute"
+join_captcha_action = "mute"
 
 # Seconds a connection has to answer before it strikes out on its own, so an
 # idle bot that never replies is dealt with rather than sitting there.

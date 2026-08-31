@@ -163,8 +163,8 @@ func pluginChallengeFor(client *Client) (joinChallenge, bool) {
 // pluginVerify asks the plugin to judge an answer for a token-only challenge.
 //
 // A plugin failure here cannot be treated as "wrong": the player may well have
-// answered correctly, and silently quarantining them for the helper's outage is
-// the false-positive case this whole feature has to avoid. The caller reissues
+// answered correctly, and acting against them over the helper's outage is the
+// false-positive case this whole feature has to avoid. The caller reissues
 // a fresh challenge instead -- see tryJoinCaptchaAnswer.
 func pluginVerify(client *Client, token, answer string) (ok bool, err error) {
 	if !captchaPluginActive() {

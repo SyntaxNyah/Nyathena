@@ -191,7 +191,7 @@ func TestJoinCaptchaCommandAllowed(t *testing.T) {
 }
 
 // TestJoinCaptchaStrikeLimit checks the floor that stops a misconfigured 0 from
-// quarantining someone on their very first blocked message.
+// acting on someone's very first blocked message.
 func TestJoinCaptchaStrikeLimit(t *testing.T) {
 	withCaptchaConfig(t, settings.ServerConfig{JoinCaptchaStrikes: 5}, func() {
 		if got := joinCaptchaStrikeLimit(); got != 5 {
@@ -208,15 +208,15 @@ func TestJoinCaptchaStrikeLimit(t *testing.T) {
 }
 
 // TestJoinCaptchaAction checks the action parse, including that an unknown
-// value falls back to the safer quarantine rather than kicking players.
+// value falls back to the safer mute rather than kicking players.
 func TestJoinCaptchaAction(t *testing.T) {
 	cases := map[string]string{
-		"quarantine": joinCaptchaActionQuarantine,
-		"kick":       joinCaptchaActionKick,
-		"KICK":       joinCaptchaActionKick,
-		" kick ":     joinCaptchaActionKick,
-		"":           joinCaptchaActionQuarantine,
-		"nonsense":   joinCaptchaActionQuarantine,
+		"mute":     joinCaptchaActionMute,
+		"kick":     joinCaptchaActionKick,
+		"KICK":     joinCaptchaActionKick,
+		" kick ":   joinCaptchaActionKick,
+		"":         joinCaptchaActionMute,
+		"nonsense": joinCaptchaActionMute,
 	}
 	for in, want := range cases {
 		withCaptchaConfig(t, settings.ServerConfig{JoinCaptchaAction: in}, func() {

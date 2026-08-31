@@ -421,13 +421,10 @@ type Client struct {
 	// captchaStrikes counts failed attempts (blocked messages and wrong
 	// answers alike) toward the configured kick threshold. The challenge
 	// itself lives under the client mutex in pendingJoinChallenge.
-	// captchaQuarantined marks a connection that ran out of captcha attempts
-	// under the default 'quarantine' action: it keeps receiving the room and
-	// keeps seeing its own messages echoed back, but nothing it sends reaches
-	// a real player. Deliberately never surfaced to the client -- see
-	// joincaptcha.go for why silence beats a kick here.
+	// captchaRestricted marks a connection that ran out of captcha attempts
+	// under the 'mute' action: what it sends no longer reaches the room.
 	awaitingCaptcha      atomic.Bool
-	captchaQuarantined   atomic.Bool
+	captchaRestricted    atomic.Bool
 	captchaStrikes       atomic.Int32
 	pendingJoinChallenge joinChallenge
 
@@ -1030,11 +1027,11 @@ func (client *Client) clientCleanup() {
 			}
 		}
 
-		// Release the captcha-quarantine hot-path gate if this connection was
-		// holding it, so a disconnect can never leak the counter and leave
-		// every message paying for a lookup that matches nobody.
-		if client.captchaQuarantined.CompareAndSwap(true, false) {
-			activeCaptchaQuarantine.Add(-1)
+		// Release the captcha hot-path gate if this connection was holding it,
+		// so a disconnect can never leak the counter and leave every message
+		// paying for a lookup that matches nobody.
+		if client.captchaRestricted.CompareAndSwap(true, false) {
+			activeCaptchaRestricted.Add(-1)
 		}
 
 		// Dissolve any pairing involving this client so a partner is never left

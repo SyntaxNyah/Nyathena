@@ -29,33 +29,27 @@ import (
 // keeps the AO2 handshake untouched (there is no captcha step in the protocol
 // to hook) and keeps the failure mode gentle for a real person who is confused.
 //
-// Two properties matter more than the question itself, and both are deliberate:
+// The property that matters most is in joincaptcha_challenge.go: the answer is
+// never printed in the question, so a scraper that echoes back whatever follows
+// "type this" gets nowhere, because there is nothing to echo.
 //
-//   - The answer is never printed in the question. See
-//     joincaptcha_challenge.go -- a scraper that echoes back whatever follows
-//     "type this" gets nowhere, because there is nothing to echo.
-//
-//   - Failing is invisible. After join_captcha_strikes failures the connection
-//     is not kicked but quarantined: its messages still echo back to it and it
-//     still receives the room, so the sender sees a working chat. A kick tells
-//     an attacker exactly which of their attempts was detected and hands them a
-//     clean signal to iterate against; the quarantine tells them nothing, which
-//     is what makes a solver expensive to develop rather than merely expensive
-//     to run. See quarantineClient below.
+// On running out of strikes the connection is either muted or kicked, per
+// join_captcha_action. Muting is the default: a kick is a loud, immediate
+// signal, and there is no reason to hand one out for free.
 
 const (
-	// joinCaptchaActionQuarantine silently shadow-quarantines a connection that
-	// runs out of strikes. The default.
-	joinCaptchaActionQuarantine = "quarantine"
+	// joinCaptchaActionMute stops a struck-out connection's messages from
+	// reaching the room. The default.
+	joinCaptchaActionMute = "mute"
 	// joinCaptchaActionKick disconnects it instead, with a plain explanation.
 	joinCaptchaActionKick = "kick"
 )
 
-// activeCaptchaQuarantine counts the connections currently shadow-quarantined.
-// The IC and OOC delivery paths consult it before doing any per-client work, so
-// a server that has never quarantined anyone pays exactly one atomic load per
+// activeCaptchaRestricted counts the connections currently under the mute
+// action. The IC and OOC delivery paths consult it before doing any per-client
+// work, so a server that has never used it pays exactly one atomic load per
 // message -- the same gating pattern /truepossess and /forcedisplay use.
-var activeCaptchaQuarantine atomic.Int64
+var activeCaptchaRestricted atomic.Int64
 
 // joinCaptchaVerified is the set of IPIDs that have solved a challenge, seeded
 // from JOIN_CAPTCHA_VERIFIED at startup so a restart does not re-challenge the
@@ -146,7 +140,7 @@ func joinCaptchaEnabled() bool {
 
 // joinCaptchaStrikeLimit returns the configured number of failures allowed
 // before the action fires, with a sane floor so a misconfigured 0 cannot
-// quarantine someone on their first blocked message.
+// act on someone's first blocked message.
 func joinCaptchaStrikeLimit() int32 {
 	if config == nil || config.JoinCaptchaStrikes < 1 {
 		return 3
@@ -157,13 +151,13 @@ func joinCaptchaStrikeLimit() int32 {
 // joinCaptchaAction returns the configured strike-out action.
 func joinCaptchaAction() string {
 	if config == nil {
-		return joinCaptchaActionQuarantine
+		return joinCaptchaActionMute
 	}
 	switch strings.ToLower(strings.TrimSpace(config.JoinCaptchaAction)) {
 	case joinCaptchaActionKick:
 		return joinCaptchaActionKick
 	default:
-		return joinCaptchaActionQuarantine
+		return joinCaptchaActionMute
 	}
 }
 
@@ -253,7 +247,7 @@ func (client *Client) pendingChallenge() joinChallenge {
 
 // joinCaptchaTimeoutWatch enforces join_captcha_timeout: a connection that
 // never answers eventually strikes out on its own, so an idle bot that simply
-// sits there is quarantined (or dropped) rather than lingering forever.
+// sits there is dealt with rather than lingering forever.
 //
 // One goroutine per challenged connection, exiting on client.done or as soon as
 // the challenge is resolved, so it cannot outlive the connection.
@@ -330,11 +324,8 @@ func (client *Client) sendCaptchaPopup(c joinChallenge) {
 
 // failJoinCaptcha applies the configured strike-out action.
 //
-// Under the default quarantine action nothing is sent to the player: the whole
-// point is that they cannot tell the difference between passing and failing.
-// The connection stops broadcasting, keeps receiving, and keeps seeing its own
-// messages echoed back. Staff are told, and the area log keeps the text, so
-// a real person caught by it is visible to a moderator and recoverable.
+// Staff are told, and the area log keeps the text, so a real person caught by
+// it is visible to a moderator and recoverable.
 func (client *Client) failJoinCaptcha(why string) {
 	if !client.awaitingCaptcha.Load() {
 		return
@@ -349,28 +340,27 @@ func (client *Client) failJoinCaptcha(why string) {
 		return
 	}
 
-	// Quarantine. awaitingCaptcha is cleared so the player stops being nudged
-	// and their messages start "working"; captchaQuarantined takes over as the
-	// flag the delivery paths consult. The pending challenge is deliberately
-	// kept so a real player who works the answer out can still /verify and be
-	// released without staff involvement.
+	// awaitingCaptcha is cleared so the connection stops being nudged;
+	// captchaRestricted takes over as the flag the delivery paths consult. The
+	// pending challenge is deliberately kept so a real player who works the
+	// answer out can still /verify and be released without staff involvement.
 	client.awaitingCaptcha.Store(false)
-	if client.captchaQuarantined.CompareAndSwap(false, true) {
-		activeCaptchaQuarantine.Add(1)
-		logger.LogInfof("Client (IPID:%v UID:%v) shadow-quarantined by the join captcha (%v)", client.Ipid(), client.Uid(), why)
-		logger.WriteAudit(fmt.Sprintf("%v | CAPTCHA_QUARANTINE | IPID:%v | UID:%v | %v",
+	if client.captchaRestricted.CompareAndSwap(false, true) {
+		activeCaptchaRestricted.Add(1)
+		logger.LogInfof("Client (IPID:%v UID:%v) muted by the join captcha (%v)", client.Ipid(), client.Uid(), why)
+		logger.WriteAudit(fmt.Sprintf("%v | CAPTCHA_MUTE | IPID:%v | UID:%v | %v",
 			time.Now().UTC().Format("15:04:05"), client.Ipid(), client.Uid(), why))
-		alertJoinCaptchaStaff(client, "was shadow-quarantined", why)
+		alertJoinCaptchaStaff(client, "was muted", why)
 	}
 }
 
-// releaseJoinCaptcha clears both the pending challenge and any quarantine,
-// records the verification and tells the player they are through. Shared by a
-// correct /verify answer and a moderator's manual release.
+// releaseJoinCaptcha clears the pending challenge and any restriction, records
+// the verification and tells the player they are through. Shared by a correct
+// /verify answer and a moderator's manual release.
 func (client *Client) releaseJoinCaptcha(kind string, notify bool) {
 	client.awaitingCaptcha.Store(false)
-	if client.captchaQuarantined.CompareAndSwap(true, false) {
-		activeCaptchaQuarantine.Add(-1)
+	if client.captchaRestricted.CompareAndSwap(true, false) {
+		activeCaptchaRestricted.Add(-1)
 	}
 	client.captchaStrikes.Store(0)
 	markJoinCaptchaVerified(client.Ipid(), kind)
@@ -383,11 +373,10 @@ func (client *Client) releaseJoinCaptcha(kind string, notify bool) {
 // match and burning a strike otherwise. Returns true when the answer was
 // correct.
 //
-// A quarantined client is still allowed to answer: they are told nothing about
-// their state either way, but a correct answer quietly restores them, so a
-// real player who got there late is not silently muted for the session.
+// A restricted client is still allowed to answer, so a real player who works it
+// out late is not stuck for the rest of the session.
 func (client *Client) tryJoinCaptchaAnswer(supplied string) bool {
-	if !client.awaitingCaptcha.Load() && !client.captchaQuarantined.Load() {
+	if !client.awaitingCaptcha.Load() && !client.captchaRestricted.Load() {
 		return false
 	}
 	c := client.pendingChallenge()
@@ -399,8 +388,8 @@ func (client *Client) tryJoinCaptchaAnswer(supplied string) bool {
 		ok, err := pluginVerify(client, c.PluginToken, supplied)
 		if err != nil {
 			// The plugin is unreachable, so this answer cannot be judged. It
-			// may well have been right, and quarantining a player for a helper
-			// process's outage is exactly the false positive to avoid -- so
+			// may well have been right, and acting against a player over a
+			// helper process's outage is the false positive to avoid -- so
 			// nothing is counted against them and they are handed a fresh
 			// question the server can judge on its own.
 			logger.LogErrorf("Captcha plugin verify failed, reissuing a built-in question for IPID %v: %v", client.Ipid(), err)
@@ -420,18 +409,17 @@ func (client *Client) tryJoinCaptchaAnswer(supplied string) bool {
 	if !correct {
 		return false
 	}
-	wasQuarantined := client.captchaQuarantined.Load()
+	wasRestricted := client.captchaRestricted.Load()
 	client.releaseJoinCaptcha(c.Kind, true)
-	if wasQuarantined {
-		logger.LogInfof("Client (IPID:%v UID:%v) answered correctly and was released from captcha quarantine", client.Ipid(), client.Uid())
+	if wasRestricted {
+		logger.LogInfof("Client (IPID:%v UID:%v) answered correctly and was released by the join captcha", client.Ipid(), client.Uid())
 	}
 	return true
 }
 
 // alertJoinCaptchaStaff notifies online staff that the captcha acted on
-// someone. A quarantine is invisible to its target by design, which makes it
-// exactly the kind of state that must not also be invisible to moderators --
-// otherwise a mis-tuned captcha silently mutes real players and nobody notices.
+// someone, so a mis-tuned captcha cannot quietly act on real players without
+// anybody noticing.
 func alertJoinCaptchaStaff(client *Client, what, why string) {
 	msg := fmt.Sprintf("[CAPTCHA] %v (UID: %v, IPID: %v) %v after failing verification (%v). Release with /joincaptcha verify %v.",
 		client.CurrentCharacter(), client.Uid(), client.Ipid(), what, why, client.Uid())
@@ -461,21 +449,14 @@ func joinCaptchaCommandAllowed(command string) bool {
 	return ok
 }
 
-// --- shadow quarantine delivery ----------------------------------------------
+// --- restricted delivery -------------------------------------------------------
 
-// broadcastToQuarantine delivers a quarantined client's packet to the sender
-// and to any other quarantined client in the same area -- the "shadow copy" of
-// the room. Nobody else ever receives it.
-//
-// Including the other quarantined clients is the part that makes this hold up
-// under testing: an attacker who connects two clients to check whether their
-// messages actually appear sees them appear, because both ends are inside the
-// same shadow. A quarantine that echoed only to the sender would be detectable
-// with two connections in about ten seconds.
-func broadcastToQuarantine(sender *Client, a *area.Area, p packet.Outgoing) {
+// deliverRestricted routes a restricted client's packet away from the room.
+// Nobody outside the restricted set ever receives it.
+func deliverRestricted(sender *Client, a *area.Area, p packet.Outgoing) {
 	header, args := p.Header(), p.Args()
 	clients.ForEach(func(c *Client) {
-		if c == sender || (c.Area() == a && c.captchaQuarantined.Load()) {
+		if c == sender || (c.Area() == a && c.captchaRestricted.Load()) {
 			c.SendPacket(header, args...)
 		}
 	})
@@ -489,7 +470,7 @@ func cmdVerify(client *Client, args []string, _ string) {
 		client.SendServerMessage("Verification is not enabled on this server — you can chat freely.")
 		return
 	}
-	if !client.awaitingCaptcha.Load() && !client.captchaQuarantined.Load() {
+	if !client.awaitingCaptcha.Load() && !client.captchaRestricted.Load() {
 		client.SendServerMessage("You're already verified — nothing to answer.")
 		return
 	}
@@ -498,10 +479,8 @@ func cmdVerify(client *Client, args []string, _ string) {
 		return
 	}
 
-	// Wrong answer. A quarantined client must not learn anything from this, so
-	// it gets the same reply a correct-looking-but-wrong answer would give a
-	// verified player: nothing that distinguishes the two states.
-	if client.captchaQuarantined.Load() {
+	// A restricted connection gets the ordinary "already verified" reply.
+	if client.captchaRestricted.Load() {
 		client.SendServerMessage("You're already verified — nothing to answer.")
 		return
 	}
@@ -527,7 +506,7 @@ func cmdVerify(client *Client, args []string, _ string) {
 
 // cmdJoinCaptcha handles the moderator side of the feature.
 //
-//	/joincaptcha status              — who is currently gated or quarantined
+//	/joincaptcha status              — who is currently gated or restricted
 //	/joincaptcha verify <uid>        — release someone (false positive)
 //	/joincaptcha reset <uid|ipid>    — clear a verification, re-challenge them
 //	/joincaptcha reset all           — clear every verification
@@ -562,14 +541,14 @@ func joinCaptchaStatus(client *Client) {
 		client.SendServerMessage("The join captcha is disabled (join_captcha = false).")
 		return
 	}
-	var pending, quarantined []string
+	var pending, restricted []string
 	clients.ForEach(func(c *Client) {
 		switch {
 		case c.awaitingCaptcha.Load():
 			pending = append(pending, fmt.Sprintf("  UID %v (%v, IPID %v) — %v strike(s), challenge [%v]",
 				c.Uid(), c.CurrentCharacter(), c.Ipid(), c.captchaStrikes.Load(), c.pendingChallenge().Kind))
-		case c.captchaQuarantined.Load():
-			quarantined = append(quarantined, fmt.Sprintf("  UID %v (%v, IPID %v) in %v",
+		case c.captchaRestricted.Load():
+			restricted = append(restricted, fmt.Sprintf("  UID %v (%v, IPID %v) in %v",
 				c.Uid(), c.CurrentCharacter(), c.Ipid(), c.Area().Name()))
 		}
 	})
@@ -594,11 +573,11 @@ func joinCaptchaStatus(client *Client) {
 	} else {
 		sb.WriteString(strings.Join(pending, "\n") + "\n")
 	}
-	sb.WriteString("\nShadow-quarantined (they don't know):\n")
-	if len(quarantined) == 0 {
+	sb.WriteString("\nMuted by the captcha:\n")
+	if len(restricted) == 0 {
 		sb.WriteString("  (nobody)")
 	} else {
-		sb.WriteString(strings.Join(quarantined, "\n"))
+		sb.WriteString(strings.Join(restricted, "\n"))
 	}
 	client.SendServerMessage(sb.String())
 }
@@ -615,7 +594,7 @@ func joinCaptchaManualVerify(client *Client, uidArg string) {
 		client.SendServerMessage("No client with that UID.")
 		return
 	}
-	if !target.awaitingCaptcha.Load() && !target.captchaQuarantined.Load() {
+	if !target.awaitingCaptcha.Load() && !target.captchaRestricted.Load() {
 		client.SendServerMessage(fmt.Sprintf("UID %v is not gated by the captcha.", uid))
 		return
 	}
@@ -663,16 +642,14 @@ func joinCaptchaReset(client *Client, target string) {
 }
 
 // joinCaptchaOnLogin clears the captcha for a client that has just signed in to
-// an account, including one that had already been quarantined. Nothing is said
-// to a quarantined player about having been quarantined -- they are simply
-// released, which from their side looks like nothing happened at all.
+// an account, including one already restricted.
 func joinCaptchaOnLogin(client *Client) {
-	if !client.awaitingCaptcha.Load() && !client.captchaQuarantined.Load() {
+	if !client.awaitingCaptcha.Load() && !client.captchaRestricted.Load() {
 		return
 	}
-	wasQuarantined := client.captchaQuarantined.Load()
-	client.releaseJoinCaptcha("login", !wasQuarantined)
-	if wasQuarantined {
-		logger.LogInfof("Client (IPID:%v UID:%v) released from captcha quarantine by logging in", client.Ipid(), client.Uid())
+	wasRestricted := client.captchaRestricted.Load()
+	client.releaseJoinCaptcha("login", !wasRestricted)
+	if wasRestricted {
+		logger.LogInfof("Client (IPID:%v UID:%v) released by the join captcha on login", client.Ipid(), client.Uid())
 	}
 }

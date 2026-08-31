@@ -325,7 +325,7 @@ func DefaultConfig() *Config {
 			JoinCaptchaKinds:                     nil,
 			JoinCaptchaRemember:                  true,
 			JoinCaptchaMinPlaytime:               300,
-			JoinCaptchaAction:                    "quarantine",
+			JoinCaptchaAction:                    "mute",
 			JoinCaptchaQuestions:                 "captcha_questions.txt",
 			JoinCaptchaCustomOnly:                false,
 			JoinCaptchaSecret:                    "",

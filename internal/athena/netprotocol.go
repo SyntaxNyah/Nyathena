@@ -1233,23 +1233,21 @@ func pktIC(client *Client, p *packet.Packet) {
 	// echoes back to only them (so their own client still looks normal) while the
 	// room hears nothing — they cannot contest or expose the possession.
 	silenced := stealthMuted || trueMuted
-	// A captcha-quarantined connection is delivered like a stealthmute, except
-	// that the packet also reaches any other quarantined client in the same
-	// area -- the shadow copy of the room. It is counted as silenced from here
-	// on so it triggers no traps, contagion or love potions, exactly like any
-	// other message the room never actually heard.
-	quarantined := activeCaptchaQuarantine.Load() > 0 && client.captchaQuarantined.Load()
+	// A captcha-restricted connection is routed away from the room. It counts
+	// as silenced from here on so it triggers no traps, contagion or love
+	// potions, like any other message the room never actually heard.
+	restricted := activeCaptchaRestricted.Load() > 0 && client.captchaRestricted.Load()
 	switch {
 	case silenced:
 		client.Send(ms)
-	case quarantined:
-		broadcastToQuarantine(client, client.Area(), ms)
+	case restricted:
+		deliverRestricted(client, client.Area(), ms)
 	case hasPunishmentType(punishments, PunishmentLifo):
 		lifoEnqueueIC(client, ms)
 	default:
 		broadcastToAreaFrom(client.Ipid(), senderBypassesIgnore(client.Perms()), client.Area(), ms)
 	}
-	silenced = silenced || quarantined
+	silenced = silenced || restricted
 	// SFX curse MC fallback: for external http(s) URLs the sfx_name field alone
 	// is not enough because standard AO2 desktop clients look for a local file
 	// and WebAO concatenates the asset URL with the sound name (producing a
@@ -1283,11 +1281,9 @@ func pktIC(client *Client, p *packet.Packet) {
 		addToBuffer(client, "IC", "\""+ms.Message+"\" (truepossessed)", false)
 	case censorShadow:
 		addToBuffer(client, "IC", "\""+ms.Message+"\" (censored)", false)
-	case quarantined:
-		// Logged so staff can read what a quarantined connection was saying --
-		// the whole point of quarantining rather than kicking is that the
-		// traffic keeps arriving where it can be looked at.
-		addToBuffer(client, "IC", "\""+ms.Message+"\" (captcha-quarantined)", false)
+	case restricted:
+		// Logged so staff can still read what a restricted connection sent.
+		addToBuffer(client, "IC", "\""+ms.Message+"\" (captcha-muted)", false)
 	default:
 		addToBuffer(client, "IC", "\""+ms.Message+"\"", false)
 	}
@@ -1720,12 +1716,11 @@ func pktOOC(client *Client, p *packet.Packet) {
 		addToBuffer(client, "OOC", "\""+msg+"\" (stealthmuted)", false)
 		return
 	}
-	// Captcha quarantine: same shadow copy of the room the IC path uses -- the
-	// sender and any other quarantined client in the area, nobody else.
-	if activeCaptchaQuarantine.Load() > 0 && client.captchaQuarantined.Load() {
-		broadcastToQuarantine(client, client.Area(),
+	// Captcha restriction: same routing the IC path uses.
+	if activeCaptchaRestricted.Load() > 0 && client.captchaRestricted.Load() {
+		deliverRestricted(client, client.Area(),
 			&packet.CTToClient{Name: encode(displayUsername), Message: msg, IsFromServer: "0"})
-		addToBuffer(client, "OOC", "\""+msg+"\" (captcha-quarantined)", false)
+		addToBuffer(client, "OOC", "\""+msg+"\" (captcha-muted)", false)
 		return
 	}
 	broadcastToAreaFrom(client.Ipid(), senderBypassesIgnore(client.Perms()), client.Area(),

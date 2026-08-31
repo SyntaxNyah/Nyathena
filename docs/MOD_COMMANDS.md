@@ -55,7 +55,7 @@ Permission bits are configured in `config/roles.toml`. Multiple bits are granted
 | `/setlockdownplaytime <minutes>` | BAN | Set the lockdown purge's minimum total-playtime threshold; 0 disables the purge |
 | `/lockdown whitelist <passkey>` | BAN | Verify a lockdown passkey (see `secretseed` in config.toml) — whitelists the IPID it certifies and permanently exempts it from the playtime purge |
 | `/lockdown unwhitelist <uid\|ipid>` | BAN | Revoke a previously-verified passkey exemption |
-| `/joincaptcha status` | BAN | Show the join captcha's settings, who is still awaiting an answer, and who has been shadow-quarantined |
+| `/joincaptcha status` | BAN | Show the join captcha's settings, who is still awaiting an answer, and who the captcha has acted on |
 | `/joincaptcha verify <uid>` | BAN | Release a player the captcha caught (a false positive), verifying them outright |
 | `/joincaptcha reset <uid\|ipid\|all>` | BAN | Clear a stored verification so that IPID is challenged again on its next connection; `all` clears every one |
 | `/lockdown exemptlist` | BAN | List every IPID currently exempt via a verified passkey |

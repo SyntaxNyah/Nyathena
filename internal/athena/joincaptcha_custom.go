@@ -15,9 +15,9 @@ import (
 //
 // Everything in joincaptcha_challenge.go is open source. Someone who reads this
 // repository can enumerate all the built-in kinds and, with enough effort,
-// write a solver for them. Rotating join_captcha_kinds raises the cost of that
-// and the shadow quarantine hides whether their solver even works, but neither
-// changes the fact that the built-in generators are public knowledge.
+// write a solver for them. Rotating join_captcha_kinds raises the cost of that,
+// but it does not change the fact that the built-in generators are public
+// knowledge.
 //
 // The only structural fix is the same one the lockdown passkeys use for
 // secretseed: keep the code public and the *data* private. Questions written by

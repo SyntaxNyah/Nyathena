@@ -135,7 +135,7 @@ Copy `config_sample/` to `config/` before first run.
 | `register_captcha` | `true` | Require captcha on `/register` |
 | `join_captcha` | `false` | Require a new IPID to answer a question before it can speak (see "Join Captcha" below) |
 | `join_captcha_strikes` | `3` | Failures (blocked messages *and* wrong answers, one shared budget) before the action fires |
-| `join_captcha_action` | `"quarantine"` | `quarantine` (silent shadow realm) or `kick` |
+| `join_captcha_action` | `"mute"` | `mute` or `kick` |
 | `join_captcha_timeout` | `180` | Seconds to answer before striking out; 0 = no timeout |
 | `join_captcha_popup` | `true` | Also show the question in a client-side popup (AO2 `BB` packet) |
 | `join_captcha_remember` | `true` | Remember a solved IPID so it is never challenged again |
@@ -509,9 +509,9 @@ It exists for raids specifically. A flood arrives from many IPIDs **and** HDIDs 
 
 **The answer is never printed in the question.** This is the property the whole feature rests on. "Please type ABC123 to verify" is defeated by a regex for whatever follows "type", no matter how random `ABC123` is — so nothing here works that way. The answer always has to be *derived*: add two numbers written as words, reverse a token, take non-adjacent characters out of one, count letters or category members, continue a sequence. Fifteen kinds (`math`, `reverse`, `acronym`, `charpick`, `everyother`, `countletter`, `category`, `sequence`, `nato`, `concat`, `wordlength`, `wordorder`, `sumdigits`, `alphabet`, `oddposition`), several phrasings each, a randomised lead-in and answer hint around all of them, and randomised token presentation (plain / dashed / spaced / mixed case — answers are normalized, so every shape reads the same to a person and none is the same string to a scraper). The invariant is **enforced at generation time**, not merely intended: `challengeAnswerLeaks` re-rolls any draw whose answer would appear in its own prompt, and `TestChallengeAnswerNeverAppearsInPrompt` pins it per kind over hundreds of draws.
 
-**Failing is invisible (`join_captcha_action = "quarantine"`, the default).** After `join_captcha_strikes` failures the connection is not kicked but **shadow-quarantined**: it keeps receiving the room and keeps seeing its own messages echoed back, so the sender sees a chat that looks like it works, while nothing it sends reaches a real player. Crucially, other quarantined clients **in the same area do receive it** — the shadow copy of the room — so an attacker who opens two connections to check whether their messages actually appear *sees them appear*, and learns nothing. A kick, by contrast, tells them exactly which attempt was caught and hands them a clean signal to iterate a solver against. Set `join_captcha_action = "kick"` to disconnect with an explanation instead.
+**Running out of strikes mutes rather than kicks (`join_captcha_action = "mute"`, the default).** A kick is a loud, immediate signal, and there is no reason to hand one out for free — so the default is to stop the connection's messages reaching the room instead. Set `join_captcha_action = "kick"` to disconnect with an explanation.
 
-Delivery reuses the stealthmute path in `pktIC`/`pktOOC` (`broadcastToQuarantine`), and a quarantined message counts as silenced so it triggers no traps, contagion or love potions. It is written to the area log tagged `(captcha-quarantined)`, and staff get a `[CAPTCHA]` OOC alert whenever the captcha acts — a state invisible to its target must never also be invisible to moderators.
+Delivery routes through `deliverRestricted` in `pktIC`/`pktOOC`, and a restricted message counts as silenced so it triggers no traps, contagion or love potions. It is written to the area log tagged `(captcha-muted)`, and staff get a `[CAPTCHA]` OOC alert whenever the captcha acts, so it can never act on real players unnoticed.
 
 **Strikes are one shared budget.** A blocked IC message, a blocked OOC message, a blocked command, a blocked music change and a wrong `/verify` all cost one strike out of `join_captcha_strikes` (default 3). Each blocked attempt re-shows the question in OOC and re-sends the popup, since someone who tried to talk in character has demonstrably not read the OOC tab.
 
@@ -530,9 +530,9 @@ This repository is public, so the built-in questions are public too. Three thing
 
 If a plugin is missing, down or slow, the built-in questions are used instead — deliberately: a captcha that stops working because a helper crashed would open the gate during exactly the incident it exists for. A plugin failure during *verify* never counts against the player (they may well have been right); they are handed a fresh built-in question instead.
 
-**Staff commands** (`BAN`): `/joincaptcha status` (settings, who is awaiting an answer, who is quarantined), `/joincaptcha verify <uid>` (release a false positive), `/joincaptcha reset <uid|ipid|all>` (clear stored verifications so they are challenged again; accepts a raw IPID so offline players can be reset).
+**Staff commands** (`BAN`): `/joincaptcha status` (settings, who is awaiting an answer, who the captcha has acted on), `/joincaptcha verify <uid>` (release a false positive), `/joincaptcha reset <uid|ipid|all>` (clear stored verifications so they are challenged again; accepts a raw IPID so offline players can be reset).
 
-Implemented in `internal/athena/joincaptcha.go` (state, gating, quarantine, commands), `joincaptcha_challenge.go` (the generators and the leak invariant), `joincaptcha_keyed.go` (the HMAC-derived source), `joincaptcha_custom.go` (operator questions), `joincaptcha_plugin.go` (the plugin bridge) and `internal/plugin` (the subprocess host).
+Implemented in `internal/athena/joincaptcha.go` (state, gating, commands), `joincaptcha_challenge.go` (the generators and the leak invariant), `joincaptcha_keyed.go` (the HMAC-derived source), `joincaptcha_custom.go` (operator questions), `joincaptcha_plugin.go` (the plugin bridge) and `internal/plugin` (the subprocess host).
 
 ### Censored Showname Shadow-Send
 `config/censored_names.txt` lists shownames (or substrings of them, case-insensitive) that nobody is allowed to speak under — independent of `automod_enabled`/`banned_words.txt`. Matching goes through the same `normalizeForFilter` Unicode-bypass normalization as AutoMod. Every IC message a player sends while their showname matches an entry is:

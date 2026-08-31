@@ -94,9 +94,9 @@ Design your plugin knowing the server will keep going without it:
   This is deliberate. A captcha that stops working because a helper crashed
   would open the gate during exactly the incident it exists for.
 - **Plugin down, or slow, on `verify`** → the player is **not** counted as
-  wrong. They may well have answered correctly, and quarantining a real player
-  over your process's outage is the false positive this whole feature has to
-  avoid. They are handed a fresh built-in question instead.
+  wrong. They may well have answered correctly, and acting against a real
+  player over your process's outage is the false positive this whole feature
+  has to avoid. They are handed a fresh built-in question instead.
 - **`error` in a response** → logged, then treated as above.
 
 ## One rule worth keeping
