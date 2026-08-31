@@ -65,6 +65,7 @@ For moderator-only commands, see [`MOD_COMMANDS.md`](MOD_COMMANDS.md). For casin
 |---------|-------------|
 | `/register <username> <password>` | Create a free player account. Captcha confirmation required by default. |
 | `/captcha <token>` | Confirm a pending registration |
+| `/verify <answer>` | Answer the verification question shown when you joined (only on servers with `join_captcha` on). You can also just type the answer in OOC. |
 | `/login <username> <password>` | Sign in to your account |
 | `/logout` | Sign out |
 | `/account` | View your account info |

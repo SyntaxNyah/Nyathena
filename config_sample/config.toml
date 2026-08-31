@@ -631,6 +631,155 @@ enable_accounts = true
 # Default: true
 register_captcha = true
 
+# ─── Join Captcha (new-IP verification) ──────────────────────────────────────
+#
+# Requires a previously-unseen IPID to answer one question before it can send
+# IC or OOC messages, run most commands, or change the music. Everything else --
+# connecting, looking around, picking a character, moving between areas -- works
+# normally while unverified, so this is a speech gate, not a connection gate.
+#
+# It exists for raids specifically. A flood arrives from many IPIDs and HDIDs at
+# once, so bans and per-IP limits are always a step behind it; what none of those
+# connections can do is answer a question.
+#
+# The questions are built so that copying will not work: the answer is never
+# printed anywhere in the question. "Type ABC123 to verify" is defeated by three
+# lines of regex, so nothing here works that way -- the answer always has to be
+# derived (add two numbers written as words, reverse a token, count things,
+# continue a sequence, pick out non-adjacent characters). There are fifteen
+# kinds, several phrasings each, and a randomised wrapper around all of them.
+# Default: false
+join_captcha = false
+
+# How many failures a connection gets before join_captcha_action fires. Both a
+# blocked message and a wrong answer count as one failure, so this is a total
+# budget across everything the player does wrong, not three of each.
+# Default: 3
+join_captcha_strikes = 3
+
+# What happens when a connection runs out of strikes.
+#
+#   "quarantine"  (default) Silently shadow-quarantine it. Nothing is said. The
+#                 connection keeps receiving the room and keeps seeing its own
+#                 messages echoed back, so the sender sees a chat that appears
+#                 to work -- but nothing it sends reaches a real player. Other
+#                 quarantined connections in the same area DO see each other, so
+#                 an attacker who opens two clients to check still sees their
+#                 messages arrive, and learns nothing.
+#
+#   "kick"        Disconnect it with an explanation instead.
+#
+# Quarantine is the default because a kick is a free signal: it tells an attacker
+# exactly which attempt was caught, which is precisely what they need to iterate
+# a solver. Staff are alerted either way (and quarantined messages are kept in
+# the area log, tagged), so a real player caught by mistake is visible and can be
+# released with /joincaptcha verify <uid>.
+# Default: "quarantine"
+join_captcha_action = "quarantine"
+
+# Seconds a connection has to answer before it strikes out on its own, so an
+# idle bot that never replies is dealt with rather than sitting there.
+# 0 disables the timeout (the gate simply stays up until they answer).
+# Default: 180
+join_captcha_timeout = 180
+
+# Also show the question in a client-side popup (the AO2 BB packet) as well as
+# in OOC. Desktop AO2 renders it as a message box, WebAO as a notice. Set false
+# if you would rather only use the OOC copy.
+# Default: true
+join_captcha_popup = true
+
+# Remember that an IPID passed, so it is never challenged again.
+# Set false to challenge every connection, every time -- stricter, but a player
+# whose connection drops mid-scene then has to solve another one to get back in.
+# Default: true
+join_captcha_remember = true
+
+# Skip the captcha entirely for any IPID with at least this much accumulated
+# all-time playtime, in minutes. Reads the same figure /playtime shows.
+#
+# Hours on the server is a far stronger statement about being a real person than
+# any puzzle, and the captcha is there to sort brand-new connections during a
+# raid -- so asking a regular anything is pure friction. Between this and
+# join_captcha_remember, an established player should never see a question.
+#
+# 0 disables the exemption (everyone unverified is asked).
+# Default: 300 (5 hours)
+join_captcha_min_playtime = 300
+
+# Which question kinds to use. Leave empty for all of them. Naming a subset lets
+# you rotate the mix from config if someone ever does build a solver, which
+# invalidates their work without a rebuild.
+# Valid kinds: math, reverse, acronym, charpick, everyother, countletter,
+#              category, sequence, nato, concat, wordlength, wordorder,
+#              sumdigits, alphabet, oddposition
+# Default: [] (all)
+join_captcha_kinds = []
+
+# ── Making it harder to beat from the source ──
+#
+# This server is open source, so the built-in questions are public. Three things
+# address that, in increasing order of strength.
+#
+# 1. A secret key. Challenges are derived as HMAC-SHA256(key, ipid + time
+#    window), so which question a given address gets is unpredictable without
+#    the key and cannot be worked backwards from any number of observed
+#    challenges. It also means a connection cannot reroll: reconnecting inside
+#    the window returns the SAME question, so a bot whose solver only handles
+#    arithmetic cannot just reconnect until it draws one.
+#
+#    The key comes from secretseed (further down this file), domain-separated so
+#    it can't collide with the lockdown passkey MAC that shares it. Set
+#    join_captcha_secret to use a separate key instead. With neither set, a
+#    random key is generated at startup -- still unpredictable, it just changes
+#    when the server restarts.
+join_captcha_secret = ""
+
+# How long one IPID keeps the same question, in seconds. Long enough that a
+# reconnect loop cannot fish for an easier one. Set to -1 to disable keying
+# entirely (every connection then draws independently, and rerolling works).
+# Default: 3600
+join_captcha_rotate = 3600
+
+# 2. Your own questions. Anything you write in this file is not in the public
+#    repository and cannot be derived from it. One per line:
+#
+#        question text | answer
+#        question text | answer, alternative, another
+#
+#    Answers ignore case, spaces and punctuation. An entry whose answer appears
+#    inside its own question is rejected at load time with a warning, since that
+#    would be copy-pasteable. Hot-reloadable with /reload.
+#    Leave blank for the default (config/captcha_questions.txt); a missing file
+#    simply means the built-in questions are used on their own.
+join_captcha_questions = "captcha_questions.txt"
+
+# Use ONLY your own questions and never the built-in ones, so the public source
+# reveals nothing about what a joining player is asked. Ignored (with the
+# built-ins used anyway) if the question file is empty -- serving no captcha at
+# all would quietly open the gate, which is worse than serving a known one.
+# Default: false
+join_captcha_custom_only = false
+
+# 3. A plugin. Point this at your own program and the server stops generating
+#    questions altogether: it asks the plugin for one, shows it, and passes
+#    answers back. The plugin is a separate process speaking newline-delimited
+#    JSON on stdin/stdout (see docs/CAPTCHA_PLUGIN.md), so it can be written in
+#    any language, is not bound by this server's licence, and cannot crash the
+#    server. If the plugin returns no answers -- only an opaque token -- then
+#    the answer never exists inside the server process at all and every attempt
+#    is judged by the plugin.
+#
+#    If the plugin is missing or down, the built-in questions are used instead,
+#    on purpose: a captcha that stops working because a helper crashed would
+#    open the gate during exactly the incident it exists for.
+# Default: "" (no plugin)
+captcha_plugin = ""
+
+# How long to wait for a plugin reply, in milliseconds, before falling back.
+# Default: 3000
+captcha_plugin_timeout = 3000
+
 # ─── Community Voting ────────────────────────────────────────────────────────
 
 # Enable the community moderation vote system.

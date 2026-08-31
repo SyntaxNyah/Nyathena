@@ -334,7 +334,6 @@ func cmdGlobal(client *Client, args []string, _ string) {
 	broadcastToAll(&packet.CTToClient{Name: fmt.Sprintf("[GLOBAL] [UID %d] %s%v", client.Uid(), tag, oocDisplayName(client)), Message: strings.Join(args, " "), IsFromServer: "1"})
 }
 
-
 // Handles /invite
 
 func cmdKick(client *Client, args []string, usage string) {
@@ -426,6 +425,11 @@ func cmdLogin(client *Client, args []string, _ string) {
 			ipFirstSeenTracker.mu.Unlock()
 			db.MarkIPKnown(client.Ipid()) //nolint:errcheck
 		}
+		// Signing in to an existing account clears the join captcha: an account
+		// with a password is a stronger statement about being a real person
+		// than any question could be, and /login is reachable while unverified
+		// precisely so a returning player on a new IP is never locked out.
+		joinCaptchaOnLogin(client)
 		if permissions.IsModerator(perms) {
 			client.SendServerMessage("Logged in as moderator.")
 			// AUTH#1 triggers the AO2 client's "Logged in as a moderator" popup.

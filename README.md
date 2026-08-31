@@ -118,6 +118,53 @@ Word-list-based enforcement covering IC text, IC showname, OOC text, and OOC use
 
 With the default `shadow` action a censored message is **shadow-sent**: the sender's client shows it as sent, but the packet is dropped for every other client — nobody sees the slur. The speaker's IPID is also added to the torment list, and every censor trip alerts online moderators in OOC (mods can opt out per-session with `/censoralerts off`). Inspect the list with `/tormentlist`; lift entries with `/untorment <ipid>` or purge everything with `/untorment all`.
 
+### Join Captcha (`join_captcha = true`)
+
+Makes a previously-unseen IPID answer one question before it can send IC or OOC
+messages, run most commands, or change the music. Connecting, looking around,
+picking a character and moving between areas all still work while unverified —
+it gates speech, not the connection.
+
+It targets raids specifically. A flood arrives from many IPIDs and HDIDs at once,
+so bans and per-IP limits are always a step behind it; what none of those
+connections can do is answer a question.
+
+- **Nothing to copy.** The answer is never printed in the question. "Type ABC123
+  to verify" is beaten by three lines of regex however random ABC123 is, so
+  nothing here works that way — the answer always has to be derived (add two
+  numbers written as words, reverse a token, count things, continue a sequence,
+  pick out non-adjacent characters). Fifteen kinds, several phrasings each, and
+  a randomised wrapper around all of them. The property is enforced at
+  generation time, not just intended: a draw that would leak its own answer is
+  re-rolled.
+- **Failing is invisible.** After three strikes the connection is not kicked but
+  **shadow-quarantined**: it keeps receiving the room and keeps seeing its own
+  messages echoed back, so the sender sees a chat that appears to work, while
+  nothing it sends reaches a real player. Other quarantined connections in the
+  same area *do* see each other, so an attacker who opens two clients to check
+  still sees their messages arrive. A kick would tell them exactly which attempt
+  was caught; this tells them nothing. (`join_captcha_action = "kick"` if you
+  would rather disconnect them.)
+- **Can't be rerolled.** Challenges are derived as HMAC-SHA256(secret, IPID +
+  time window), so reconnecting returns the *same* question — a bot whose solver
+  only handles arithmetic can't reconnect until it draws one.
+- **Can't be beaten from the source.** This repository is public, so the
+  built-in questions are too. Write your own in `config/captcha_questions.txt`
+  (hot-reloadable, never in the repo), or point `captcha_plugin` at your own
+  program and the server stops generating questions entirely — see
+  [docs/CAPTCHA_PLUGIN.md](docs/CAPTCHA_PLUGIN.md). In the plugin's token mode
+  the answer never enters the server process at all.
+
+**Regulars are never asked.** Moderators, anyone who has passed it once (stored
+by IPID, surviving restarts), and any IPID with 5+ hours of accumulated playtime
+(`join_captcha_min_playtime`) skip it outright.
+
+The question is shown in OOC and in a client-side popup (desktop AO2 and WebAO).
+Players answer with `/verify <answer>`, or by just typing the answer in OOC.
+Signing in with `/login` clears it. Staff use `/joincaptcha status`, and
+`/joincaptcha verify <uid>` to release a false positive — quarantined messages
+are kept in the area log, tagged, and staff are alerted whenever it acts.
+
 ### IPHub VPN Firewall
 
 When `iphub_api_key` is set, new connections are checked against IPHub. Known IPs are cached permanently so repeat visitors never cost an API call (respects the 1,000 req/day free tier). Toggle in-game or via Discord.

@@ -2539,6 +2539,22 @@ func initCommands() {
 			accountCmd: true,
 			category:   "account",
 		},
+		"verify": {
+			handler:  cmdVerify,
+			minArgs:  1,
+			usage:    "Usage: /verify <answer>",
+			desc:     "Answer the verification question you were given when you joined, so you can chat.",
+			reqPerms: permissions.PermissionField["NONE"],
+			category: "general",
+		},
+		"joincaptcha": {
+			handler:  cmdJoinCaptcha,
+			minArgs:  1,
+			usage:    "Usage: /joincaptcha status | verify <uid> | reset <uid|ipid|all>",
+			desc:     "Inspect the join captcha, release a player it caught, or clear stored verifications.",
+			reqPerms: permissions.PermissionField["BAN"],
+			category: "moderation",
+		},
 		"captcha": {
 			handler:    cmdCaptcha,
 			minArgs:    1,

@@ -111,6 +111,20 @@ type ServerConfig struct {
 	EnableCasino                         bool     `toml:"enable_casino"`
 	EnableAccounts                       bool     `toml:"enable_accounts"`
 	RegisterCaptcha                      bool     `toml:"register_captcha"`
+	JoinCaptcha                          bool     `toml:"join_captcha"`
+	JoinCaptchaStrikes                   int      `toml:"join_captcha_strikes"`
+	JoinCaptchaTimeout                   int      `toml:"join_captcha_timeout"`
+	JoinCaptchaKinds                     []string `toml:"join_captcha_kinds"`
+	JoinCaptchaRemember                  bool     `toml:"join_captcha_remember"`
+	JoinCaptchaMinPlaytime               int      `toml:"join_captcha_min_playtime"`
+	JoinCaptchaAction                    string   `toml:"join_captcha_action"`
+	JoinCaptchaQuestions                 string   `toml:"join_captcha_questions"`
+	JoinCaptchaCustomOnly                bool     `toml:"join_captcha_custom_only"`
+	JoinCaptchaSecret                    string   `toml:"join_captcha_secret"`
+	JoinCaptchaRotate                    int      `toml:"join_captcha_rotate"`
+	CaptchaPlugin                        string   `toml:"captcha_plugin"`
+	CaptchaPluginTimeout                 int      `toml:"captcha_plugin_timeout"`
+	JoinCaptchaPopup                     bool     `toml:"join_captcha_popup"`
 	EnableCommunityVote                  bool     `toml:"enable_community_vote"`
 	VoteThreshold                        int      `toml:"vote_threshold"`
 	VoteDuration                         int      `toml:"vote_duration"`
@@ -305,6 +319,20 @@ func DefaultConfig() *Config {
 			EnableCasino:                         false,
 			EnableAccounts:                       true,
 			RegisterCaptcha:                      true,
+			JoinCaptcha:                          false,
+			JoinCaptchaStrikes:                   3,
+			JoinCaptchaTimeout:                   180,
+			JoinCaptchaKinds:                     nil,
+			JoinCaptchaRemember:                  true,
+			JoinCaptchaMinPlaytime:               300,
+			JoinCaptchaAction:                    "quarantine",
+			JoinCaptchaQuestions:                 "captcha_questions.txt",
+			JoinCaptchaCustomOnly:                false,
+			JoinCaptchaSecret:                    "",
+			JoinCaptchaRotate:                    3600,
+			CaptchaPlugin:                        "",
+			CaptchaPluginTimeout:                 3000,
+			JoinCaptchaPopup:                     true,
 			EnableCommunityVote:                  false,
 			VoteThreshold:                        3,
 			VoteDuration:                         120,

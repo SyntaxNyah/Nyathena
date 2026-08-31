@@ -133,6 +133,20 @@ Copy `config_sample/` to `config/` before first run.
 | `iphub_api_key` | `""` | IPHub API key for VPN/proxy detection |
 | `enable_casino` | `false` | Enable casino and player account system |
 | `register_captcha` | `true` | Require captcha on `/register` |
+| `join_captcha` | `false` | Require a new IPID to answer a question before it can speak (see "Join Captcha" below) |
+| `join_captcha_strikes` | `3` | Failures (blocked messages *and* wrong answers, one shared budget) before the action fires |
+| `join_captcha_action` | `"quarantine"` | `quarantine` (silent shadow realm) or `kick` |
+| `join_captcha_timeout` | `180` | Seconds to answer before striking out; 0 = no timeout |
+| `join_captcha_popup` | `true` | Also show the question in a client-side popup (AO2 `BB` packet) |
+| `join_captcha_remember` | `true` | Remember a solved IPID so it is never challenged again |
+| `join_captcha_min_playtime` | `300` | Minutes of playtime (5 h) that exempts an IPID outright (0 = no exemption) |
+| `join_captcha_kinds` | `[]` | Which built-in question kinds to use (empty = all) |
+| `join_captcha_secret` | `""` | Key for challenge derivation; falls back to `secretseed`, then a random per-process key |
+| `join_captcha_rotate` | `3600` | Seconds one IPID keeps the same question; `-1` disables keying |
+| `join_captcha_questions` | `"captcha_questions.txt"` | Operator-written question file (not in the repo) |
+| `join_captcha_custom_only` | `false` | Serve only the operator's questions, never the built-in ones |
+| `captcha_plugin` | `""` | Path to an external captcha plugin program (see `docs/CAPTCHA_PLUGIN.md`) |
+| `captcha_plugin_timeout` | `3000` | Milliseconds to wait for a plugin reply before falling back |
 
 ### config/config.toml — [Discord]
 
@@ -154,6 +168,7 @@ Copy `config_sample/` to `config/` before first run.
 | `backgrounds.txt` | Background list |
 | `banned_words.txt` | AutoMod word list |
 | `parrot.txt` | Parrot command word list |
+| `captcha_questions.txt` | (Optional) Operator-written join-captcha questions, `question \| answer[, alt]` per line. Never in the repo, hot-reloadable. |
 
 ### Discord Bot Setup
 
@@ -486,6 +501,38 @@ Runs collapse to 2 rather than 1 on purpose: a genuinely double-lettered entry n
 - collides with a common English word — `collidesWithCommonWords` (`internal/athena/common_words.go`) checks the normalized entry against an embedded ~10,000-word frequency list ([google-10000-english](https://github.com/first20hours/google-10000-english)) and rejects it if it's a substring of some other, unrelated common word (an entry that equals a real word outright is fine — only being a fragment *inside* a different word counts)
 
 Both checks run once at load time (startup and `/reload`), not on the hot per-message path. This trades word-boundary awareness for evasion resistance: even with both gates, a banned entry can in principle match across what used to be separate words. That's an extension of the false-positive risk substring matching already had (e.g. `ass` inside `class`), not a new category — keep `banned_words.txt`/`censored_names.txt` entries as specific as practical, and check the startup/`/reload` logs for skipped-entry warnings after editing either file.
+
+### Join Captcha
+`join_captcha = true` makes a previously-unseen IPID answer one question before it can send IC or OOC messages, run most commands, or change the music. Connecting, looking around, picking a character and moving between areas all still work while unverified — this is a gate in front of *speech*, not in front of the connection, because AO2 has no captcha step in its handshake to hook.
+
+It exists for raids specifically. A flood arrives from many IPIDs **and** HDIDs at once, so nothing that keys off identity — bans, cooldowns, per-IP rate limits — can get ahead of it: by the time an address is worth blocking it has been discarded. What every one of those connections has in common is that none of them can answer a question.
+
+**The answer is never printed in the question.** This is the property the whole feature rests on. "Please type ABC123 to verify" is defeated by a regex for whatever follows "type", no matter how random `ABC123` is — so nothing here works that way. The answer always has to be *derived*: add two numbers written as words, reverse a token, take non-adjacent characters out of one, count letters or category members, continue a sequence. Fifteen kinds (`math`, `reverse`, `acronym`, `charpick`, `everyother`, `countletter`, `category`, `sequence`, `nato`, `concat`, `wordlength`, `wordorder`, `sumdigits`, `alphabet`, `oddposition`), several phrasings each, a randomised lead-in and answer hint around all of them, and randomised token presentation (plain / dashed / spaced / mixed case — answers are normalized, so every shape reads the same to a person and none is the same string to a scraper). The invariant is **enforced at generation time**, not merely intended: `challengeAnswerLeaks` re-rolls any draw whose answer would appear in its own prompt, and `TestChallengeAnswerNeverAppearsInPrompt` pins it per kind over hundreds of draws.
+
+**Failing is invisible (`join_captcha_action = "quarantine"`, the default).** After `join_captcha_strikes` failures the connection is not kicked but **shadow-quarantined**: it keeps receiving the room and keeps seeing its own messages echoed back, so the sender sees a chat that looks like it works, while nothing it sends reaches a real player. Crucially, other quarantined clients **in the same area do receive it** — the shadow copy of the room — so an attacker who opens two connections to check whether their messages actually appear *sees them appear*, and learns nothing. A kick, by contrast, tells them exactly which attempt was caught and hands them a clean signal to iterate a solver against. Set `join_captcha_action = "kick"` to disconnect with an explanation instead.
+
+Delivery reuses the stealthmute path in `pktIC`/`pktOOC` (`broadcastToQuarantine`), and a quarantined message counts as silenced so it triggers no traps, contagion or love potions. It is written to the area log tagged `(captcha-quarantined)`, and staff get a `[CAPTCHA]` OOC alert whenever the captcha acts — a state invisible to its target must never also be invisible to moderators.
+
+**Strikes are one shared budget.** A blocked IC message, a blocked OOC message, a blocked command, a blocked music change and a wrong `/verify` all cost one strike out of `join_captcha_strikes` (default 3). Each blocked attempt re-shows the question in OOC and re-sends the popup, since someone who tried to talk in character has demonstrably not read the OOC tab.
+
+**Answering.** The question is sent as an OOC message *and* as a client-side popup (the AO2 `BB` packet — a modal box on desktop AO2, a notice on WebAO; `join_captcha_popup = false` to use OOC only). Players reply with `/verify <answer>`, or by simply typing the answer in OOC — the difficulty is meant to be the question, not remembering the command. Answers are compared through `normalizeCaptchaAnswer` (case, spaces and punctuation ignored; `12` and `twelve` both accepted). Only `/verify`, `/login`, `/help` and `/about` are usable while unverified: most commands broadcast (`/global`, `/pm`, `/roll`), and a gate a bot can talk through is not a gate. Moderators are exempt, and `/login` clears the captcha for anyone — an account with a password is a stronger statement about being a real person than any question, and it is reachable while unverified precisely so a returning player on a new IP is never locked out.
+
+**Who is never asked.** Three exemptions, checked in `issueJoinCaptcha` before a challenge is generated: moderators; any IPID that has already passed one (see persistence below); and any IPID with at least `join_captcha_min_playtime` minutes of accumulated all-time playtime (default 300 = 5 hours), read from the same `KNOWN_IPS.PLAYTIME` figure `/playtime`, the lockdown purge and the autoban tiers use — so all four agree on what "an established player" means. Hours on the server say more about being a real person than any puzzle can, and the captcha is there to sort brand-new connections during a raid, so a regular should never see a question. A DB error while reading playtime means *not* exempt (the captcha is shown) — the opposite of the autoban's fail-open rule, and for the opposite reason: there, failing closed would ban a real player over a hiccup; here, failing open would drop the gate mid-incident, and the worst case of failing closed is that a regular answers one question.
+
+Solved IPIDs are persisted in `JOIN_CAPTCHA_VERIFIED` (DB migration 26) and seeded into an in-memory set at startup, so the check is one map lookup at join and a restart never re-challenges the player base. `join_captcha_remember = false` makes verification last only for the connection. The hot path is a single `atomic.Bool` load per message (`client.awaitingCaptcha`), so a server with the feature off pays essentially nothing.
+
+#### Not beatable from the source
+This repository is public, so the built-in questions are public too. Three things address that, in increasing order of strength — and they stack.
+
+1. **A secret key.** Challenges are derived as `HMAC-SHA256(key, ipid ‖ time-bucket)` and that digest drives every random choice a generator makes (`internal/athena/joincaptcha_keyed.go`). Two things follow. A connection **cannot reroll**: reconnecting inside `join_captcha_rotate` (default 1 h) returns the *same* question, so a bot whose solver only handles arithmetic can't disconnect and retry until it draws one — this is the main reason the key exists. And because HMAC-SHA256 is a one-way PRF, observing any number of issued challenges reveals nothing about the key and therefore nothing about what any other address will be asked; two servers running identical code produce unrelated streams. The key comes from `secretseed`, domain-separated (`nyathena-join-captcha-v1`) so it cannot collide with the lockdown passkey MAC that shares that seed; `join_captcha_secret` overrides it; with neither set a random key is generated at startup. `join_captcha_rotate = -1` disables keying and restores independent per-connection draws.
+2. **Operator-written questions.** `config/captcha_questions.txt` (`question | answer[, alternative...]`, `#` comments) is not in this repository and cannot be derived from it. Entries are mixed into the built-in pool, weighted by how many there are and capped so they can never crowd the generators out entirely; `join_captcha_custom_only = true` serves nothing else. An entry whose answer appears inside its own question is **rejected at load time** with a warning naming it, since that would be copy-pasteable. Hot-reloadable via `/reload`. If `custom_only` is set but the file is empty the built-ins are used anyway — serving no captcha at all would silently open the gate, which is worse than serving a known one.
+3. **A plugin.** `captcha_plugin` points at an external program and the server stops generating questions altogether: it asks the plugin for one, shows it, and passes answers back. The plugin is a separate process speaking newline-delimited JSON on stdin/stdout (`internal/plugin`, protocol in `docs/CAPTCHA_PLUGIN.md`), so it can be written in any language, is not linked into the server (and so not bound by its AGPL licence), cannot crash it, and does not have to be rebuilt when the server's Go version changes. A subprocess rather than Go's `plugin` package on purpose: `buildmode=plugin` demands an identical toolchain and identical dependency versions, so a routine `go get` would break every plugin until each was rebuilt. If the plugin returns only an **opaque token** and no answers, the server calls back to have every attempt judged and the answer never exists inside the server process at all.
+
+If a plugin is missing, down or slow, the built-in questions are used instead — deliberately: a captcha that stops working because a helper crashed would open the gate during exactly the incident it exists for. A plugin failure during *verify* never counts against the player (they may well have been right); they are handed a fresh built-in question instead.
+
+**Staff commands** (`BAN`): `/joincaptcha status` (settings, who is awaiting an answer, who is quarantined), `/joincaptcha verify <uid>` (release a false positive), `/joincaptcha reset <uid|ipid|all>` (clear stored verifications so they are challenged again; accepts a raw IPID so offline players can be reset).
+
+Implemented in `internal/athena/joincaptcha.go` (state, gating, quarantine, commands), `joincaptcha_challenge.go` (the generators and the leak invariant), `joincaptcha_keyed.go` (the HMAC-derived source), `joincaptcha_custom.go` (operator questions), `joincaptcha_plugin.go` (the plugin bridge) and `internal/plugin` (the subprocess host).
 
 ### Censored Showname Shadow-Send
 `config/censored_names.txt` lists shownames (or substrings of them, case-insensitive) that nobody is allowed to speak under — independent of `automod_enabled`/`banned_words.txt`. Matching goes through the same `normalizeForFilter` Unicode-bypass normalization as AutoMod. Every IC message a player sends while their showname matches an entry is:
