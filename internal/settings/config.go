@@ -77,6 +77,31 @@ type ServerConfig struct {
 	RateLimitKickAutobanMinPlaytime      int      `toml:"rate_limit_kick_autoban_min_playtime"`
 	RateLimitKickAutobanLenientPlaytime  int      `toml:"rate_limit_kick_autoban_lenient_playtime"`
 	RateLimitKickAutobanLenientThreshold int      `toml:"rate_limit_kick_autoban_lenient_threshold"`
+	RaidGuardEnabled                     bool     `toml:"raid_guard_enabled"`
+	RaidGuardMaxAction                   string   `toml:"raid_guard_max_action"`
+	RaidGuardMinPlaytime                 int      `toml:"raid_guard_min_playtime"`
+	RaidGuardLenientPlaytime             int      `toml:"raid_guard_lenient_playtime"`
+	RaidGuardLenientScale                int      `toml:"raid_guard_lenient_scale"`
+	RaidGuardStrictPlaytime              int      `toml:"raid_guard_strict_playtime"`
+	RaidGuardStrictScale                 int      `toml:"raid_guard_strict_scale"`
+	RaidGuardBanDuration                 string   `toml:"raid_guard_ban_duration"`
+	RaidGuardScoreWatch                  int      `toml:"raid_guard_score_watch"`
+	RaidGuardScoreChallenge              int      `toml:"raid_guard_score_challenge"`
+	RaidGuardScoreSilence                int      `toml:"raid_guard_score_silence"`
+	RaidGuardScoreKick                   int      `toml:"raid_guard_score_kick"`
+	RaidGuardScoreBan                    int      `toml:"raid_guard_score_ban"`
+	RaidGuardObjectionMinMsgs            int      `toml:"raid_guard_objection_min_msgs"`
+	RaidGuardObjectionFraction           float64  `toml:"raid_guard_objection_fraction"`
+	RaidGuardFastCharPickMs              int      `toml:"raid_guard_fast_charpick_ms"`
+	RaidGuardFastSpeechMs                int      `toml:"raid_guard_fast_speech_ms"`
+	RaidGuardCharChurnMs                 int      `toml:"raid_guard_char_churn_ms"`
+	RaidGuardNameChurnMax                int      `toml:"raid_guard_name_churn_max"`
+	RaidGuardCorrWindow                  int      `toml:"raid_guard_corr_window"`
+	RaidGuardCorrIPIDs                   int      `toml:"raid_guard_corr_ipids"`
+	RaidGuardCorrMinLen                  int      `toml:"raid_guard_corr_min_len"`
+	RaidGuardCorrMaxEntries              int      `toml:"raid_guard_corr_max_entries"`
+	RaidGuardArrivalBurst                int      `toml:"raid_guard_arrival_burst"`
+	RaidGuardAutoLockdown                bool     `toml:"raid_guard_auto_lockdown"`
 	ModcallCooldown                      int      `toml:"modcall_cooldown"`
 	ConnRateLimit                        int      `toml:"connection_rate_limit"`
 	ConnRateLimitWindow                  int      `toml:"connection_rate_limit_window"`
@@ -286,6 +311,31 @@ func DefaultConfig() *Config {
 			RateLimitKickAutobanMinPlaytime:      1200, // 20 hours
 			RateLimitKickAutobanLenientPlaytime:  120,  // 2 hours
 			RateLimitKickAutobanLenientThreshold: 5,
+			RaidGuardEnabled:                     false,
+			RaidGuardMaxAction:                   "captcha",
+			RaidGuardMinPlaytime:                 1200, // 20 hours -- never acted on
+			RaidGuardLenientPlaytime:             120,  // 2 hours -- thresholds doubled
+			RaidGuardLenientScale:                200,  // 2h+: needs twice the evidence
+			RaidGuardStrictPlaytime:              15,   // under 15m of history = brand new
+			RaidGuardStrictScale:                 70,   // brand new: needs 30% less
+			RaidGuardBanDuration:                 "30m",
+			RaidGuardScoreWatch:                  40,
+			RaidGuardScoreChallenge:              60,
+			RaidGuardScoreSilence:                80,
+			RaidGuardScoreKick:                   100,
+			RaidGuardScoreBan:                    160,
+			RaidGuardObjectionMinMsgs:            3,
+			RaidGuardObjectionFraction:           0.8,
+			RaidGuardFastCharPickMs:              1000,
+			RaidGuardFastSpeechMs:                1500,
+			RaidGuardCharChurnMs:                 1000,
+			RaidGuardNameChurnMax:                3,
+			RaidGuardCorrWindow:                  10,
+			RaidGuardCorrIPIDs:                   4,
+			RaidGuardCorrMinLen:                  15,
+			RaidGuardCorrMaxEntries:              4096,
+			RaidGuardArrivalBurst:                12,
+			RaidGuardAutoLockdown:                false,
 			ModcallCooldown:                      0,
 			ConnRateLimit:                        10,
 			ConnRateLimitWindow:                  10,
