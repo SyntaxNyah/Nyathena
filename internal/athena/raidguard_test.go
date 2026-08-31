@@ -302,3 +302,33 @@ func TestTwoSignalsCannotDisconnect(t *testing.T) {
 		}
 	}
 }
+
+// TestAutoLockdownIsOptIn checks the guard's one server-wide action stays off
+// unless an operator asks for it. It affects players who have done nothing but
+// try to connect at a bad moment, so it must never engage by default.
+func TestAutoLockdownIsOptIn(t *testing.T) {
+	withRaidConfig(t)
+	if config.RaidGuardAutoLockdown {
+		t.Error("raid_guard_auto_lockdown defaults to on; it must be opt-in")
+	}
+
+	oldClients := clients
+	t.Cleanup(func() { clients = oldClients; serverLockdown.Store(false); resetRaidGuardState() })
+	clients = &ClientList{list: make(map[*Client]struct{}), uidIndex: make(map[int]*Client), ipidCounts: make(map[string]int)}
+
+	serverLockdown.Store(false)
+	markRaidAttack(time.Now())
+	if serverLockdown.Load() {
+		t.Error("a detected raid engaged lockdown with raid_guard_auto_lockdown off")
+	}
+	if !raidGuardUnderAttack() {
+		t.Error("markRaidAttack did not set the under-attack flag")
+	}
+
+	config.RaidGuardAutoLockdown = true
+	resetRaidGuardState()
+	markRaidAttack(time.Now())
+	if !serverLockdown.Load() {
+		t.Error("a detected raid did not engage lockdown with raid_guard_auto_lockdown on")
+	}
+}

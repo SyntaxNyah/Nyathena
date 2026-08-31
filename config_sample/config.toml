@@ -605,11 +605,21 @@ raid_guard_corr_max_entries = 4096
 # Default: 12
 raid_guard_arrival_burst = 12
 
-# Reserved for a future integration with the server's /lockdown system (see
-# "Lockdown Playtime Purge" above) -- automatically flipping the server into
-# lockdown the moment raid guard's server-wide "under attack" state trips.
-# Present here for forward compatibility; not yet consumed by this build, so
-# changing it currently has no effect.
+# Automatically engage the server lockdown (see "Lockdown Playtime Purge"
+# above) the moment the raid guard's server-wide "under attack" state trips, so
+# a fan-out stops growing while staff are still reading the alert. New IPIDs
+# cannot join until a moderator runs /lockdown off.
+#
+# This deliberately does NOT run the playtime purge that /lockdown on performs.
+# The purge disconnects every connected player under the playtime threshold,
+# which during a raid includes any genuine newcomer who happened to join that
+# evening. The join gate alone costs a real player a delayed connection; the
+# purge costs them their session, and automatic detection is not confident
+# enough to spend that on its own. A moderator who wants the purge runs
+# /lockdown on themselves -- staff are told exactly that in the alert.
+#
+# Off by default: this is the guard's only server-wide action, and it affects
+# players who have done nothing at all beyond trying to connect at a bad moment.
 # Default: false
 raid_guard_auto_lockdown = false
 

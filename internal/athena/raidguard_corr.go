@@ -37,12 +37,17 @@
 package athena
 
 import (
+	"fmt"
 	"hash/fnv"
 	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
 	"unicode"
+
+	"github.com/MangosArentLiterature/Athena/internal/logger"
+	"github.com/MangosArentLiterature/Athena/internal/packet"
+	"github.com/MangosArentLiterature/Athena/internal/permissions"
 )
 
 // Shingle parameters. shingleSize is the number of consecutive tokens in a
@@ -280,9 +285,46 @@ func raidCorr() *CorrelationWindow {
 	return raidCorrWindow
 }
 
-// markRaidAttack flags the server as under coordinated attack.
+// markRaidAttack flags the server as under coordinated attack, and optionally
+// closes the door behind it.
+//
+// raid_guard_auto_lockdown (off by default) engages the existing server
+// lockdown on the first detection, so a fan-out stops growing while staff are
+// still reading the alert. It deliberately does NOT run
+// purgeLockdownFloodClients the way /lockdown on does: the purge disconnects
+// every connected player under the playtime threshold, which during a raid
+// includes any genuine newcomer who happened to join this evening. The join
+// gate alone costs a real player a delayed connection; the purge costs them
+// their session, and nothing here is confident enough to spend that
+// automatically. A moderator who wants the purge still runs /lockdown on.
 func markRaidAttack(now time.Time) {
 	raidAttackUntil.Store(now.Add(raidAttackHold).UnixNano())
+
+	if config == nil || !config.RaidGuardAutoLockdown {
+		return
+	}
+	if !serverLockdown.CompareAndSwap(false, true) {
+		return // already locked down; nothing to announce
+	}
+	logger.LogInfof("Raid guard: coordinated raid detected -- lockdown engaged automatically")
+	logger.WriteAudit(fmt.Sprintf("%v | RAID_GUARD_LOCKDOWN | automatic lockdown on raid detection",
+		now.UTC().Format("15:04:05")))
+	alertRaidLockdown()
+}
+
+// alertRaidLockdown tells staff the guard locked the server down on its own,
+// and how to undo it.
+func alertRaidLockdown() {
+	msg := "Raid guard detected a coordinated raid and engaged lockdown automatically: new IPIDs cannot " +
+		"join until it is lifted. Connected players were NOT purged. Run /lockdown off to lift it, or " +
+		"/lockdown on if you also want the playtime purge."
+	out := &packet.CTToClient{Name: "[RAIDGUARD]", Message: encode(msg), IsFromServer: "1"}
+	clients.ForEach(func(c *Client) {
+		if !permissions.HasPermission(c.Perms(), permissions.PermissionField["MOD_CHAT"]) {
+			return
+		}
+		c.Send(out)
+	})
 }
 
 // raidGuardUnderAttack reports whether the server is currently seeing evidence
