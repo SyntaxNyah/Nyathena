@@ -108,10 +108,17 @@ func giveawayStart(client *Client, item string) {
 		return
 	}
 
-	if matched, ok := matchBannedWord(normalizeForFilter(item)); ok {
+	// Checked against the tiered entries rather than the flat list, so a word
+	// the operator defined only with a tier ("tranny | nuke") is caught here
+	// too. A giveaway item is broadcast to the area like any other text, so
+	// there is no reason for it to be filtered less thoroughly than speech.
+	// Severity is not acted on here beyond refusing the item: this is a
+	// rejected command, not a message somebody said, so it neither bans on a
+	// nuke nor feeds the raid guard.
+	if m := matchWordEntries(effectiveWordEntries(), item); m.Matched {
 		client.SendServerMessage("Your giveaway item contains prohibited language and cannot be posted.")
-		alertCensorTrip(client, "giveaway item", matched, item, "The giveaway was blocked.")
-		logger.LogInfof("giveaway: blocked giveaway item from %v (uid %d) — matched word %q", client.Ipid(), client.Uid(), matched)
+		alertCensorTrip(client, "giveaway item", m.Entry.String(), item, "The giveaway was blocked.")
+		logger.LogInfof("giveaway: blocked giveaway item from %v (uid %d) — matched %s", client.Ipid(), client.Uid(), m.Entry.String())
 		return
 	}
 

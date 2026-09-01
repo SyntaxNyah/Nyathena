@@ -161,6 +161,20 @@ func loadWordListFile(path string) ([]string, error) {
 
 	seen := make(map[string]struct{})
 	for _, line := range lines {
+		// Take only the word itself, discarding any "| tier | mode" suffix.
+		// Without this, a tiered entry like "tranny | nuke" would normalize
+		// whole -- separators are dropped, so the flat needle becomes the
+		// gibberish "trannynuke", which matches nothing. That is not merely a
+		// dead entry: this flat list is what /giveaway start checks against,
+		// so a word the operator defined ONLY with a tier would silently stop
+		// being filtered there. Splitting here keeps the flat and tiered reads
+		// of the same file agreeing on what the entry actually is.
+		if i := strings.IndexByte(line, '|'); i >= 0 {
+			line = strings.TrimSpace(line[:i])
+			if line == "" {
+				continue
+			}
+		}
 		normalized := normalizeForFilter(line)
 		if n := utf8.RuneCountInString(normalized); n < minNormalizedEntryLen {
 			// A word list entry that is mostly digits/punctuation can collapse
