@@ -125,11 +125,22 @@ func hashString(s string) uint64 {
 	return h.Sum64()
 }
 
-// corrEntry is the set of IPIDs seen uttering one fingerprint, and when it was
-// last touched so it can be evicted.
+// corrEntry is the set of IPIDs seen uttering one fingerprint, and when that
+// tally started so it can be aged out.
+//
+// The timestamp is when the entry was FIRST opened, not when it was last
+// touched, which makes the window tumbling rather than sliding: a fingerprint's
+// tally is thrown away once it is window-old however recently it was said. That
+// distinction is load-bearing now the window is 30 seconds rather than 10. Under
+// last-touch semantics an entry survives as long as something keeps touching it,
+// so an area catchphrase said by a different player every 20 seconds would
+// accumulate IPIDs indefinitely and eventually cross any threshold -- turning a
+// running joke into "coordinated". Bounding the tally to one window of wall
+// clock means correlation only ever describes what happened inside a window,
+// which is the claim the signal is actually making.
 type corrEntry struct {
 	ipids map[string]struct{}
-	last  time.Time
+	first time.Time
 }
 
 // CorrelationWindow maps a content fingerprint to the distinct IPIDs that have
@@ -177,11 +188,10 @@ func (w *CorrelationWindow) Observe(fp uint64, ipid string, now time.Time) int {
 	w.pruneLocked(now)
 
 	e, ok := w.entries[fp]
-	if !ok || now.Sub(e.last) > w.window {
-		e = &corrEntry{ipids: make(map[string]struct{}, 4)}
+	if !ok || now.Sub(e.first) > w.window {
+		e = &corrEntry{ipids: make(map[string]struct{}, 4), first: now}
 		w.entries[fp] = e
 	}
-	e.last = now
 	if len(e.ipids) < w.maxIPIDs {
 		e.ipids[ipid] = struct{}{}
 	}
@@ -201,7 +211,7 @@ func (w *CorrelationWindow) pruneLocked(now time.Time) {
 	}
 	w.lastPrune = now
 	for k, e := range w.entries {
-		if now.Sub(e.last) > w.window {
+		if now.Sub(e.first) > w.window {
 			delete(w.entries, k)
 		}
 	}
@@ -255,9 +265,75 @@ func (a *arrivalWindow) Observe(now time.Time) int {
 	return len(a.stamps)
 }
 
+// echoWindow counts how many DISTINCT lines are currently being echoed across
+// IPIDs -- the breadth of the fan-out rather than the depth of any one line.
+//
+// This exists because depth and breadth are different claims and only one of
+// them is safe to read as "a raid is happening". Two friends quoting each other
+// produce one line echoed by two people, however many times they do it; that is
+// depth 2, breadth 1, and it is ordinary. A raid produces several *different*
+// lines each echoed by different people at the same time, which is a shape no
+// pair of players can manufacture between them.
+//
+// Measured on the three captures in testdata: breadth peaked at 0 across both
+// clean captures (85 messages, 44 distinct players, one of them the agitated
+// room minutes after a real raid) and at 11 during the raid capture.
+//
+// Credited at most once per message, keyed by the fingerprint that matched, so
+// one long echoed line counts once rather than once per shingle -- without that
+// a single quoted sentence would read as eight independent echoes and this
+// would be a worse signal than the one it is built on.
+type echoWindow struct {
+	mu         sync.Mutex
+	seen       map[uint64]time.Time
+	window     time.Duration
+	maxEntries int
+}
+
+func newEchoWindow(window time.Duration) *echoWindow {
+	if window <= 0 {
+		window = 30 * time.Second
+	}
+	return &echoWindow{seen: make(map[uint64]time.Time), window: window, maxEntries: 1024}
+}
+
+// Credit records that fp was seen echoed across IPIDs and returns how many
+// distinct lines are echoing inside the window.
+func (e *echoWindow) Credit(fp uint64, now time.Time) int {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	// Bounded for the same reason CorrelationWindow is: this map is fed by
+	// exactly the traffic it exists to detect.
+	if len(e.seen) > e.maxEntries {
+		e.seen = make(map[uint64]time.Time)
+	}
+	for k, at := range e.seen {
+		if now.Sub(at) > e.window {
+			delete(e.seen, k)
+		}
+	}
+	e.seen[fp] = now
+	return len(e.seen)
+}
+
+// Breadth reports the current count without recording anything, for
+// /raidguard status.
+func (e *echoWindow) Breadth(now time.Time) int {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	n := 0
+	for _, at := range e.seen {
+		if now.Sub(at) <= e.window {
+			n++
+		}
+	}
+	return n
+}
+
 // Package-level layer-2 state.
 var (
 	raidCorrWindow  *CorrelationWindow
+	raidEchoWindow  *echoWindow
 	raidArrivals    = newArrivalWindow(time.Second)
 	raidCorrOnce    sync.Once
 	raidAttackUntil atomic.Int64 // unix nanos; server is "under attack" until then
@@ -268,21 +344,42 @@ var (
 // flicker between bursts, short enough that a finished raid stops mattering.
 const raidAttackHold = 2 * time.Minute
 
-func raidCorr() *CorrelationWindow {
+func raidCorrInit() {
 	raidCorrOnce.Do(func() {
-		w := 10 * time.Second
+		w := raidCorrWindowLen()
 		max := 4096
-		if config != nil {
-			if config.RaidGuardCorrWindow > 0 {
-				w = time.Duration(config.RaidGuardCorrWindow) * time.Second
-			}
-			if config.RaidGuardCorrMaxEntries > 0 {
-				max = config.RaidGuardCorrMaxEntries
-			}
+		if config != nil && config.RaidGuardCorrMaxEntries > 0 {
+			max = config.RaidGuardCorrMaxEntries
 		}
 		raidCorrWindow = NewCorrelationWindow(w, max)
+		raidEchoWindow = newEchoWindow(w)
 	})
+}
+
+func raidCorr() *CorrelationWindow {
+	raidCorrInit()
 	return raidCorrWindow
+}
+
+func raidEchoes() *echoWindow {
+	raidCorrInit()
+	return raidEchoWindow
+}
+
+// raidCorrWindowLen is how long a piece of text stays correlatable.
+//
+// The default moved from 10 seconds to 30 on the strength of the 2026-08-31
+// capture: that raid re-used the same line at +1s, then again at +19s, and a
+// third IPID repeated a second line 16s after the first said it. A 10-second
+// window saw one of those three repeats; a 30-second window sees all three.
+// Lengthening it is only safe alongside corrEntry's first-observation expiry
+// (see there) -- with last-touch expiry a longer window is what lets an
+// ordinary recurring line accumulate IPIDs forever.
+func raidCorrWindowLen() time.Duration {
+	if config != nil && config.RaidGuardCorrWindow > 0 {
+		return time.Duration(config.RaidGuardCorrWindow) * time.Second
+	}
+	return 30 * time.Second
 }
 
 // markRaidAttack flags the server as under coordinated attack, and optionally
@@ -338,35 +435,116 @@ func raidGuardUnderAttack() bool {
 	return time.Now().UnixNano() < raidAttackUntil.Load()
 }
 
-// raidObserveContent folds one message into the correlation window and reports
-// whether it is corroborated across enough distinct IPIDs to count as
-// coordinated. Any single fingerprint reaching the threshold is enough.
-func raidObserveContent(ipid, text string, now time.Time) bool {
-	minLen := 15
-	need := 4
+// raidCorrThresholds returns the two cross-IPID corroboration levels, and the
+// minimum length below which text is not correlated at all.
+//
+// There are two levels because the original single threshold answered the wrong
+// question for anything but the loudest possible raid. It asked "have four
+// separate people said this exact phrase inside ten seconds", and the
+// 2026-08-31 raid never got there: ten IPIDs spread ten different slurs over
+// twenty-six seconds, re-using a line twice or three times but never four. Layer
+// 2 therefore contributed nothing at all to that incident -- no signal, no
+// under-attack flag, and so no ban ever reachable -- while the raid ran its
+// course. Replaying it confirms zero hits at the shipped defaults.
+//
+// So the evidence is now graded rather than all-or-nothing:
+//
+//	weak (raid_guard_corr_ipids_weak, default 2) -- somebody else is saying your
+//	line. Fires SigEchoedAcrossIPIDs, worth 25: real evidence, and on its own
+//	still below the watch threshold at every tier, so it takes a second
+//	independent signal before anything happens to anyone.
+//
+//	strong (raid_guard_corr_ipids, default 4) -- unchanged. Fires
+//	SigDupeAcrossIPIDs, worth 45, marks the server under attack, and remains the
+//	ONLY thing that satisfies the ban gate in raidBanAllowed.
+//
+// Splitting them rather than simply lowering the one threshold is what keeps the
+// ban invariant honest. Two people quoting each other must never be able to
+// arm a ban, and under a single lowered threshold it would have: the same event
+// would both mark the connection corroborated and flip the server-wide flag,
+// which are supposed to be two independent facts.
+//
+// Measured on the captures in testdata: the weak level fires 0 times across both
+// clean captures (85 messages from 44 distinct players, one capture being the
+// room minutes after a real raid), 3 times in the 2026-08-31 raid, and 24 times
+// in the 2026-08-27 raid capture.
+func raidCorrThresholds() (minLen, weak, strong int) {
+	minLen, weak, strong = 15, 2, 4
 	if config != nil {
 		if config.RaidGuardCorrMinLen > 0 {
 			minLen = config.RaidGuardCorrMinLen
 		}
 		if config.RaidGuardCorrIPIDs > 0 {
-			need = config.RaidGuardCorrIPIDs
+			strong = config.RaidGuardCorrIPIDs
+		}
+		if config.RaidGuardCorrIPIDsWeak > 0 {
+			weak = config.RaidGuardCorrIPIDsWeak
 		}
 	}
+	// A weak level above the strong one would be nonsense -- the weak signal
+	// would outrank the one that gates bans. Clamp rather than reject so a
+	// mistyped config degrades to the old single-threshold behaviour.
+	if weak > strong {
+		weak = strong
+	}
+	if weak < 2 {
+		weak = 2 // one IPID saying its own line is not corroboration of anything
+	}
+	return minLen, weak, strong
+}
+
+// raidCorrBreadth is how many distinct lines must be echoing at once before the
+// server counts as under attack on breadth alone. Deliberately conservative: the
+// 2026-08-31 raid only reached 2, so this does not fire on it -- the latency win
+// there comes from the weak echo signal, not from here. This exists so that
+// under-attack has a route that does not depend on one line being repeated four
+// times, without handing that route to a pair of players quoting each other
+// (which is breadth 1, whatever they do).
+func raidCorrBreadth() int {
+	if config != nil && config.RaidGuardCorrBreadth > 0 {
+		return config.RaidGuardCorrBreadth
+	}
+	return 3
+}
+
+// raidObserveContent folds one message into the correlation window and reports
+// what the rest of the server has to say about it: whether anyone else is
+// saying the same line (echoed), and whether enough distinct IPIDs are saying it
+// to count as a coordinated fan-out (corroborated). Corroborated implies echoed.
+func raidObserveContent(ipid, text string, now time.Time) (echoed, corroborated bool) {
+	minLen, weak, strong := raidCorrThresholds()
 	fps := raidFingerprints(text, minLen)
 	if len(fps) == 0 {
-		return false
+		return false, false
 	}
 	w := raidCorr()
-	hit := false
+	var canonical uint64
 	for _, fp := range fps {
-		if w.Observe(fp, ipid, now) >= need {
-			hit = true
+		n := w.Observe(fp, ipid, now)
+		if n >= strong {
+			corroborated = true
+		}
+		if n >= weak && !echoed {
+			echoed, canonical = true, fp
 		}
 	}
-	if hit {
+	if corroborated {
 		markRaidAttack(now)
 	}
-	return hit
+	if echoed {
+		// One credit per message, keyed by the fingerprint that matched, so a
+		// single echoed sentence counts once rather than once per shingle.
+		if raidEchoes().Credit(canonical, now) >= raidCorrBreadth() {
+			markRaidAttack(now)
+		}
+	}
+	return echoed, corroborated
+}
+
+// raidGuardEchoBreadth reports how many distinct lines are currently echoing
+// across IPIDs, for /raidguard status.
+func raidGuardEchoBreadth() int {
+	return raidEchoes().Breadth(time.Now())
 }
 
 // raidObserveArrival records a newly-seen IPID and reports whether arrivals are
@@ -387,6 +565,7 @@ func raidObserveArrival(now time.Time) bool {
 func resetRaidGuardState() {
 	raidCorrOnce = sync.Once{}
 	raidCorrWindow = nil
+	raidEchoWindow = nil
 	raidArrivals = newArrivalWindow(time.Second)
 	raidAttackUntil.Store(0)
 }

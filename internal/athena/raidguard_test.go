@@ -363,3 +363,168 @@ func TestPacketFloodAutobanIsHonoured(t *testing.T) {
 		t.Error("the raw-packet-flood branch no longer bans at all; the flag should gate the ban, not remove it")
 	}
 }
+
+// TestChallengeRungRespectsCaptchaToggle checks that an operator who turns the
+// join captcha off does not keep getting captchas from the raid guard. The
+// challenge rung borrows the captcha's machinery, so with that switched off it
+// degrades to an alert -- and specifically not to silence, which without a
+// question the player can answer is harsher than the rung above it.
+func TestChallengeRungRespectsCaptchaToggle(t *testing.T) {
+	withRaidConfig(t)
+	oldClients := clients
+	t.Cleanup(func() { clients = oldClients })
+	clients = &ClientList{
+		list:       make(map[*Client]struct{}),
+		uidIndex:   make(map[int]*Client),
+		ipidCounts: make(map[string]int),
+	}
+
+	config.JoinCaptcha = false
+	config.RaidGuardMaxAction = "ban"
+
+	c := &Client{conn: &testConn{}, uid: 1, ipid: "captcha-off-ipid"}
+	rs := newRaidState()
+	rs.mu.Lock()
+	rs.score = config.RaidGuardScoreChallenge
+	rs.mu.Unlock()
+
+	raidGuardEnforce(c, rs, VerdictChallenge, "test")
+	if _, _, acted := rs.snapshot(); acted != VerdictWatch {
+		t.Errorf("with the captcha off, a challenge verdict acted as %v; want watch", acted)
+	}
+	if c.awaitingCaptcha.Load() {
+		t.Error("the guard put a client into the captcha flow on a server with join_captcha = false")
+	}
+	if c.captchaRestricted.Load() {
+		t.Error("the guard silenced a client that should only have been alerted on")
+	}
+}
+
+// TestBanStillWorksWithCaptchaOff checks the thing an operator actually cares
+// about when turning the captcha off: the autoban half is untouched by it.
+func TestBanStillWorksWithCaptchaOff(t *testing.T) {
+	withRaidConfig(t)
+	config.JoinCaptcha = false
+	if v := verdictForTier(config.RaidGuardScoreBan, raidGuardScaleBase); v != VerdictBan {
+		t.Errorf("ban verdict = %v with the captcha off; the two features must be independent", v)
+	}
+	if v := verdictForTier(config.RaidGuardScoreKick, raidGuardScaleBase); v != VerdictKick {
+		t.Errorf("kick verdict = %v with the captcha off", v)
+	}
+}
+
+// TestCorrelationWindowExpiresFromFirstSighting pins the tumbling-window
+// semantics corrEntry documents. Under the previous last-touch expiry an entry
+// stayed alive as long as anything kept touching it, so a line said by a
+// different player every few seconds accumulated IPIDs without bound and would
+// eventually cross any threshold -- turning an area catchphrase into
+// "coordinated". The tally must instead describe one window of wall clock and
+// nothing longer, which is the claim the signal actually makes.
+func TestCorrelationWindowExpiresFromFirstSighting(t *testing.T) {
+	w := NewCorrelationWindow(10*time.Second, 4096)
+	const fp = 0xC0FFEE
+	start := time.Now()
+
+	// Four different IPIDs say the same line, each 4 seconds after the last.
+	// Every gap is inside the window, so last-touch expiry would keep one entry
+	// alive across all of them and report 4.
+	counts := make([]int, 0, 4)
+	for i := 0; i < 4; i++ {
+		counts = append(counts, w.Observe(fp, fmt.Sprintf("ipid-%d", i), start.Add(time.Duration(i)*4*time.Second)))
+	}
+	t.Logf("one line said by four IPIDs at 4s intervals -> counts %v", counts)
+
+	// The first two land inside the first window and tally together; by +8s the
+	// entry is not yet 10s old either, so three is expected. The fourth, at
+	// +12s, is past the window measured from the FIRST sighting, so the tally
+	// restarts at 1 rather than reaching 4.
+	if got := counts[len(counts)-1]; got != 1 {
+		t.Errorf("after the window elapsed from the first sighting the tally was %d, want 1 -- entries are "+
+			"expiring from last touch, so a slowly-recurring line can accumulate IPIDs forever", got)
+	}
+}
+
+// TestEchoBreadthCountsDistinctLines pins the difference between depth and
+// breadth. Two people quoting one line at each other is depth, and ordinary; it
+// must read as breadth 1 no matter how long they keep it up. Only several
+// DIFFERENT lines echoing at once is a shape a pair of players cannot produce.
+func TestEchoBreadthCountsDistinctLines(t *testing.T) {
+	e := newEchoWindow(30 * time.Second)
+	now := time.Now()
+
+	for i := 0; i < 20; i++ {
+		if got := e.Credit(0xAAAA, now.Add(time.Duration(i)*time.Second)); got != 1 {
+			t.Fatalf("one line echoed %d times reported breadth %d, want 1 -- breadth must count distinct "+
+				"lines, or two players quoting each other look like a raid", i+1, got)
+		}
+	}
+	if got := e.Credit(0xBBBB, now.Add(20*time.Second)); got != 2 {
+		t.Errorf("a second distinct line reported breadth %d, want 2", got)
+	}
+	// And breadth decays: nothing said for a whole window means nothing echoing.
+	if got := e.Breadth(now.Add(2 * time.Minute)); got != 0 {
+		t.Errorf("breadth %d a full two minutes later, want 0 -- echoes must age out", got)
+	}
+}
+
+// TestWeakCorrelationNeverArmsTheBanGate is the invariant that makes a weak
+// threshold of two IPIDs safe. The echo signal is evidence and carries score,
+// but raidBanAllowed must remain reachable only through the strong signal, so no
+// number of people quoting each other can arm a ban between them.
+func TestWeakCorrelationNeverArmsTheBanGate(t *testing.T) {
+	oldConfig := config
+	defer func() { config = oldConfig }()
+	config = settings.DefaultConfig()
+
+	resetRaidGuardState()
+	t.Cleanup(resetRaidGuardState)
+
+	rs := newRaidState()
+	const line = "this is a long enough line to be fingerprinted at all"
+	now := time.Now()
+
+	// Two IPIDs, back and forth, many times: the strongest form of "quoting
+	// each other" two people can manage.
+	for i := 0; i < 25; i++ {
+		raidGuardCorrelate(rs, "ipid-a", line, now.Add(time.Duration(i)*time.Second))
+		raidGuardCorrelate(rs, "ipid-b", line, now.Add(time.Duration(i)*time.Second))
+	}
+
+	if !rs.hasFired(SigEchoedAcrossIPIDs) {
+		t.Errorf("two IPIDs repeating one line never fired the echo signal; the weak threshold is not working")
+	}
+	if rs.hasFired(SigDupeAcrossIPIDs) {
+		t.Errorf("two IPIDs repeating one line fired SigDupeAcrossIPIDs -- the strong threshold has collapsed " +
+			"onto the weak one, and with it the ban gate")
+	}
+	if raidBanAllowed(rs.hasFired(SigDupeAcrossIPIDs), raidGuardUnderAttack()) {
+		t.Errorf("raidBanAllowed is true after two players quoted each other; a ban must never be reachable " +
+			"without corroboration a lone pair cannot manufacture")
+	}
+	// Breadth is the other half: one line, however loudly, is breadth 1.
+	if b := raidGuardEchoBreadth(); b >= raidCorrBreadth() {
+		t.Errorf("echo breadth reached %d (threshold %d) from a single repeated line; breadth must count "+
+			"distinct lines", b, raidCorrBreadth())
+	}
+}
+
+// TestCorrThresholdsClampSanely checks that a mistyped config degrades rather
+// than inverting the design: a weak level above the strong one would make the
+// cheaper signal outrank the one that gates bans.
+func TestCorrThresholdsClampSanely(t *testing.T) {
+	oldConfig := config
+	defer func() { config = oldConfig }()
+
+	config = settings.DefaultConfig()
+	config.RaidGuardCorrIPIDs = 3
+	config.RaidGuardCorrIPIDsWeak = 9
+	if _, weak, strong := raidCorrThresholds(); weak > strong {
+		t.Errorf("weak=%d strong=%d: a weak level above the strong one was accepted", weak, strong)
+	}
+
+	config.RaidGuardCorrIPIDsWeak = 1
+	if _, weak, _ := raidCorrThresholds(); weak < 2 {
+		t.Errorf("weak=%d: one IPID saying its own line is not corroboration and must never be accepted "+
+			"as the threshold", weak)
+	}
+}

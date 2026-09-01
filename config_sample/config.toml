@@ -536,8 +536,16 @@ raid_guard_objection_fraction = 0.8
 # completes -- the whole handshake window counts) within which picking a
 # character is considered implausibly fast for a human reading a character
 # list.
-# Default: 1000 (1 second)
-raid_guard_fast_charpick_ms = 1000
+#
+# Bounded by protocol physics, not by taste: a real client cannot pick a
+# character before it has received the character list, because it builds the
+# picker from that list. The fastest full handshake in the clean capture was
+# 330ms, so nothing under that is reachable by a legitimate pick -- including a
+# client auto-picking from a share link. 1000 is the obvious-looking value and
+# is WRONG: 6 of the 19 real handshakes in that capture completed inside it, so
+# a fast connection auto-picking a character would have tripped this signal.
+# Default: 250
+raid_guard_fast_charpick_ms = 250
 
 # Milliseconds after a connection's FIRST character pick within which sending
 # its first IC message is considered implausibly fast. The weakest timing
@@ -573,14 +581,57 @@ raid_guard_name_churn_max = 3
 
 # Seconds a piece of text is tracked for cross-IPID correlation before it
 # ages out of the window.
-# Default: 10
-raid_guard_corr_window = 10
+#
+# Measured from when the text was FIRST seen, not when it was last repeated, so
+# a line's tally is always "how many people said this inside one window" and
+# never accumulates indefinitely because something keeps touching it.
+#
+# Raised from 10 to 30 after the 2026-08-31 raid, which re-used one line at +1s
+# and again at +19s, and a second line 16s after its first use. A 10-second
+# window saw one of those three repeats; 30 sees all three. Costs nothing on
+# clean traffic: replaying both clean captures in internal/athena/testdata at
+# 10s, 30s and 60s produces zero cross-IPID correlations at every setting.
+# Default: 30
+raid_guard_corr_window = 30
 
 # Number of DISTINCT IPIDs that must say the same (or near-identical, via
 # shingling) text within raid_guard_corr_window seconds before it counts as
-# coordinated.
+# coordinated. This is the STRONG level: it is worth 45 points, it flips the
+# server-wide "under attack" state, and it is the only thing that can ever
+# satisfy the ban gate.
 # Default: 4
 raid_guard_corr_ipids = 4
+
+# The WEAK level: how many distinct IPIDs saying the same text counts as an
+# echo worth scoring at all. Worth 25 points -- below the watch threshold at
+# every playtime tier, so on its own it neither alerts nor acts; it takes a
+# second, independent signal before anything happens to anyone. It never
+# satisfies the ban gate, so two players quoting each other cannot arm a ban
+# between them however long they keep it up.
+#
+# This exists because a single threshold of 4 answered the wrong question for
+# anything but the loudest possible raid. The 2026-08-31 raid put ten IPIDs and
+# ten different slurs on the server over twenty-six seconds, re-using lines two
+# and three times but never four, so layer 2 contributed nothing at all to it --
+# no signal, no under-attack flag, no ban ever reachable. At 2 the same capture
+# is corroborated on its fourth message, seven seconds in.
+#
+# Clamped to at least 2 (one IPID saying its own line corroborates nothing) and
+# to at most raid_guard_corr_ipids.
+# Default: 2
+raid_guard_corr_ipids_weak = 2
+
+# How many DISTINCT lines must be echoing across IPIDs at the same time before
+# the server counts as under attack on breadth alone.
+#
+# Depth and breadth are different claims. Two friends quoting each other are one
+# line echoed by two people however many times they do it -- breadth 1, and
+# ordinary. A raid is several different lines each echoed by different people at
+# once, which no pair of players can produce between them. Measured across the
+# captures in internal/athena/testdata: breadth peaked at 0 on both clean
+# captures and at 11 during the raid capture.
+# Default: 3
+raid_guard_corr_breadth = 3
 
 # Minimum normalized-character length a message must reach before it is even
 # considered for correlation at all. Short lines (two players independently

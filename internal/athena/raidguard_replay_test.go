@@ -210,9 +210,9 @@ func applyEvent(ir *ipidReplay, ev recvEvent) {
 			SinceCharPick: ir.sinceCharPick(ev.ts),
 			Now:           ev.ts,
 		})
-		if raidObserveContent(ir.ipid, msg, ev.ts) {
-			ir.rs.noteCorrelated()
-		}
+		// Same helper the production IC/OOC hooks use, so the harness cannot
+		// drift from them on which half of the graded corroboration it records.
+		raidGuardCorrelate(ir.rs, ir.ipid, msg, ev.ts)
 
 	case "MS":
 		// Client-format MS: up to 26 fields, no OtherName/OtherEmote. Decoded
@@ -248,9 +248,7 @@ func applyEvent(ir *ipidReplay, ev recvEvent) {
 			SinceCharPick: ir.sinceCharPick(ev.ts),
 			Now:           ev.ts,
 		})
-		if raidObserveContent(ir.ipid, ms.Message, ev.ts) {
-			ir.rs.noteCorrelated()
-		}
+		raidGuardCorrelate(ir.rs, ir.ipid, ms.Message, ev.ts)
 
 	default:
 		// askchaa's siblings (ID, HI, CH, VS_JOIN, MC, ...) carry no signal
@@ -397,16 +395,43 @@ func TestRaidGuardReplayCapturesAgainstRealTraffic(t *testing.T) {
 	raidResults := replayCaptureFile(t, "testdata/raid_capture.log")
 
 	// Correlation state (content fingerprints, the "under attack" flag) must
-	// never leak from one capture's replay into the other's -- a raid's
-	// fingerprints polluting the normal replay would be a self-inflicted false
-	// positive that has nothing to do with the engine's real behaviour.
-	resetRaidGuardState()
+	// never leak from one capture's replay into the next -- a raid's
+	// fingerprints polluting a clean replay would be a self-inflicted false
+	// positive that has nothing to do with the engine's real behaviour. Reset
+	// before each replay below, not once here, since there is now more than one
+	// clean capture and they must not pollute each other either.
 
-	// --- Replay the normal capture ---
-	normalResults := replayCaptureFile(t, "testdata/normal_capture.log")
+	// --- Replay the clean captures ---
+	//
+	// Two of them, from different evenings and different populations:
+	//
+	//	normal_capture.log     a quiet evening, nothing happening.
+	//	aftermath_capture.log  the same server two minutes after the 2026-08-31
+	//	                       raid: 24 players, agitated, several of them
+	//	                       shouting in caps and using the objection button
+	//	                       while they talk about what just happened.
+	//
+	// The second is the harder and more useful one. A quiet evening does not
+	// test much -- the interesting question is whether the guard stays silent
+	// through a room that is loud, upset and talking in the raid's own
+	// vocabulary, which is exactly the traffic a loosened threshold would eat.
+	cleanCaptures := []struct {
+		label string
+		path  string
+	}{
+		{"NORMAL", "testdata/normal_capture.log"},
+		{"AFTERMATH", "testdata/aftermath_capture.log"},
+	}
+	cleanResults := make(map[string][]replayResult, len(cleanCaptures))
+	for _, c := range cleanCaptures {
+		resetRaidGuardState()
+		cleanResults[c.label] = replayCaptureFile(t, c.path)
+	}
 
 	logReplayReport(t, "RAID", raidResults)
-	logReplayReport(t, "NORMAL", normalResults)
+	for _, c := range cleanCaptures {
+		logReplayReport(t, c.label, cleanResults[c.label])
+	}
 
 	raidHist70 := verdictHistogram(raidResults, 70)
 	t.Logf("[RAID] verdict histogram @ scalePct=70 (strict/brand-new tier -- what these connections would actually be judged at in production, informational only): %s",
@@ -433,20 +458,23 @@ func TestRaidGuardReplayCapturesAgainstRealTraffic(t *testing.T) {
 	// brand-new-connection tier -- the harshest a legitimate first-time
 	// player could ever land at). If the baseline capture is clean at 70 it
 	// is clean everywhere, since every other tier is only more forgiving.
-	for _, scalePct := range []int{raidGuardScaleBase, 70} {
-		var offenders []string
-		for _, r := range normalResults {
-			if v := verdictForTier(r.score, scalePct); v > VerdictWatch {
-				offenders = append(offenders, fmt.Sprintf("  IPID %s -> %v (score=%d, signals=[%s])",
-					r.ipid, v, r.score, strings.Join(r.signals, ", ")))
+	for _, c := range cleanCaptures {
+		results := cleanResults[c.label]
+		for _, scalePct := range []int{raidGuardScaleBase, 70} {
+			var offenders []string
+			for _, r := range results {
+				if v := verdictForTier(r.score, scalePct); v > VerdictWatch {
+					offenders = append(offenders, fmt.Sprintf("  IPID %s -> %v (score=%d, signals=[%s])",
+						r.ipid, v, r.score, strings.Join(r.signals, ", ")))
+				}
 			}
-		}
-		if len(offenders) > 0 {
-			t.Errorf("FALSE POSITIVE: NORMAL capture produced %d punitive verdict(s) at scalePct=%d -- "+
-				"the guard must NEVER act on legitimate traffic:\n%s",
-				len(offenders), scalePct, strings.Join(offenders, "\n"))
-		} else {
-			t.Logf("[NORMAL] scalePct=%d: 0/%d IPIDs reached a punitive verdict (clean)", scalePct, len(normalResults))
+			if len(offenders) > 0 {
+				t.Errorf("FALSE POSITIVE: %s capture produced %d punitive verdict(s) at scalePct=%d -- "+
+					"the guard must NEVER act on legitimate traffic:\n%s",
+					c.label, len(offenders), scalePct, strings.Join(offenders, "\n"))
+			} else {
+				t.Logf("[%s] scalePct=%d: 0/%d IPIDs reached a punitive verdict (clean)", c.label, scalePct, len(results))
+			}
 		}
 	}
 
