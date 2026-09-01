@@ -682,7 +682,22 @@ func cmdProfile(client *Client, args []string, _ string) {
 		playtimeSec += int64(time.Since(connAt).Seconds())
 	}
 
-	// Favourite characters (wardrobe) — only meaningful if linked to an account.
+	// The exact playtime figure is itself identifying: /playtime top lists
+	// every registered account's hours by username, so even with the account
+	// line above hidden, showing the raw number here would let anyone match
+	// "this anonymous connection has 47h32m" against that public,
+	// named leaderboard and deanonymize the target just the same. Gated by
+	// the same isSelfProfile/Authenticated rule as the account line, for the
+	// same reason.
+	playtimeDisplay := formatPlaytime(playtimeSec)
+	if !isSelfProfile && !target.Authenticated() {
+		playtimeDisplay = "(hidden)"
+	}
+
+	// Favourite characters (wardrobe): keyed by account username, so this
+	// already cascades from the same gated `username` value above — a
+	// logged-out target's wardrobe stays hidden alongside their account for
+	// the identical reason, with no separate check needed.
 	var favs []string
 	if username != "(guest)" {
 		if f, err := db.GetFavourites(username); err == nil {
@@ -699,10 +714,18 @@ func cmdProfile(client *Client, args []string, _ string) {
 	}
 
 	// Active cosmetic tag (casino or non-casino modes both expose this).
-	activeTag := db.GetActiveTag(target.Ipid())
+	// Gated the same way as the account/playtime lines above: an equipped
+	// tag is persisted by IPID like everything else here, so a logged-out
+	// target's past tag choice (sometimes a one-of-a-kind custom tag naming
+	// its owner outright) is just as identifying as their account name or
+	// hours would be.
 	tagDisplay := "(none)"
-	if t := formatTagDisplay(activeTag); t != "" {
-		tagDisplay = t
+	if isSelfProfile || target.Authenticated() {
+		if t := formatTagDisplay(db.GetActiveTag(target.Ipid())); t != "" {
+			tagDisplay = t
+		}
+	} else {
+		tagDisplay = "(hidden)"
 	}
 
 	// Active punishments count — don't leak details, just a count so players
@@ -720,7 +743,7 @@ func cmdProfile(client *Client, args []string, _ string) {
 	sb.WriteString(fmt.Sprintf("  UID:         %d\n", target.Uid()))
 	sb.WriteString(fmt.Sprintf("  Account:     %v\n", username))
 	sb.WriteString(fmt.Sprintf("  Area:        %v\n", areaName))
-	sb.WriteString(fmt.Sprintf("  Playtime:    %v\n", formatPlaytime(playtimeSec)))
+	sb.WriteString(fmt.Sprintf("  Playtime:    %v\n", playtimeDisplay))
 	if config != nil && config.EnableCasino {
 		sb.WriteString(fmt.Sprintf("  Chips:       %d\n", chips))
 	}
