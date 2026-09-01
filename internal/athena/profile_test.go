@@ -13,7 +13,11 @@
    with the account name hidden, /playtime top publicly ranks every
    registered account by name and exact hours, so showing the raw number on
    /profile still lets anyone match a logged-out connection to a specific
-   account by its playtime alone. Playtime is gated by the same rule. */
+   account by its playtime alone. Playtime is gated by the same rule.
+
+   The active cosmetic tag is gated the same way for the same reason (a
+   custom tag can literally name its owner) — favourites already cascaded
+   from the same gated username and needed no separate fix. */
 
 package athena
 
@@ -42,6 +46,12 @@ func TestProfileHidesAccountForUnauthenticatedOtherPlayer(t *testing.T) {
 	if err := db.AddPlaytime("ip-target", 18000); err != nil { // 5h 0m exactly
 		t.Fatalf("AddPlaytime: %v", err)
 	}
+	if err := db.CreateCustomTag("spytag", "SpyTag", "admin"); err != nil {
+		t.Fatalf("CreateCustomTag: %v", err)
+	}
+	if err := db.SetActiveTag("ip-target", "spytag"); err != nil {
+		t.Fatalf("SetActiveTag: %v", err)
+	}
 
 	viewer := &Client{conn: &captureConn{}, uid: 1, ipid: "ip-viewer", char: -1, jailAreaID: -1}
 	target := &Client{conn: &captureConn{}, uid: 2, ipid: "ip-target", char: -1, jailAreaID: -1}
@@ -68,9 +78,15 @@ func TestProfileHidesAccountForUnauthenticatedOtherPlayer(t *testing.T) {
 	if !strings.Contains(out, "Playtime:    (hidden)") {
 		t.Fatalf("expected playtime to show as (hidden) for an unauthenticated target, got:\n%s", out)
 	}
+	if strings.Contains(out, "SpyTag") {
+		t.Fatalf("profile leaked the target's active tag while they were unauthenticated:\n%s", out)
+	}
+	if !strings.Contains(out, "Active tag:  (hidden)") {
+		t.Fatalf("expected active tag to show as (hidden) for an unauthenticated target, got:\n%s", out)
+	}
 
 	// Once the target actually authenticates this connection (/login or
-	// /register), viewing them shows both the account and the real playtime.
+	// /register), viewing them shows the account, real playtime, and tag.
 	target.SetAuthenticated(true)
 	viewer.conn = &captureConn{}
 	cmdProfile(viewer, []string{"2"}, "")
@@ -81,8 +97,11 @@ func TestProfileHidesAccountForUnauthenticatedOtherPlayer(t *testing.T) {
 	if !strings.Contains(out, "5h 0m") {
 		t.Fatalf("expected the real playtime to show once the target authenticated, got:\n%s", out)
 	}
+	if !strings.Contains(out, "SpyTag") {
+		t.Fatalf("expected the real active tag to show once the target authenticated, got:\n%s", out)
+	}
 
-	// Self-view always resolves your own linked account and playtime,
+	// Self-view always resolves your own linked account, playtime, and tag,
 	// authenticated or not — it's your own information, not something being
 	// outed to a peer.
 	target.SetAuthenticated(false)
@@ -94,5 +113,8 @@ func TestProfileHidesAccountForUnauthenticatedOtherPlayer(t *testing.T) {
 	}
 	if !strings.Contains(out, "5h 0m") {
 		t.Fatalf("expected self-view to show the caller's own real playtime even when unauthenticated, got:\n%s", out)
+	}
+	if !strings.Contains(out, "SpyTag") {
+		t.Fatalf("expected self-view to show the caller's own real active tag even when unauthenticated, got:\n%s", out)
 	}
 }

@@ -694,7 +694,10 @@ func cmdProfile(client *Client, args []string, _ string) {
 		playtimeDisplay = "(hidden)"
 	}
 
-	// Favourite characters (wardrobe) — only meaningful if linked to an account.
+	// Favourite characters (wardrobe): keyed by account username, so this
+	// already cascades from the same gated `username` value above — a
+	// logged-out target's wardrobe stays hidden alongside their account for
+	// the identical reason, with no separate check needed.
 	var favs []string
 	if username != "(guest)" {
 		if f, err := db.GetFavourites(username); err == nil {
@@ -711,10 +714,18 @@ func cmdProfile(client *Client, args []string, _ string) {
 	}
 
 	// Active cosmetic tag (casino or non-casino modes both expose this).
-	activeTag := db.GetActiveTag(target.Ipid())
+	// Gated the same way as the account/playtime lines above: an equipped
+	// tag is persisted by IPID like everything else here, so a logged-out
+	// target's past tag choice (sometimes a one-of-a-kind custom tag naming
+	// its owner outright) is just as identifying as their account name or
+	// hours would be.
 	tagDisplay := "(none)"
-	if t := formatTagDisplay(activeTag); t != "" {
-		tagDisplay = t
+	if isSelfProfile || target.Authenticated() {
+		if t := formatTagDisplay(db.GetActiveTag(target.Ipid())); t != "" {
+			tagDisplay = t
+		}
+	} else {
+		tagDisplay = "(hidden)"
 	}
 
 	// Active punishments count — don't leak details, just a count so players
