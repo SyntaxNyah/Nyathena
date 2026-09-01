@@ -970,6 +970,17 @@ func pktIC(client *Client, p *packet.Packet) {
 		}
 		return false
 	}
+	// A nuke in EITHER field wins outright, decided before the per-field checks
+	// below get a chance to short-circuit one another: without this, a merely
+	// default-tier word in the message sets censorShadow and the showname is
+	// then never examined, so a nuke word worn as a showname would be answered
+	// with a shadow-drop instead of a ban.
+	if nukeFieldsOrNothing(client,
+		[2]string{msgText, "IC message"},
+		[2]string{decode(ms.Showname), "IC showname"},
+	) {
+		return
+	}
 	if checkCensored(msgText, "IC message") {
 		return
 	}
@@ -1642,14 +1653,20 @@ func pktOOC(client *Client, p *packet.Packet) {
 	// configured action consistently. On a shadow trip the message is echoed
 	// back to only the sender (under the offending name, so their client
 	// looks normal) and dropped for everyone else.
-	// A nuke-tier hit destroys the packet and bans the IPID before any of the
-	// shadow/kick handling below gets a look at it; everything gentler feeds
-	// the raid guard and then takes the configured action exactly as before.
-	nameMatch, nameResult, nameKick := autoModCheckTiered(client, username, "OOC username")
-	if nameMatch.Matched && nameMatch.Entry.Severity == SeverityNuke {
-		applyAutoModNuke(client, nameMatch, "OOC username")
+	// A nuke in EITHER the username or the message body wins outright, decided
+	// before the per-field handling below can short-circuit: a shadowed
+	// username returns from this function before the message is ever checked,
+	// so without this sweep a nuke word in the message could be shielded by a
+	// gentler word in the name.
+	if nukeFieldsOrNothing(client,
+		[2]string{username, "OOC username"},
+		[2]string{decode(ct.Message), "OOC message"},
+	) {
 		return
 	}
+	// Everything gentler feeds the raid guard and then takes the configured
+	// action exactly as before.
+	nameMatch, nameResult, nameKick := autoModCheckTiered(client, username, "OOC username")
 	raidGuardOnWordHit(client, nameMatch)
 	switch result, kick := nameResult, nameKick; result {
 	case autoModBlocked:

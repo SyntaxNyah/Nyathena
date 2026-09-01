@@ -1165,6 +1165,15 @@ func cmdForceName(client *Client, args []string, _ string) {
 		client.SendServerMessage(fmt.Sprintf("Forced showname is too long (max %d characters).", maxShownameLength))
 		return
 	}
+	// Refused here rather than at the PU filter, which would drop the broadcast
+	// and, on a nuke-tier entry, ban the TARGET for what the moderator typed.
+	// The name a moderator sets is the moderator's doing, so the command says no
+	// and nothing is stored or broadcast at all.
+	if m := matchWordEntries(effectiveWordEntries(), name); m.Matched {
+		client.SendServerMessage(fmt.Sprintf("That showname contains prohibited language (%s) and was not applied.", m.Entry.Raw))
+		logger.LogInfof("forcename: refused showname for UID %v from %v — matched %s", uid, client.Ipid(), m.Entry.String())
+		return
+	}
 	// Store as AO2-encoded so it can be placed directly into the IC packet's
 	// MSPacket.Showname field without an extra encode step on every message.
 	target.SetForcedShowname(encode(name))

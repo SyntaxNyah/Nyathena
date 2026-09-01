@@ -44,6 +44,7 @@ package athena
 
 import (
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/MangosArentLiterature/Athena/internal/db"
@@ -75,6 +76,46 @@ func autoModNukeBanDuration() (time.Duration, bool) {
 		return 0, false
 	}
 	return d, true
+}
+
+// nukeFieldsOrNothing checks every field of one packet for a nuke-tier entry and,
+// on the first hit, destroys the packet and bans the sender.
+//
+// This exists because the per-field checks that follow it are allowed to
+// short-circuit each other. Once the message text trips a shadow, pktIC skips
+// the showname entirely -- an optimisation that was harmless while every trip
+// did the same thing, and stopped being harmless the moment tiers arrived: a
+// merely "default" word in the message would shield a nuke word in the
+// showname, and the offender would get a shadow-drop instead of a ban. The same
+// shape exists in pktOOC, where a shadowed username returns before the message
+// is ever looked at.
+//
+// Rather than unpick every short-circuit, the worst tier is decided across ALL
+// fields up front, matching what matchWordEntries already does within a single
+// field: the worst thing present wins, no matter which field it is hiding in or
+// what any other field did. Everything gentler is left to the existing
+// per-field logic below, whose short-circuiting is still correct for it.
+//
+// Matching only -- no action is taken for anything below the nuke tier here, so
+// this cannot double-alert or double-apply an action.
+func nukeFieldsOrNothing(client *Client, fields ...[2]string) bool {
+	if client == nil {
+		return false
+	}
+	entries := effectiveWordEntries()
+	if len(entries) == 0 {
+		return false
+	}
+	for _, f := range fields {
+		text, source := f[0], f[1]
+		if strings.TrimSpace(text) == "" {
+			continue
+		}
+		if m := matchWordEntries(entries, text); m.Matched && m.Entry.Severity == SeverityNuke {
+			return applyAutoModNuke(client, m, source)
+		}
+	}
+	return false
 }
 
 // applyAutoModNuke destroys the message and bans the sender.
