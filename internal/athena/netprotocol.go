@@ -897,6 +897,104 @@ func pktIC(client *Client, p *packet.Packet) {
 		return
 	}
 
+	// ---------------------------------------------------------------------
+	// Content gate: AutoMod banned words in the decoded message AND in the
+	// showname (a slur worn as a showname is just as visible as one spoken,
+	// and checking both closes an obvious bypass), plus the
+	// censored_names.txt showname list.
+	//
+	// This sits here -- immediately after field validation, before any other
+	// handling whatsoever -- rather than further down where it used to live,
+	// because everything in between turned out to be a way for the text or
+	// the showname to reach somebody:
+	//
+	//   - the showname is broadcast to EVERY client in a PU packet as part of
+	//     the state update below, and that happened before the showname had
+	//     been censored at all. A slur worn as a showname rendered in every
+	//     client in the room and the censor never got a look at it. That is
+	//     the leak this move fixes, and it is not a small one.
+	//   - quickdraw, the typing race and the unscramble event all read the
+	//     message text, so a censored line could still win a prize.
+	//   - the testimony recorder can store and later replay it.
+	//
+	// Nothing here depends on the punishment transforms applied further down:
+	// msgText is decoded exactly once, at the top of this function, and is
+	// never reassigned, so checking it here checks the identical string the
+	// old placement checked.
+	//
+	// A shadow trip does NOT abort processing: the message flows through the
+	// normal pipeline and is folded into the silenced delivery path below, so
+	// the sender gets a well-formed echo -- their client shows the message as
+	// sent while no other client ever sees it. A NUKE trip is the opposite and
+	// aborts everything immediately, with no echo at all (see
+	// applyAutoModNuke).
+	//
+	// Ordering against the other suppression mechanisms is deliberate and is
+	// the point of the whole block: censoring runs before the torment branch,
+	// before the stealthmute/truepossess silencing, and before the escalating
+	// kick, so a censored message can never escape through the delayed 50/50
+	// torment rebroadcast, and a nuked one never reaches any of them at all.
+	// ---------------------------------------------------------------------
+	censorShadow := false
+	// pendingCensorKick is set when a censor trip requires an escalating kick
+	// but the connection must stay open a little longer -- through the
+	// shadow-echo/broadcast below -- so the kick is applied once, at the very
+	// end of this function, via client.KickForCensorTrip().
+	pendingCensorKick := false
+	// checkCensored runs one field through the tiered word list. It reports
+	// whether the caller must abandon the packet outright; a shadow trip sets
+	// censorShadow instead and lets processing continue.
+	checkCensored := func(text, source string) (abandon bool) {
+		m, result, kick := autoModCheckTiered(client, text, source)
+		if m.Matched && m.Entry.Severity == SeverityNuke {
+			// Destroys the message and bans the IPID. Nothing else in this
+			// function may run afterwards -- not the echo, not the area log,
+			// not a single state update.
+			return applyAutoModNuke(client, m, source)
+		}
+		// Everything below nuke feeds the raid guard: saying something flagged
+		// is one more piece of evidence about a connection, and combines with
+		// the behavioural signals rather than acting on its own. A nuke is
+		// excluded above because scoring a connection that has just been
+		// banned would be pointless.
+		raidGuardOnWordHit(client, m)
+		switch result {
+		case autoModBlocked:
+			if kick {
+				client.KickForCensorTrip()
+			}
+			return true
+		case autoModShadow:
+			censorShadow = true
+			pendingCensorKick = kick
+		}
+		return false
+	}
+	// A nuke in EITHER field wins outright, decided before the per-field checks
+	// below get a chance to short-circuit one another: without this, a merely
+	// default-tier word in the message sets censorShadow and the showname is
+	// then never examined, so a nuke word worn as a showname would be answered
+	// with a shadow-drop instead of a ban.
+	if nukeFieldsOrNothing(client,
+		[2]string{msgText, "IC message"},
+		[2]string{decode(ms.Showname), "IC showname"},
+	) {
+		return
+	}
+	if checkCensored(msgText, "IC message") {
+		return
+	}
+	if !censorShadow && ms.Showname != "" && checkCensored(decode(ms.Showname), "IC showname") {
+		return
+	}
+	if !censorShadow && ms.Showname != "" && checkCensoredShowname(client, decode(ms.Showname)) {
+		// checkCensoredShowname has exactly one outcome on a match (shadow-drop
+		// + torment-list), unlike the word list's configurable actions, so a
+		// match always also warrants the same escalating kick.
+		pendingCensorKick = true
+		censorShadow = true
+	}
+
 	// During possession the pair fields are resolved from the *target's* state,
 	// not the possessor's, so the target's partner renders exactly as it would on
 	// the target's own messages (no "the pair vanished" possess tell). Applies to
@@ -1100,50 +1198,6 @@ func pktIC(client *Client, p *packet.Packet) {
 	// Unscramble: check whether the IC message is the correct answer.
 	if config != nil && config.EnableCasino {
 		unscrambleOnIC(client, msgText)
-	}
-
-	// Censor checks: AutoMod banned words in the decoded message AND the
-	// showname (slurs in shownames are just as visible as in message text;
-	// checking both closes a common bypass), plus the censored_names.txt
-	// showname list. A shadow trip does NOT abort processing: the message
-	// flows through the normal pipeline and is folded into the silenced
-	// delivery path below, so the sender gets a well-formed echo — their
-	// client shows the message as sent while no other client ever sees it.
-	// These run BEFORE the torment branch on purpose: a censored message
-	// must never reach the room, not even through the delayed 50/50 torment
-	// rebroadcast in handleTormentedIC.
-	censorShadow := false
-	// pendingCensorKick is set when a censor trip above requires an escalating kick
-	// (see autoModCheck's kickAfter return) but the connection must stay open a
-	// little longer -- through the shadow-echo/broadcast below -- so the kick is
-	// applied once, at the very end of this function, via client.KickForCensorTrip().
-	pendingCensorKick := false
-	if result, kick := autoModCheck(client, msgText, "IC message"); result == autoModBlocked {
-		if kick {
-			client.KickForCensorTrip()
-		}
-		return
-	} else if result == autoModShadow {
-		censorShadow = true
-		pendingCensorKick = kick
-	}
-	if !censorShadow && ms.Showname != "" {
-		if result, kick := autoModCheck(client, decode(ms.Showname), "IC showname"); result == autoModBlocked {
-			if kick {
-				client.KickForCensorTrip()
-			}
-			return
-		} else if result == autoModShadow {
-			censorShadow = true
-			pendingCensorKick = kick
-		}
-	}
-	if !censorShadow && ms.Showname != "" && checkCensoredShowname(client, decode(ms.Showname)) {
-		// checkCensoredShowname has exactly one outcome on a match (shadow-drop +
-		// torment-list), unlike autoModCheck's multiple configurable actions, so a
-		// match always also warrants the same escalating kick.
-		pendingCensorKick = true
-		censorShadow = true
 	}
 
 	// Torment: ghost or delay the message without the client noticing.
@@ -1599,7 +1653,22 @@ func pktOOC(client *Client, p *packet.Packet) {
 	// configured action consistently. On a shadow trip the message is echoed
 	// back to only the sender (under the offending name, so their client
 	// looks normal) and dropped for everyone else.
-	switch result, kick := autoModCheck(client, username, "OOC username"); result {
+	// A nuke in EITHER the username or the message body wins outright, decided
+	// before the per-field handling below can short-circuit: a shadowed
+	// username returns from this function before the message is ever checked,
+	// so without this sweep a nuke word in the message could be shielded by a
+	// gentler word in the name.
+	if nukeFieldsOrNothing(client,
+		[2]string{username, "OOC username"},
+		[2]string{decode(ct.Message), "OOC message"},
+	) {
+		return
+	}
+	// Everything gentler feeds the raid guard and then takes the configured
+	// action exactly as before.
+	nameMatch, nameResult, nameKick := autoModCheckTiered(client, username, "OOC username")
+	raidGuardOnWordHit(client, nameMatch)
+	switch result, kick := nameResult, nameKick; result {
 	case autoModBlocked:
 		if kick {
 			client.KickForCensorTrip()
@@ -1703,7 +1772,13 @@ func pktOOC(client *Client, p *packet.Packet) {
 	// sent on their side while no other client ever receives it. This runs
 	// before the torment branch so a censored message can never leak out
 	// through handleTormentedOOC's delayed rebroadcast.
-	switch result, kick := autoModCheck(client, decode(msg), "OOC message"); result {
+	msgMatch, msgResult, msgKick := autoModCheckTiered(client, decode(msg), "OOC message")
+	if msgMatch.Matched && msgMatch.Entry.Severity == SeverityNuke {
+		applyAutoModNuke(client, msgMatch, "OOC message")
+		return
+	}
+	raidGuardOnWordHit(client, msgMatch)
+	switch result, kick := msgResult, msgKick; result {
 	case autoModBlocked:
 		if kick {
 			client.KickForCensorTrip()

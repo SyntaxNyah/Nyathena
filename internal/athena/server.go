@@ -899,6 +899,14 @@ func writeToAllClients(header string, contents ...string) {
 // Args() is invoked exactly once and the resulting slice is reused for
 // every recipient.
 func broadcastToAll(p packet.Outgoing) {
+	// Name-carrying PU packets are filtered here rather than at each of the
+	// dozen call sites that emit them -- see pu_name_filter.go for why the
+	// point of exposure is the only place a name filter cannot be bypassed by
+	// a code path nobody thought about. Checked once, before the fan-out,
+	// rather than per recipient.
+	if !puAllowed(p) {
+		return
+	}
 	header, args := p.Header(), p.Args()
 	clients.ForEach(func(client *Client) {
 		if client.Uid() != -1 {
@@ -931,6 +939,9 @@ func broadcastToAreaFrom(senderIPID string, senderIsMod bool, area *area.Area, p
 // broadcastToAllClients fans a typed packet to every connected client,
 // including those that haven't yet been assigned a UID.
 func broadcastToAllClients(p packet.Outgoing) {
+	if !puAllowed(p) {
+		return
+	}
 	header, args := p.Header(), p.Args()
 	clients.ForEach(func(client *Client) {
 		client.SendPacket(header, args...)
@@ -1017,11 +1028,17 @@ func sendPlayerListToClient(newClient *Client) {
 		}
 		uid := c.Uid()
 		newClient.Send(&packet.PR{ID: uid, Type: 0})
-		if c.OOCName() != "" {
-			newClient.Send(&packet.PU{ID: uid, Type: 0, Data: c.OOCName()})
+		// Filtered like any other name broadcast. This is the path that made
+		// the filter necessary: a name set before a word was added to the list
+		// is otherwise re-sent, in full, to every person who joins from then
+		// on, long after the input-time check stopped running.
+		if n := (&packet.PU{ID: uid, Type: 0, Data: c.OOCName()}); c.OOCName() != "" && puAllowed(n) {
+			newClient.Send(n)
 		}
 		newClient.Send(&packet.PU{ID: uid, Type: 1, Data: c.CurrentCharacter()})
-		newClient.Send(&packet.PU{ID: uid, Type: 2, Data: decode(c.Showname())})
+		if n := (&packet.PU{ID: uid, Type: 2, Data: decode(c.Showname())}); puAllowed(n) {
+			newClient.Send(n)
+		}
 		newClient.Send(&packet.PU{ID: uid, Type: 3, Data: strconv.Itoa(getAreaIndex(c.Area()))})
 	})
 }

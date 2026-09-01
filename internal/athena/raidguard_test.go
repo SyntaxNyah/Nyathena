@@ -528,3 +528,200 @@ func TestCorrThresholdsClampSanely(t *testing.T) {
 			"as the threshold", weak)
 	}
 }
+
+// TestSlurSeverityMapsToSignals checks each word-severity tier feeds the one
+// signal the design calls for, and only that one: a severe hit must not also
+// register as a merely-flagged hit, and vice versa.
+func TestSlurSeverityMapsToSignals(t *testing.T) {
+	severe := newRaidState()
+	if fired := severe.noteWordHit(SeveritySevere); len(fired) != 1 || fired[0] != SigSlurSevere {
+		t.Errorf("noteWordHit(SeveritySevere) fired %v, want [SigSlurSevere]", fired)
+	}
+	if !severe.hasFired(SigSlurSevere) || severe.hasFired(SigSlurFlagged) {
+		t.Error("a severe word-list hit must fire SigSlurSevere and only SigSlurSevere")
+	}
+
+	for _, sev := range []WordSeverity{SeverityDefault, SeverityWatch} {
+		rs := newRaidState()
+		if fired := rs.noteWordHit(sev); len(fired) != 1 || fired[0] != SigSlurFlagged {
+			t.Errorf("noteWordHit(%v) fired %v, want [SigSlurFlagged]", sev, fired)
+		}
+		if !rs.hasFired(SigSlurFlagged) || rs.hasFired(SigSlurSevere) {
+			t.Errorf("a %v word-list hit must fire SigSlurFlagged and only SigSlurFlagged", sev)
+		}
+	}
+}
+
+// TestSlurNukeFiresNothing checks a nuke-tier hit never reaches the raid
+// guard's scoring engine at all. A nuke ends the connection deterministically
+// through AutoMod's own path (word_severity.go); scoring something that is
+// already being banned is pointless, and folding it in here would quietly
+// give one signal the power to act alone -- exactly what this file's design
+// forbids everywhere else.
+func TestSlurNukeFiresNothing(t *testing.T) {
+	rs := newRaidState()
+	if fired := rs.noteWordHit(SeverityNuke); len(fired) != 0 {
+		t.Errorf("noteWordHit(SeverityNuke) fired %v; a nuke hit must never reach the raid guard's own scoring", fired)
+	}
+	if rs.hasFired(SigSlurSevere) || rs.hasFired(SigSlurFlagged) {
+		t.Error("SeverityNuke fired a slur signal despite noteWordHit reporting none")
+	}
+	if score, _, _ := rs.snapshot(); score != 0 {
+		t.Errorf("SeverityNuke added %d to the score; it must add nothing", score)
+	}
+}
+
+// TestSlurAloneNeverPunishes is the safety property behind both new weights.
+//
+// Note this is a STRONGER claim than the file's general invariant, and
+// deliberately so. "No single signal rises above an alert" is not true of the
+// guard as a whole -- SigHandshakeAnomaly (50) already reaches the challenge
+// rung on its own at the strict tier, where the threshold is 60 * 70% = 42 --
+// and the codebase's actual floor is TestNoSingleSignalCanBan's "never reaches
+// a disconnect alone". The two word-list weights are held to the tighter bar
+// because they are the only signals driven by CONTENT rather than behaviour,
+// and content is the thing an ordinary player can trip by saying one word. 40
+// was chosen to sit just under that 42 line for exactly this reason, so if
+// someone later raises it to 45 this test fails rather than the property
+// quietly evaporating.
+//
+// The original property, restated:
+// a slur is strong evidence of intent but zero evidence of a coordinated
+// fan-out, so on its own it must never reach a PUNITIVE rung -- Silence or
+// worse, an action stronger than something the connection resolves itself by
+// answering the pending captcha -- at any playtime tier, including the strict
+// one a brand-new connection is judged at. This is the loud version of
+// TestNoSingleSignalCanBan, specifically for the two signals added here.
+//
+// The boundary is deliberately VerdictSilence, not VerdictWatch: at the
+// strict tier a severe slur alone (45) DOES cross into VerdictChallenge
+// (effective threshold 42) -- exactly like the pre-existing SigHandshakeAnomaly
+// (50) already does at that same tier, which TestNoSingleSignalCanBan's
+// baseline-only check never exercised. Challenge is the self-service rung: it
+// hands the connection a question it can answer itself, the same recourse
+// VerdictSilence itself leaves available (raidGuardSilence's own doc comment).
+// Silence is where the line actually belongs, and it is also the strongest
+// verdict a bare two-signal combination (slur + one more) can ever reach
+// regardless of weight, since clampDisconnect refuses Kick/Ban below
+// minSignalsToDisconnect -- see TestTwoSignalsCannotDisconnect.
+func TestSlurAloneNeverPunishes(t *testing.T) {
+	withRaidConfig(t)
+	for _, sig := range []SignalKind{SigSlurSevere, SigSlurFlagged} {
+		w := signalWeight(sig)
+		for _, tier := range []struct {
+			name  string
+			scale int
+		}{
+			{"strict", config.RaidGuardStrictScale},
+			{"baseline", raidGuardScaleBase},
+			{"lenient", config.RaidGuardLenientScale},
+		} {
+			if v := verdictForTier(w, tier.scale); v > VerdictWatch {
+				t.Errorf("%s alone (weight %d) at the %s tier (%d%%) reached %v; a slur alone must NEVER "+
+					"reach a punitive rung (silence or worse), at any playtime tier", raidSignalName[sig], w, tier.name, tier.scale, v)
+			}
+		}
+	}
+}
+
+// TestSlurCannotArmBan checks the ban gate's cross-IPID-corroboration
+// requirement holds even when a severe slur is stacked with two other
+// independent, non-corroboration signals: the combination reaches a
+// ban-level SCORE at the strict tier, but raidBanAllowed still refuses to let
+// that become a ban without SigDupeAcrossIPIDs having fired. A slur, however
+// severe, is not evidence of a fan-out, and cannot buy its way past the one
+// check that is.
+func TestSlurCannotArmBan(t *testing.T) {
+	withRaidConfig(t)
+	rs := newRaidState()
+	rs.markFired(SigSlurSevere)
+	rs.markFired(SigHandshakeAnomaly)
+	rs.markFired(SigObjectionSpam)
+	score, signals, _ := rs.snapshot()
+
+	if v := verdictForTier(score, config.RaidGuardStrictScale); v < VerdictBan {
+		t.Fatalf("severe slur + handshake anomaly + objection spam (score %d, signals %v) does not even reach "+
+			"a ban-level score (%v) at the strict tier; the fixture needs strengthening for this test to mean "+
+			"anything", score, signals, v)
+	}
+	if rs.hasFired(SigDupeAcrossIPIDs) {
+		t.Fatal("fixture accidentally fired the corroboration signal itself")
+	}
+	// Even with the server concurrently "under attack" (the most permissive
+	// half of the gate), no ban is allowed without corroboration for THIS
+	// connection.
+	if raidBanAllowed(rs.hasFired(SigDupeAcrossIPIDs), true) {
+		t.Error("a ban-level score built from a severe slur plus two other signals was allowed to arm a ban " +
+			"without cross-IPID corroboration -- raidBanAllowed's gate has been weakened")
+	}
+}
+
+// TestSlurSignalFiresOnce checks repeated slurs cannot inflate the score
+// beyond each signal firing once, matching every other signal in this file
+// (see TestSignalsFireOnce). Without this, a connection that keeps talking
+// could grind its way to a ban purely by repeating one flagged word many
+// times, which would be exactly the single-behaviour-inflation rule 1 exists
+// to prevent.
+func TestSlurSignalFiresOnce(t *testing.T) {
+	withRaidConfig(t)
+	rs := newRaidState()
+	for i := 0; i < 50; i++ {
+		rs.noteWordHit(SeveritySevere)
+		rs.noteWordHit(SeverityDefault)
+		rs.noteWordHit(SeverityWatch)
+	}
+	score, signals, _ := rs.snapshot()
+	want := signalWeight(SigSlurSevere) + signalWeight(SigSlurFlagged)
+	if score != want {
+		t.Errorf("score after 50 rounds of repeated severe+default+watch hits = %d, want %d "+
+			"(SigSlurSevere and SigSlurFlagged each firing exactly once); signals=%v", score, want, signals)
+	}
+}
+
+// TestRaidGuardOnWordHitNoop checks the wire hook is inert for a nil client,
+// for an unmatched WordListMatch, and for a nuke-tier match -- none of those
+// three should so much as allocate a raidState, mirroring how the other wire
+// hooks treat their own do-nothing inputs (TestWireFeatureGateOff).
+func TestRaidGuardOnWordHitNoop(t *testing.T) {
+	withWiring(t)
+
+	// A nil client must never panic, and there is nothing to allocate into.
+	raidGuardOnWordHit(nil, WordListMatch{Matched: true, Entry: WordEntry{Severity: SeveritySevere}})
+
+	c := wireTestClient(t, "wordhit-noop-ipid", 0)
+	raidGuardOnWordHit(c, WordListMatch{Matched: false, Entry: WordEntry{Severity: SeveritySevere}})
+	c.mu.Lock()
+	rs := c.raid
+	c.mu.Unlock()
+	if rs != nil {
+		t.Error("an unmatched WordListMatch allocated raid-guard state")
+	}
+
+	raidGuardOnWordHit(c, WordListMatch{Matched: true, Entry: WordEntry{Severity: SeverityNuke}})
+	c.mu.Lock()
+	rs = c.raid
+	c.mu.Unlock()
+	if rs != nil {
+		t.Error("a nuke-tier match allocated raid-guard state through the wire hook -- nuke must never reach " +
+			"the raid guard's scoring engine")
+	}
+}
+
+// TestRaidGuardOnWordHitFires checks a real severe match reaches the engine
+// through the wire hook, and is evaluated (not merely recorded): a lone
+// severe slur is exactly heavy enough to reach VerdictWatch and no further,
+// so that is what the hook's own escalation bookkeeping should land on.
+func TestRaidGuardOnWordHitFires(t *testing.T) {
+	withWiring(t)
+	c := wireTestClient(t, "wordhit-fires-ipid", 0)
+	raidGuardOnWordHit(c, WordListMatch{Matched: true, Entry: WordEntry{Raw: "test", Severity: SeveritySevere}})
+
+	rs := c.raidGuard()
+	if rs == nil || !rs.firedSignal(SigSlurSevere) {
+		t.Fatal("a matched severe word-list hit did not fire SigSlurSevere through the wire hook")
+	}
+	if _, _, acted := rs.snapshot(); acted != VerdictWatch {
+		t.Errorf("acted verdict after one severe slur = %v, want watch (the only level a lone slur signal "+
+			"can ever reach)", acted)
+	}
+}

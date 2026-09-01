@@ -90,6 +90,8 @@ const (
 	SigFastFirstSpeech
 	SigShoutySpam
 	SigGlobalSpam
+	SigSlurSevere
+	SigSlurFlagged
 	numRaidSignals
 )
 
@@ -174,6 +176,54 @@ var raidSignalWeight = [numRaidSignals]int{
 	// can tip a borderline case, never enough to matter on their own.
 	SigShoutySpam: 10,
 	SigGlobalSpam: 10,
+	// A word-list hit at SeveritySevere (word_severity.go). Saying something
+	// vile is strong evidence of intent -- but on its own it is exactly zero
+	// evidence of a coordinated FAN-OUT, which is the thing this whole file
+	// exists to catch, so it does not get to skip the design rules the other
+	// ten signals live under. Weighted to match SigDupeAcrossIPIDs (45)
+	// deliberately: a severe slur plus one other independent signal reaches a
+	// punitive rung at the strict tier exactly as two ordinary signals would,
+	// but the slur alone still only ever reaches watch (see
+	// TestSlurAloneNeverPunishes) -- rule 1 does not bend for this signal.
+	//
+	// This is a HEURISTIC signal, scored and gated exactly like every other one
+	// in this file: it accumulates toward a verdict, it is capped by the
+	// playtime tiers, it counts toward minSignalsToDisconnect, and it can never
+	// arm a ban on its own or in a pair (raidBanAllowed still requires
+	// SigDupeAcrossIPIDs). That is a deliberately different thing from what
+	// SeverityNuke does: a nuke-tier word ends the connection immediately and
+	// deterministically through AutoMod's own path, before this file is ever
+	// consulted -- see the SeverityNuke case below and word_severity.go's own
+	// doc comment. Keeping "said a bad word" (probabilistic, scored, gated) and
+	// "said THE word" (deterministic, instant, ungated) as two separate
+	// mechanisms is what keeps this file's whole safety story intact; folding
+	// nuke-tier hits into this scoring engine would quietly reintroduce a path
+	// where a single signal decides an irreversible outcome.
+	// Weighted at 40 for one arithmetic reason worth stating explicitly, because
+	// it is easy to raise this number without noticing what it buys: the
+	// challenge threshold at the strict tier is 60 * 70% = 42, so anything at or
+	// above 42 would let a single flagged word, with no other evidence
+	// whatsoever, act on a brand-new connection. 40 sits just under that line,
+	// which keeps "a slur alone never rises above an alert" true at EVERY tier
+	// rather than approximately true -- and it costs nothing in practice,
+	// because 40 plus literally any other signal (even shouty spam at 10)
+	// clears 42 and reaches the captcha rung. That composite -- a new
+	// connection re-rolling characters, shouting on every line, speaking a
+	// second after joining, AND saying something flagged -- is the thing this
+	// signal exists to catch; the word on its own is not.
+	SigSlurSevere: 40,
+	// A word-list hit at SeverityDefault or SeverityWatch: an entry the
+	// operator marked as worth feeding the score, not as automatically
+	// punishable in its own right -- SeverityWatch in particular is not even
+	// actionable through AutoMod by word_severity.go's own contract. Weighted
+	// below the watch threshold at every tier, matching SigEchoedAcrossIPIDs
+	// (25): on its own this signal does not even alert, it only adds weight to
+	// a connection that is already behaving oddly some other way.
+	//
+	// SeverityNuke intentionally maps to NEITHER of these two signals -- see
+	// raidGuardOnWordHit (raidguard_wire.go), which no-ops on it before this
+	// file's scoring engine is ever reached.
+	SigSlurFlagged: 20,
 }
 
 // raidSignalName labels a signal for staff alerts and the audit log.
@@ -189,6 +239,8 @@ var raidSignalName = [numRaidSignals]string{
 	SigFastFirstSpeech:   "spoke instantly after joining",
 	SigShoutySpam:        "shouted repetitive all-caps",
 	SigGlobalSpam:        "global-channel spam while brand new",
+	SigSlurSevere:        "said something severely flagged",
+	SigSlurFlagged:       "said something flagged",
 }
 
 // Verdict is the strongest action a score justifies. Ordered by severity; the
@@ -296,8 +348,36 @@ func (rs *raidState) markFired(k SignalKind) bool {
 		return false
 	}
 	rs.fired |= bit
-	rs.score += raidSignalWeight[k]
+	rs.score += signalWeight(k)
 	return true
+}
+
+// signalWeight is what markFired actually charges for a signal. It is a
+// thin override on top of raidSignalWeight for the two signals that are
+// configurable at runtime (raid_guard_slur_severe_weight,
+// raid_guard_slur_flagged_weight) -- everything else keeps reading the plain
+// array. Factored out rather than making raidSignalWeight itself dynamic so
+// the array stays what it has always been: a fixed table other code (staff
+// alerts naming a signal's weight, the safety tests pinning the SHIPPED
+// defaults) can read directly without caring whether config is loaded.
+func signalWeight(k SignalKind) int {
+	// config itself may be nil (unset in a test, or read before startup has
+	// loaded one) -- checked here rather than left to raidGuardInt, because
+	// raidGuardInt's own nil check runs too late: its argument, a field read
+	// off config, is evaluated by the CALLER before raidGuardInt is even
+	// entered, so a nil config would already have faulted by the time the
+	// function's own guard could matter.
+	if config == nil {
+		return raidSignalWeight[k]
+	}
+	switch k {
+	case SigSlurSevere:
+		return raidGuardInt(config.RaidGuardSlurSevereWeight, raidSignalWeight[SigSlurSevere])
+	case SigSlurFlagged:
+		return raidGuardInt(config.RaidGuardSlurFlaggedWeight, raidSignalWeight[SigSlurFlagged])
+	default:
+		return raidSignalWeight[k]
+	}
 }
 
 func (rs *raidState) hasFired(k SignalKind) bool {
@@ -447,6 +527,29 @@ func (rs *raidState) noteEchoed() (fired bool) {
 	rs.mu.Lock()
 	defer rs.mu.Unlock()
 	return rs.markFired(SigEchoedAcrossIPIDs)
+}
+
+// noteWordHit folds one word-list match's severity into this connection's
+// evidence. SeveritySevere and SeverityDefault/SeverityWatch map onto the two
+// signals above it; SeverityNuke maps onto neither -- a nuke fires nothing
+// here because it is never passed in at all (see raidGuardOnWordHit in
+// raidguard_wire.go, which no-ops on it before this method is reached). Like
+// every other note* method, each of the two signals still fires at most once
+// per connection no matter how many matching messages arrive.
+func (rs *raidState) noteWordHit(sev WordSeverity) (fired []SignalKind) {
+	rs.mu.Lock()
+	defer rs.mu.Unlock()
+	switch sev {
+	case SeveritySevere:
+		if rs.markFired(SigSlurSevere) {
+			fired = append(fired, SigSlurSevere)
+		}
+	case SeverityDefault, SeverityWatch:
+		if rs.markFired(SigSlurFlagged) {
+			fired = append(fired, SigSlurFlagged)
+		}
+	}
+	return fired
 }
 
 // snapshot returns the current score and fired-signal names.
