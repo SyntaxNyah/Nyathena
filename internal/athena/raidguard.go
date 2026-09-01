@@ -721,12 +721,69 @@ func raidGuardTier(client *Client) (scalePct int, punishable bool) {
 		return 0, false
 	}
 	if l := config.RaidGuardLenientPlaytime; l > 0 && !lockdownPurgeEligible(secs, int64(l)*60) {
-		return raidGuardInt(config.RaidGuardLenientScale, 200), true
+		return raidGuardUnderAttackScale(raidGuardInt(config.RaidGuardLenientScale, 200)), true
 	}
 	if st := config.RaidGuardStrictPlaytime; st > 0 && lockdownPurgeEligible(secs, int64(st)*60) {
-		return raidGuardInt(config.RaidGuardStrictScale, 70), true
+		return raidGuardUnderAttackScale(raidGuardInt(config.RaidGuardStrictScale, 70)), true
 	}
-	return raidGuardScaleBase, true
+	return raidGuardUnderAttackScale(raidGuardScaleBase), true
+}
+
+// raidGuardUnderAttackScale tightens a connection's thresholds for as long as
+// the server is demonstrably under coordinated attack, and returns base
+// unchanged the rest of the time.
+//
+// The problem it solves is a floor the per-connection design has by
+// construction: scoring needs a message to score, so a raider's FIRST message
+// reaches the room before anything is known about them. Multiply that by the
+// number of connections in a fan-out and it is the bulk of what actually gets
+// through -- not a detection failure, a latency floor. Measured against real
+// captures the guard already acts on essentially every raiding connection; it
+// simply acts one or two messages in, and those messages are the leak.
+//
+// Server-wide evidence arrives far sooner than any individual connection's
+// score does, because arrival bursts and cross-IPID correlation are visible
+// within a fraction of a second of a fan-out starting. This uses that: once the
+// server knows a raid is happening, a connection needs proportionally less of
+// its own evidence before the guard acts on it, so verdicts that would have
+// landed on message two or three land on message one instead -- and, because
+// the guard scores before the delivery switch in pktIC, message one is then
+// suppressed rather than delivered.
+//
+// Three properties keep this from becoming a false-positive machine, and they
+// are the reason it is safe to be aggressive here at all:
+//
+//  1. It NEVER creates evidence, it only lowers the bar for evidence a
+//     connection already produced on its own. A connection with a score of zero
+//     stays at zero and is untouchable at any scale; scaling multiplies the
+//     threshold, not the score. Every ordinary player who simply talks during a
+//     raid is in exactly that position.
+//  2. It requires raidGuardUnderAttack(), which needs either cross-IPID content
+//     correlation or an arrival burst -- neither reachable by one person acting
+//     alone, however oddly they behave. A quiet evening never enters this mode,
+//     so the cost on normal traffic is not "small", it is structurally zero.
+//  3. It is multiplicative over the playtime tier rather than a replacement, so
+//     the tiers keep their ordering: an established player still needs
+//     proportionally more evidence than a brand-new connection, and the fully
+//     exempt tiers stay exempt because raidGuardTier returns before reaching
+//     this at all.
+//
+// It also lapses on its own -- raidAttackHold after the last piece of evidence
+// -- so a finished raid restores normal thresholds without anybody touching a
+// setting.
+func raidGuardUnderAttackScale(base int) int {
+	if base <= 0 || !raidGuardUnderAttack() {
+		return base
+	}
+	pct := raidGuardInt(config.RaidGuardUnderAttackScale, 70)
+	if pct >= raidGuardScaleBase {
+		return base // configured off, or configured to loosen -- never loosen
+	}
+	scaled := base * pct / raidGuardScaleBase
+	if scaled < 1 {
+		scaled = 1
+	}
+	return scaled
 }
 
 // isShoutySpam reports the combined all-caps shape: long, overwhelmingly

@@ -725,3 +725,90 @@ func TestRaidGuardOnWordHitFires(t *testing.T) {
 			"can ever reach)", acted)
 	}
 }
+
+// TestUnderAttackScaleOnlyTightens pins the direction: the raid-mode multiplier
+// may make thresholds harder to sit under, never easier. A misconfigured value
+// above 100 must be ignored rather than quietly loosening the guard during the
+// exact incident it exists for.
+func TestUnderAttackScaleOnlyTightens(t *testing.T) {
+	withRaidConfig(t)
+	resetRaidGuardState()
+	t.Cleanup(resetRaidGuardState)
+
+	// Not under attack: the base scale is returned untouched, whatever is set.
+	for _, pct := range []int{50, 70, 100, 150} {
+		config.RaidGuardUnderAttackScale = pct
+		if got := raidGuardUnderAttackScale(70); got != 70 {
+			t.Errorf("pct=%d: scale changed to %d while NOT under attack; raid mode must be inert on a "+
+				"quiet server", pct, got)
+		}
+	}
+
+	markRaidAttack(time.Now())
+	config.RaidGuardUnderAttackScale = 70
+	if got := raidGuardUnderAttackScale(100); got != 70 {
+		t.Errorf("under attack: baseline scale became %d, want 70", got)
+	}
+	// Multiplicative over the tier, so the tier ordering survives.
+	strict := raidGuardUnderAttackScale(70)
+	lenient := raidGuardUnderAttackScale(200)
+	if !(strict < lenient) {
+		t.Errorf("raid mode collapsed the playtime tiers: strict=%d lenient=%d; an established player must "+
+			"still need proportionally more evidence than a brand-new connection", strict, lenient)
+	}
+	// A value at or above 100 must never loosen anything.
+	for _, pct := range []int{100, 150, 1000} {
+		config.RaidGuardUnderAttackScale = pct
+		if got := raidGuardUnderAttackScale(70); got != 70 {
+			t.Errorf("pct=%d under attack: scale became %d; raid mode must never loosen a threshold", pct, got)
+		}
+	}
+}
+
+// TestUnderAttackNeverActsWithoutEvidence is the safety property the whole
+// mechanism rests on. Raid mode multiplies the THRESHOLD, never the score, so a
+// connection that has produced no evidence of its own is untouchable at any
+// scale -- which is the position every ordinary player talking during a raid is
+// in.
+func TestUnderAttackNeverActsWithoutEvidence(t *testing.T) {
+	withRaidConfig(t)
+	resetRaidGuardState()
+	t.Cleanup(resetRaidGuardState)
+	markRaidAttack(time.Now())
+
+	for _, pct := range []int{70, 50, 25, 1} {
+		config.RaidGuardUnderAttackScale = pct
+		scale := raidGuardUnderAttackScale(raidGuardInt(config.RaidGuardStrictScale, 70))
+		if v := verdictForTier(0, scale); v != VerdictClean {
+			t.Errorf("pct=%d: a connection with score 0 reached %v during raid mode; scaling must never "+
+				"manufacture evidence", pct, v)
+		}
+	}
+}
+
+// TestUnderAttackDoesNotBypassTheBanGate keeps raid mode away from the one
+// invariant that matters most: it can bring a verdict forward, and it still
+// cannot turn a score into a ban without the cross-IPID corroboration
+// raidBanAllowed demands.
+func TestUnderAttackDoesNotBypassTheBanGate(t *testing.T) {
+	withRaidConfig(t)
+	resetRaidGuardState()
+	t.Cleanup(resetRaidGuardState)
+	markRaidAttack(time.Now())
+	config.RaidGuardUnderAttackScale = 50
+
+	rs := newRaidState()
+	rs.markFired(SigHandshakeAnomaly)
+	rs.markFired(SigObjectionSpam)
+	rs.markFired(SigOOCNameChurn)
+	score, _, _ := rs.snapshot()
+	scale := raidGuardUnderAttackScale(raidGuardInt(config.RaidGuardStrictScale, 70))
+
+	if v := verdictForTier(score, scale); v < VerdictBan {
+		t.Logf("score %d at scale %d yields %v (informational)", score, scale, v)
+	}
+	if raidBanAllowed(rs.hasFired(SigDupeAcrossIPIDs), raidGuardUnderAttack()) {
+		t.Error("raid mode let a ban through without SigDupeAcrossIPIDs; the corroboration requirement " +
+			"must hold regardless of how tight the thresholds get")
+	}
+}
