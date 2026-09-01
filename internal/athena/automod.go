@@ -467,14 +467,26 @@ func autoModCheck(client *Client, msg string, source string) (result autoModResu
 // what keeps this backward compatible with every existing caller and test
 // that only ever populates bannedWords via setBannedWords (giveaway's item
 // filter reads it directly too, independently of this function) -- and in
-// production the two lists are loaded from the very same file by initAutoMod,
-// so the only entries the wrap adds beyond what loadWordListEntries already
-// covers are harmless: an unmarked line produces the identical
-// SeverityDefault/MatchSubstring entry either way, and a tiered line (e.g.
-// "tranny | nuke") produces an inert, gibberish whole-line-normalized string
-// via the flat loader ("trannynuke") that no real message will ever contain,
-// sitting alongside the real "tranny" nuke entry the tiered loader produced
-// for the same line.
+// production the two lists are loaded from the very same file by initAutoMod.
+//
+// A legacy entry is therefore SKIPPED when the tiered list already covers the
+// same needle, and that skip is load-bearing rather than an optimisation.
+// Legacy entries carry no tier, so they are stamped SeverityDefault; without
+// the skip, every entry in the file appears TWICE -- once at the tier the
+// operator chose, and once at SeverityDefault -- and since matchWordEntries
+// returns the WORST match, any tier gentler than default is silently
+// overridden. A file full of "watch" entries, which must never punish anybody,
+// instead took the configured automod_action: on a server set to "torment"
+// that meant dropping the message, torment-listing the IPID and kicking the
+// connection, for words the operator had explicitly marked alert-only.
+//
+// This was not hypothetical. It shipped, and it hit real players on a live
+// server saying ordinary things, because two separately-reasonable changes
+// combined badly: loadWordListFile began stripping the "| tier | mode" suffix
+// (so /giveaway would still filter a word defined only with a tier), which
+// turned what used to be an inert whole-line needle ("retardwatch", matching
+// nothing) into the real word at default severity. Each change was right on
+// its own; together they defeated the entire tier system.
 //
 // Built fresh on every call rather than cached, since either source list can
 // be swapped out from under it at any time (by /reload, or by a test); the
@@ -486,10 +498,19 @@ func effectiveWordEntries() []WordEntry {
 	if len(legacy) == 0 {
 		return tiered
 	}
+	covered := make(map[string]struct{}, len(tiered))
+	for _, e := range tiered {
+		covered[e.Pattern] = struct{}{}
+	}
 	entries := make([]WordEntry, 0, len(tiered)+len(legacy))
 	entries = append(entries, tiered...)
 	for _, w := range legacy {
 		if w == "" {
+			continue
+		}
+		if _, dup := covered[w]; dup {
+			// Already present at the operator's chosen tier. Re-adding it at
+			// SeverityDefault would override anything gentler.
 			continue
 		}
 		entries = append(entries, WordEntry{Raw: w, Pattern: w, Severity: SeverityDefault, Mode: MatchSubstring})
