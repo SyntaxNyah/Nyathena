@@ -92,8 +92,8 @@ var punishmentHelpGroups = []punishmentSubcategory{
 	},
 	{
 		emoji: "☣️", title: "Traps & contagion",
-		desc: "Punishments that move on their own: plagues, mines, area traps, and the silent treatment.",
-		cmds: []string{"contagious", "minefield", "silencebell", "stealthmute"},
+		desc: "Punishments that move on their own: plagues, mines, area traps, random warps, and the silent treatment.",
+		cmds: []string{"contagious", "minefield", "randomarea", "silencebell", "stealthmute"},
 	},
 	{
 		emoji: "🔊", title: "Audio / SFX",

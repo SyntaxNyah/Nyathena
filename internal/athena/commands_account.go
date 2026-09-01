@@ -653,11 +653,22 @@ func cmdProfile(client *Client, args []string, _ string) {
 		displayName = "(no character selected)"
 	}
 
-	// Look up any linked account username for this IPID. This works whether or
-	// not the target is currently authenticated, falling back to "(guest)".
+	// Look up any linked account username for this IPID. Viewing your own
+	// profile always resolves it (it's your own information, and it's a
+	// handy way to check whether this connection is tied to an account at
+	// all). Viewing someone else's profile only resolves it if THEY are
+	// currently authenticated (ran /login or /register this connection) —
+	// an IPID can stay linked to an account from a past session long after
+	// that session ends, and showing the account name from that residual
+	// link would out an anonymous-looking player as a specific known
+	// account without their say-so. Logging in is an explicit statement
+	// "yes, this connection is me"; a stale IPID link is not.
+	isSelfProfile := target == client
 	username := "(guest)"
-	if u, err := db.GetUsernameByIPID(target.Ipid()); err == nil && u != "" {
-		username = u
+	if isSelfProfile || target.Authenticated() {
+		if u, err := db.GetUsernameByIPID(target.Ipid()); err == nil && u != "" {
+			username = u
+		}
 	}
 
 	// Chips + playtime: pulled from the account-stats table; session time is

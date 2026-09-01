@@ -1013,6 +1013,8 @@ func parsePunishmentType(s string) PunishmentType {
 		return PunishmentMinefield
 	case "stealthmute":
 		return PunishmentStealthMute
+	case "randomarea":
+		return PunishmentRandomArea
 	default:
 		return PunishmentNone
 	}

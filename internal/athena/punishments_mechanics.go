@@ -222,7 +222,7 @@ func cmdContagious(client *Client, args []string, usage string) {
 	case PunishmentNone:
 		client.SendServerMessage(fmt.Sprintf("Unknown punishment type: %v", flags.Arg(0)))
 		return
-	case PunishmentContagious, PunishmentLag, PunishmentMinefield, PunishmentLifo, PunishmentStealthMute:
+	case PunishmentContagious, PunishmentLag, PunishmentMinefield, PunishmentLifo, PunishmentStealthMute, PunishmentRandomArea:
 		client.SendServerMessage(fmt.Sprintf("'%v' cannot be made contagious.", pType.String()))
 		return
 	}
@@ -436,7 +436,7 @@ func cmdSilencebell(client *Client, args []string, usage string) {
 			return
 		}
 		switch pick {
-		case PunishmentContagious, PunishmentLag, PunishmentMinefield, PunishmentLifo, PunishmentStealthMute:
+		case PunishmentContagious, PunishmentLag, PunishmentMinefield, PunishmentLifo, PunishmentStealthMute, PunishmentRandomArea:
 			client.SendServerMessage(fmt.Sprintf("'%v' cannot be loaded into the bell.", pick.String()))
 			return
 		}
