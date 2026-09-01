@@ -823,20 +823,40 @@ ip_retention_days = 0
 # Default: "web.aceattorneyonline.com"
 webao_allowed_origin = "web.aceattorneyonline.com"
 
-# AutoMod: Automatically bans any player who sends a message (IC or OOC) that contains
-# a word from the banned-word list. The ban is permanent and silent — no entry is posted
-# to the punishment webhook, keeping your moderation channel free from noise.
-# Set to true to enable. Default: false.
+# AutoMod: Automatically acts on any player who sends a message (IC or OOC),
+# uses a showname, or picks an OOC username that contains a word from the
+# banned-word list. The word filter itself always runs once a wordlist is
+# loaded (see automod_wordlist below); this toggle only gates the punitive
+# action tier (automod_action) — with it off, a trip still falls back to the
+# safe shadow-drop behaviour rather than doing nothing.
+# Set to true to enable full enforcement. Default: false.
 automod_enabled = false
 
 # Path to the banned-words file, relative to the config directory.
-# Each non-empty line is one word or phrase (case-insensitive). Lines beginning
-# with '#' are treated as comments. Default: "banned_words.txt".
+# Each non-empty line is one entry; lines beginning with '#' are comments.
+# An entry is just a word or phrase (case-insensitive) — that alone is fully
+# backward compatible and gets automod_action below applied to it — but can
+# optionally carry a severity tier and a match mode, '|'-separated:
+#
+#   word | tier | mode
+#
+# e.g. "tranny | nuke" (destroy the message and ban outright, no matter what
+# automod_action says) or "rape | severe | word" (matches the whole word
+# "rape" and its stem-preserving inflections, without also matching inside
+# "therapeutic" the way plain substring matching would, which is why that
+# entry needs "word" mode to load at all). See banned_words.txt itself for
+# the full syntax reference and the complete tier/mode table.
+# Default: "banned_words.txt".
 automod_wordlist = "banned_words.txt"
 
-# Action to take when the AutoMod detects a banned word in a player's message.
-# Whatever the action, every trip also alerts online moderators in OOC (each
-# mod can silence the alerts for their session with /censoralerts off).
+# Action to take when the AutoMod detects a "default"-tier (i.e. untiered, or
+# explicitly "| default") banned-word match. Whatever the action, every trip
+# also alerts online moderators in OOC (each mod can silence the alerts for
+# their session with /censoralerts off). A "severe"-tier match takes this
+# same action, plus a large raid-guard score contribution; a "watch"-tier
+# match is delivered normally and only alerts/scores; a "nuke"-tier match
+# ignores this setting entirely — see automod_wordlist above and
+# automod_nuke_ban_duration below.
 # Accepted values:
 #   "shadow"  — (default) Shadow-send the censored message: it is echoed back
 #               to the sender so their client shows it as sent, but no other
@@ -851,6 +871,18 @@ automod_wordlist = "banned_words.txt"
 #               they connect, making the experience deeply unpleasant without
 #               a hard ban. Use /untorment <ipid|all> to lift.
 automod_action = "shadow"
+
+# How long a "nuke"-tier banned-word match (see automod_wordlist above) bans
+# the offending IPID for. A nuke destroys the message before anyone —
+# including the sender — sees it, and bans unconditionally; this setting only
+# controls the ban's length, never whether it happens.
+# Accepts a duration string ("30m", "3d", "2h30m", ...) or the literal
+# "permanent" for an unappealable-by-time-alone ban. An unparseable value
+# falls back to permanent (with a startup warning) rather than to some
+# arbitrary short ban, since a word an operator put in the nuke tier is one
+# they explicitly asked to be treated as the harshest case.
+# Default: "permanent".
+automod_nuke_ban_duration = "permanent"
 
 # /randomsong cooldown: Tiered minimum seconds between uses of /randomsong.
 #   random_song_cooldown      — regular users (default 20)

@@ -198,6 +198,33 @@ func raidGuardCorrelate(rs *raidState, ipid, text string, now time.Time) (fired 
 	return fired
 }
 
+// raidGuardOnWordHit folds a word-list match into this connection's evidence.
+// Called from pktIC/pktOOC by the lead's code.
+//
+// SeverityNuke is checked and skipped here, not merely left to fall through:
+// a nuke-tier hit bans the connection outright via AutoMod's own deterministic
+// path (word_severity.go) before this file would ever have a say, and scoring
+// a connection that is already being banned is pointless. Everything this
+// function DOES pass on to the engine -- SeveritySevere and
+// SeverityDefault/SeverityWatch -- is a heuristic signal like any other in
+// this file: scored, tiered, and never by itself enough to disconnect or ban
+// anyone. See the SigSlurSevere/SigSlurFlagged doc comments in raidguard.go.
+func raidGuardOnWordHit(client *Client, m WordListMatch) {
+	if raidGuardExempt(client) {
+		return
+	}
+	if !m.Matched || m.Entry.Severity == SeverityNuke {
+		return
+	}
+	rs := client.raidGuard()
+	if rs == nil {
+		return
+	}
+	if fired := rs.noteWordHit(m.Entry.Severity); len(fired) > 0 {
+		raidGuardEvaluate(client, rs, "flagged word")
+	}
+}
+
 // raidGuardOnOOC mirrors raidGuardOnIC for OOC chat. Called from pktOOC only
 // once a plain (non-command) message has cleared the automod/censor checks
 // and is about to reach the room via the normal broadcast path -- a

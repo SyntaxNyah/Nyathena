@@ -104,6 +104,8 @@ type ServerConfig struct {
 	RaidGuardCorrMaxEntries              int      `toml:"raid_guard_corr_max_entries"`
 	RaidGuardArrivalBurst                int      `toml:"raid_guard_arrival_burst"`
 	RaidGuardAutoLockdown                bool     `toml:"raid_guard_auto_lockdown"`
+	RaidGuardSlurSevereWeight            int      `toml:"raid_guard_slur_severe_weight"`
+	RaidGuardSlurFlaggedWeight           int      `toml:"raid_guard_slur_flagged_weight"`
 	ModcallCooldown                      int      `toml:"modcall_cooldown"`
 	ConnRateLimit                        int      `toml:"connection_rate_limit"`
 	ConnRateLimitWindow                  int      `toml:"connection_rate_limit_window"`
@@ -126,6 +128,7 @@ type ServerConfig struct {
 	AutoModEnabled                       bool     `toml:"automod_enabled"`
 	AutoModWordlist                      string   `toml:"automod_wordlist"`
 	AutoModAction                        string   `toml:"automod_action"`
+	AutoModNukeBanDuration               string   `toml:"automod_nuke_ban_duration"`
 	RandomSongCooldown                   int      `toml:"random_song_cooldown"`
 	RandomSongCooldownDJ                 int      `toml:"random_song_cooldown_dj"`
 	RandomSongCooldownMod                int      `toml:"random_song_cooldown_mod"`
@@ -340,6 +343,8 @@ func DefaultConfig() *Config {
 			RaidGuardCorrMaxEntries:              4096,
 			RaidGuardArrivalBurst:                12,
 			RaidGuardAutoLockdown:                false,
+			RaidGuardSlurSevereWeight:            40,
+			RaidGuardSlurFlaggedWeight:           20,
 			ModcallCooldown:                      0,
 			ConnRateLimit:                        10,
 			ConnRateLimitWindow:                  10,
@@ -362,6 +367,7 @@ func DefaultConfig() *Config {
 			AutoModEnabled:                       false,
 			AutoModWordlist:                      "banned_words.txt",
 			AutoModAction:                        "shadow",
+			AutoModNukeBanDuration:               "permanent",
 			RandomSongCooldown:                   20,
 			RandomSongCooldownDJ:                 5,
 			RandomSongCooldownMod:                0,

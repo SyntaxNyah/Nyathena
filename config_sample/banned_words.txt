@@ -1,10 +1,96 @@
-# Banned Words List for Athena AutoMod
+# Banned Words List for Nyathena AutoMod
 #
-# Add one word or phrase per line. Lines starting with '#' are comments.
-# Matching is case-insensitive. A player whose IC or OOC message contains
-# any entry here will be permanently banned automatically — no webhook is
-# posted for these bans to keep your punishment channel free from noise.
+# One entry per line. Lines starting with '#' are comments; blank lines are
+# ignored. Matching is Unicode-confusable- and leetspeak-insensitive (see
+# CLAUDE.md's "AutoMod" section) — stylized letters, accents, homoglyphs and
+# digit substitutions are all normalized away before an entry is compared
+# against a message.
 #
-# Examples (fill in your own list below):
+# ---------------------------------------------------------------------------
+# Syntax: word | tier | mode
+# ---------------------------------------------------------------------------
+#
+# Only the word itself is required. Fields are '|'-separated and trimmed, so
+# an entry with no '|' at all behaves exactly as a plain flat list always has:
+#
+#   badword                    -> tier "default", mode "substring"
+#   tranny | nuke              -> tier "nuke",    mode "substring"
+#   rape | severe | word       -> tier "severe",  mode "word"
+#   mildthing | watch          -> tier "watch",   mode "substring"
+#
+# TIER (2nd field) — how hard automod comes down when this entry matches:
+#
+#   watch     Delivered normally — never blocked, muted, kicked or banned on
+#             its own. Still alerts staff in OOC and still feeds the raid
+#             guard's scoring. Use this for words that are only worth
+#             knowing about, or that are only meaningful combined with other
+#             signals from the same connection.
+#   default   (same as leaving the tier off) Whatever automod_action says
+#             (shadow / kick / mute / torment / ban — see config.toml).
+#             This is the right tier for the great majority of entries.
+#   severe    The configured automod_action, exactly like "default", plus a
+#             large contribution to the raid guard's behavioural score —
+#             large enough that one more independent signal from the same
+#             connection is enough to reach a punitive rung. Use this for
+#             words that are a serious red flag but where you still want the
+#             configured action (e.g. shadow-drop + torment-list) rather
+#             than an unconditional ban.
+#   nuke      The message is destroyed before ANYONE sees it — including the
+#             sender, unlike every other tier/action — and the IPID is
+#             banned immediately (automod_nuke_ban_duration in config.toml
+#             controls how long; default permanent). No staff judgment call,
+#             no configured action, no raid-guard score: an operator who
+#             nukes a word is saying "there is nothing to weigh up here."
+#             Reserve this tier for words you never want a defensible reason
+#             to have typed on your server.
+#
+# MODE (3rd field, only meaningful together with a tier) — how the entry is
+# compared against a message:
+#
+#   substring  (default) Matches anywhere inside the message, after every
+#              separator and digit substitution has been stripped out. This
+#              is what makes the filter hard to evade — but it also means
+#              word boundaries do not exist by match time, so a substring
+#              entry can accidentally match INSIDE an unrelated, innocent
+#              word. Entries that do this are rejected at load time (see
+#              below) rather than silently causing false positives.
+#   word       Matches only a whole word (and the inflections that keep its
+#              stem intact — "rape" also catches "rapes"/"raped", but not
+#              "raping" or "therapist", which change the stem). The trade
+#              is that spacing evasion ("r a p e") works against it, so this
+#              mode suits words too generic to ever be usable as a substring.
+#
+# --- Worked example: why "word" mode exists ------------------------------
+#
+# Every entry — with or without a tier — is still run through the same
+# safety gates loadWordListFile has always applied: too-short entries and
+# entries that would collide with an ordinary English word are rejected at
+# startup/`/reload`, with a warning naming the entry, rather than silently
+# creating a false-positive machine.
+#
+#   rape | severe | word
+#
+# Try to list "rape" as a plain substring entry (no tier, or "| severe" with
+# no third field) and it gets rejected: normalized, "rape" is a substring of
+# "therapeutic", so loading it as a substring entry would censor every
+# message that so much as mentions a massage. That is the collision the
+# safety gate exists to catch, and until word mode existed, it meant a word
+# an operator obviously wanted blocked was simply unavailable to them.
+#
+# "word" mode is the fix: matching only whole words (and the inflections
+# that keep the stem, so "raped"/"rapes" are still caught) means "rape" can
+# never fire inside "therapeutic" in the first place, so the collision gate
+# that protects substring mode doesn't need to run for it at all. List the
+# word in word mode and the entry loads.
+#
+# ---------------------------------------------------------------------------
+#
+# Every example below is commented out — this file ships with NO live
+# entries. Uncomment and adapt for your own server; check the startup or
+# /reload log for warnings naming any entry that was skipped.
+#
 # badword
 # offensive phrase
+# tranny | nuke
+# rape | severe | word
+# mildthing | watch
