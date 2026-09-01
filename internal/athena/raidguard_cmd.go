@@ -113,8 +113,12 @@ func raidGuardStatus(client *Client) {
 		attack = "YES — a raid has been detected in the last raidAttackHold window"
 	}
 	sb.WriteString(fmt.Sprintf("\nUnder attack right now: %s.\n", attack))
-	sb.WriteString(fmt.Sprintf("Correlation window: %d fingerprint(s) currently tracked (need %d distinct IPIDs on one to corroborate, %ds window).\n",
-		corrLen, raidGuardInt(config.RaidGuardCorrIPIDs, 4), raidGuardInt(config.RaidGuardCorrWindow, 10)))
+	_, weak, strong := raidCorrThresholds()
+	sb.WriteString(fmt.Sprintf("Correlation window: %d fingerprint(s) currently tracked over %v "+
+		"(%d distinct IPIDs on one line = echo, %d = corroborated).\n",
+		corrLen, raidCorrWindowLen(), weak, strong))
+	sb.WriteString(fmt.Sprintf("Echo breadth: %d distinct line(s) echoing across IPIDs right now (%d marks the server under attack).\n",
+		raidGuardEchoBreadth(), raidCorrBreadth()))
 
 	// Connected clients the engine currently has anything recorded for.
 	type row struct {

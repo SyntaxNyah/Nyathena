@@ -173,12 +173,29 @@ func raidGuardOnIC(client *Client, ms *packet.MSPacket, text string) {
 		SinceCharPick: sinceCharPick,
 		Now:           now,
 	})
-	if raidObserveContent(client.Ipid(), text, now) && rs.noteCorrelated() {
-		fired = append(fired, SigDupeAcrossIPIDs)
-	}
+	fired = append(fired, raidGuardCorrelate(rs, client.Ipid(), text, now)...)
 	if len(fired) > 0 {
 		raidGuardEvaluate(client, rs, "IC message")
 	}
+}
+
+// raidGuardCorrelate feeds one message to the server-wide layer and folds
+// whatever it says back into this connection's evidence. Written once and shared
+// by the IC and OOC hooks so the two channels can never drift apart on which
+// half of the graded corroboration they record -- the fan-out being detected
+// does not care which channel it arrived on, and neither should this.
+func raidGuardCorrelate(rs *raidState, ipid, text string, now time.Time) (fired []SignalKind) {
+	echoed, corroborated := raidObserveContent(ipid, text, now)
+	if corroborated && rs.noteCorrelated() {
+		fired = append(fired, SigDupeAcrossIPIDs)
+	}
+	// Recorded even when the strong signal already fired: they are separate
+	// pieces of evidence with separate weights, and only the strong one is
+	// allowed anywhere near the ban gate.
+	if echoed && rs.noteEchoed() {
+		fired = append(fired, SigEchoedAcrossIPIDs)
+	}
+	return fired
 }
 
 // raidGuardOnOOC mirrors raidGuardOnIC for OOC chat. Called from pktOOC only
@@ -206,9 +223,7 @@ func raidGuardOnOOC(client *Client, oocName, text string) {
 		SinceCharPick: sinceCharPick,
 		Now:           now,
 	})
-	if raidObserveContent(client.Ipid(), text, now) && rs.noteCorrelated() {
-		fired = append(fired, SigDupeAcrossIPIDs)
-	}
+	fired = append(fired, raidGuardCorrelate(rs, client.Ipid(), text, now)...)
 	if len(fired) > 0 {
 		raidGuardEvaluate(client, rs, "OOC message")
 	}

@@ -98,6 +98,8 @@ type ServerConfig struct {
 	RaidGuardNameChurnMax                int      `toml:"raid_guard_name_churn_max"`
 	RaidGuardCorrWindow                  int      `toml:"raid_guard_corr_window"`
 	RaidGuardCorrIPIDs                   int      `toml:"raid_guard_corr_ipids"`
+	RaidGuardCorrIPIDsWeak               int      `toml:"raid_guard_corr_ipids_weak"`
+	RaidGuardCorrBreadth                 int      `toml:"raid_guard_corr_breadth"`
 	RaidGuardCorrMinLen                  int      `toml:"raid_guard_corr_min_len"`
 	RaidGuardCorrMaxEntries              int      `toml:"raid_guard_corr_max_entries"`
 	RaidGuardArrivalBurst                int      `toml:"raid_guard_arrival_burst"`
@@ -330,8 +332,10 @@ func DefaultConfig() *Config {
 			RaidGuardFastSpeechMs:                1500,
 			RaidGuardCharChurnMs:                 1000,
 			RaidGuardNameChurnMax:                3,
-			RaidGuardCorrWindow:                  10,
-			RaidGuardCorrIPIDs:                   3,
+			RaidGuardCorrWindow:                  30,
+			RaidGuardCorrIPIDs:                   4,
+			RaidGuardCorrIPIDsWeak:               2,
+			RaidGuardCorrBreadth:                 3,
 			RaidGuardCorrMinLen:                  15,
 			RaidGuardCorrMaxEntries:              4096,
 			RaidGuardArrivalBurst:                12,

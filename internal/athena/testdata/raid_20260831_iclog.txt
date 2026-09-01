@@ -1,0 +1,43 @@
+# Raid of 2026-08-31, Skrapegropen, area 0 -- recovered from the server's own
+# /log buffer (the dump a moderator pulled two minutes after the incident) and
+# reproduced verbatim.
+#
+# Format is the per-area log line this server already writes:
+#   HH:MM:SS | ACTION | CHARACTER | IPID | HDID | MESSAGE
+#
+# There is no raw packet capture of this window -- the raid was over before
+# anyone started one -- so this is the whole record of it. It is worth keeping
+# anyway because it is a raid of a completely different SHAPE to
+# raid_capture.log: ten IPIDs and ten different lines spread over twenty-six
+# seconds rather than sixty-five IPIDs inside three, which is the shape the
+# shipped layer-2 thresholds were blind to.
+#
+# Real players are interleaved with the raiders throughout and are named in
+# raidguard_slowfanout_test.go; a change that makes the guard notice this raid
+# but also fires on any of them has not improved anything.
+19:55:06 | IC | sans_atf | vdIBxXbiLtRk8JdgPwPS2g | | but as i was saying
+19:55:19 | IC | caine (mg) | UXFI2TY42Y41u1OXQNhJCQ | | COA NOW IS WHITELIST ONLY GET FUCKED
+19:55:24 | IC | ziz_nikke | xiDtVwc75LbsMpnItQp8Dw | | Faggots faggots.
+19:55:25 | IC | biker boy (bbd) | KJvOo1Uf2R5oi9a171Zn2A | | sD mastyra Mint SyntaxNyah Salanto all of you vibe coders go to hell.
+19:55:26 | IC | fever_hd | zGGldMiqe+oGrO1TFQHQ7w | | sD mastyra Mint SyntaxNyah Salanto all of you vibe coders go to hell.
+19:55:27 | IC | sig | p1X8IuAwVXuQkzWh7xbd7w | | CLOVERRR GET RAPED GET RAPED
+19:55:27 | IC | alice pc98 (touhou) | 7zcqZQv11MxtWQ3Gz0IKeg | | i think i missed what you said
+19:55:28 | IC | lambdadelta | OwIbZ6LlObZsjtLlR+QMSQ | | CLOVER YOU LOLICON RAPE RAPE RAPE
+19:55:29 | IC | kalei_xn | 8ySOTcS1w0uF+b5x65qUzw | | 4CHAN GET FUCKED ON BY RAVEN
+19:55:42 | IC | yoshiteru zaimokuza | zcW3ge7pW+KXBmtyQJlTAA | | CLOVERRR LIKES LOLIS
+19:55:44 | IC | netzachlc | p8+1fwBhAJ6iKgvZPg+dKw | | sD mastyra Mint SyntaxNyah Salanto all of you vibe coders go to hell.
+19:55:45 | IC | ch'en (arknights) | q0v47hVabxEfjtjEG9YSpQ | | 4CHAN GET FUCKED ON BY RAVEN
+19:55:58 | IC | marshall aa | xT2NLl+OqAGvzW48zEhljw | | damn
+19:56:02 | IC | narumi oosone_hd_fv | NTnvZ2US5nAvtRFfwRbLfQ | | CLOVERRR GET RAPED GET RAPED
+19:56:02 | IC | uzukamaru taizo | Wbjbg4aWjNcbzdOKxs9X1A | | okay the anti raid is working
+19:56:08 | IC | marshall aa | xT2NLl+OqAGvzW48zEhljw | | is it tho
+19:56:10 | IC | uzukamaru taizo | Wbjbg4aWjNcbzdOKxs9X1A | | mostly
+19:56:11 | IC | uzukamaru taizo | Wbjbg4aWjNcbzdOKxs9X1A | | yes.
+19:56:18 | IC | uzukamaru taizo | Wbjbg4aWjNcbzdOKxs9X1A | | it defused the raid.
+19:56:22 | IC | marshall aa | xT2NLl+OqAGvzW48zEhljw | | neat
+19:56:31 | IC | alice pc98 (touhou) | 7zcqZQv11MxtWQ3Gz0IKeg | | ah, thought those were manual bans
+19:56:36 | IC | sans_atf | vdIBxXbiLtRk8JdgPwPS2g | | also yeah uhh
+19:56:48 | IC | marshall aa | xT2NLl+OqAGvzW48zEhljw | | the malice in peoples hearts suck
+19:56:52 | IC | alice pc98 (touhou) | 7zcqZQv11MxtWQ3Gz0IKeg | | i was asking about the negative changes, yeah
+19:57:13 | IC | sans_atf | vdIBxXbiLtRk8JdgPwPS2g | | they made the lighting worse (option in settings to change it but still), they didnt have ground haze at launch so you could see how small the map was
+19:57:34 | IC | sans_atf | vdIBxXbiLtRk8JdgPwPS2g | | and the main bit that irritates me is they force a gps tracker on

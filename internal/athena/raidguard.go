@@ -81,6 +81,7 @@ type SignalKind uint16
 const (
 	SigHandshakeAnomaly SignalKind = iota
 	SigDupeAcrossIPIDs
+	SigEchoedAcrossIPIDs
 	SigObjectionSpam
 	SigOOCNameChurn
 	SigShownameChurn
@@ -96,7 +97,7 @@ const (
 // the separation each showed between a real raid capture and a clean baseline,
 // discounted by how plausibly an ordinary player could trip it alone.
 //
-// The ban threshold (raid_guard_score_ban, default 140) is deliberately higher
+// The ban threshold (raid_guard_score_ban, default 160) is deliberately higher
 // than any single weight here, and higher than any pair of them, so reaching it
 // requires at least three independent signals.
 var raidSignalWeight = [numRaidSignals]int{
@@ -118,6 +119,21 @@ var raidSignalWeight = [numRaidSignals]int{
 	// The same text from N distinct IPIDs inside a few seconds. The single
 	// clearest fan-out signal, and one no per-IPID limiter can see.
 	SigDupeAcrossIPIDs: 45,
+	// The weaker half of the same evidence: somebody else is saying your line,
+	// but not yet enough people to call it a fan-out. Added after the 2026-08-31
+	// raid, where ten IPIDs spread ten different slurs over twenty-six seconds
+	// and re-used lines two and three times but never four -- so the full
+	// SigDupeAcrossIPIDs threshold was never met and layer 2 contributed nothing
+	// while the raid ran. Replaying that capture, this fires on the fourth raid
+	// message, seven seconds in.
+	//
+	// Weighted at 25 deliberately: below the watch threshold at every tier, so a
+	// connection whose only distinction is that somebody echoed it is not even
+	// alerted on, let alone acted on. It takes a second independent signal to
+	// reach the captcha rung. It never satisfies the ban gate -- that stays on
+	// SigDupeAcrossIPIDs alone (see raidBanAllowed), so two players quoting each
+	// other cannot arm a ban between them.
+	SigEchoedAcrossIPIDs: 25,
 	// Sustained objection shouts. Bimodal in the capture: raiders who used it
 	// used it on 100% of their messages, real players on none of theirs.
 	//
@@ -162,16 +178,17 @@ var raidSignalWeight = [numRaidSignals]int{
 
 // raidSignalName labels a signal for staff alerts and the audit log.
 var raidSignalName = [numRaidSignals]string{
-	SigHandshakeAnomaly: "handshake out of order",
-	SigDupeAcrossIPIDs:  "text repeated across many IPIDs",
-	SigObjectionSpam:    "every message an objection shout",
-	SigOOCNameChurn:     "OOC name changing per message",
-	SigShownameChurn:    "showname changing per message",
-	SigFastCharPick:     "picked a character instantly",
-	SigCharChurn:        "re-rolling characters rapidly",
-	SigFastFirstSpeech:  "spoke instantly after joining",
-	SigShoutySpam:       "shouted repetitive all-caps",
-	SigGlobalSpam:       "global-channel spam while brand new",
+	SigHandshakeAnomaly:  "handshake out of order",
+	SigDupeAcrossIPIDs:   "text repeated across many IPIDs",
+	SigEchoedAcrossIPIDs: "text echoed by another IPID",
+	SigObjectionSpam:     "every message an objection shout",
+	SigOOCNameChurn:      "OOC name changing per message",
+	SigShownameChurn:     "showname changing per message",
+	SigFastCharPick:      "picked a character instantly",
+	SigCharChurn:         "re-rolling characters rapidly",
+	SigFastFirstSpeech:   "spoke instantly after joining",
+	SigShoutySpam:        "shouted repetitive all-caps",
+	SigGlobalSpam:        "global-channel spam while brand new",
 }
 
 // Verdict is the strongest action a score justifies. Ordered by severity; the
@@ -424,6 +441,14 @@ func (rs *raidState) noteCorrelated() (fired bool) {
 	return rs.markFired(SigDupeAcrossIPIDs)
 }
 
+// noteEchoed is the weak half of noteCorrelated: somebody else is saying this
+// connection's line, but not yet enough people for it to count as a fan-out.
+func (rs *raidState) noteEchoed() (fired bool) {
+	rs.mu.Lock()
+	defer rs.mu.Unlock()
+	return rs.markFired(SigEchoedAcrossIPIDs)
+}
+
 // snapshot returns the current score and fired-signal names.
 func (rs *raidState) snapshot() (score int, signals []string, acted Verdict) {
 	rs.mu.Lock()
@@ -485,7 +510,7 @@ func verdictForTier(score, scalePct int) Verdict {
 		return score*raidGuardScaleBase >= raidGuardInt(v, def)*scalePct
 	}
 	switch {
-	case at(config.RaidGuardScoreBan, 140):
+	case at(config.RaidGuardScoreBan, raidGuardDefaultScoreBan):
 		return VerdictBan
 	case at(config.RaidGuardScoreKick, 100):
 		return VerdictKick
@@ -498,6 +523,12 @@ func verdictForTier(score, scalePct int) Verdict {
 	}
 	return VerdictClean
 }
+
+// raidGuardDefaultScoreBan is the ban threshold used when no config is loaded.
+// It matches settings.DefaultConfig and config_sample/config.toml, which both
+// ship 160; the fallback here used to say 140 and so disagreed with the value
+// every real server actually runs.
+const raidGuardDefaultScoreBan = 160
 
 // raidGuardInt returns a configured value, falling back to a default when the
 // config is absent (tests) or the value is nonsensical.
