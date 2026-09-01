@@ -469,6 +469,36 @@ raid_guard_strict_playtime = 15
 # Default: 70 (needs 30% less evidence)
 raid_guard_strict_scale = 70
 
+# Raid mode: how thresholds scale WHILE the server is under coordinated attack,
+# as a percentage multiplied over the playtime tier above. 100 disables it.
+#
+# This closes a latency floor rather than a detection gap. Scoring a connection
+# needs a message to score, so a raider's FIRST message reaches the room before
+# anything is known about them -- and across a fan-out that first message, times
+# the number of connections, is most of what actually gets through. The guard
+# was already acting on essentially every raiding connection; it was just acting
+# one or two messages in.
+#
+# Server-wide evidence (arrival bursts, cross-IPID correlation) shows up within
+# a fraction of a second of a fan-out starting, long before any single
+# connection's own score does. So once the server KNOWS a raid is happening,
+# each connection needs proportionally less of its own evidence -- verdicts that
+# would have landed on message two land on message one, and because the guard
+# scores before delivery, that message is suppressed instead of sent.
+#
+# Safe to be aggressive here for three reasons. It never creates evidence, it
+# only lowers the bar for evidence a connection already produced, so anyone with
+# a score of zero -- which is every ordinary player who is simply talking -- is
+# untouchable at any setting. It requires the under-attack state, which needs
+# correlation or an arrival burst and is not reachable by one person acting
+# alone, so a quiet evening never enters this mode at all. And it is
+# multiplicative over the playtime tier, so an established player still needs
+# proportionally more evidence than a brand-new connection.
+#
+# Lapses on its own two minutes after the last piece of raid evidence.
+# Default: 70
+raid_guard_under_attack_scale = 70
+
 # --- Score thresholds ---
 #
 # Raid guard accumulates a score for one connection out of independent

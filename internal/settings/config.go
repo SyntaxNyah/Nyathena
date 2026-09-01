@@ -84,6 +84,7 @@ type ServerConfig struct {
 	RaidGuardLenientScale                int      `toml:"raid_guard_lenient_scale"`
 	RaidGuardStrictPlaytime              int      `toml:"raid_guard_strict_playtime"`
 	RaidGuardStrictScale                 int      `toml:"raid_guard_strict_scale"`
+	RaidGuardUnderAttackScale            int      `toml:"raid_guard_under_attack_scale"`
 	RaidGuardBanDuration                 string   `toml:"raid_guard_ban_duration"`
 	RaidGuardScoreWatch                  int      `toml:"raid_guard_score_watch"`
 	RaidGuardScoreChallenge              int      `toml:"raid_guard_score_challenge"`
@@ -322,7 +323,8 @@ func DefaultConfig() *Config {
 			RaidGuardLenientPlaytime:             120,  // 2 hours -- thresholds doubled
 			RaidGuardLenientScale:                200,  // 2h+: needs twice the evidence
 			RaidGuardStrictPlaytime:              15,   // under 15m of history = brand new
-			RaidGuardStrictScale:                 70,   // brand new: needs 30% less
+			RaidGuardStrictScale:                 70,
+			RaidGuardUnderAttackScale:            70, // brand new: needs 30% less
 			RaidGuardBanDuration:                 "30m",
 			RaidGuardScoreWatch:                  40,
 			RaidGuardScoreChallenge:              60,
