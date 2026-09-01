@@ -834,6 +834,9 @@ Admins can adjust an account's stored playtime directly: `/playtime add <usernam
 ### `/profile` DJ Insignia
 Players with the `DJ` permission bit (and no moderator privileges) get a 💿 vinyl badge on their `/profile` card so DJs are visible at a glance. Mods are unaffected — they have their own staff lines.
 
+### `/profile` Account Privacy (Bug Fix)
+`/profile <uid>` (viewing someone else) used to resolve the target's linked account purely from `db.GetUsernameByIPID(target.Ipid())`, regardless of whether the target had actually logged in on this connection — an IPID stays linked in the DB long after the session that logged it in ends, so anyone could out an anonymous-looking player as a specific known account off that stale link, with no action from the target. The account line now only resolves for someone else's profile if the target `client.Authenticated()` — i.e. they ran `/login` or `/register` on this connection — otherwise it shows `(guest)` exactly like a never-registered IPID would. Viewing your **own** profile (`/profile` with no args) is unaffected and always resolves your own linked account regardless of authentication, since that's your own information rather than something being outed to a peer. The favourites/wardrobe line cascades from the same `username` value so it's hidden alongside the account for the same case; chips, playtime and the active cosmetic tag are untouched (those are tracked per-IPID for every connection, guest or not, and are already visible elsewhere regardless of login state). Implemented in `cmdProfile` (`internal/athena/commands_account.go`).
+
 ### `/global` Tag Display
 `/global` now shows the sender's `[tag]` in the prefix, matching local-OOC formatting. `/g` is a plain alias of `/global` (same permissions, same handler) for players who want a shorter command to type.
 
