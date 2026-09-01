@@ -682,6 +682,18 @@ func cmdProfile(client *Client, args []string, _ string) {
 		playtimeSec += int64(time.Since(connAt).Seconds())
 	}
 
+	// The exact playtime figure is itself identifying: /playtime top lists
+	// every registered account's hours by username, so even with the account
+	// line above hidden, showing the raw number here would let anyone match
+	// "this anonymous connection has 47h32m" against that public,
+	// named leaderboard and deanonymize the target just the same. Gated by
+	// the same isSelfProfile/Authenticated rule as the account line, for the
+	// same reason.
+	playtimeDisplay := formatPlaytime(playtimeSec)
+	if !isSelfProfile && !target.Authenticated() {
+		playtimeDisplay = "(hidden)"
+	}
+
 	// Favourite characters (wardrobe) — only meaningful if linked to an account.
 	var favs []string
 	if username != "(guest)" {
@@ -720,7 +732,7 @@ func cmdProfile(client *Client, args []string, _ string) {
 	sb.WriteString(fmt.Sprintf("  UID:         %d\n", target.Uid()))
 	sb.WriteString(fmt.Sprintf("  Account:     %v\n", username))
 	sb.WriteString(fmt.Sprintf("  Area:        %v\n", areaName))
-	sb.WriteString(fmt.Sprintf("  Playtime:    %v\n", formatPlaytime(playtimeSec)))
+	sb.WriteString(fmt.Sprintf("  Playtime:    %v\n", playtimeDisplay))
 	if config != nil && config.EnableCasino {
 		sb.WriteString(fmt.Sprintf("  Chips:       %d\n", chips))
 	}
