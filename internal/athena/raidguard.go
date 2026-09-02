@@ -80,6 +80,7 @@ type SignalKind uint16
 
 const (
 	SigHandshakeAnomaly SignalKind = iota
+	SigHandshakeReplay
 	SigDupeAcrossIPIDs
 	SigEchoedAcrossIPIDs
 	SigObjectionSpam
@@ -118,6 +119,41 @@ var raidSignalWeight = [numRaidSignals]int{
 	// causal, not conventional: there is no code path that emits any of the three
 	// earlier, and no ordering a real client can be coaxed into that inverts it.
 	SigHandshakeAnomaly: 50,
+	// An askchaa arriving on a connection that has already joined. Unlike every
+	// other signal here this one is not a judgement about behaviour at all: it is
+	// a packet the server's own protocol cannot have solicited.
+	//
+	// askchaa is only ever sent in reply to PN, and pktId -- the only place PN is
+	// emitted -- returns early once the connection has a UID. RD assigns that UID.
+	// So after RD the server never sends another PN, and a client whose askchaa
+	// is driven by PN can never send another askchaa. A second one is the
+	// connection replaying a canned handshake script rather than reacting to what
+	// the server actually said.
+	//
+	// Confirmed against all four client families that reach this server, because
+	// a signal this strong is only worth having if it cannot fire on a real
+	// player:
+	//   AO2 desktop 2.11  NetworkManager::join_to_server() disconnects its own
+	//                     server_connected signal before shipping askchaa, so the
+	//                     slot cannot run twice on one connection.
+	//   AsyncAO           session.go drives the ladder off PN, and
+	//                     courtroom_test.go feeds a second PN mid-load and asserts
+	//                     the reply ladder stays exactly HI,ID,askchaa,RC,RM,RD.
+	//   LemmyAO / webAO   client/handshake.ts sends askchaa only from
+	//                     applyServerInfo, the PN handler.
+	// Measured per connection across two clean captures and two raid captures:
+	// 0/17 webAO, 0/11 LemmyAO, 0/6 AsyncAO, 0/60 clients that sent no ID packet
+	// -- against 37/122 connections claiming to be "AO2 2.11.0", a string the
+	// desktop client's own source says cannot do this. The signal is really
+	// catching a lie about what client is connecting.
+	//
+	// Weighted just under SigHandshakeAnomaly, and specifically so that alone it
+	// reaches the captcha rung but never the kick rung at any tier -- on the
+	// arithmetic, not merely via clampDisconnect's three-signal floor. A captcha
+	// is self-service: a real player on some client not examined above answers a
+	// question and moves on. It also stays below the watch threshold for anyone
+	// with two hours of playtime, so an established regular is untouched by it.
+	SigHandshakeReplay: 45,
 	// The same text from N distinct IPIDs inside a few seconds. The single
 	// clearest fan-out signal, and one no per-IPID limiter can see.
 	SigDupeAcrossIPIDs: 45,
@@ -229,6 +265,7 @@ var raidSignalWeight = [numRaidSignals]int{
 // raidSignalName labels a signal for staff alerts and the audit log.
 var raidSignalName = [numRaidSignals]string{
 	SigHandshakeAnomaly:  "handshake out of order",
+	SigHandshakeReplay:   "re-ran the handshake after joining",
 	SigDupeAcrossIPIDs:   "text repeated across many IPIDs",
 	SigEchoedAcrossIPIDs: "text echoed by another IPID",
 	SigObjectionSpam:     "every message an objection shout",
@@ -340,6 +377,12 @@ func newRaidState() *raidState {
 	}
 }
 
+// raidSignalsFitBitmask fails the build if a future signal would overflow the
+// bitmask markFired shifts into. rs.fired is a SignalKind (uint16), so index
+// numRaidSignals-1 must stay below 16 -- past that, `1 << k` silently wraps and
+// two different signals start sharing a bit.
+const _ = uint(15 - (numRaidSignals - 1))
+
 // markFired records a signal and adds its weight, exactly once. Returns false
 // if the signal had already fired, so callers can avoid re-alerting.
 func (rs *raidState) markFired(k SignalKind) bool {
@@ -401,6 +444,23 @@ func (rs *raidState) noteAskchaa() {
 	rs.mu.Lock()
 	rs.sawAskchaa = true
 	rs.mu.Unlock()
+}
+
+// noteAskchaaPostJoin records an askchaa that arrived after this connection
+// already joined (RD assigned it a UID). See SigHandshakeReplay: the server
+// stops answering ID with PN once a UID exists, and askchaa is only ever a
+// reply to PN, so this is a packet no client driven by the server's own
+// responses can produce.
+//
+// Deliberately keyed on having joined rather than on the count of askchaas: a
+// client whose first askchaa was ignored (it arrives before HDID is set, so
+// pktResCount returns without sending SI) never joins, and its retry is
+// therefore not this signal. Only an askchaa that arrives after the handshake
+// already succeeded is unexplainable.
+func (rs *raidState) noteAskchaaPostJoin() (fired bool) {
+	rs.mu.Lock()
+	defer rs.mu.Unlock()
+	return rs.markFired(SigHandshakeReplay)
 }
 
 // noteHandshakeStep records an RC/RM/RD. Arriving before this connection's own

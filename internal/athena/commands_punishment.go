@@ -270,36 +270,62 @@ func cmdFastspammer(client *Client, args []string, usage string) {
 // cmdLag adds a player's IPID to the torment list, applying the same fake-lag
 // effects as the automod torment action: ghost/delayed IC and OOC messages and
 // a silent random disconnect timer. Requires MUTE permission.
-func cmdLag(client *Client, args []string, usage string) {
-	if punishmentsSystemDisabled(client) {
-		return
+// tormentIPIDFromConsole adds an IPID to the torment list. This is the only
+// remaining way to put somebody on it by hand.
+//
+// The in-game /lag command used to do this and has been removed. The torment
+// system itself is unchanged and still arms itself automatically on an AutoMod
+// censor trip -- what is gone is a moderator's ability to apply it manually,
+// because it is the one punishment whose whole design is that the target cannot
+// tell it is happening: their messages ghost or arrive late and their
+// connection drops for no stated reason, which is indistinguishable from a bad
+// connection. A power that leaves no evidence for the person it is used on
+// belongs behind shell access, not behind a permission bit.
+//
+// Removal is deliberately NOT restricted: /untorment and /unlag stay available
+// in game. Letting staff undo this without console access, while requiring
+// console to apply it, is the asymmetry that makes it safe -- a mistake can
+// always be fixed by whoever is online.
+func tormentIPIDFromConsole(ipid string) (added bool, note string) {
+	ipid = strings.TrimSpace(ipid)
+	if ipid == "" {
+		return false, "No IPID given."
 	}
-	if len(args) == 0 {
-		client.SendServerMessage("Not enough arguments:\n" + usage)
-		return
-	}
-	uid, err := strconv.Atoi(strings.TrimSpace(args[0]))
-	if err != nil {
-		client.SendServerMessage("Invalid UID.")
-		return
-	}
-	target, err := getClientByUid(uid)
-	if err != nil {
-		client.SendServerMessage("No client found with that UID.")
-		return
-	}
-	ipid := target.Ipid()
 	if isIPIDTormented(ipid) {
-		client.SendServerMessage(fmt.Sprintf("UID %d (IPID %s) is already lagged.", uid, ipid))
-		return
+		return false, fmt.Sprintf("IPID %v is already on the torment list.", ipid)
 	}
 	addTormentedIP(ipid)
-	// Start a disconnect timer for every session currently open under that IPID.
+	sessions := 0
 	for _, c := range getClientsByIpid(ipid) {
 		go startTormentDisconnect(c)
+		sessions++
 	}
-	client.SendServerMessage(fmt.Sprintf("Added UID %d (IPID %s) to the lag list.", uid, ipid))
-	addToBuffer(client, "CMD", fmt.Sprintf("lagged UID %d IPID %s", uid, ipid), true)
+	logger.WriteAudit(fmt.Sprintf("%v | TORMENT | IPID:%v | By: console",
+		time.Now().UTC().Format("15:04:05"), ipid))
+	return true, fmt.Sprintf("Added IPID %v to the torment list (%d active session(s) affected).", ipid, sessions)
+}
+
+// untormentFromConsole is the console half of /untorment, so an operator who
+// applied a torment from here can lift it from here too without needing a
+// logged-in moderator session.
+func untormentFromConsole(arg string) string {
+	arg = strings.TrimSpace(arg)
+	if strings.EqualFold(arg, "all") {
+		n := clearAllTormentedIPs()
+		if n == 0 {
+			return "The torment list is already empty."
+		}
+		logger.WriteAudit(fmt.Sprintf("%v | UNTORMENT | ALL (%d removed) | By: console",
+			time.Now().UTC().Format("15:04:05"), n))
+		return fmt.Sprintf("Purged the torment list — removed %d IPID(s).", n)
+	}
+	if !isIPIDTormented(arg) {
+		return fmt.Sprintf("IPID %v is not on the torment list.", arg)
+	}
+	removeTormentedIP(arg)
+	logger.WriteAudit(fmt.Sprintf("%v | UNTORMENT | IPID:%v | By: console",
+		time.Now().UTC().Format("15:04:05"), arg))
+	return fmt.Sprintf("Removed %v from the torment list.", arg)
 }
 
 // cmdUnlag removes a player's IPID from the torment list. Requires MUTE permission.

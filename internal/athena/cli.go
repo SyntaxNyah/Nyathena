@@ -33,7 +33,12 @@ func ListenInput() {
 		cmd[0] = strings.TrimPrefix(cmd[0], "/")
 		switch cmd[0] {
 		case "help":
-			logger.LogInfo("Recognized commands: help, mkusr, rmusr, players, getlog, say, reload, punishment.")
+			logger.LogInfo("Recognized commands: help, mkusr, rmusr, players, getlog, say, reload, punishment, grant, torment, untorment.")
+			logger.LogInfo("  grant <command>          Arm ONE use of a console-gated command (see `grant status`).")
+			logger.LogInfo("  grant status             Show which gated commands are armed.")
+			logger.LogInfo("  grant revoke <cmd|all>   Disarm a grant before it is used.")
+			logger.LogInfo("  torment <ipid>           Manually add an IPID to the torment list (no in-game equivalent).")
+			logger.LogInfo("  untorment <ipid|all>     Remove one or every IPID from the torment list.")
 		case "reload":
 			// Full hot-reload: characters.txt (append-only), music.txt, cdns.txt,
 			// backgrounds.txt, parrot.txt, 8ball.txt, banned_words.txt and the
@@ -117,6 +122,61 @@ func ListenInput() {
 			default:
 				logger.LogInfo("Usage: punishment <enable|disable|status>")
 			}
+		case "grant":
+			// Console-only authorisation for the handful of in-game commands
+			// whose effect is invisible to the person they are used on.
+			// Holding ADMIN is not sufficient for those; each use has to be
+			// armed here, and one arming buys exactly one use. See
+			// console_gate.go for why console is the right authority.
+			if len(cmd) < 2 {
+				logger.LogInfo("Usage: grant <command> | grant status | grant revoke <command|all>")
+				break
+			}
+			switch strings.ToLower(cmd[1]) {
+			case "status":
+				logger.LogInfo("Console-gated commands:")
+				for _, line := range consoleGrantStatus() {
+					logger.LogInfo(line)
+				}
+			case "revoke":
+				if len(cmd) < 3 {
+					logger.LogInfo("Usage: grant revoke <command|all>")
+					break
+				}
+				n, errMsg := revokeConsoleUse(cmd[2])
+				if errMsg != "" {
+					logger.LogInfo(errMsg)
+					break
+				}
+				if n == 0 {
+					logger.LogInfo("Nothing was armed.")
+					break
+				}
+				logger.LogInfof("Revoked %d grant(s).", n)
+			default:
+				if ok, errMsg := grantConsoleUse(cmd[1]); !ok {
+					logger.LogInfo(errMsg)
+				}
+			}
+		case "torment":
+			// The manual half of the torment list. /lag used to do this in
+			// game and has been removed; the automatic AutoMod path that arms
+			// it on a censor trip is untouched.
+			if len(cmd) < 2 {
+				logger.LogInfo("Usage: torment <ipid>")
+				break
+			}
+			added, note := tormentIPIDFromConsole(cmd[1])
+			logger.LogInfo(note)
+			if added {
+				logger.LogInfo("Remove it in game with /untorment <ipid>, or here with: untorment <ipid>")
+			}
+		case "untorment":
+			if len(cmd) < 2 {
+				logger.LogInfo("Usage: untorment <ipid|all>")
+				break
+			}
+			logger.LogInfo(untormentFromConsole(cmd[1]))
 		case "say":
 			if len(cmd) < 2 {
 				logger.LogInfo("Not enough arguments for command say. Usage: say <message>.")

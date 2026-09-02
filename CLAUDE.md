@@ -228,7 +228,7 @@ Weaponize the IC packet's non-text fields. Applied in `pktIC` (`applyProtocolPun
 - `/forcepreanim <uid>` — promotes idle/talk modifiers so the named preanim plays
 
 #### Timing Effects (4)
-`/slowpoke`, `/fastspammer`, `/lag`, plus:
+`/slowpoke`, `/fastspammer`, plus:
 - `/lifo <uid>` — buffers the target's IC messages and releases them in **reverse arrival order** (flush at 3 messages or 6 s, whichever first). Implemented in `internal/athena/punishments_lifo.go`; queues are keyed by `*Client` and self-flush, so disconnects can't leak.
 
 #### Traps & Contagion (5)
@@ -392,12 +392,14 @@ Each armed connection runs a single per-client watcher goroutine that picks a ne
 ### Possession
 Speak through another player's character. Shares one sprite-spoof + pair-spoof pipeline (`internal/athena/possess.go`, applied in `pktIC`):
 
-- `/possess <uid> <message>` (ADMIN) — one message rendered exactly as the target.
-- `/fullpossess <uid>` (ADMIN) — persistent silencing possession; identical to `/truepossess`.
-- `/truepossess <uid>` (ADMIN) — persistent silencing possession; identical to `/fullpossess`. (Both names kept; both share `beginPossession`.)
+- `/possess <uid> <message>` (**console-gated**) — one message rendered exactly as the target.
+- `/fullpossess <uid>` (**console-gated**) — persistent silencing possession; identical to `/truepossess`.
+- `/truepossess <uid>` (**console-gated**) — persistent silencing possession; identical to `/fullpossess`. (Both names kept; both share `beginPossession` — which is exactly why both are gated: gating one alone would gate nothing.)
 - `/unpossess` (SHADOW) — stop a full/true possession; lifts the mute.
 
 **Pair-spoof (applies to all flavours).** A possessed IC message reproduces the *target's* pairing, not the possessor's: `applyPossessedPairFields` resolves the target's partner (normal `/pair` or UID-locked `/forcepair`) and stamps the partner's sprite (`OtherCharID`/`OtherName`/`OtherEmote`/`OtherOffset`/`OtherFlip`) onto the packet, and the possessed message also adopts the target's own self-offset/flip. Without this, possessing a paired player dropped their partner from the viewport — an obvious "this is a possess" tell. The possessor's own pair-info state is preserved (the bottom-of-`pktIC` `SetPairInfo` uses saved `ownFlip`/`ownSelfOffset`).
+
+**Both are console-gated.** `ADMIN` no longer suffices — each use has to be armed from the server console with `grant fullpossess` / `grant truepossess`, and one arming buys one use. `/unpossess` is deliberately left ungated so a possession can always be lifted by whoever is online. See "Console-Gated Commands" below.
 
 **Silencing (`/fullpossess` and `/truepossess`).** The target is marked `trueMuted` (per-client flag, hot-path-gated by the `activeTruePossess` atomic counter so unused servers pay nothing). While active: their IC and OOC are echoed back to *only them* (stealthmute semantics — their client looks normal) but reach nobody; their OOC commands (`/global`, `/pm`, `/modchat`, `/a`, …) are swallowed undispatched; and their showname / OOC name are frozen (the PU broadcasts are skipped) so they can't rename into a distress signal — which also keeps the possessor's spoofed messages pinned to the target's original showname. Suppressed lines are logged tagged `(truepossessed)` / `(suppressed during /truepossess)` for staff audit. The mute is lifted by `/unpossess`, switching target, or either party disconnecting (`endTruePossession` + `clientCleanup`, keeping the atomic gate balanced). Admins only — shadow mods no longer have access to any possession command.
 
@@ -520,9 +522,9 @@ A match **drops the packet entirely** rather than substituting a placeholder —
 
 **`shadow` (default action):** the censored message is **shadow-sent** — echoed back to the sender so their client shows it as sent, while the packet is dropped for every other client, so nobody ever sees the slur. The speaker's IPID is also added to the torment list (same list as `/lag`: ghost/delayed messages and random silent disconnects, persisted across reconnects), and the connection is kicked (see above). Clean messages are unaffected — only messages that trip the censor are swallowed, but once tripped the speaker stays on the torment list until a moderator lifts it. In `pktIC` the shadow trip is folded into the existing stealthmute `silenced` delivery path (so the sender's echo is a fully-processed, well-formed packet, sent *before* the kick closes the connection) and runs **before** the torment branch, so a censored message can never leak out through `handleTormentedIC`'s delayed rebroadcast; it is also excluded from the area's IC history so `/markov`/`/icwarp` can't regurgitate it. Area logs tag suppressed lines `(censored)`.
 
-**Staff alerts:** every censor trip (any action, and the showname censor below) sends a `[CENSOR]` OOC alert to everyone holding `MOD_CHAT` — who tripped, where, the matched entry, the (truncated) text, and what the server did about it. Every alert carries the opt-out hint; each staff member can mute them per-session with `/censoralerts off` (`/censoralerts on` re-enables; bare `/censoralerts` shows the current state). Manual torment additions (`/lag`) deliberately never alert — only censor trips do.
+**Staff alerts:** every censor trip (any action, and the showname censor below) sends a `[CENSOR]` OOC alert to everyone holding `MOD_CHAT` — who tripped, where, the matched entry, the (truncated) text, and what the server did about it. Every alert carries the opt-out hint; each staff member can mute them per-session with `/censoralerts off` (`/censoralerts on` re-enables; bare `/censoralerts` shows the current state). Manual torment additions (now console-only) deliberately never alert — only censor trips do.
 
-**Torment list tooling:** `/tormentlist` (MUTE) lists every IPID on the torment/lag list with any connected sessions (UID, name, area) or `offline`. `/untorment <ipid>` (BAN) removes one entry; `/untorment all` purges the entire list — every IPID, in memory and in the DB (which also cancels all pending torment disconnect timers).
+**Torment list tooling:** `/tormentlist` (MUTE) lists every IPID on the torment list with any connected sessions (UID, name, area) or `offline`. `/untorment <ipid>` (BAN) removes one entry; `/untorment all` purges the entire list — every IPID, in memory and in the DB (which also cancels all pending torment disconnect timers). There is no longer any in-game command that *adds* to the list — see "Console-Gated Commands" below.
 
 **Filter-evasion normalization.** Both `banned_words.txt`/`censored_names.txt` entries and the text being checked are run through `normalizeForFilter` (`internal/athena/text_filter_normalize.go`) before matching, so stylizing, spacing out, or leetspeaking a slur doesn't evade the filter. Only letters survive normalization — everything else is either substituted into a letter or dropped — which defeats:
 - stylized Unicode letters — mathematical bold/script/fraktur, fullwidth, circled, superscript, etc. — via NFKD compatibility decomposition (`golang.org/x/text/unicode/norm`), which folds e.g. `𝓷𝓲𝓰𝓰𝓮𝓻` or fullwidth `ｎｉｇｇｅｒ` back to plain `nigger`
@@ -673,6 +675,11 @@ Every rate limit the server had before this feature — `message_rate_limit`, `o
 
 **Signals, and roughly why each earned its weight** (`raidSignalWeight` in `raidguard.go`, highest first):
 - **Handshake anomaly (50)** — an RC/RM/RD (character list, music list, area list requests) arriving before the connection's own `askchaa`. No real client implementation does this; a bot that skips straight to requesting data skips the step that precedes it in every real handshake. Measured in **67% of raid connections vs 0% of baseline**.
+- **Handshake replay (45)** — an `askchaa` arriving on a connection that has *already joined*. Alone among these signals it is not a judgement about behaviour but a protocol impossibility: `askchaa` is only ever sent in reply to `PN`, `pktId` is the only place `PN` is emitted, and it returns early once the connection has a UID — which `pktReqDone` (RD) assigns. After RD the server therefore never sends another `PN`, so a client whose `askchaa` is driven by `PN` can never send a second one. A connection that sends one anyway is replaying a canned handshake script instead of reacting to what the server actually said.
+
+  Confirmed at source level against **every client family that reaches this server**, because a signal weighted this highly is only worth having if it cannot fire on a real player: **AO2 desktop 2.11** disconnects its own `server_connected` signal inside `NetworkManager::join_to_server()` *before* shipping the packet, so the slot structurally cannot run twice; **AsyncAO** drives the ladder off `PN` and its `courtroom_test.go` feeds a second `PN` mid-load specifically to assert the reply ladder stays exactly `HI, ID, askchaa, RC, RM, RD`; **LemmyAO / webAO** send it only from `applyServerInfo`, the `PN` handler in `client/handshake.ts`. Measured per connection over two clean and two raid captures: **0/17 webAO, 0/11 LemmyAO, 0/6 AsyncAO, 0/60 clients sending no ID packet** — against **37/122 connections claiming to be `AO2 2.11.0`**, a string the desktop client's own source says cannot do this. The signal is really catching a *lie about which client is connecting*.
+
+  Weighted just under the ordering signal so that on its own it reaches the captcha rung but **never** the kick rung at any tier — on the arithmetic, not merely via `clampDisconnect`'s three-signal floor, which is a backstop for a mis-calibrated weight and is spent if a weight leans on it. It also sits below the watch threshold for anyone with two hours of playtime, so an established regular is untouched by it alone. It fires at *handshake*, before the connection has said anything, which is what makes it the answer to the latency floor described under "Raid mode" below: the first message no longer has to be the evidence.
 - **Duplicate text across IPIDs (45)** — the same message (by token shingle, not exact match — see below) seen from `raid_guard_corr_ipids` (default 4) distinct IPIDs inside the correlation window. The one signal a per-IPID limiter is structurally incapable of producing, and measured at **34% of raid messages vs 0% of baseline** once trivially short lines (a shared `/gas` or `/cm`) are excluded from the comparison. This is the only signal that satisfies the ban gate.
 - **Text echoed by another IPID (25)** — the weak half of the same evidence, at `raid_guard_corr_ipids_weak` (default 2) distinct IPIDs: somebody else is saying your line, but not yet enough people to call it a fan-out. Weighted deliberately below the watch rung at every playtime tier, so on its own it neither alerts nor acts — it takes a second independent signal to reach the captcha rung — and it **never** satisfies the ban gate, so two players quoting each other cannot arm a ban between them. Measured at 0 across both clean captures (85 messages, 44 distinct players) against 3 on the 2026-08-31 raid and 24 on the 2026-08-27 raid capture. See "Grading the corroboration" below for why it exists.
 - **Objection spam (35)** — a high, sustained fraction of a connection's messages carrying a non-zero objection modifier (Objection!/Hold It!/Take That!). Measured at **90% of raid IC packets vs 0% of baseline** carrying the modifier at all, and the raid population was **bimodal**: a raider who used it used it on **100%** of their messages, not some middling fraction. A real trial interleaves dialogue with shouts, so the signal requires both a floor of messages and a high fraction (default 80%, `raid_guard_objection_fraction`) before it fires — one dramatic entrance can never trip it.
@@ -715,6 +722,8 @@ Three properties make it safe to be aggressive here, and they are why this is no
 
 **A signal that was measured and deliberately NOT added: a slow arrival detector.** The obvious companion to the above is a second arrival window ("N new IPIDs per minute" alongside the existing 12-per-second), since 10 IPIDs over 26 seconds cannot reach a per-second burst threshold. Measuring it on the captures killed it: arrival counts taken from a packet log are contaminated by the log's own start, where every already-connected player registers as "new" at their first line — the clean captures show 16 and 21 "new" IPIDs inside ten seconds on that basis. There is consequently no trustworthy figure for what a real slow arrival rate looks like on a busy evening, and a threshold guessed without one would fire on a server restart or a popular night. The 12-per-second burst stays as the only arrival trigger.
 
+**And a change measured and deliberately NOT made: lowering that burst threshold.** A later raid reached a genuine peak of only **7 new IPIDs in a second** (54 IPIDs spread over three minutes, well clear of the capture's own start), so the arrival trigger never fired and the under-attack flag had to come entirely from cross-IPID correlation. Lowering the threshold to catch it looks obvious and is not safe: measured the same way, the two clean captures peak at **6 per second** — one below that raid's genuine peak — because a capture's opening seconds register every already-connected player as an arrival, and a server restart or a busy evening produces the same shape for real. There is no gap between the populations to put a threshold in. The handshake-replay signal above is the answer to that raid instead: it identifies the individual connections directly, needs no server-wide flag to do it, and fires before any of them speaks.
+
 **Kept honest by replay.** `TestSlowFanOutIsCorroboratedEarly` asserts the guard corroborates the 2026-08-31 raid no later than its fourth message; `TestSlowFanOutSparesTheRealPlayers` asserts the four ordinary players talking in that same room — two of them *about* the raid, using its vocabulary — stay completely clean; `TestSlowFanOutCannotReachTheBanGate` asserts the strong signal still never fires on that capture, so the ban gate stays shut on this class of evidence. A third capture, `aftermath_capture.log` (the same server two minutes later: 24 players, agitated, several shouting in caps and using the objection button while discussing what happened), is now replayed by the main validation harness alongside the quiet-evening baseline, because a loud upset room is the traffic a loosened threshold would actually eat. It scores a maximum of 20 with zero correlation hits.
 
 **`/raidguard` command** (`BAN`, `internal/athena/raidguard_cmd.go`):
@@ -747,7 +756,7 @@ Three properties make it safe to be aggressive here, and they are why this is no
 
 | Command | Behaviour |
 |---------|-----------|
-| `/shadowdisconnect <uid\|ipid> [-r reason]` | Persistently shadow-bans the target's IPID. Accepts a connected target's UID or a raw IPID, so an offline player can be preemptively listed. Drops every live connection sharing that IPID immediately, and every future one silently. Idempotent; re-issuing overwrites the reason/issuer. |
+| `/shadowdisconnect <uid\|ipid> [-r reason]` | **Console-gated** — needs `grant shadowdisconnect` at the console for each use; `ADMIN` alone is not enough (see "Console-Gated Commands"). Persistently shadow-bans the target's IPID. Accepts a connected target's UID or a raw IPID, so an offline player can be preemptively listed. Drops every live connection sharing that IPID immediately, and every future one silently. Idempotent; re-issuing overwrites the reason/issuer. |
 | `/shadowundisconnect <uid\|ipid\|all>` | Lifts a shadow-disconnect. Accepts a UID, a raw IPID (so offline players can be lifted too), or the literal `all` to clear the entire list at once. |
 | `/shadowdisconnectlist` | Lists every active shadow-disconnect entry with reason, issuer and timestamp (newest first). |
 
@@ -759,6 +768,52 @@ Three properties make it safe to be aggressive here, and they are why this is no
 - `Client.HandleClient` (`internal/athena/client.go`) — a defense-in-depth re-check right alongside `CheckBanned`/the torment check, for a connection that was already past the accept-loop gate when `/shadowdisconnect` was issued mid-handshake.
 
 The in-memory set (`internal/athena/shadowdisconnect.go`) is a `map[string]struct{}` behind an `RWMutex`, seeded from the DB at startup, so every one of the above checks is a single lock-free-ish map lookup — cheap enough to run before any handshake work. A moderator target cannot be shadow-disconnected via UID (mirrors `/musicban`'s guard); an offline IPID has no such check, matching `/ban`'s offline-IPID path.
+
+### Console-Gated Commands (`grant`)
+
+A few commands are powerful in a way that is **invisible to the person they are used on**. Possession speaks as somebody and silences them so they cannot say otherwise; a shadow-disconnect looks to its target exactly like a bad network; a torment listing makes their messages ghost and their connection drop for no stated reason. Holding `ADMIN` is no longer sufficient for any of them.
+
+Console is the authority instead, because it is the one place that cannot be reached over the network at all: it needs shell access to the host, which is a different and stronger thing than any in-game credential. This is the mirror image of the console-only `punishment disable` kill switch — there, console is the only thing that can take a power away; here, it is the only thing that can hand one out.
+
+**Two different shapes, because the commands differ in what they need.**
+
+*Armed for one use* — the command stays in game (possession structurally has to: `beginPossession` sets state on the **possessor**, whose own IC is then spoofed as the target, so there is nobody to do the possessing from a console). The console arms it, the admin uses it, and it re-locks:
+
+| Command | What it does |
+|---------|--------------|
+| `/possess` | Speak one IC message as another player |
+| `/fullpossess` | Become a player and silence them until `/unpossess` |
+| `/truepossess` | Same handler as `/fullpossess`, under its other name |
+| `/shadowdisconnect` | Stealth-ban an IPID with no message, ever |
+
+```
+grant <command>          # arm ONE use
+grant status             # what is armed, and how long it has left
+grant revoke <cmd|all>   # disarm before it is used
+```
+
+*Moved to the console outright* — the manual half of the torment list. `/lag` has been **removed** from the game entirely; nothing in game adds to the list any more.
+
+```
+torment <ipid>           # the only remaining manual way onto the torment list
+untorment <ipid|all>     # console half of /untorment
+```
+
+**The torment system itself is unchanged.** AutoMod still arms it automatically on a censor trip, exactly as before. What is gone is a moderator's ability to apply it by hand.
+
+**Design properties, and why each one is there:**
+
+- **One arming buys one use, not a window.** Re-arming an already-armed command refreshes its expiry rather than stacking a second use — a console operator who types the command twice should not silently be handing out two.
+- **An unused grant lapses after 5 minutes** (`consoleGrantTTL`). A grant armed and then forgotten would otherwise leave the power continuously available again, which is the exact thing the gate exists to prevent.
+- **A grant is spent on the command taking effect, not on the attempt.** Each gate sits after every validation branch in its handler and immediately before the only observable effect, so a mistyped UID costs nothing and the console operator is not re-arming for typos. It authorises one *action*, not one keystroke. `/shadowdisconnect` is the one documented exception: its gate has to precede the database write (on the far side, a refusal would leave an unauthorised row already persisted), so a DB failure on the next line spends the grant even though nothing happened — rare, fixed by re-arming, and the right way round to be wrong.
+- **Applying is restricted; lifting never is.** `/unpossess`, `/untorment`, `/unlag` and `/shadowundisconnect` all stay available in game at their existing permissions. Requiring console to apply while letting staff undo means a mistake can always be fixed by whoever is online — the asymmetry is what makes the gate safe to be strict.
+- **ADMIN is still required, just no longer sufficient.** The permission stays as a floor so an armed grant cannot be raced for by an arbitrary player; the grant is the added authority, not a replacement for the old one.
+- **Every arm, consumption and refusal is written to the audit log** (`logger.WriteAudit`, `CONSOLE_GRANT` lines) as well as the console, so the record of who used one survives a restart.
+- **Both possession names are gated.** `/fullpossess` and `/truepossess` are one handler behind two names, so gating either alone would gate nothing. Pinned by `TestBothPossessionAliasesAreGated`.
+
+There is no bypass: `parsePunishmentType` never reaches the torment list (`addTormentedIP` has exactly two callers — the AutoMod censor path and the console helper), so `/stack lag`, the roulette pool and `/maso` cannot put anyone on it, and no Discord slash command reaches any gated command.
+
+Implemented in `internal/athena/console_gate.go` (the grant store and `consumeConsoleGrant`), with the console verbs in `internal/athena/cli.go` and the torment helpers in `internal/athena/commands_punishment.go`.
 
 ### Hot Config Reload (`/reload`)
 `/reload` (in-game, `ADMIN`) atomically re-reads every supported config/data file from disk and swaps it in without restarting the server. Also available as the `reload` CLI command on stdin and via `SIGHUP`.
