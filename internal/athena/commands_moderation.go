@@ -331,7 +331,35 @@ func cmdGlobal(client *Client, args []string, _ string) {
 	if tag != "" {
 		tag += " "
 	}
-	broadcastToAll(&packet.CTToClient{Name: fmt.Sprintf("[GLOBAL] [UID %d] %s%v", client.Uid(), tag, oocDisplayName(client)), Message: strings.Join(args, " "), IsFromServer: "1"})
+	// args arrive already decoded (pktOOC splits them off a decoded string), so
+	// this is plain text and must not be decoded again.
+	msg := strings.Join(args, " ")
+	out := &packet.CTToClient{
+		Name:         fmt.Sprintf("[GLOBAL] [UID %d] %s%v", client.Uid(), tag, oocDisplayName(client)),
+		Message:      msg,
+		IsFromServer: "1",
+	}
+	// The command branch in pktOOC returns before the content gate, so without
+	// this a global reached every client on the server unexamined. See
+	// oocCommandAllowed.
+	if !oocCommandAllowed(client, msg, "global message", out) {
+		return
+	}
+	// Score it like any other OOC line now that it has cleared everything above.
+	// A global is the most broadcast thing a player can send, and cross-IPID
+	// correlation could not see it at all before -- a fan-out conducted entirely
+	// through /g was invisible to the raid guard.
+	raidGuardOnOOC(client, client.OOCName(), msg)
+	// The guard may have just silenced, kicked or banned this connection over
+	// this very message. Re-read that before broadcasting, so the message that
+	// earned the verdict is the first one stopped rather than the last one
+	// delivered -- see oocGuardVerdictSuppresses.
+	if oocGuardVerdictSuppresses(client, msg, out) {
+		return
+	}
+
+	broadcastToAll(out)
+	addToBuffer(client, "OOC", "[GLOBAL] \""+msg+"\"", false)
 }
 
 // Handles /invite
@@ -804,6 +832,15 @@ func cmdPM(client *Client, args []string, _ string) {
 		return
 	}
 	msg := strings.Join(args[1:], " ")
+	// Same gate as /global: a PM carries free player text to whatever UID list
+	// the sender names, and took the same unexamined path. Not raid-guard scored
+	// -- unlike a global it is not a broadcast, and there is no capture data to
+	// calibrate correlating private messages against.
+	if !oocCommandAllowed(client, msg, "private message",
+		&packet.CTToClient{Name: fmt.Sprintf("[PM] [UID %d] %v", client.Uid(), oocDisplayName(client)),
+			Message: msg, IsFromServer: "1"}) {
+		return
+	}
 	toPM := getUidList(strings.Split(args[0], ","))
 	var recipientNames []string
 	for _, c := range toPM {
