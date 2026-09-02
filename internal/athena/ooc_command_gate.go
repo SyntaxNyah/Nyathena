@@ -103,3 +103,72 @@ func oocCommandAllowed(client *Client, text, source string, echo *packet.CTToCli
 
 	return true
 }
+
+// oocGuardVerdictSuppresses re-reads the raid guard's effect on this connection
+// immediately after it scored the message, and reports whether the message that
+// earned the verdict must now be withheld.
+//
+// This is the ordering property pktIC already has and this path did not. There,
+// raidGuardOnIC runs BEFORE the delivery switch reads captchaRestricted, so a
+// connection the guard silences on message N has message N suppressed. Scoring
+// after the suppression checks -- which is deliberate, so a message the room
+// never heard is never fed to the correlation window -- means the flag is read
+// before the guard has had its say, and the message that earned a ban goes out
+// to the whole server first. On a global that is every client on the server,
+// which is precisely the audience the verdict exists to protect.
+//
+// Two outcomes are checked. A silence sets captchaRestricted (raidGuardSilence);
+// a kick or ban closes the connection (markClosed), and the offending message
+// must not be delivered to everyone else on the way out.
+func oocGuardVerdictSuppresses(client *Client, text string, echo *packet.CTToClient) bool {
+	if client == nil {
+		return false
+	}
+	if client.closed.Load() {
+		// Kicked or banned by the verdict this message just earned. Nothing is
+		// echoed -- the connection is already gone.
+		addToBuffer(client, "OOC", "\""+text+"\" (raid guard)", false)
+		return true
+	}
+	if activeCaptchaRestricted.Load() > 0 && client.captchaRestricted.Load() {
+		client.Send(echo)
+		addToBuffer(client, "OOC", "\""+text+"\" (raid guard)", false)
+		return true
+	}
+
+	// While the server is actually under attack, a connection carrying ANY raid
+	// evidence does not get to broadcast to every client on the server, even if
+	// its score has not yet reached a rung that acts.
+	//
+	// A global is the largest audience a player can reach and it is opt-in, so
+	// holding one back costs an ordinary player nothing while a raid is running.
+	// The same is not true of area chat, which is why this applies here and not
+	// there.
+	//
+	// It borrows the safety argument the under-attack threshold scaling already
+	// rests on, and needs no new one:
+	//
+	//   - It never creates evidence. A score of zero -- every ordinary player who
+	//     is merely talking while a raid happens around them -- is untouched, so
+	//     the check is inert for them at any setting.
+	//   - It requires the under-attack state, which needs cross-IPID correlation
+	//     or an arrival burst and is not reachable by one person acting alone, so
+	//     a quiet evening never enters this mode at all.
+	//   - It respects the playtime tiers: raidGuardTier reports punishable=false
+	//     for moderators and for anyone at or above raid_guard_min_playtime, and
+	//     they are excluded here exactly as they are everywhere else.
+	//
+	// And it is a hold on one message, not a punishment: nothing is recorded
+	// against the sender, nothing persists, and it lapses on its own when the
+	// attack state does. The message is echoed back so their client looks normal.
+	if rs := client.raidGuard(); rs != nil && raidGuardUnderAttack() {
+		if score, _, _ := rs.snapshot(); score > 0 {
+			if _, punishable := raidGuardTier(client); punishable {
+				client.Send(echo)
+				addToBuffer(client, "OOC", "\""+text+"\" (raid guard: held during attack)", false)
+				return true
+			}
+		}
+	}
+	return false
+}

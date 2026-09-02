@@ -350,6 +350,13 @@ func cmdGlobal(client *Client, args []string, _ string) {
 	// correlation could not see it at all before -- a fan-out conducted entirely
 	// through /g was invisible to the raid guard.
 	raidGuardOnOOC(client, client.OOCName(), msg)
+	// The guard may have just silenced, kicked or banned this connection over
+	// this very message. Re-read that before broadcasting, so the message that
+	// earned the verdict is the first one stopped rather than the last one
+	// delivered -- see oocGuardVerdictSuppresses.
+	if oocGuardVerdictSuppresses(client, msg, out) {
+		return
+	}
 
 	broadcastToAll(out)
 	addToBuffer(client, "OOC", "[GLOBAL] \""+msg+"\"", false)

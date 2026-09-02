@@ -25,6 +25,7 @@ import (
 
 	"github.com/MangosArentLiterature/Athena/internal/area"
 	"github.com/MangosArentLiterature/Athena/internal/packet"
+	"github.com/MangosArentLiterature/Athena/internal/permissions"
 )
 
 // Every command handler that broadcasts free player text must consult
@@ -187,6 +188,139 @@ func TestOOCCommandGateVerdicts(t *testing.T) {
 		c.AddPunishment(PunishmentStealthMute, time.Hour, "")
 		if oocCommandAllowed(c, "perfectly clean text", "global message", echo) {
 			t.Error("a stealthmuted player reached the whole server through /global")
+		}
+	})
+}
+
+// The message that earns a raid-guard verdict must be the first one stopped,
+// not the last one delivered.
+//
+// cmdGlobal scores the guard AFTER the suppression checks -- deliberately, so a
+// message the room never heard is never fed to the correlation window -- which
+// means the captchaRestricted flag is read before the guard has had its say. On
+// an area message that costs one line; on a global it is one line delivered to
+// every client on the server, which is exactly the audience the verdict exists
+// to protect. pktIC has the same ordering problem solved by re-reading the flag
+// after scoring, and this asserts /global does the same.
+func TestRaidGuardVerdictSuppressesTheGlobalThatEarnedIt(t *testing.T) {
+	withRaidConfig(t)
+	room := area.NewArea(area.AreaData{Name: "Courtroom"}, 5, 10, area.EviAny)
+	echo := &packet.CTToClient{Name: "[GLOBAL] [UID 1] tester", Message: "x", IsFromServer: "1"}
+
+	t.Run("silence stops it", func(t *testing.T) {
+		prev := activeCaptchaRestricted.Load()
+		t.Cleanup(func() { activeCaptchaRestricted.Store(prev) })
+
+		c := &Client{char: -1, conn: &testConn{}, area: room, ipid: "verdict-silence"}
+		if oocGuardVerdictSuppresses(c, "hello", echo) {
+			t.Fatal("suppressed a global with no verdict against it")
+		}
+		// Exactly what a Silence verdict does.
+		raidGuardSilence(c)
+		if !oocGuardVerdictSuppresses(c, "hello", echo) {
+			t.Error("a global was broadcast after the guard silenced the sender over it")
+		}
+	})
+
+	t.Run("kick or ban stops it", func(t *testing.T) {
+		// markClosed closes client.done, so it has to exist -- a real connection
+		// always has one.
+		c := &Client{char: -1, conn: &testConn{}, area: room, ipid: "verdict-kick",
+			done: make(chan struct{})}
+		if oocGuardVerdictSuppresses(c, "hello", echo) {
+			t.Fatal("suppressed a global with no verdict against it")
+		}
+		c.markClosed()
+		if !oocGuardVerdictSuppresses(c, "hello", echo) {
+			t.Error("a global was broadcast to the whole server after the guard " +
+				"kicked or banned the sender over it")
+		}
+	})
+}
+
+// While the server is under attack, a connection carrying any raid evidence is
+// held back from broadcasting server-wide. The constraints that make that safe
+// are the point of this test: an ordinary player must be untouchable.
+func TestGlobalsHeldFromSuspiciousConnectionsDuringAnAttack(t *testing.T) {
+	// raidGuardTier reads playtime from the database and FAILS OPEN on an
+	// error -- a hiccup must never act on somebody, so the hold inherits that
+	// too. Without a real handle this test would pass or fail depending on
+	// what other tests in the package left the global db in, which is how it
+	// first went green alone and red in the suite.
+	defer setupShadowDisconnectTestDB(t)()
+	withRaidConfig(t)
+	room := area.NewArea(area.AreaData{Name: "Courtroom"}, 5, 10, area.EviAny)
+	echo := &packet.CTToClient{Name: "[GLOBAL] [UID 1] tester", Message: "x", IsFromServer: "1"}
+
+	prevAttack := raidAttackUntil.Load()
+	prevActive := raidGuardActive.Load()
+	t.Cleanup(func() {
+		raidAttackUntil.Store(prevAttack)
+		raidGuardActive.Store(prevActive)
+		resetRaidGuardState()
+	})
+	raidGuardActive.Store(true)
+
+	// A connection the guard has scored: the handshake-replay signal alone.
+	scored := func(ipid string) *Client {
+		c := &Client{char: -1, conn: &testConn{}, area: room, ipid: ipid}
+		rs := c.raidGuard()
+		if rs == nil {
+			t.Fatal("raid guard state not available")
+		}
+		rs.noteAskchaaPostJoin()
+		if score, _, _ := rs.snapshot(); score == 0 {
+			t.Fatal("test setup produced no score")
+		}
+		return c
+	}
+
+	underAttack := func(on bool) {
+		if on {
+			raidAttackUntil.Store(time.Now().Add(time.Minute).UnixNano())
+		} else {
+			raidAttackUntil.Store(0)
+		}
+	}
+
+	t.Run("held while under attack", func(t *testing.T) {
+		underAttack(true)
+		if !oocGuardVerdictSuppresses(scored("sus-1"), "hello", echo) {
+			t.Error("a scored connection broadcast server-wide during an active raid")
+		}
+	})
+
+	t.Run("not held when no attack is happening", func(t *testing.T) {
+		underAttack(false)
+		if oocGuardVerdictSuppresses(scored("sus-2"), "hello", echo) {
+			t.Error("a scored connection was held with no raid in progress; the hold " +
+				"must be inert outside the under-attack state")
+		}
+	})
+
+	// The property the whole thing rests on: scaling and holding never create
+	// evidence, so a player with none is untouchable at any setting.
+	t.Run("an ordinary player is never held", func(t *testing.T) {
+		underAttack(true)
+		c := &Client{char: -1, conn: &testConn{}, area: room, ipid: "ordinary"}
+		if rs := c.raidGuard(); rs != nil {
+			if score, _, _ := rs.snapshot(); score != 0 {
+				t.Fatalf("test setup gave an ordinary player a score of %d", score)
+			}
+		}
+		if oocGuardVerdictSuppresses(c, "what is going on", echo) {
+			t.Error("a player with zero raid score was held during an attack -- " +
+				"every ordinary player talking through a raid would be silenced")
+		}
+	})
+
+	t.Run("a moderator is never held", func(t *testing.T) {
+		underAttack(true)
+		c := scored("mod-1")
+		c.perms = permissions.PermissionField["ADMIN"]
+		if oocGuardVerdictSuppresses(c, "everyone calm down", echo) {
+			t.Error("a moderator was held; raidGuardTier reports them unpunishable " +
+				"and every other guard action respects that")
 		}
 	})
 }
