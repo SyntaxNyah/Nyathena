@@ -88,7 +88,10 @@ var punishmentHelpGroups = []punishmentSubcategory{
 	{
 		emoji: "⏱", title: "Timing & throughput",
 		desc: "Slow, speed up, pace — or reverse — the target's IC chat.",
-		cmds: []string{"slowpoke", "fastspammer", "lag", "lifo"},
+		// "lag" is deliberately absent: the in-game command was removed, and the
+		// torment list can now only be applied from the server console. /unlag
+		// stays listed under removal, since lifting one is unrestricted.
+		cmds: []string{"slowpoke", "fastspammer", "lifo"},
 	},
 	{
 		emoji: "☣️", title: "Traps & contagion",

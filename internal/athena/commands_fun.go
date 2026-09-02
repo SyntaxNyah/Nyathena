@@ -418,6 +418,15 @@ func cmdPossess(client *Client, args []string, _ string) {
 		Additive:               "0",
 	}
 
+	// Console gate, placed as late as it can go: after every validation branch
+	// above (including the two defensive character-bounds checks, which a race
+	// on the target's character change can still trip) and immediately before
+	// the only observable effect. A grant therefore buys one delivered message,
+	// never a failed attempt, and a refusal leaves the target's area untouched.
+	if !consumeConsoleGrant(client, "possess") {
+		return
+	}
+
 	// Send the IC message to the target's area
 	broadcastToArea(target.Area(), ms)
 
@@ -459,7 +468,11 @@ func cmdUnpossess(client *Client, args []string, _ string) {
 // cannot contest or expose it. Shared by /fullpossess and /truepossess — they are
 // equivalent, differing only in name and in the audit-log label. Stop with
 // /unpossess. Admins only (gated at the registry).
-func beginPossession(client *Client, args []string, label string) {
+// cmd is the registered command name this call arrived through, used for the
+// console gate. It is passed explicitly rather than derived from label, so
+// renaming the human-readable label cannot silently point the gate at a command
+// that does not exist (which would fail closed, but confusingly).
+func beginPossession(client *Client, args []string, label, cmd string) {
 	uid, err := strconv.Atoi(args[0])
 	if err != nil {
 		client.SendServerMessage("Invalid UID.")
@@ -488,6 +501,13 @@ func beginPossession(client *Client, args []string, label string) {
 		return
 	}
 
+	// Console gate. After validation (so a typo costs nothing) and before
+	// endTruePossession, which would otherwise drop an existing possession on
+	// the way to a refusal.
+	if !consumeConsoleGrant(client, cmd) {
+		return
+	}
+
 	// If this moderator was already possessing someone else, release that
 	// player's silent mute before re-pointing the link at the new target.
 	endTruePossession(client)
@@ -504,13 +524,13 @@ func beginPossession(client *Client, args []string, label string) {
 
 // Handles /fullpossess — persistent silencing possession (see beginPossession).
 func cmdFullPossess(client *Client, args []string, _ string) {
-	beginPossession(client, args, "full")
+	beginPossession(client, args, "full", "fullpossess")
 }
 
 // Handles /truepossess — identical to /fullpossess; kept as the explicit name for
 // the "become them and they can't expose it" behaviour (see beginPossession).
 func cmdTruePossess(client *Client, args []string, _ string) {
-	beginPossession(client, args, "true")
+	beginPossession(client, args, "true", "truepossess")
 }
 
 // Handles /rmusr

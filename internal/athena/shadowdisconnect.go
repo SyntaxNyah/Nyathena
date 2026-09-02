@@ -177,6 +177,20 @@ func cmdShadowDisconnect(client *Client, args []string, usage string) {
 		uidNote = fmt.Sprintf(" (UID %d)", uid)
 	}
 
+	// Console gate. The target has resolved and the moderator check has passed,
+	// so a mistyped UID or a protected target is already rejected without
+	// spending the grant, and a refusal here leaves the target's connection
+	// untouched.
+	//
+	// It has to sit before the write rather than after it: on the far side, a
+	// refusal would leave an unauthorised row already persisted. The cost of
+	// that ordering is that a database failure on the next line spends the
+	// grant even though nothing happened -- rare, recoverable by re-arming, and
+	// the right way round to be wrong.
+	if !consumeConsoleGrant(client, "shadowdisconnect") {
+		return
+	}
+
 	if err := db.AddShadowDisconnect(ipid, reason, client.ModName(), time.Now().UTC().Unix()); err != nil {
 		client.SendServerMessage(fmt.Sprintf("Failed to persist shadow-disconnect: %v", err))
 		return
