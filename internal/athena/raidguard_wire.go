@@ -72,11 +72,14 @@ func raidGuardTimings(client *Client, now time.Time) (sinceConnect, sinceCharPic
 	return sinceConnect, sinceCharPick
 }
 
-// raidGuardOnAskchaa records that this connection reached the askchaa
-// handshake step. Called from pktResCount. See raidState.noteAskchaa: nothing
-// is evaluated here, since reaching askchaa is the normal/expected event --
-// it's what arrives *before* it (see raidGuardOnHandshakeStep) that's the
-// anomaly.
+// raidGuardOnAskchaa records this connection's askchaa. Called from
+// pktResCount, before that handler's own early returns, so the guard sees the
+// packet whether or not the server acts on it.
+//
+// Two different things are watched here. Reaching askchaa pre-join is the
+// normal event and is only recorded -- it's what arrives *before* it that is
+// the anomaly (see raidGuardOnHandshakeStep). Reaching it *post*-join is itself
+// the anomaly, and is evaluated immediately (see SigHandshakeReplay).
 func raidGuardOnAskchaa(client *Client) {
 	if raidGuardExempt(client) {
 		return
@@ -85,7 +88,24 @@ func raidGuardOnAskchaa(client *Client) {
 	if rs == nil {
 		return
 	}
+	// Recorded unconditionally, including for the post-join case below. Skipping
+	// it there would leave sawAskchaa false, so the next RC/RM/RD would fire the
+	// ordering signal too and one behaviour would be charged twice -- 45 + 50 for
+	// a single replayed handshake. In production the connection has necessarily
+	// sent askchaa already (RD needs the `joining` flag that only pktResCount
+	// sets), so this is belt-and-braces rather than a live path; it costs one
+	// mutex acquisition on a handshake packet and removes the ordering
+	// dependency entirely.
 	rs.noteAskchaa()
+
+	// An askchaa arriving after RD already assigned this connection a UID is the
+	// one form of this packet that is not normal: pktId stops answering ID with
+	// PN once a UID exists, and every client implementation sends askchaa only in
+	// reply to PN, so nothing the server said can have prompted it. See
+	// SigHandshakeReplay for the per-client evidence.
+	if client.Uid() != -1 && rs.noteAskchaaPostJoin() {
+		raidGuardEvaluate(client, rs, "handshake replay")
+	}
 }
 
 // raidGuardOnHandshakeStep records one RC/RM/RD arrival and evaluates the

@@ -152,6 +152,20 @@ type ipidReplay struct {
 	charPicked  bool
 	charPickAt  time.Time
 	msgCount    int // CT + MS messages actually observed, i.e. "spoke"
+
+	// joined models *Client.Uid() != -1 for the connection currently in
+	// progress, which is what SigHandshakeReplay keys on. It is reset by HI
+	// and set by RD.
+	//
+	// The reset is load-bearing rather than tidy. raidState here is keyed by
+	// IPID, but in production it belongs to a *Client, and an IPID is an IP:
+	// one player reconnecting produces a second HI on the same IPID, and their
+	// fresh connection starts again at Uid() == -1. Without the reset this
+	// harness would read a reconnect's perfectly ordinary askchaa as a post-join
+	// one and fire the signal on a real player -- an artefact this harness would
+	// manufacture, not a behaviour the server has. A real reconnect in the clean
+	// capture set does exactly this, which is how the artefact was found.
+	joined bool
 }
 
 func (ir *ipidReplay) sinceCharPick(now time.Time) time.Duration {
@@ -180,13 +194,31 @@ func applyEvent(ir *ipidReplay, ev recvEvent) {
 	body := fields[1:]
 
 	switch kind {
+	case "HI":
+		// A new connection on this IPID (HI is the first packet a client
+		// sends). Production would build a fresh *Client here, so the join
+		// state starts over -- see ipidReplay.joined.
+		ir.joined = false
+
 	case "askchaa":
+		// Mirrors raidGuardOnAskchaa exactly, including that noteAskchaa is
+		// recorded unconditionally: post-join is the anomaly, but the packet is
+		// still an askchaa and must not leave sawAskchaa false.
 		ir.rs.noteAskchaa()
+		if ir.joined {
+			ir.rs.noteAskchaaPostJoin()
+		}
 
 	case "RC", "RM", "RD":
 		// Handshake list requests. Arriving before this connection's own
 		// askchaa is the protocol anomaly the guard watches for.
 		ir.rs.noteHandshakeStep()
+		if kind == "RD" {
+			// RD is where pktReqDone assigns the UID, after which the server
+			// will not answer another ID with PN -- so no client driven by PN
+			// can legitimately send askchaa again on this connection.
+			ir.joined = true
+		}
 
 	case "CC":
 		// Character pick. sinceConnect uses the first-RECV-event proxy for
