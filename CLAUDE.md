@@ -541,6 +541,27 @@ Runs collapse to 2 rather than 1 on purpose: a genuinely double-lettered entry n
 
 Both checks run once at load time (startup and `/reload`), not on the hot per-message path. This trades word-boundary awareness for evasion resistance: even with both gates, a banned entry can in principle match across what used to be separate words. That's an extension of the false-positive risk substring matching already had (e.g. `ass` inside `class`), not a new category — keep `banned_words.txt`/`censored_names.txt` entries as specific as practical, and check the startup/`/reload` logs for skipped-entry warnings after editing either file.
 
+### OOC Commands That Broadcast (`/global`, `/pm`) — Content Gate (Bug Fix)
+
+`pktOOC` dispatches a slash command and **returns** before it reaches the content gate, the torment branch, the stealthmute branch, the captcha restriction and the raid guard. That is right for the overwhelming majority of commands, which take no free text or address only the caller — and it was wrong for the two that carry arbitrary player text to other people.
+
+`/global` (and its alias `/g`) reaches **every client on the server**; `/pm` reaches any UID list the sender names. Neither was examined by anything. The consequences, all four confirmed against the source:
+
+- **A slur went out in full.** `banned_words.txt` was never consulted, at any tier — a `nuke` word that would have banned the IPID from ordinary OOC broadcast server-wide instead.
+- **A stealthmuted player was audible again**, to everyone, through the one command with the largest audience.
+- **A tormented player escaped the ghosting.** `isIPIDTormented` was never checked.
+- **A connection the join captcha had already stopped could still talk.** The command branch gates on `awaitingCaptcha`, but a connection that has *run out of attempts* carries `captchaRestricted` instead, and nothing on this path consulted it.
+
+The word filter appeared to be working, because it was — on the path those two commands do not take. Only `checkNewIPIDOOCCooldown` was re-checked inside `cmdGlobal`/`cmdPM`, so on a server with a large `new_ipid_ooc_cooldown` the cooldown was the *sole* thing standing between a slur and every connected client, and it lapses on its own: a raider who waits it out, or returns on an IPID the server has already seen, was never filtered at all.
+
+**The raid guard could not see a global either.** `raidGuardOnOOC` is called from `pktOOC` only, below the command branch, so a fan-out conducted entirely through `/g` produced no score, no fingerprint and no cross-IPID correlation. Replaying a real incident (24 globals from 16 IPIDs inside six seconds) through the production correlator: **9 echo hits and one line crossing the strong 4-IPID threshold**, so `SigDupeAcrossIPIDs` — the only signal that satisfies the ban gate — now fires on traffic that was previously invisible to layer 2 in its entirety.
+
+`oocCommandAllowed` (`internal/athena/ooc_command_gate.go`) restores that pipeline in the order `pktOOC` applies it, so the two cannot drift on what a censored, tormented or silenced player sees. Every suppressing branch sends back **exactly the packet that was about to be broadcast**, to the sender alone, so their own client looks normal and the suppression stays undetectable from the inside — the property shadow-sending exists for. Successful globals are also now written to the area buffer, so they appear in modcall reports.
+
+Two deliberate choices. Torment **ghosts** a global rather than routing through `handleTormentedOOC`: that helper re-broadcasts to the sender's *area* after a delay, which for a server-wide global would resurrect the message outside the gate and deliver it to the wrong audience. And `/pm` is gated but **not** raid-guard scored — unlike a global it is not a broadcast, and there is no capture data to calibrate correlating private messages against.
+
+Pinned by `ooc_command_gate_test.go`: the verdicts (clean passes, banned word blocked, spacing evasion normalized, `watch` tier still passes under *every* configured action, stealthmute no longer bypassable), plus two source-order invariants in the shape of `censor_ordering_test.go` — every send in `cmdGlobal`/`cmdPM` must sit after the gate, and `pktOOC`'s command branch must keep returning *before* its own gate, or a global would be filtered twice. The first was verified to fail on the pre-fix code.
+
 ### Join Captcha
 `join_captcha = true` makes a previously-unseen IPID answer one question before it can send IC or OOC messages, run most commands, or change the music. Connecting, looking around, picking a character and moving between areas all still work while unverified — this is a gate in front of *speech*, not in front of the connection, because AO2 has no captcha step in its handshake to hook.
 
@@ -931,7 +952,7 @@ Admins can adjust an account's stored playtime directly: `/playtime add <usernam
 Players with the `DJ` permission bit (and no moderator privileges) get a 💿 vinyl badge on their `/profile` card so DJs are visible at a glance. Mods are unaffected — they have their own staff lines.
 
 ### `/global` Tag Display
-`/global` now shows the sender's `[tag]` in the prefix, matching local-OOC formatting. `/g` is a plain alias of `/global` (same permissions, same handler) for players who want a shorter command to type.
+`/global` now shows the sender's `[tag]` in the prefix, matching local-OOC formatting. `/g` is a plain alias of `/global` (same permissions, same handler) for players who want a shorter command to type — which is also why gating one and not the other would gate nothing; both go through `oocCommandAllowed` (see "OOC Commands That Broadcast" above).
 
 ### `/status lfp` Shorthand
 `/status` (CM) sets the current area's AO2 status (`idle`, `looking-for-players`, `casing`, `recess`, `rp`, `gaming`). `lfp` is accepted as a shorthand for `looking-for-players` — `/status lfp` and `/status looking-for-players` set the exact same status.
