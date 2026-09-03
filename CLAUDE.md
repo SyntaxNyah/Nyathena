@@ -694,11 +694,39 @@ This is separate from `conn_flood_autoban` (repeated *connection* rejections) an
 
 **New-IPID IC cooldown ordering.** `new_ipid_ic_cooldown` (default: 10s, mirrors `new_ipid_ooc_cooldown`) blocks a brand-new IPID from speaking IC until the cooldown elapses. Unlike the OOC cooldown (checked before AutoMod in `pktOOC`), the IC cooldown check in `pktIC` runs deliberately *after* the rate-limit and AutoMod/censor/torment checks — so a flood or slur burst from a fresh connection during the cooldown window is still judged (and can still trigger the autoban above) by those checks, rather than being silently absorbed by the cooldown. The cooldown itself only ever rejects an otherwise-clean message sent too early.
 
-### CharsCheck Fan-Out (Server Freeze, Bug Fix)
+### Server Freeze: A Blocking Socket Write Under the Field Mutex (Bug Fix)
 
-A raid froze the server without crashing it, while AutoMod was correctly catching everything the raiders said. The cause was not the content path at all.
+A raid froze the server without crashing it, while AutoMod was correctly catching everything the raiders said. The cause was a lock held across blocking I/O, and one connection that had stopped reading was enough to do it.
 
-A packet capture taken during it spans **2.16 seconds** and carries **6.1 MB** of outbound payload. The breakdown is lopsided:
+```go
+func (client *Client) write(message string) {
+    client.mu.Lock()
+    io.WriteString(client.conn, message)   // blocking, no deadline
+    client.mu.Unlock()
+}
+
+func (client *Client) Area() *area.Area {
+    client.mu.Lock()                        // the SAME mutex
+    defer client.mu.Unlock()
+    return client.area
+}
+```
+
+`client.mu` is the general field mutex, and `Area()` is what **every broadcast calls on every client** to decide who the recipients are. So a client blocked in `write` holds the mutex that every fan-out on the server needs. `runWriter` clears the write deadline after each of its own writes, so nothing bounded this one: on a socket whose send buffer is full, `io.WriteString` blocks until TCP gives up, and the mutex is never released.
+
+`pktReqAM` used that path to push the ~45 KB music/area list **on join**. A raid is hundreds of connections joining at once, many of them bots that connect and never read — so the raid supplies exactly the input that pins the lock.
+
+`SendPacketSync` had the same shape. It does set a deadline, so it is bounded at `writeDeadline` (30 s) rather than forever — but 30 seconds of holding the mutex every broadcast needs is still a server-wide stall, and the path is reached **in bulk at the worst possible moment**: the lockdown playtime purge delivers its kick reason through `SendPacketSync` to every connection it removes. Turning on lockdown to stop a raid fans that out to hundreds of half-open sockets at once, so **the anti-raid response was itself capable of freezing the server**.
+
+**The fix:** neither path holds `client.mu` across I/O any more. `mu` is taken only long enough to read the conn and the log fields, and a separate `writeMu` preserves the one thing it was providing — that two concurrent inline writes cannot interleave their bytes. `Client.write` also now sets a deadline, so it is bounded even in the fallback case, and `pktReqAM` enqueues the pre-built SM blob (`getSMPacketBytes`, published in lockstep with the string form) through the ordinary asynchronous queue rather than writing inline at all.
+
+Pinned by `write_lock_stall_test.go`, which stands up a connection that blocks in `Write` and asserts an ordinary broadcast still completes — once for the join path and once for the purge path. Both were verified to fail against the pre-fix code (a 3-second timeout) and pass after (instant).
+
+### CharsCheck Fan-Out (Bug Fix)
+
+Separate from the freeze above, and found while investigating it: a real inefficiency in how broadcasts are serialized, worth fixing on its own but **not** on its own an explanation for the freeze (see the measurement at the end of this section).
+
+A packet capture taken during the incident spans **2.16 seconds** and carries **6.1 MB** of outbound payload. The breakdown is lopsided:
 
 | Packet | Sends | Bytes | Share | Avg size |
 |--------|------:|------:|------:|---------:|
@@ -720,7 +748,17 @@ Benchmarked at 600 clients, one character change:
 | allocated | 5.76 MB | 83 KB | **69x** |
 | allocations | 603 | 5 | 120x |
 
-**12.65 ms of CPU per character change** means ~80 changes/second saturates a core, and each one sheds 5.76 MB of garbage. Rapid character re-rolling is a *documented raid signature* (`SigCharChurn` scores it), so a raid drives precisely the input that maximises this. That is a server that stops responding while never crashing — CPU and GC, not a deadlock.
+Rapid character re-rolling is a *documented raid signature* (`SigCharChurn` scores it), so a raid drives precisely the input that maximises this.
+
+**How much of the freeze this actually explains: measurably, not much — and that is worth recording.** Replaying the real character-change timeline from `raid_capture.log` against the real broadcast code (`freeze_sim_test.go`) reports CPU-seconds consumed per wall-second of captured traffic. Above 1.00 the work arrives faster than it can be done and the backlog grows without bound; the measured peak raid rate is 8–10 changes/sec:
+
+| clients | before | after |
+|---|---:|---:|
+| 118 (the freeze capture's population) | 0.02x | 0.00x |
+| 600 | 0.13x | 0.00x |
+| 1000 | 0.19x | 0.01x |
+
+So the fan-out never came close to saturating a core at real raid rates, and the first, confident diagnosis — that this *was* the freeze — was wrong. Building the simulation is what showed it, which is the argument for building one rather than extrapolating from a microbenchmark. What the projection does show is allocation: **349 GB churned over two hours** of sustained raiding at 600 clients, against 6.2 GB after. Worth fixing for GC pressure alone; not a freeze.
 
 Two things it was *not*, both already fixed earlier and confirmed still correct here: `SendPacket` is asynchronous (it buffers and pushes to `sendCh`, dropping on overflow rather than blocking a broadcaster on one slow consumer), and `ClientList.ForEach` releases its read lock after snapshotting, before any send. Neither a stuck socket nor lock contention was involved.
 

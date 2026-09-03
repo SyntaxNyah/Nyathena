@@ -60,6 +60,10 @@ var (
 	censoredNamesPtr   atomic.Pointer[[]string]
 	punishmentNamesPtr atomic.Pointer[[]string]
 	smPacketPtr        atomic.Pointer[string]
+	// smPacketBytes is the same blob pre-converted for the outbound queue, so
+	// the join path never converts (or worse, blocking-writes) per connection.
+	// Published in lockstep with smPacketPtr by setSMPacket.
+	smPacketBytes atomic.Pointer[[]byte]
 )
 
 // reloadMu serializes calls to ReloadConfig so two concurrent reloads cannot
@@ -140,7 +144,21 @@ func setCDNs(c []string)            { storeStrSlice(&cdnsPtr, c) }
 func setBannedWords(w []string)     { storeStrSlice(&bannedWordsPtr, w) }
 func setCensoredNames(n []string)   { storeStrSlice(&censoredNamesPtr, n) }
 func setPunishmentNames(n []string) { storeStrSlice(&punishmentNamesPtr, n) }
-func setSMPacket(s string)          { smPacketPtr.Store(&s) }
+func setSMPacket(s string) {
+	smPacketPtr.Store(&s)
+	b := []byte(s)
+	smPacketBytes.Store(&b)
+}
+
+// getSMPacketBytes returns the pre-built SM blob ready to enqueue. The slice is
+// shared by every connection that joins between reloads and must never be
+// modified -- the outbound path only ever reads it.
+func getSMPacketBytes() []byte {
+	if v := smPacketBytes.Load(); v != nil {
+		return *v
+	}
+	return nil
+}
 
 // buildCharIndex builds the lowercase-name → character-ID lookup map.
 func buildCharIndex(chars []string) map[string]int {

@@ -335,9 +335,13 @@ type ClientPairInfo struct {
 const emergencyBypassWindow = 30 * time.Second
 
 type Client struct {
-	pair                ClientPairInfo
-	mu                  sync.Mutex
-	conn                net.Conn
+	pair ClientPairInfo
+	mu   sync.Mutex
+	conn net.Conn
+	// writeMu serializes inline socket writes with each other. Deliberately
+	// separate from mu: nothing that blocks on I/O may hold the mutex ordinary
+	// field accessors use -- see Client.write.
+	writeMu             sync.Mutex
 	joining             bool
 	hdid                string
 	uid                 int
@@ -827,13 +831,39 @@ func skipNetWhitespace(br *bufio.Reader) error {
 // write sends the given message to the client's network socket.
 // Write errors are intentionally ignored: any underlying connection failure
 // will surface on the next read in HandleClient, which closes the connection.
+//
+// The socket write MUST NOT happen under client.mu. It used to, and that was a
+// server-wide freeze: client.mu is the general field mutex, taken by ordinary
+// accessors including Client.Area() -- which every broadcast calls on every
+// client to decide who the recipients are. A connection whose send buffer was
+// full would block here holding that mutex, and every broadcast on the server
+// then queued behind it. With no deadline set (runWriter clears the deadline
+// after each of its own writes) that block is indefinite, so the server stops
+// responding without ever crashing. A raid produces exactly this: many
+// connections that join and then never read. See
+// TestStuckWriterCannotStallBroadcasts.
+//
+// mu is therefore held only long enough to read the fields, and a separate
+// writeMu preserves the one thing it was actually providing here -- that two
+// concurrent write calls cannot interleave their bytes on the wire.
 func (client *Client) write(message string) {
 	client.mu.Lock()
-	io.WriteString(client.conn, message) //nolint:errcheck
-	if logger.EnableNetworkLogging {
-		logger.WriteNetworkLog(client.ipid, client.hdid, "SEND", message)
-	}
+	conn, ipid, hdid := client.conn, client.ipid, client.hdid
 	client.mu.Unlock()
+	if conn == nil {
+		return
+	}
+
+	client.writeMu.Lock()
+	// Bounded so a stuck socket cannot pin this path forever either.
+	conn.SetWriteDeadline(time.Now().Add(writeDeadline())) //nolint:errcheck
+	io.WriteString(conn, message)                          //nolint:errcheck
+	conn.SetWriteDeadline(time.Time{})                     //nolint:errcheck
+	client.writeMu.Unlock()
+
+	if logger.EnableNetworkLogging {
+		logger.WriteNetworkLog(ipid, hdid, "SEND", message)
+	}
 }
 
 // SendPacket enqueues a packet for asynchronous delivery. The packet is built
@@ -944,17 +974,37 @@ func (client *Client) SendPacketSync(header string, contents ...string) {
 		b.WriteString("#%")
 	}
 
+	// Same rule as Client.write: the socket write must not happen under
+	// client.mu. The deadline bounds it at writeDeadline (30s by default)
+	// rather than forever, but 30 seconds of holding the mutex every broadcast
+	// needs -- Client.Area() takes it -- is still a server-wide stall, and this
+	// path is reached in bulk during exactly the wrong moment: the lockdown
+	// purge delivers its kick reason through SendPacketSync to every connection
+	// it is removing, which during a raid is hundreds of sockets that have
+	// stopped reading. writeMu keeps concurrent inline writes from interleaving.
 	client.mu.Lock()
-	client.conn.SetWriteDeadline(time.Now().Add(writeDeadline())) //nolint:errcheck
-	if logger.EnableNetworkLogging {
-		msg := b.String()
-		client.conn.Write(b.Bytes()) //nolint:errcheck
-		logger.WriteNetworkLog(client.ipid, client.hdid, "SEND", msg)
-	} else {
-		b.WriteTo(client.conn) //nolint:errcheck
-	}
-	client.conn.SetWriteDeadline(time.Time{}) //nolint:errcheck
+	conn, ipid, hdid := client.conn, client.ipid, client.hdid
 	client.mu.Unlock()
+	if conn == nil {
+		packetBufPool.Put(b)
+		return
+	}
+
+	client.writeMu.Lock()
+	conn.SetWriteDeadline(time.Now().Add(writeDeadline())) //nolint:errcheck
+	var msg string
+	if logger.EnableNetworkLogging {
+		msg = b.String()
+		conn.Write(b.Bytes()) //nolint:errcheck
+	} else {
+		b.WriteTo(conn) //nolint:errcheck
+	}
+	conn.SetWriteDeadline(time.Time{}) //nolint:errcheck
+	client.writeMu.Unlock()
+
+	if logger.EnableNetworkLogging {
+		logger.WriteNetworkLog(ipid, hdid, "SEND", msg)
+	}
 
 	packetBufPool.Put(b)
 }
