@@ -695,6 +695,78 @@ This is separate from `conn_flood_autoban` (repeated *connection* rejections) an
 
 **New-IPID IC cooldown ordering.** `new_ipid_ic_cooldown` (default: 10s, mirrors `new_ipid_ooc_cooldown`) blocks a brand-new IPID from speaking IC until the cooldown elapses. Unlike the OOC cooldown (checked before AutoMod in `pktOOC`), the IC cooldown check in `pktIC` runs deliberately *after* the rate-limit and AutoMod/censor/torment checks — so a flood or slur burst from a fresh connection during the cooldown window is still judged (and can still trigger the autoban above) by those checks, rather than being silently absorbed by the cooldown. The cooldown itself only ever rejects an otherwise-clean message sent too early.
 
+### Server Freeze: A Blocking Socket Write Under the Field Mutex (Bug Fix)
+
+A raid froze the server without crashing it, while AutoMod was correctly catching everything the raiders said. The cause was a lock held across blocking I/O, and one connection that had stopped reading was enough to do it.
+
+```go
+func (client *Client) write(message string) {
+    client.mu.Lock()
+    io.WriteString(client.conn, message)   // blocking, no deadline
+    client.mu.Unlock()
+}
+
+func (client *Client) Area() *area.Area {
+    client.mu.Lock()                        // the SAME mutex
+    defer client.mu.Unlock()
+    return client.area
+}
+```
+
+`client.mu` is the general field mutex, and `Area()` is what **every broadcast calls on every client** to decide who the recipients are. So a client blocked in `write` holds the mutex that every fan-out on the server needs. `runWriter` clears the write deadline after each of its own writes, so nothing bounded this one: on a socket whose send buffer is full, `io.WriteString` blocks until TCP gives up, and the mutex is never released.
+
+`pktReqAM` used that path to push the ~45 KB music/area list **on join**. A raid is hundreds of connections joining at once, many of them bots that connect and never read — so the raid supplies exactly the input that pins the lock.
+
+`SendPacketSync` had the same shape. It does set a deadline, so it is bounded at `writeDeadline` (30 s) rather than forever — but 30 seconds of holding the mutex every broadcast needs is still a server-wide stall, and the path is reached **in bulk at the worst possible moment**: the lockdown playtime purge delivers its kick reason through `SendPacketSync` to every connection it removes. Turning on lockdown to stop a raid fans that out to hundreds of half-open sockets at once, so **the anti-raid response was itself capable of freezing the server**.
+
+**The fix:** neither path holds `client.mu` across I/O any more. `mu` is taken only long enough to read the conn and the log fields, and a separate `writeMu` preserves the one thing it was providing — that two concurrent inline writes cannot interleave their bytes. `Client.write` also now sets a deadline, so it is bounded even in the fallback case, and `pktReqAM` enqueues the pre-built SM blob (`getSMPacketBytes`, published in lockstep with the string form) through the ordinary asynchronous queue rather than writing inline at all.
+
+Pinned by `write_lock_stall_test.go`, which stands up a connection that blocks in `Write` and asserts an ordinary broadcast still completes — once for the join path and once for the purge path. Both were verified to fail against the pre-fix code (a 3-second timeout) and pass after (instant).
+
+### CharsCheck Fan-Out (Bug Fix)
+
+Separate from the freeze above, and found while investigating it: a real inefficiency in how broadcasts are serialized, worth fixing on its own but **not** on its own an explanation for the freeze (see the measurement at the end of this section).
+
+A packet capture taken during the incident spans **2.16 seconds** and carries **6.1 MB** of outbound payload. The breakdown is lopsided:
+
+| Packet | Sends | Bytes | Share | Avg size |
+|--------|------:|------:|------:|---------:|
+| **CharsCheck** | 515 | 4,641,175 | **75.8%** | **9,011** |
+| ARUP | 4,133 | 520,951 | 8.5% | 126 |
+| SC / SM (join lists) | 14 | 790,948 | 13.0% | ~56,000 |
+| PU | 7,705 | 119,498 | 2.0% | 15 |
+| PR | 2,675 | 25,211 | 0.4% | 9 |
+
+Those 4.6 MB of `CharsCheck` were produced by **eight character changes**. `CharsCheck` carries one entry per character on the server (4,465 here), so it is ~9 KB, and it is broadcast to the whole area on every character change — 64 recipients each, i.e. **0.58 MB per character change with 45 people online**.
+
+`SendPacket` serializes per recipient: it walks the entire argument slice and allocates a fresh buffer for each client. For a packet with four short fields that is irrelevant. For one with 4,465, sending an *identical* payload N times costs N × 4,465 loop iterations and N × 9 KB of immediately-garbage allocation.
+
+Benchmarked at 600 clients, one character change:
+
+| | per recipient | build once | |
+|---|---:|---:|---|
+| time | 12.65 ms | 0.21 ms | **60x** |
+| allocated | 5.76 MB | 83 KB | **69x** |
+| allocations | 603 | 5 | 120x |
+
+Rapid character re-rolling is a *documented raid signature* (`SigCharChurn` scores it), so a raid drives precisely the input that maximises this.
+
+**How much of the freeze this actually explains: measurably, not much — and that is worth recording.** Replaying the real character-change timeline from `raid_capture.log` against the real broadcast code (`freeze_sim_test.go`) reports CPU-seconds consumed per wall-second of captured traffic. Above 1.00 the work arrives faster than it can be done and the backlog grows without bound; the measured peak raid rate is 8–10 changes/sec:
+
+| clients | before | after |
+|---|---:|---:|
+| 118 (the freeze capture's population) | 0.02x | 0.00x |
+| 600 | 0.13x | 0.00x |
+| 1000 | 0.19x | 0.01x |
+
+So the fan-out never came close to saturating a core at real raid rates, and the first, confident diagnosis — that this *was* the freeze — was wrong. Building the simulation is what showed it, which is the argument for building one rather than extrapolating from a microbenchmark. What the projection does show is allocation: **349 GB churned over two hours** of sustained raiding at 600 clients, against 6.2 GB after. Worth fixing for GC pressure alone; not a freeze.
+
+Two things it was *not*, both already fixed earlier and confirmed still correct here: `SendPacket` is asynchronous (it buffers and pushes to `sendCh`, dropping on overflow rather than blocking a broadcaster on one slow consumer), and `ClientList.ForEach` releases its read lock after snapshotting, before any send. Neither a stuck socket nor lock contention was involved.
+
+`broadcastToAreaOnce` (`internal/athena/broadcast_prebuilt.go`) serializes the packet **once per wire format** and hands every recipient the same immutable buffer via `Client.sendPrebuilt`. Safe because `runWriter` only reads the slice (`conn.Write(buf)`, and `string(buf)` for the network log) and never mutates it, so one buffer can back any number of queued sends. It keeps `SendPacket`'s contract exactly: non-blocking, and a full queue drops rather than blocking or disconnecting. JSON-mode clients get their own single `BuildJSON` blob, and the MS broadcast schema is validated once per packet rather than once per recipient, since the bytes are identical.
+
+Applied to all five `CharsCheck` broadcasts and deliberately nowhere else: ARUP (126 bytes) and PU (15 bytes) are three orders of magnitude smaller per packet, so rebuilding those per recipient costs little and the indirection would not pay for itself. Pinned by `broadcast_prebuilt_test.go`, which asserts the emitted bytes are identical to what the per-recipient path produced, that all recipients genuinely share one backing array, that area scoping still holds, and that a client which is not reading gets its packet dropped instead of stalling the fan-out.
+
 ### Raid Guard (Behavioural Fan-Out Detection)
 Every rate limit the server had before this feature — `message_rate_limit`, `ooc_rate_limit`, the Repeat-Offender Autoban above, even `conn_flood_autoban` — is keyed on one identity: an IPID, an HDID, a connection. That structurally cannot see a raid, because a raid is not one identity behaving badly, it is a *fan-out*: many identities behaving identically. A real incident on this server put **65 distinct IPIDs** on the box inside **three seconds**, and every single one of them individually stayed under `message_rate_limit` the whole time. Measured against a clean baseline capture, the per-IPID speech rate of a raider (median **2.31 msg/s**) was indistinguishable from an ordinary player mid-conversation (**2.00 msg/s**) — while the *aggregate* rate differed by **41x**. There is no per-IPID threshold that separates those two populations, because on a per-IPID basis they are the same population. Catching this needed something that scores behaviour instead of volume, and something that looks at the server as a whole instead of one connection at a time.
 

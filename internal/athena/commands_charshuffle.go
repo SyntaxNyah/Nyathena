@@ -114,7 +114,7 @@ func cmdCharShuffle(client *Client, _ []string, _ string) {
 		p.c.SendServerMessage("A moderator has shuffled characters in this area.")
 	}
 	// Single CharsCheck broadcast at the end is much cheaper than per-client.
-	broadcastToArea(targetArea, &packet.CharsCheck{Entries: targetArea.Taken()})
+	broadcastToAreaOnce(targetArea, &packet.CharsCheck{Entries: targetArea.Taken()})
 	// Push PU updates so other players see the new char names too.
 	for _, p := range participants {
 		broadcastToAll(&packet.PU{ID: p.c.Uid(), Type: 1, Data: p.c.CurrentCharacter()})
@@ -174,7 +174,7 @@ func cmdUnCharShuffle(client *Client, _ []string, _ string) {
 		p.c.SetShuffledOrigCharID(-2)
 		p.c.SendServerMessage("A moderator has restored characters in this area.")
 	}
-	broadcastToArea(targetArea, &packet.CharsCheck{Entries: targetArea.Taken()})
+	broadcastToAreaOnce(targetArea, &packet.CharsCheck{Entries: targetArea.Taken()})
 	for _, p := range participants {
 		broadcastToAll(&packet.PU{ID: p.c.Uid(), Type: 1, Data: p.c.CurrentCharacter()})
 	}

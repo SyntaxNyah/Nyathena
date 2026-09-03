@@ -258,7 +258,12 @@ func pktReqAM(client *Client, _ *packet.Packet) {
 		client.Send(&packet.SM{Items: items})
 		return
 	}
-	client.write(getSMPacket())
+	// Enqueued, never written inline. This used to call client.write, which
+	// held client.mu across a blocking ~45 KB socket write with no deadline --
+	// and Client.Area() takes that same mutex, so every broadcast on the server
+	// queued behind any connection that had stopped reading. See
+	// TestStuckWriterCannotStallBroadcasts.
+	client.sendPrebuilt(getSMPacketBytes())
 }
 
 // Handles RD#%
