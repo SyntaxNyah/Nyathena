@@ -1798,7 +1798,7 @@ func (client *Client) ChangeArea(a *area.Area) bool {
 		// mirrors pktReqDone's ordering and matches Akashi's behaviour.
 		client.Send(&packet.DONE{})
 	} else {
-		broadcastToArea(a, &packet.CharsCheck{Entries: a.Taken()})
+		broadcastToAreaOnce(a, &packet.CharsCheck{Entries: a.Taken()})
 	}
 	// BN always last — after any DONE — so desk-overlay images never load
 	// against an unrendered viewport on WebAO (same fix as initial join).
@@ -1997,7 +1997,7 @@ func (client *Client) ChangeCharacter(id int) {
 		// player's display name (e.g. "Adachi") persists across character
 		// changes and is used correctly by possession commands.
 		client.Send(&packet.PV{PlayerID: 0, CharID: id})
-		broadcastToArea(client.Area(), &packet.CharsCheck{Entries: client.Area().Taken()})
+		broadcastToAreaOnce(client.Area(), &packet.CharsCheck{Entries: client.Area().Taken()})
 		if client.Uid() != -1 {
 			broadcastToAll(&packet.PU{ID: client.Uid(), Type: 1, Data: client.CurrentCharacter()})
 			broadcastToAll(&packet.PU{ID: client.Uid(), Type: 2, Data: decode(client.Showname())})
@@ -2271,7 +2271,7 @@ func (client *Client) forceChangeArea(a *area.Area) {
 		// must initialize the viewport before desk-overlay images load.
 		client.Send(&packet.DONE{})
 	} else {
-		broadcastToArea(a, &packet.CharsCheck{Entries: a.Taken()})
+		broadcastToAreaOnce(a, &packet.CharsCheck{Entries: a.Taken()})
 	}
 	// BN always after any DONE so desk overlays load correctly on WebAO.
 	client.Send(&packet.BN{Background: a.Background()})

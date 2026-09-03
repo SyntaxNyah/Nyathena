@@ -694,6 +694,40 @@ This is separate from `conn_flood_autoban` (repeated *connection* rejections) an
 
 **New-IPID IC cooldown ordering.** `new_ipid_ic_cooldown` (default: 10s, mirrors `new_ipid_ooc_cooldown`) blocks a brand-new IPID from speaking IC until the cooldown elapses. Unlike the OOC cooldown (checked before AutoMod in `pktOOC`), the IC cooldown check in `pktIC` runs deliberately *after* the rate-limit and AutoMod/censor/torment checks — so a flood or slur burst from a fresh connection during the cooldown window is still judged (and can still trigger the autoban above) by those checks, rather than being silently absorbed by the cooldown. The cooldown itself only ever rejects an otherwise-clean message sent too early.
 
+### CharsCheck Fan-Out (Server Freeze, Bug Fix)
+
+A raid froze the server without crashing it, while AutoMod was correctly catching everything the raiders said. The cause was not the content path at all.
+
+A packet capture taken during it spans **2.16 seconds** and carries **6.1 MB** of outbound payload. The breakdown is lopsided:
+
+| Packet | Sends | Bytes | Share | Avg size |
+|--------|------:|------:|------:|---------:|
+| **CharsCheck** | 515 | 4,641,175 | **75.8%** | **9,011** |
+| ARUP | 4,133 | 520,951 | 8.5% | 126 |
+| SC / SM (join lists) | 14 | 790,948 | 13.0% | ~56,000 |
+| PU | 7,705 | 119,498 | 2.0% | 15 |
+| PR | 2,675 | 25,211 | 0.4% | 9 |
+
+Those 4.6 MB of `CharsCheck` were produced by **eight character changes**. `CharsCheck` carries one entry per character on the server (4,465 here), so it is ~9 KB, and it is broadcast to the whole area on every character change — 64 recipients each, i.e. **0.58 MB per character change with 45 people online**.
+
+`SendPacket` serializes per recipient: it walks the entire argument slice and allocates a fresh buffer for each client. For a packet with four short fields that is irrelevant. For one with 4,465, sending an *identical* payload N times costs N × 4,465 loop iterations and N × 9 KB of immediately-garbage allocation.
+
+Benchmarked at 600 clients, one character change:
+
+| | per recipient | build once | |
+|---|---:|---:|---|
+| time | 12.65 ms | 0.21 ms | **60x** |
+| allocated | 5.76 MB | 83 KB | **69x** |
+| allocations | 603 | 5 | 120x |
+
+**12.65 ms of CPU per character change** means ~80 changes/second saturates a core, and each one sheds 5.76 MB of garbage. Rapid character re-rolling is a *documented raid signature* (`SigCharChurn` scores it), so a raid drives precisely the input that maximises this. That is a server that stops responding while never crashing — CPU and GC, not a deadlock.
+
+Two things it was *not*, both already fixed earlier and confirmed still correct here: `SendPacket` is asynchronous (it buffers and pushes to `sendCh`, dropping on overflow rather than blocking a broadcaster on one slow consumer), and `ClientList.ForEach` releases its read lock after snapshotting, before any send. Neither a stuck socket nor lock contention was involved.
+
+`broadcastToAreaOnce` (`internal/athena/broadcast_prebuilt.go`) serializes the packet **once per wire format** and hands every recipient the same immutable buffer via `Client.sendPrebuilt`. Safe because `runWriter` only reads the slice (`conn.Write(buf)`, and `string(buf)` for the network log) and never mutates it, so one buffer can back any number of queued sends. It keeps `SendPacket`'s contract exactly: non-blocking, and a full queue drops rather than blocking or disconnecting. JSON-mode clients get their own single `BuildJSON` blob, and the MS broadcast schema is validated once per packet rather than once per recipient, since the bytes are identical.
+
+Applied to all five `CharsCheck` broadcasts and deliberately nowhere else: ARUP (126 bytes) and PU (15 bytes) are three orders of magnitude smaller per packet, so rebuilding those per recipient costs little and the indirection would not pay for itself. Pinned by `broadcast_prebuilt_test.go`, which asserts the emitted bytes are identical to what the per-recipient path produced, that all recipients genuinely share one backing array, that area scoping still holds, and that a client which is not reading gets its packet dropped instead of stalling the fan-out.
+
 ### Raid Guard (Behavioural Fan-Out Detection)
 Every rate limit the server had before this feature — `message_rate_limit`, `ooc_rate_limit`, the Repeat-Offender Autoban above, even `conn_flood_autoban` — is keyed on one identity: an IPID, an HDID, a connection. That structurally cannot see a raid, because a raid is not one identity behaving badly, it is a *fan-out*: many identities behaving identically. A real incident on this server put **65 distinct IPIDs** on the box inside **three seconds**, and every single one of them individually stayed under `message_rate_limit` the whole time. Measured against a clean baseline capture, the per-IPID speech rate of a raider (median **2.31 msg/s**) was indistinguishable from an ordinary player mid-conversation (**2.00 msg/s**) — while the *aggregate* rate differed by **41x**. There is no per-IPID threshold that separates those two populations, because on a per-IPID basis they are the same population. Catching this needed something that scores behaviour instead of volume, and something that looks at the server as a whole instead of one connection at a time.
 
