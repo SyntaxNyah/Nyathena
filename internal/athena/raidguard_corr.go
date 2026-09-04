@@ -46,8 +46,6 @@ import (
 	"unicode"
 
 	"github.com/MangosArentLiterature/Athena/internal/logger"
-	"github.com/MangosArentLiterature/Athena/internal/packet"
-	"github.com/MangosArentLiterature/Athena/internal/permissions"
 )
 
 // Shingle parameters. shingleSize is the number of consecutive tokens in a
@@ -415,13 +413,7 @@ func alertRaidLockdown() {
 	msg := "Raid guard detected a coordinated raid and engaged lockdown automatically: new IPIDs cannot " +
 		"join until it is lifted. Connected players were NOT purged. Run /lockdown off to lift it, or " +
 		"/lockdown on if you also want the playtime purge."
-	out := &packet.CTToClient{Name: "[RAIDGUARD]", Message: encode(msg), IsFromServer: "1"}
-	clients.ForEach(func(c *Client) {
-		if !permissions.HasPermission(c.Perms(), permissions.PermissionField["MOD_CHAT"]) {
-			return
-		}
-		c.Send(out)
-	})
+	sendRaidGuardAlert(msg)
 }
 
 // raidGuardUnderAttack reports whether the server is currently seeing evidence

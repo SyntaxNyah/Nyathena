@@ -22,10 +22,17 @@
 //	/raidguard clear all    -- the same, for every connected client.
 //	/raidguard test <text>  -- show what the engine makes of a line of text
 //	                           without acting on anyone or recording anything.
+//	/raidguard alert <on|off> -- mute the [RAIDGUARD] staff alerts for your own
+//	                           session, the way /censoralerts mutes censor trips.
 //
-// Same permission and shape as /joincaptcha (joincaptcha.go): a single
-// subcommand dispatcher gated on BAN, status/verify-style reporting, and a
-// UID-or-"all" clear form mirroring /joincaptcha reset.
+// The command as a whole is gated on MOD_CHAT rather than BAN so that everyone
+// who *receives* the alerts can also turn them off; status, clear and test
+// re-check BAN in the handler, so lowering the registry gate widens nothing
+// but the toggle.
+//
+// Otherwise the same shape as /joincaptcha (joincaptcha.go): a single
+// subcommand dispatcher, status/verify-style reporting, and a UID-or-"all"
+// clear form mirroring /joincaptcha reset.
 package athena
 
 import (
@@ -36,6 +43,7 @@ import (
 	"time"
 
 	"github.com/MangosArentLiterature/Athena/internal/logger"
+	"github.com/MangosArentLiterature/Athena/internal/permissions"
 )
 
 // cmdRaidGuard handles the moderator side of the raid guard.
@@ -44,7 +52,20 @@ func cmdRaidGuard(client *Client, args []string, usage string) {
 		client.SendServerMessage(usage)
 		return
 	}
-	switch strings.ToLower(args[0]) {
+	sub := strings.ToLower(args[0])
+
+	// The opt-out is available to every alert recipient (MOD_CHAT); everything
+	// else here inspects or changes live raid state and stays on BAN.
+	if sub == "alert" || sub == "alerts" {
+		raidGuardAlertCmd(client, args[1:])
+		return
+	}
+	if !permissions.HasPermission(client.Perms(), permissions.PermissionField["BAN"]) {
+		client.SendServerMessage("You do not have permission to use that command.\nUsage: /raidguard alert <on|off>")
+		return
+	}
+
+	switch sub {
 	case "status":
 		raidGuardStatus(client)
 	case "clear":
@@ -61,6 +82,35 @@ func cmdRaidGuard(client *Client, args []string, usage string) {
 		raidGuardTest(client, strings.Join(args[1:], " "))
 	default:
 		client.SendServerMessage(usage)
+	}
+}
+
+// --- /raidguard alert -----------------------------------------------------
+
+// raidGuardAlertCmd handles /raidguard alert <on|off>, the per-session mute
+// for the [RAIDGUARD] staff alerts. With no argument it reports the caller's
+// current setting. Per-session by design, mirroring /censoralerts: alerts
+// default back to on for every fresh connection, so a mute during one raid
+// can never quietly outlive it.
+func raidGuardAlertCmd(client *Client, args []string) {
+	const usage = "Usage: /raidguard alert <on|off>"
+	if len(args) == 0 {
+		state := "ENABLED"
+		if client.RaidAlertsDisabled() {
+			state = "DISABLED"
+		}
+		client.SendServerMessage(fmt.Sprintf("Raid guard alerts are currently %s for you.\n%s", state, usage))
+		return
+	}
+	switch strings.ToLower(strings.TrimSpace(args[0])) {
+	case "on":
+		client.SetRaidAlertsDisabled(false)
+		client.SendServerMessage("Raid guard alerts are now ON for you.")
+	case "off":
+		client.SetRaidAlertsDisabled(true)
+		client.SendServerMessage("Raid guard alerts are now OFF for you (this session only — they reset to on when you reconnect).")
+	default:
+		client.SendServerMessage("Invalid argument:\n" + usage)
 	}
 }
 
@@ -119,6 +169,12 @@ func raidGuardStatus(client *Client) {
 		corrLen, raidCorrWindowLen(), weak, strong))
 	sb.WriteString(fmt.Sprintf("Echo breadth: %d distinct line(s) echoing across IPIDs right now (%d marks the server under attack).\n",
 		raidGuardEchoBreadth(), raidCorrBreadth()))
+
+	alertState := "ON"
+	if client.RaidAlertsDisabled() {
+		alertState = "OFF"
+	}
+	sb.WriteString(fmt.Sprintf("[RAIDGUARD] alerts are %s for you (/raidguard alert <on|off>).\n", alertState))
 
 	// Connected clients the engine currently has anything recorded for.
 	type row struct {

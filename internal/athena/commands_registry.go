@@ -2550,9 +2550,9 @@ func initCommands() {
 		"raidguard": {
 			handler:  cmdRaidGuard,
 			minArgs:  1,
-			usage:    "Usage: /raidguard status | clear <uid|all> | test <text>",
-			desc:     "Inspect the raid guard, clear a false positive's score, or test how it reads a piece of text.",
-			reqPerms: permissions.PermissionField["BAN"],
+			usage:    "Usage: /raidguard status | clear <uid|all> | test <text> | alert <on|off>",
+			desc:     "Inspect the raid guard, clear a false positive's score, test how it reads text, or mute its alerts for yourself.",
+			reqPerms: permissions.PermissionField["MOD_CHAT"],
 			category: "moderation",
 		},
 		"captcha": {
