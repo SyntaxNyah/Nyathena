@@ -1701,14 +1701,6 @@ func initCommands() {
 			reqPerms: permissions.PermissionField["MUTE"],
 			category: "punishment",
 		},
-		"umahorse": {
-			handler:  cmdUmaHorse,
-			minArgs:  1,
-			usage:    "Usage: /umahorse [-d duration] [-r reason] [-h] global | <uid1>,<uid2>...",
-			desc:     "Re-rolls the target's sprite to a different random uma on every IC message. Run /horse too for the sounds.",
-			reqPerms: permissions.PermissionField["MUTE"],
-			category: "punishment",
-		},
 		"trex": {
 			handler:  cmdTrex,
 			minArgs:  1,

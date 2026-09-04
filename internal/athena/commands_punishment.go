@@ -517,14 +517,6 @@ func cmdFish(client *Client, args []string, usage string) {
 	cmdPunishment(client, args, usage, PunishmentFish)
 }
 
-// cmdUmaHorse applies the every-message uma re-roll. Unlike /horse it changes
-// no text and claims no character slot — the sprite is rewritten on the way out
-// (see applyUmaHorseSprite) — so running /horse alongside it gives a target the
-// noises as well as the rotating sprite.
-func cmdUmaHorse(client *Client, args []string, usage string) {
-	cmdPunishment(client, args, usage, PunishmentUmaHorse)
-}
-
 func cmdZoo(client *Client, args []string, usage string) {
 	cmdPunishment(client, args, usage, PunishmentZoo)
 }
@@ -884,8 +876,6 @@ func parsePunishmentType(s string) PunishmentType {
 		return PunishmentTrex
 	case "fish":
 		return PunishmentFish
-	case "umahorse":
-		return PunishmentUmaHorse
 	case "lion":
 		return PunishmentLion
 	case "zoo":

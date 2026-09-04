@@ -1,7 +1,6 @@
 /* Athena - A server for Attorney Online 2 written in Go
 
-   Nyathena fork addition: the uma character pool shared by /horse and
-   /umahorse.
+   Nyathena fork addition: the uma character pool behind /horse.
 
    The pool is discovered from characters.txt by MARKER rather than by a
    hardcoded list of names. Any character whose name carries "(uma)" or
@@ -12,31 +11,16 @@
    one, e.g. "(gbf)") are deliberately NOT in the pool: the marker is the
    opt-in.
 
-   Two consumers, deliberately different in kind:
-
-     /horse    — a ONE-SHOT swap. The target is genuinely moved onto a free
-                 uma slot (Client.ChangeCharacter), so the area's taken-char
-                 table, /players and everyone's client all agree, and the
-                 target may change away afterwards like any /charcurse.
-
-     /umahorse — a PER-MESSAGE re-roll. Here a real character change is the
-                 wrong tool: ChangeCharacter broadcasts a CharsCheck to the
-                 whole area, which is ~9 KB per recipient on a large roster
-                 (see the "CharsCheck Fan-Out" note in CLAUDE.md), so doing
-                 one per IC message would be a serious regression. Instead
-                 the outgoing IC packet's sprite fields are rewritten just
-                 before broadcast — the same technique /forcedisplay and the
-                 forced iniswap (/tung) already use — which costs one slice
-                 index and two string assignments and claims no slot. */
+   /horse applies a ONE-SHOT swap: the target is genuinely moved onto a free
+   uma slot (Client.ChangeCharacter), so the area's taken-char table,
+   /players and everyone's client all agree, and the target may change away
+   afterwards like any /charcurse. Nothing here touches the IC hot path. */
 
 package athena
 
 import (
 	"math/rand"
-	"strconv"
 	"strings"
-
-	"github.com/MangosArentLiterature/Athena/internal/packet"
 )
 
 // umaCharMarkers are the case-insensitive substrings that opt a character in
@@ -113,32 +97,6 @@ func randomFreeUmaChar(target *Client) int {
 	return free[rand.Intn(len(free))]
 }
 
-// randomUmaCharSlot returns a random uma character slot for a sprite rewrite,
-// or -1 if the pool is empty. Unlike randomFreeUmaChar it ignores the area's
-// taken table: nothing is being claimed, the slot is only being rendered, so
-// two punished players may well show as the same uma at once.
-//
-// exclude is skipped when the pool has an alternative — callers pass the
-// packet's pair partner so a message can never render as a character paired
-// with itself, which clients handle badly.
-func randomUmaCharSlot(exclude int) int {
-	ids := getUmaCharIDs()
-	switch len(ids) {
-	case 0:
-		return -1
-	case 1:
-		return ids[0] // nothing to swap to; excluding it would mean no sprite
-	}
-	// Slots are distinct, so at most one entry can equal exclude; stepping to
-	// the next index is therefore guaranteed to land on a different character
-	// and always succeeds, unlike rejection sampling.
-	i := rand.Intn(len(ids))
-	if ids[i] == exclude {
-		i = (i + 1) % len(ids)
-	}
-	return ids[i]
-}
-
 // turnIntoRandomUma moves the target onto a random free uma character and
 // returns its name. It reports false — changing nothing — when the server has
 // no free uma character, or when another moderator effect has already pinned
@@ -163,61 +121,4 @@ func turnIntoRandomUma(target *Client) (string, bool) {
 		return "", false
 	}
 	return getCharacters()[id], true
-}
-
-// applyUmaHorseSprite rewrites the outgoing IC packet's sprite to a random uma
-// character when the speaker carries an active /umahorse punishment, so every
-// message they send arrives as a different horse girl. punishments is the
-// speaker's already-filtered active set from pktIC, so no extra lock is taken.
-//
-// Called after field validation (like every other packet rewrite) and before
-// maybeApplyForceDisplay, which is documented as having the final word on the
-// outgoing sprite.
-//
-// The emote is reset to "normal" and any preanimation is stripped: the
-// speaker's own emote and preanim names come from their real character's ini
-// and are not going to exist on a randomly-drawn uma, so pointing the viewport
-// at them would ask the client to play animations that aren't there.
-func applyUmaHorseSprite(ms *packet.MSPacket, punishments []PunishmentState) {
-	active := false
-	for i := range punishments {
-		if punishments[i].punishmentType == PunishmentUmaHorse {
-			active = true
-			break
-		}
-	}
-	if !active {
-		return
-	}
-
-	// Never draw the pair partner's slot: a character paired with itself
-	// renders badly on desktop AO2.
-	exclude := -1
-	if ms.OtherCharID != "" {
-		// The pair field may carry an order suffix ("5^1"); the slot is the
-		// part before it, same as the pair resolution earlier in pktIC.
-		pidStr, _, _ := strings.Cut(ms.OtherCharID, "^")
-		if n, err := strconv.Atoi(pidStr); err == nil {
-			exclude = n
-		}
-	}
-
-	id := randomUmaCharSlot(exclude)
-	if id == -1 {
-		return // no uma characters on this server; leave the sprite alone
-	}
-	chars := getCharacters()
-	if id >= len(chars) {
-		return
-	}
-	ms.Character = chars[id]
-	ms.CharID = strconv.Itoa(id)
-	ms.Emote = "normal"
-	ms.PreAnim = "-"
-	switch ms.EmoteModifier {
-	case "1", "2":
-		ms.EmoteModifier = "0"
-	case "6":
-		ms.EmoteModifier = "5"
-	}
 }
