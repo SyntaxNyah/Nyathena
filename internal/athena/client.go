@@ -303,11 +303,6 @@ const (
 	// existing persisted SUBTYPE values keep their meaning.
 	PunishmentTrex // RAAASRFH — dinosaur roars
 	PunishmentFish // blublublib — fish noises
-	// UmaHorse — re-rolls the speaker's sprite to a different random uma
-	// character on every IC message. Unlike the text effects above it touches
-	// the IC packet's sprite fields, not its message text, and is applied late
-	// in pktIC just before the forcedisplay rewrite. See uma.go.
-	PunishmentUmaHorse
 )
 
 // IssuerTier records the permission tier of the moderator who applied a
@@ -3195,8 +3190,6 @@ func (p PunishmentType) String() string {
 		return "trex"
 	case PunishmentFish:
 		return "fish"
-	case PunishmentUmaHorse:
-		return "umahorse"
 	default:
 		return "none"
 	}

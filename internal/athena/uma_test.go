@@ -1,19 +1,17 @@
 /* Athena - A server for Attorney Online 2 written in Go
 
-   Tests for the uma character pool shared by /horse and /umahorse, and for
-   the /trex and /fish animal filters. */
+   Tests for the uma character pool behind /horse, and for the /trex and
+   /fish animal filters. */
 
 package athena
 
 import (
 	"os"
-	"strconv"
 	"strings"
 	"testing"
 
 	"github.com/MangosArentLiterature/Athena/internal/area"
 	"github.com/MangosArentLiterature/Athena/internal/db"
-	"github.com/MangosArentLiterature/Athena/internal/packet"
 	"github.com/MangosArentLiterature/Athena/internal/permissions"
 )
 
@@ -115,31 +113,6 @@ func TestUmaPoolEmptyOnServerWithoutUmaCharacters(t *testing.T) {
 
 	if got := getUmaCharIDs(); len(got) != 0 {
 		t.Errorf("getUmaCharIDs() = %v, want empty", got)
-	}
-	if got := randomUmaCharSlot(-1); got != -1 {
-		t.Errorf("randomUmaCharSlot() = %d, want -1 on an empty pool", got)
-	}
-}
-
-func TestRandomUmaCharSlotStaysInPoolAndAvoidsExclusion(t *testing.T) {
-	setUmaTestRoster(t)
-
-	inPool := map[int]bool{1: true, 3: true, 5: true, 7: true, 9: true}
-	sawOther := false
-	for i := 0; i < 500; i++ {
-		got := randomUmaCharSlot(3)
-		if !inPool[got] {
-			t.Fatalf("randomUmaCharSlot returned %d, which is not a uma slot", got)
-		}
-		if got == 3 {
-			t.Fatalf("randomUmaCharSlot returned the excluded slot 3")
-		}
-		if got != 1 {
-			sawOther = true
-		}
-	}
-	if !sawOther {
-		t.Error("randomUmaCharSlot never varied its pick across 500 draws")
 	}
 }
 
@@ -270,94 +243,6 @@ func TestHorseTurnsTargetIntoUma(t *testing.T) {
 	}
 }
 
-// ── /umahorse ───────────────────────────────────────────────────────────────
-
-func umaHorsePunishments() []PunishmentState {
-	return []PunishmentState{{punishmentType: PunishmentUmaHorse}}
-}
-
-func TestUmaHorseRewritesSpriteToAUma(t *testing.T) {
-	setUmaTestRoster(t)
-
-	ms := &packet.MSPacket{Character: "Phoenix Wright", CharID: "0", Emote: "pointing", PreAnim: "point"}
-	applyUmaHorseSprite(ms, umaHorsePunishments())
-
-	id, err := strconv.Atoi(ms.CharID)
-	if err != nil {
-		t.Fatalf("CharID %q is not numeric", ms.CharID)
-	}
-	if !isUmaCharacter(getCharacters()[id]) {
-		t.Errorf("sprite rewritten to slot %d (%q), which is not a uma character", id, getCharacters()[id])
-	}
-	if ms.Character != getCharacters()[id] {
-		t.Errorf("Character = %q but CharID names %q — the two must agree", ms.Character, getCharacters()[id])
-	}
-	// The speaker's emote and preanim belong to their real character's ini and
-	// will not exist on the drawn uma, so both must be reset.
-	if ms.Emote != "normal" {
-		t.Errorf("Emote = %q, want \"normal\"", ms.Emote)
-	}
-	if ms.PreAnim != "-" {
-		t.Errorf("PreAnim = %q, want \"-\"", ms.PreAnim)
-	}
-}
-
-// Every message draws again — that is the whole command.
-func TestUmaHorseRerollsBetweenMessages(t *testing.T) {
-	setUmaTestRoster(t)
-
-	seen := map[string]bool{}
-	for i := 0; i < 300; i++ {
-		ms := &packet.MSPacket{Character: "Phoenix Wright", CharID: "0", Emote: "normal"}
-		applyUmaHorseSprite(ms, umaHorsePunishments())
-		seen[ms.CharID] = true
-	}
-	if len(seen) < 2 {
-		t.Errorf("/umahorse produced only %d distinct sprite(s) across 300 messages: %v", len(seen), seen)
-	}
-}
-
-func TestUmaHorseLeavesUnpunishedSpeakersAlone(t *testing.T) {
-	setUmaTestRoster(t)
-
-	ms := &packet.MSPacket{Character: "Phoenix Wright", CharID: "0", Emote: "pointing", PreAnim: "point"}
-	applyUmaHorseSprite(ms, nil)
-
-	if ms.Character != "Phoenix Wright" || ms.CharID != "0" || ms.Emote != "pointing" || ms.PreAnim != "point" {
-		t.Errorf("applyUmaHorseSprite touched an unpunished speaker's packet: %+v", ms)
-	}
-}
-
-func TestUmaHorseIsInertWithoutUmaCharacters(t *testing.T) {
-	orig := getCharacters()
-	t.Cleanup(func() { setCharacters(orig) })
-	setCharacters([]string{"Phoenix Wright", "Miles Edgeworth"})
-
-	ms := &packet.MSPacket{Character: "Phoenix Wright", CharID: "0", Emote: "pointing"}
-	applyUmaHorseSprite(ms, umaHorsePunishments())
-
-	if ms.Character != "Phoenix Wright" || ms.CharID != "0" || ms.Emote != "pointing" {
-		t.Errorf("applyUmaHorseSprite rewrote a packet on a server with no uma characters: %+v", ms)
-	}
-}
-
-// A character paired with itself renders badly on desktop AO2, so the draw
-// must never land on the partner's slot — including when the pair field
-// carries an order suffix.
-func TestUmaHorseNeverDrawsThePairPartner(t *testing.T) {
-	setUmaTestRoster(t)
-
-	for _, pair := range []string{"3", "3^1"} {
-		for i := 0; i < 300; i++ {
-			ms := &packet.MSPacket{Character: "Phoenix Wright", CharID: "0", OtherCharID: pair}
-			applyUmaHorseSprite(ms, umaHorsePunishments())
-			if ms.CharID == "3" {
-				t.Fatalf("with OtherCharID=%q the sprite was drawn as the partner's slot 3", pair)
-			}
-		}
-	}
-}
-
 // ── /trex and /fish ─────────────────────────────────────────────────────────
 
 func TestTrexAndFishReplaceEveryWord(t *testing.T) {
@@ -429,7 +314,7 @@ func TestFishBlubs(t *testing.T) {
 func TestNewPunishmentCommandsAreModOnlyAndDocumented(t *testing.T) {
 	initCommands()
 
-	for _, name := range []string{"horse", "umahorse", "trex", "fish"} {
+	for _, name := range []string{"horse", "trex", "fish"} {
 		t.Run(name, func(t *testing.T) {
 			cmd, ok := Commands[name]
 			if !ok {
@@ -475,7 +360,7 @@ func TestNewPunishmentCommandsAreModOnlyAndDocumented(t *testing.T) {
 // parsePunishmentType, so a new punishment that isn't parseable there is
 // stackable and removable only by name in the mod's imagination.
 func TestNewPunishmentTypesRoundTrip(t *testing.T) {
-	for _, p := range []PunishmentType{PunishmentTrex, PunishmentFish, PunishmentUmaHorse} {
+	for _, p := range []PunishmentType{PunishmentTrex, PunishmentFish} {
 		name := p.String()
 		if name == "none" {
 			t.Errorf("punishment %d has no String() name", p)

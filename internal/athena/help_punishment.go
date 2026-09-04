@@ -71,7 +71,7 @@ var punishmentHelpGroups = []punishmentSubcategory{
 		emoji: "🐾", title: "Animal filters",
 		desc: "Replace text with animal sounds. Supports 'global'.",
 		cmds: []string{"monkey", "snake", "dog", "cat", "bird", "cow", "frog", "duck",
-			"horse", "umahorse", "lion", "trex", "fish", "zoo", "bunny"},
+			"horse", "lion", "trex", "fish", "zoo", "bunny"},
 	},
 	{
 		emoji: "👁", title: "Visibility / cosmetic",

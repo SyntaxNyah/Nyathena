@@ -258,32 +258,12 @@ Replace text with animal sounds. All require `MUTE` and support `global` and `-h
 | `/bunny` | \*thump\*, \*binky!\*, \*flops\* |
 | `/zoo` | Random animal sound per message (draws from all of the above) |
 
-### Uma characters — `/horse` and `/umahorse`
+### Uma characters — `/horse`
 
-Two commands turn the target into a **horse girl**, on servers whose
-`characters.txt` carries uma characters.
-
-| Command | Effect |
-|---------|--------|
-| `/horse <uid>` | Horse sounds **plus a one-shot swap** onto a random free uma character. The target keeps that character and may change away freely, exactly like `/charcurse`. |
-| `/umahorse <uid>` | **No text change.** The target's sprite is re-rolled to a *different* random uma on **every IC message**, so they flicker through the whole roster as they talk. |
-
-Both take the standard flags (`-d`, `-r`, `-h`, comma-separated UID lists,
-`global`), stack, persist across reconnects, and lift with
-`/unpunish -t horse|umahorse <uid>`. Run them together for sounds *and* a
-rotating sprite:
-
-```
-/horse -d 10m 7
-/umahorse -d 10m 7
-```
-
-> The one-shot character swap belongs to the **`/horse` command**, not to the
-> horse punishment type — so `/stack horse ...`, `/randompunishall`, the
-> roulette and a `punishment_area` roll all apply the sounds without swapping
-> anyone, exactly as they did before. Only `/horse` itself swaps. (Combined
-> with `/umahorse` this makes no visible difference anyway, since the sprite is
-> being re-rolled every message regardless.)
+On a server whose `characters.txt` carries uma characters, `/horse` also
+**swaps the target onto a random free uma character** — they don't just sound
+like a horse. The target keeps that character and may change away freely,
+exactly like `/charcurse`.
 
 **How the uma roster is discovered.** The pool is built from `characters.txt`
 by **marker**, never from a hardcoded list of names: any character whose name
@@ -299,24 +279,19 @@ tokai teio (uma_h)
 gold ship (uma_h)
 ```
 
-**On a server with no uma characters — the upstream default — both commands
-still work**: `/horse` applies its sounds and swaps nobody, and `/umahorse`
-leaves every sprite alone. The swap is additive, never a precondition, so
-neither command can fail because of it.
+**On a server with no uma characters — the upstream default — `/horse` still
+works**: it applies its sounds and swaps nobody. The swap is additive, never a
+precondition, so the command can never fail because of it.
 
-`/horse` skips the swap (and says nothing about it) for a target who is
+`/horse` also skips the swap (and says nothing about it) for a target who is
 spectating, already pinned by `/charstuck` or a forced iniswap (`/tung`), or in
 an area where every uma slot is already taken — the sound punishment still
-lands in every one of those cases. `/umahorse` claims no character slot at all,
-so several punished players can render as the same uma at once.
+lands in every one of those cases.
 
-> `/umahorse` rewrites the outgoing IC packet's sprite rather than performing a
-> real character change. A real change would broadcast a `CharsCheck` to the
-> whole area on every message (~9 KB per recipient on a large roster), which is
-> the fan-out problem documented in `CLAUDE.md`; the rewrite costs two string
-> assignments. The side effect is that the target's *actual* character — what
-> `/players` and the area's taken-slot table show — is untouched; only what the
-> room sees changes.
+> The swap belongs to the **`/horse` command**, not to the horse punishment
+> type — so `/stack horse ...`, `/randompunishall`, the roulette and a
+> `punishment_area` roll all apply the sounds without swapping anyone, exactly
+> as they did before. Only `/horse` itself swaps.
 
 ---
 
