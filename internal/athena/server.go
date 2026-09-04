@@ -82,7 +82,6 @@ var (
 	// (getCharacters(), getMusicList(), getCDNs(), …) instead of as plain
 	// globals, so a runtime swap never races a reader.
 	areas          []*area.Area
-	areaNames      string
 	areaIndexMap   map[*area.Area]int // pre-computed index lookup for O(1) getAreaIndex
 	roles          []permissions.Role
 	uids           *uidmanager.UidManager
@@ -511,7 +510,7 @@ func NewServer(conf *settings.Config) (*Server, error) {
 	setEightBall(s.eightBall)
 	setCDNs(s.cdns)
 	areas = s.areas
-	areaNames = s.areaNames
+	setAreaNames(s.areaNames)
 	areaIndexMap = s.areaIndexMap
 	roles = s.roles
 	uids = s.uids

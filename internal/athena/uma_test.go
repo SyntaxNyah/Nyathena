@@ -126,12 +126,12 @@ func setupUmaSwapClients(t *testing.T) (*area.Area, *Client, *Client) {
 
 	a := area.NewArea(area.AreaData{Name: "Paddock"}, len(getCharacters()), 10, area.EviAny)
 
-	mod := &Client{conn: &testConn{}, uid: 1, ipid: "ip-mod", char: 0, possessing: -1, pair: ClientPairInfo{wanted_id: -1}}
+	mod := &Client{conn: &testConn{}, uid: 1, ipid: "ip-mod", char: 0, pair: ClientPairInfo{wanted_id: -1}}
 	mod.SetArea(a)
 	a.AddChar(0)
 	mod.perms = permissions.PermissionField["MUTE"]
 
-	target := &Client{conn: &testConn{}, uid: 2, ipid: "ip-target", char: 4, possessing: -1, pair: ClientPairInfo{wanted_id: -1}}
+	target := &Client{conn: &testConn{}, uid: 2, ipid: "ip-target", char: 4, pair: ClientPairInfo{wanted_id: -1}}
 	target.SetArea(a)
 	a.AddChar(4)
 
@@ -208,10 +208,10 @@ func TestHorseAppliesPunishmentWithoutUmaCharacters(t *testing.T) {
 	setCharacters([]string{"Phoenix Wright", "Miles Edgeworth"})
 
 	a := area.NewArea(area.AreaData{Name: "Courtroom"}, len(getCharacters()), 10, area.EviAny)
-	mod := &Client{conn: &testConn{}, uid: 1, ipid: "ip-mod", char: 0, possessing: -1, pair: ClientPairInfo{wanted_id: -1}}
+	mod := &Client{conn: &testConn{}, uid: 1, ipid: "ip-mod", char: 0, pair: ClientPairInfo{wanted_id: -1}}
 	mod.SetArea(a)
 	mod.perms = permissions.PermissionField["MUTE"]
-	target := &Client{conn: &testConn{}, uid: 2, ipid: "ip-target", char: 1, possessing: -1, pair: ClientPairInfo{wanted_id: -1}}
+	target := &Client{conn: &testConn{}, uid: 2, ipid: "ip-target", char: 1, pair: ClientPairInfo{wanted_id: -1}}
 	target.SetArea(a)
 	for _, c := range []*Client{mod, target} {
 		clients.AddClient(c)

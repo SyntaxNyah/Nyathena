@@ -61,6 +61,10 @@ var (
 	censoredNamesPtr   atomic.Pointer[[]string]
 	punishmentNamesPtr atomic.Pointer[[]string]
 	smPacketPtr        atomic.Pointer[string]
+	// areaNamesPtr is the "#"-joined area-name list embedded in the SM blob.
+	// Behind a pointer like the rest because /area rename rewrites it at
+	// runtime while pktAM reads it on the music/area-change path.
+	areaNamesPtr atomic.Pointer[string]
 	// smPacketBytes is the same blob pre-converted for the outbound queue, so
 	// the join path never converts (or worse, blocking-writes) per connection.
 	// Published in lockstep with smPacketPtr by setSMPacket.
@@ -116,6 +120,16 @@ func getSMPacket() string {
 	}
 	return ""
 }
+
+// getAreaNames returns the "#"-joined list of current area names.
+func getAreaNames() string {
+	if v := areaNamesPtr.Load(); v != nil {
+		return *v
+	}
+	return ""
+}
+
+func setAreaNames(s string) { areaNamesPtr.Store(&s) }
 
 // set* helpers publish a new snapshot. setCharacters and setBackgrounds also
 // rebuild their derived caches (the name→ID index and the /bglist string) so
@@ -344,7 +358,7 @@ func ReloadConfig() (string, error) {
 		setMusicList(newMusic)
 		// The SM packet (sent to every client on join) embeds the music list, so
 		// rebuild it from the new list and the unchanged area names.
-		setSMPacket(buildSMPacket(areaNames, newMusic))
+		setSMPacket(buildSMPacket(getAreaNames(), newMusic))
 		changes = append(changes, "music.txt")
 	}
 

@@ -120,9 +120,9 @@ func TestAreaMuteLiftedOnDeparture(t *testing.T) {
 	lobby := area.NewArea(area.AreaData{Name: "Lobby"}, len(getCharacters()), 10, area.EviAny)
 	areas = []*area.Area{courtroom, lobby}
 
-	caller := &Client{conn: &testConn{}, uid: 1, ipid: "ip-caller", area: courtroom, char: -1, possessing: -1, pair: ClientPairInfo{wanted_id: -1}}
+	caller := &Client{conn: &testConn{}, uid: 1, ipid: "ip-caller", area: courtroom, char: -1, pair: ClientPairInfo{wanted_id: -1}}
 	courtroom.AddCM(caller.Uid())
-	target := &Client{conn: &testConn{}, uid: 2, ipid: "ip-target", area: courtroom, char: -1, possessing: -1, pair: ClientPairInfo{wanted_id: -1}}
+	target := &Client{conn: &testConn{}, uid: 2, ipid: "ip-target", area: courtroom, char: -1, pair: ClientPairInfo{wanted_id: -1}}
 	for _, c := range []*Client{caller, target} {
 		clients.AddClient(c)
 		clients.RegisterUID(c)

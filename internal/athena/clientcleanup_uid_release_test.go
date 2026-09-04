@@ -107,13 +107,13 @@ func TestClientCleanupReleasesUIDAfterRemovalIsVisible(t *testing.T) {
 
 	spyConn := &capturingConn{}
 	spy := &Client{conn: spyConn, uid: 99, char: -1, area: testArea,
-		forcePairUID: -1, possessing: -1, pair: ClientPairInfo{wanted_id: -1},
+		forcePairUID: -1, pair: ClientPairInfo{wanted_id: -1},
 		done: make(chan struct{})}
 	clients.AddClient(spy)
 	clients.RegisterUID(spy)
 
 	departing := &Client{conn: &testConn{}, uid: uid, char: -1, area: testArea,
-		forcePairUID: -1, possessing: -1, pair: ClientPairInfo{wanted_id: -1},
+		forcePairUID: -1, pair: ClientPairInfo{wanted_id: -1},
 		done: make(chan struct{})}
 	clients.AddClient(departing)
 	clients.RegisterUID(departing)

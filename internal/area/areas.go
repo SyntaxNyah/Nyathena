@@ -145,6 +145,7 @@ type Area struct {
 	logSilenced         bool               // whether area-log writing and modcall forwarding are suppressed
 	voiceAllowed        bool               // runtime toggle: whether voice chat is permitted in this area
 	musicFrozen         bool               // hard music lock: no one (including CMs/DJs/mods) can change music
+	nameHeldByCM        bool               // whether the current runtime name (/area rename) was set while the area had a CM
 }
 
 type AreaData struct {
@@ -185,6 +186,9 @@ type AreaData struct {
 }
 
 type defaults struct {
+	// name is the area's name exactly as areas.toml declared it. /area rename
+	// overwrites data.Name at runtime; this is what ResetName restores.
+	name              string
 	evi_mode          EvidenceMode
 	allow_iniswap     bool
 	force_noint       bool
@@ -226,6 +230,7 @@ func NewAreaWithVoiceDefault(data AreaData, charlen int, bufsize int, evi_mode E
 	return &Area{
 		data: data,
 		defaults: defaults{
+			name:              data.Name,
 			evi_mode:          evi_mode,
 			allow_iniswap:     data.Allow_iniswap,
 			force_noint:       data.Force_noint,
@@ -274,6 +279,66 @@ func (a *Area) Name() string {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	return a.data.Name
+}
+
+// SetName renames the area at runtime (/area rename). The caller is responsible
+// for republishing anything derived from the name -- the server-wide area-name
+// string, the pre-built SM blob, and the area list the clients hold -- since the
+// area package has no way to reach any of that.
+//
+// It also records whether the area had a CM at the time, which is what decides
+// later whether the name is released when the area runs out of CMs. See
+// NameHeldByCM.
+func (a *Area) SetName(name string) {
+	a.mu.Lock()
+	a.data.Name = name
+	a.nameHeldByCM = len(a.cms) > 0
+	a.mu.Unlock()
+}
+
+// NameHeldByCM reports whether the area's current runtime name was set while
+// somebody was CMing the area.
+//
+// A moderator does not have to be a CM to rename a room, so "this area has no
+// CMs" cannot on its own mean "the name's owner is gone" -- for a room that
+// never had a CM it is true from the moment of the rename, and would drop the
+// name on the next unrelated departure. Recording it at rename time is what
+// makes the release rule mean what it says: the name goes when the person
+// running the room does.
+func (a *Area) NameHeldByCM() bool {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return a.nameHeldByCM
+}
+
+// DefaultName returns the name areas.toml gave this area, regardless of any
+// runtime rename.
+func (a *Area) DefaultName() string {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return a.defaults.name
+}
+
+// Renamed reports whether the area currently carries a runtime rename rather
+// than its configured name.
+func (a *Area) Renamed() bool {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return a.data.Name != a.defaults.name
+}
+
+// ResetName restores the configured name, reporting whether it actually changed
+// anything. The bool is what lets a caller skip the (server-wide) republish when
+// there was no rename to undo.
+func (a *Area) ResetName() bool {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if a.data.Name == a.defaults.name {
+		return false
+	}
+	a.data.Name = a.defaults.name
+	a.nameHeldByCM = false
+	return true
 }
 
 // Taken returns the area's taken list, where "-1" is taken and "0" is free
@@ -722,7 +787,11 @@ func (a *Area) HasInvited(uid int) bool {
 	return exists
 }
 
-// Reset returns all area settings to their default values.
+// Reset returns all area settings to their default values. It deliberately does NOT
+// restore the name: a rename is visible server-wide (the area-name string, the
+// SM blob, every connected client's area list) and undoing it needs a republish
+// this package cannot perform. The athena package resets it alongside this call
+// -- see releaseAreaNameIfUnattended.
 func (a *Area) Reset() {
 	a.mu.Lock()
 	a.evidence = []string{}

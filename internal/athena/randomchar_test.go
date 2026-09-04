@@ -39,10 +39,10 @@ func TestGetRandomFreeChar(t *testing.T) {
 		a.AddChar(2)
 
 		client := &Client{
-			uid:        1,
-			char:       -1,
-			possessing: -1,
-			pair:       ClientPairInfo{wanted_id: -1},
+			uid:  1,
+			char: -1,
+
+			pair: ClientPairInfo{wanted_id: -1},
 		}
 		client.SetArea(a)
 
@@ -60,10 +60,10 @@ func TestGetRandomFreeChar(t *testing.T) {
 		}
 
 		client := &Client{
-			uid:        1,
-			char:       -1,
-			possessing: -1,
-			pair:       ClientPairInfo{wanted_id: -1},
+			uid:  1,
+			char: -1,
+
+			pair: ClientPairInfo{wanted_id: -1},
 		}
 		client.SetArea(a)
 
@@ -81,10 +81,10 @@ func TestGetRandomFreeChar(t *testing.T) {
 		a.AddChar(3)
 
 		client := &Client{
-			uid:        1,
-			char:       -1,
-			possessing: -1,
-			pair:       ClientPairInfo{wanted_id: -1},
+			uid:  1,
+			char: -1,
+
+			pair: ClientPairInfo{wanted_id: -1},
 		}
 		client.SetArea(a)
 
@@ -100,10 +100,10 @@ func TestGetRandomFreeChar(t *testing.T) {
 		setCharacters([]string{})
 		a := area.NewArea(area.AreaData{}, 0, 0, area.EviAny)
 		client := &Client{
-			uid:        1,
-			char:       -1,
-			possessing: -1,
-			pair:       ClientPairInfo{wanted_id: -1},
+			uid:  1,
+			char: -1,
+
+			pair: ClientPairInfo{wanted_id: -1},
 		}
 		client.SetArea(a)
 
@@ -198,12 +198,12 @@ func TestForceRandomCharTargetsUID(t *testing.T) {
 	a := area.NewArea(area.AreaData{}, len(getCharacters()), 0, area.EviAny)
 
 	// The targeted player.
-	target := &Client{uid: 20, char: 1, possessing: -1, pair: ClientPairInfo{wanted_id: -1}}
+	target := &Client{uid: 20, char: 1, pair: ClientPairInfo{wanted_id: -1}}
 	target.SetArea(a)
 	a.AddChar(1)
 
 	// A bystander in the same area.
-	bystander := &Client{uid: 30, char: 2, possessing: -1, pair: ClientPairInfo{wanted_id: -1}}
+	bystander := &Client{uid: 30, char: 2, pair: ClientPairInfo{wanted_id: -1}}
 	bystander.SetArea(a)
 	a.AddChar(2)
 
@@ -256,12 +256,12 @@ func TestForceRandomCharOnlyAffectsCurrentArea(t *testing.T) {
 	otherArea := area.NewArea(area.AreaData{}, len(getCharacters()), 0, area.EviAny)
 
 	// Client in the admin's area.
-	inArea := &Client{uid: 1, char: 0, possessing: -1, pair: ClientPairInfo{wanted_id: -1}}
+	inArea := &Client{uid: 1, char: 0, pair: ClientPairInfo{wanted_id: -1}}
 	inArea.SetArea(adminArea)
 	adminArea.AddChar(0)
 
 	// Client in a different area — must not be changed.
-	outArea := &Client{uid: 2, char: 1, possessing: -1, pair: ClientPairInfo{wanted_id: -1}}
+	outArea := &Client{uid: 2, char: 1, pair: ClientPairInfo{wanted_id: -1}}
 	outArea.SetArea(otherArea)
 	otherArea.AddChar(1)
 

@@ -437,15 +437,9 @@ func pktIC(client *Client, p *packet.Packet) {
 	// The reverse encode happens once at the bottom via ms.ServerArgs().
 	ms := packet.ParseMSClient(p.Body)
 
-	// /truepossess silences its target: their own IC is echoed back to them but
-	// reaches nobody, and their showname is frozen so they can't expose the
-	// possession. Gated by the atomic counter so servers not using it pay only a
-	// single atomic load here.
-	trueMuted := activeTruePossess.Load() > 0 && client.TruePossessed()
-
-	// Save the admin's own values before any fullpossess transformation so that
-	// state updates (showname, pairInfo, textColor) always reflect the admin's
-	// own character — not the target's — even during fullpossess.
+	// The client's own values, saved before any moderator override below so that
+	// state updates (showname, pairInfo, textColor) always reflect what the
+	// client actually sent rather than a forced substitute.
 	ownCharName := ms.Character
 	ownEmote := ms.Emote
 	ownTextColor := ms.TextColor
@@ -470,101 +464,6 @@ func pktIC(client *Client, p *packet.Packet) {
 		ownCharName = charName
 		ms.Character = charName
 		ms.CharID = charIDStr
-	}
-
-	// Track if we're in fullpossess mode for validation adjustments
-	isPossessing := false
-	// The resolved target of an active possession, or nil. Used below to spoof
-	// the target's pairing instead of the possessor's so the partner's sprite
-	// renders correctly (no "the pair vanished" possess tell).
-	var possessedTarget *Client
-
-	// Full possession: Transform admin's IC messages to appear from target
-	if client.Possessing() != -1 {
-		target, err := getClientByUid(client.Possessing())
-		if err != nil {
-			// Target no longer exists, clear possession
-			client.SetPossessing(-1)
-			client.SetPossessedPos("")
-			client.SendServerMessage("Target disconnected. Possession ended.")
-		} else {
-			isPossessing = true
-			// Transform the message to use target's appearance
-			// Use the saved target position (from when possession started) to fully spoof them
-
-			// Get target's emote, or use "normal" as fallback
-			targetEmote := target.PairInfo().emote
-			if targetEmote == "" {
-				targetEmote = "normal"
-			}
-
-			// Get the target's displayed character name (handles iniswap)
-			// Use PairInfo().name if available (contains iniswapped character), otherwise use their actual character
-			targetCharName := target.PairInfo().name
-			if targetCharName == "" {
-				// Bounds check before accessing characters array
-				if target.CharID() >= 0 && target.CharID() < len(getCharacters()) {
-					targetCharName = getCharacters()[target.CharID()]
-				} else {
-					// Invalid character, clear possession
-					client.SetPossessing(-1)
-					client.SetPossessedPos("")
-					client.SendServerMessage("Target has invalid character. Possession ended.")
-					return
-				}
-			}
-
-			// Get the character ID for the displayed character
-			targetCharID := getCharacterID(targetCharName)
-			if targetCharID == -1 {
-				// If character name is not found, fall back to target's actual character
-				targetCharID = target.CharID()
-				// Verify bounds before accessing characters array
-				if targetCharID >= 0 && targetCharID < len(getCharacters()) {
-					targetCharName = getCharacters()[targetCharID]
-				} else {
-					// Invalid character, clear possession
-					client.SetPossessing(-1)
-					client.SetPossessedPos("")
-					client.SendServerMessage("Target has invalid character. Possession ended.")
-					return
-				}
-			}
-
-			// Replace character and appearance with target's (including their saved position)
-			ms.Character = targetCharName
-			ms.Emote = targetEmote
-			ms.Side = client.PossessedPos()
-			ms.CharID = strconv.Itoa(targetCharID)
-
-			// Use target's text color
-			targetTextColor := target.LastTextColor()
-			if targetTextColor == "" {
-				targetTextColor = "0"
-			}
-			ms.TextColor = targetTextColor
-
-			// Use target's showname, respecting any moderator-forced showname,
-			// and falling back to the displayed character name.
-			targetShowname := target.EffectiveShowname()
-			if strings.TrimSpace(targetShowname) == "" {
-				targetShowname = targetCharName
-			}
-			ms.Showname = targetShowname
-
-			// Remember the target so the pairing block below renders the
-			// target's partner (not the possessor's), and adopt the target's own
-			// self-offset and flip so a paired possession sits the spoofed
-			// character exactly where the target sits. The possessor's real
-			// flip/offset were saved above (ownFlip/ownSelfOffset) for the
-			// possessor's own pair-info state update later.
-			possessedTarget = target
-			ms.SelfOffset = target.PairInfo().offset
-			ms.Flip = target.PairInfo().flip
-			if ms.Flip == "" {
-				ms.Flip = "0"
-			}
-		}
 	}
 
 	if pos := client.Pos(); pos != "" {
@@ -850,10 +749,10 @@ func pktIC(client *Client, p *packet.Packet) {
 	case !sliceutil.ContainsString(validDeskMods, ms.DeskMod):
 		logger.LogWarningf("dropped MS from IPID:%v UID:%v — DeskMod not in validDeskMods; value=%q", client.Ipid(), client.Uid(), ms.DeskMod)
 		return
-	case !isPossessing && !hasForcedIniswap && !strings.EqualFold(getCharacters()[client.CharID()], ms.Character) && !client.Area().IniswapAllowed(): // character name (skip check when possessing or forced iniswap)
+	case !hasForcedIniswap && !strings.EqualFold(getCharacters()[client.CharID()], ms.Character) && !client.Area().IniswapAllowed(): // character name (skip check when forced iniswap)
 		client.SendServerMessage("Iniswapping is not allowed in this area.")
 		return
-	case !isPossessing && !hasForcedIniswap && stuckCharID >= 0 && !strings.EqualFold(getCharacters()[stuckCharID], ms.Character): // block iniswap when charstuck unless forced iniswap
+	case !hasForcedIniswap && stuckCharID >= 0 && !strings.EqualFold(getCharacters()[stuckCharID], ms.Character): // block iniswap when charstuck unless forced iniswap
 		client.SendServerMessage(fmt.Sprintf("You are character stuck as %v and cannot iniswap.", getCharacters()[stuckCharID]))
 		return
 	case utf8.RuneCountInString(msgText) > config.MaxMsg:
@@ -867,7 +766,7 @@ func pktIC(client *Client, p *packet.Packet) {
 	case ms.Message == client.LastMsg():
 		logger.LogWarningf("dropped MS from IPID:%v UID:%v — duplicate of LastMsg", client.Ipid(), client.Uid())
 		return
-	case !isPossessing && !hasForcedIniswap && ms.CharID != client.CharIDStr(): // skip check when possessing or forced iniswap
+	case !hasForcedIniswap && ms.CharID != client.CharIDStr(): // skip check when forced iniswap
 		logger.LogWarningf("dropped MS from IPID:%v UID:%v — CharID mismatch; packet=%q client=%q", client.Ipid(), client.Uid(), ms.CharID, client.CharIDStr())
 		return
 	case objection < 0 || objection > 4:
@@ -936,7 +835,7 @@ func pktIC(client *Client, p *packet.Packet) {
 	//
 	// Ordering against the other suppression mechanisms is deliberate and is
 	// the point of the whole block: censoring runs before the torment branch,
-	// before the stealthmute/truepossess silencing, and before the escalating
+	// before the stealthmute silencing, and before the escalating
 	// kick, so a censored message can never escape through the delayed 50/50
 	// torment rebroadcast, and a nuked one never reaches any of them at all.
 	// ---------------------------------------------------------------------
@@ -1000,94 +899,83 @@ func pktIC(client *Client, p *packet.Packet) {
 		censorShadow = true
 	}
 
-	// During possession the pair fields are resolved from the *target's* state,
-	// not the possessor's, so the target's partner renders exactly as it would on
-	// the target's own messages (no "the pair vanished" possess tell). Applies to
-	// both /fullpossess and /truepossess. Otherwise, fall through to the normal
-	// possessor-driven pairing resolution.
-	if possessedTarget != nil {
-		applyPossessedPairFields(ms, possessedTarget)
-	} else {
-
-		// If force-paired, always sync the wanted CharID to the partner's current CharID,
-		// keeping the pair active even when either player changes character or position.
-		// Also sync the position so both characters are always broadcast at the same
-		// courtroom position, preventing the pairing sprite from breaking on clients.
-		if client.ForcePairUID() >= 0 {
-			if partner, err := getClientByUid(client.ForcePairUID()); err == nil && partner.CharID() >= 0 {
-				ms.OtherCharID = partner.CharIDStr()
-				client.SetPairWantedID(partner.CharID())
-				partner.SetPairWantedID(client.CharID())
-				if pos := partner.Pos(); pos != "" {
-					ms.Side = pos
-					client.SetPos(pos)
-				}
+	// If force-paired, always sync the wanted CharID to the partner's current CharID,
+	// keeping the pair active even when either player changes character or position.
+	// Also sync the position so both characters are always broadcast at the same
+	// courtroom position, preventing the pairing sprite from breaking on clients.
+	if client.ForcePairUID() >= 0 {
+		if partner, err := getClientByUid(client.ForcePairUID()); err == nil && partner.CharID() >= 0 {
+			ms.OtherCharID = partner.CharIDStr()
+			client.SetPairWantedID(partner.CharID())
+			partner.SetPairWantedID(client.CharID())
+			if pos := partner.Pos(); pos != "" {
+				ms.Side = pos
+				client.SetPos(pos)
 			}
 		}
+	}
 
-		// If the client used /pair to set a desired pair but has not selected one via the
-		// in-client pair button (OtherCharID is absent or -1), inject the server-set pair
-		// character ID so the pairing animation activates exactly as if the pair button
-		// had been used.
-		if (ms.OtherCharID == "" || ms.OtherCharID == "-1") && client.PairWantedID() != -1 {
-			ms.OtherCharID = strconv.Itoa(client.PairWantedID())
+	// If the client used /pair to set a desired pair but has not selected one via the
+	// in-client pair button (OtherCharID is absent or -1), inject the server-set pair
+	// character ID so the pairing animation activates exactly as if the pair button
+	// had been used.
+	if (ms.OtherCharID == "" || ms.OtherCharID == "-1") && client.PairWantedID() != -1 {
+		ms.OtherCharID = strconv.Itoa(client.PairWantedID())
+	}
+
+	// Pairing validation
+	if ms.OtherCharID != "" && ms.OtherCharID != "-1" {
+		pidStr, _, _ := strings.Cut(ms.OtherCharID, "^")
+		pid, err := strconv.Atoi(pidStr)
+		if err != nil {
+			return
 		}
-
-		// Pairing validation
-		if ms.OtherCharID != "" && ms.OtherCharID != "-1" {
-			pidStr, _, _ := strings.Cut(ms.OtherCharID, "^")
-			pid, err := strconv.Atoi(pidStr)
-			if err != nil {
+		if pid < 0 || pid > len(getCharacters()) || pid == client.CharID() {
+			return
+		}
+		client.SetPairWantedID(pid)
+		pairing := false
+		clients.ForEach(func(c *Client) {
+			if pairing {
 				return
 			}
-			if pid < 0 || pid > len(getCharacters()) || pid == client.CharID() {
+			isForce := client.ForcePairUID() >= 0 && client.ForcePairUID() == c.Uid() &&
+				c.ForcePairUID() >= 0 && c.ForcePairUID() == client.Uid()
+			// If the client has a stored pair partner, skip any client that isn't
+			// that specific partner to prevent false matches from position overlap.
+			if client.ForcePairUID() >= 0 && !isForce {
 				return
 			}
-			client.SetPairWantedID(pid)
-			pairing := false
-			clients.ForEach(func(c *Client) {
-				if pairing {
-					return
-				}
-				isForce := client.ForcePairUID() >= 0 && client.ForcePairUID() == c.Uid() &&
-					c.ForcePairUID() >= 0 && c.ForcePairUID() == client.Uid()
-				// If the client has a stored pair partner, skip any client that isn't
-				// that specific partner to prevent false matches from position overlap.
-				if client.ForcePairUID() >= 0 && !isForce {
-					return
-				}
-				// Also guard the candidate: if c is already UID-committed to a different partner,
-				// it must not be matched by anyone other than that partner.
-				if c.ForcePairUID() >= 0 && c.ForcePairUID() != client.Uid() {
-					return
-				}
-				if c.CharID() == pid && c.PairWantedID() == client.CharID() && (isForce || c.Pos() == client.Pos()) {
-					pairinfo := c.PairInfo()
-					ms.OtherName = pairinfo.name
-					ms.OtherEmote = pairinfo.emote
-					ms.OtherOffset = pairinfo.offset
-					ms.OtherFlip = pairinfo.flip
-					pairing = true
-				}
-			})
-			if !pairing {
-				// Plain "-1", never "-1^": the "^" pair-order suffix is not parsed
-				// by every client (official webAO gets Number("-1^") = NaN and some
-				// fork desktop clients drop the whole message — see PR #386). Since
-				// /pair injects a wanted id into every message the requester sends,
-				// this fallback fires on each of them until the pair is accepted,
-				// so a "^" here silently mutes the requester on those clients.
-				ms.OtherCharID = "-1"
-				ms.OtherName = ""
-				ms.OtherEmote = ""
+			// Also guard the candidate: if c is already UID-committed to a different partner,
+			// it must not be matched by anyone other than that partner.
+			if c.ForcePairUID() >= 0 && c.ForcePairUID() != client.Uid() {
+				return
 			}
-		} else {
-			// No pair attempted: ensure OtherName/OtherEmote are empty.
+			if c.CharID() == pid && c.PairWantedID() == client.CharID() && (isForce || c.Pos() == client.Pos()) {
+				pairinfo := c.PairInfo()
+				ms.OtherName = pairinfo.name
+				ms.OtherEmote = pairinfo.emote
+				ms.OtherOffset = pairinfo.offset
+				ms.OtherFlip = pairinfo.flip
+				pairing = true
+			}
+		})
+		if !pairing {
+			// Plain "-1", never "-1^": the "^" pair-order suffix is not parsed
+			// by every client (official webAO gets Number("-1^") = NaN and some
+			// fork desktop clients drop the whole message — see PR #386). Since
+			// /pair injects a wanted id into every message the requester sends,
+			// this fallback fires on each of them until the pair is accepted,
+			// so a "^" here silently mutes the requester on those clients.
+			ms.OtherCharID = "-1"
 			ms.OtherName = ""
 			ms.OtherEmote = ""
 		}
-
-	} // end of the non-possession pairing branch opened above
+	} else {
+		// No pair attempted: ensure OtherName/OtherEmote are empty.
+		ms.OtherName = ""
+		ms.OtherEmote = ""
+	}
 
 	// Offset validation
 	if ms.SelfOffset != "" {
@@ -1166,9 +1054,9 @@ func pktIC(client *Client, p *packet.Packet) {
 		}
 	}
 
-	// Use the admin's own (pre-transformation) values for state updates so that
-	// the admin's showname, pairInfo and textColor are never overwritten with
-	// the target's during fullpossess.
+	// Use the client's own values (saved before any moderator-forced showname or
+	// iniswap override above) for state updates, so a forced substitute is never
+	// written back as the client's own stored state.
 	client.SetPairInfo(ownCharName, ownEmote, ownFlip, ownSelfOffset)
 	client.SetLastMsg(ms.Message)
 	client.SetLastTextColor(ownTextColor)
@@ -1177,10 +1065,7 @@ func pktIC(client *Client, p *packet.Packet) {
 		newShowname = getCharacters()[client.CharID()]
 	}
 	// Only broadcast a PU showname update when the showname actually changed.
-	// A /truepossess target's showname is frozen: skipping the update keeps their
-	// stored showname (shown in /players and reused on the possessor's spoofed
-	// messages) pinned, so they can't rename into a distress signal.
-	if !trueMuted && client.UpdateShowname(newShowname) {
+	if client.UpdateShowname(newShowname) {
 		broadcastToAll(&packet.PU{ID: client.Uid(), Type: 2, Data: decode(newShowname)})
 	}
 	client.Area().SetLastSpeaker(client.CharID())
@@ -1301,11 +1186,7 @@ func pktIC(client *Client, p *packet.Packet) {
 	// see raidGuardOnIC's doc comment for why it isn't re-parsed here.
 	raidGuardOnIC(client, ms, msgText)
 
-	stealthMuted := hasPunishmentType(punishments, PunishmentStealthMute) || censorShadow
-	// A /truepossess target is silenced exactly like a stealthmute: the packet
-	// echoes back to only them (so their own client still looks normal) while the
-	// room hears nothing — they cannot contest or expose the possession.
-	silenced := stealthMuted || trueMuted
+	silenced := hasPunishmentType(punishments, PunishmentStealthMute) || censorShadow
 	// A captcha-restricted connection is routed away from the room. It counts
 	// as silenced from here on so it triggers no traps, contagion or love
 	// potions, like any other message the room never actually heard.
@@ -1346,12 +1227,9 @@ func pktIC(client *Client, p *packet.Packet) {
 	if !silenced {
 		punishmentMechanicsOnIC(client, punishments)
 	}
-	// Log suppressed /truepossess IC with a marker so staff can audit what the
-	// silenced target tried to say (e.g. an attempt to expose the possession).
-	// Censor-tripped messages get their own marker for the same reason.
+	// Censor-tripped messages get a marker so staff can audit what a silenced
+	// speaker tried to say.
 	switch {
-	case trueMuted:
-		addToBuffer(client, "IC", "\""+ms.Message+"\" (truepossessed)", false)
 	case censorShadow:
 		addToBuffer(client, "IC", "\""+ms.Message+"\" (censored)", false)
 	case restricted:
@@ -1489,7 +1367,7 @@ func pktAM(client *Client, p *packet.Packet) {
 			Name: song, CharID: mc.CharID, Showname: name,
 			Looping: "1", Channel: "0", Effects: effects,
 		})
-	} else if strings.Contains(areaNames, decodedSong) {
+	} else if strings.Contains(getAreaNames(), decodedSong) {
 		if decodedSong == client.Area().Name() {
 			return
 		}
@@ -1601,21 +1479,11 @@ func pktOOC(client *Client, p *packet.Packet) {
 		return
 	}
 
-	// /truepossess silences the target's OOC entirely (see pktIC for the IC side).
-	// Gated by the atomic counter so servers not using it pay only one atomic load.
-	trueMuted := activeTruePossess.Load() > 0 && client.TruePossessed()
-
 	// Commands are dispatched before OOC-name validation so that /login and
 	// other commands are always reachable regardless of new-IPID OOC cooldowns,
 	// username validity, or duplicate-name collisions.  Returning players whose
 	// IP changed must be able to /login without waiting out any cooldown timer.
 	if strings.HasPrefix(ct.Message, "/") {
-		// Swallow commands from a /truepossess target so they can't reach anyone
-		// via /global, /pm, /modchat, /a, etc. The attempt is logged for staff.
-		if trueMuted {
-			addToBuffer(client, "CMD", "(suppressed during /truepossess) "+decode(ct.Message), false)
-			return
-		}
 		decoded := decode(ct.Message)
 		match := commandRegex.FindString(decoded)
 		command := strings.ToLower(strings.TrimPrefix(match, "/"))
@@ -1701,22 +1569,6 @@ func pktOOC(client *Client, p *packet.Packet) {
 		client.SendServerMessage("Your message exceeds the maximum message length!")
 		return
 	} else if strings.TrimSpace(ct.Message) == "" {
-		return
-	}
-	// /truepossess: the target's OOC is inert beyond this point. Echo the message
-	// back to only them under their frozen display name (so their own client still
-	// looks normal), but propagate nothing — no broadcast, no rename, no name PU —
-	// so they cannot expose or contest the possession.
-	if trueMuted {
-		display := client.OOCName()
-		if client.Uid() != -1 {
-			display = "[" + strconv.Itoa(client.Uid()) + "] " + display
-		}
-		if tag := formatTagDisplay(db.GetActiveTag(client.Ipid())); tag != "" {
-			display = tag + " " + display
-		}
-		client.Send(&packet.CTToClient{Name: encode(display), Message: ct.Message, IsFromServer: "0"})
-		addToBuffer(client, "OOC", "\""+ct.Message+"\" (truepossessed)", false)
 		return
 	}
 	var usernameTaken bool

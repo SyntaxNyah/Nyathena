@@ -244,7 +244,7 @@ Weaponize the IC packet's non-text fields. Applied in `pktIC` (`applyProtocolPun
 - `/nopreanim <uid>` — strips preanimations (PREANIM modifiers demoted, preanim name cleared)
 - `/forcepreanim <uid>` — promotes idle/talk modifiers so the named preanim plays
 
-#### Timing Effects (4)
+#### Timing Effects (3)
 `/slowpoke`, `/fastspammer`, plus:
 - `/lifo <uid>` — buffers the target's IC messages and releases them in **reverse arrival order** (flush at 3 messages or 6 s, whichever first). Implemented in `internal/athena/punishments_lifo.go`; queues are keyed by `*Client` and self-flush, so disconnects can't leak.
 
@@ -406,19 +406,13 @@ Unlike the `character` potion's per-session auto-rotation, the curse is **persis
 
 Each armed connection runs a single per-client watcher goroutine that picks a new random 1–5 second interval every tick, swaps to a random free character via the same `getRandomFreeChar`/`ChangeCharacter` path `/randomchar` uses (skips a tick if the target is tunged), and exits cleanly via `client.done` the moment the connection closes — so a cursed player who disconnects can never leak a goroutine, and `/uncurserandomchar` clearing the active flag makes the next tick exit on its own.
 
-### Possession
-Speak through another player's character. Shares one sprite-spoof + pair-spoof pipeline (`internal/athena/possess.go`, applied in `pktIC`):
+### Removed: Possession (`/possess`, `/fullpossess`, `/truepossess`, `/unpossess`)
 
-- `/possess <uid> <message>` (**console-gated**) — one message rendered exactly as the target.
-- `/fullpossess <uid>` (**console-gated**) — persistent silencing possession; identical to `/truepossess`.
-- `/truepossess <uid>` (**console-gated**) — persistent silencing possession; identical to `/fullpossess`. (Both names kept; both share `beginPossession` — which is exactly why both are gated: gating one alone would gate nothing.)
-- `/unpossess` (SHADOW) — stop a full/true possession; lifts the mute.
+Gone entirely, along with the whole spoof pipeline that backed them (`possess.go`, the `possessing`/`trueMuted` client fields, and the possession branches in `pktIC`/`pktOOC`). The `grant` console gate that briefly stood in front of them is gone too — see "Removed: Console-Gated Commands" below.
 
-**Pair-spoof (applies to all flavours).** A possessed IC message reproduces the *target's* pairing, not the possessor's: `applyPossessedPairFields` resolves the target's partner (normal `/pair` or UID-locked `/forcepair`) and stamps the partner's sprite (`OtherCharID`/`OtherName`/`OtherEmote`/`OtherOffset`/`OtherFlip`) onto the packet, and the possessed message also adopts the target's own self-offset/flip. Without this, possessing a paired player dropped their partner from the viewport — an obvious "this is a possess" tell. The possessor's own pair-info state is preserved (the bottom-of-`pktIC` `SetPairInfo` uses saved `ownFlip`/`ownSelfOffset`).
+The property they shared is that the effect was **invisible to the person it landed on**: a possession spoke as somebody, spoofed their pairing so the room saw nothing unusual, and silenced their IC, their OOC and their commands so they had no channel to say "that isn't me". Gating that behind shell access made it harder to reach and did not change what it did to its target. A moderation tool that leaves the person on the receiving end nothing to notice, report or appeal is the wrong shape regardless of who can fire it.
 
-**Both are console-gated.** `ADMIN` no longer suffices — each use has to be armed from the server console with `grant fullpossess` / `grant truepossess`, and one arming buys one use. `/unpossess` is deliberately left ungated so a possession can always be lifted by whoever is online. See "Console-Gated Commands" below.
-
-**Silencing (`/fullpossess` and `/truepossess`).** The target is marked `trueMuted` (per-client flag, hot-path-gated by the `activeTruePossess` atomic counter so unused servers pay nothing). While active: their IC and OOC are echoed back to *only them* (stealthmute semantics — their client looks normal) but reach nobody; their OOC commands (`/global`, `/pm`, `/modchat`, `/a`, …) are swallowed undispatched; and their showname / OOC name are frozen (the PU broadcasts are skipped) so they can't rename into a distress signal — which also keeps the possessor's spoofed messages pinned to the target's original showname. Suppressed lines are logged tagged `(truepossessed)` / `(suppressed during /truepossess)` for staff audit. The mute is lifted by `/unpossess`, switching target, or either party disconnecting (`endTruePossession` + `clientCleanup`, keeping the atomic gate balanced). Admins only — shadow mods no longer have access to any possession command.
+Nothing replaces it. `/forcedisplay` (pin one character onto every sprite in the area) and `/charcurse` remain — both are visible to the room and to the target.
 
 ### Admin Lock (`/adminlock`)
 `/adminlock` (ADMIN) toggles an admin-only seal on the caller's area: an admin-locked area refuses entry to **everyone but administrators** — even moderators and shadow mods who hold `BYPASS_LOCK`, and even players on the invite list. Unlike `/lock`, there is no emergency-bypass or invite escape hatch. Players already inside are not evicted (it blocks new entries only). The check sits at the top of `Client.ChangeArea`, before the normal lock logic. The area is also set to `LockLocked` so it displays as locked in ARUP; a new `area.adminLocked` bool (cleared on `Area.Reset`) carries the extra seal. A non-admin cannot `/unlock` or `/lock` an admin-locked area out from under it — only `/adminlock` (by an admin) lifts it, which reopens the area (`LockFree`, invites cleared). Area 0 cannot be admin-locked.
@@ -498,7 +492,7 @@ Enabled with `enable_area_logging = true` in `[Logging]`.
 Separate from the persistent per-area daily log files above, each area also keeps an in-memory buffer of recent action lines (IC, OOC, MOD calls, CMD, MUSIC, ...) that gets flushed to a `report-<timestamp>-<area>.log` file (and posted to the report webhook) whenever a player calls a moderator (`/modcall`) — the same buffer backs the in-game `/log <area>` command and the Discord bot's per-player log lookup. It previously kept a fixed number of lines (`log_buffer_size`, default 150), so a busy area could rotate through that many lines in well under an hour, leaving mod call reports covering only a few hours instead of the intended full day of context. The buffer now retains every line from the past **24 hours** regardless of count; `log_buffer_size` becomes a safety-valve cap on top of that (`0` = no cap, the new default) to bound memory in an extremely active area. Implemented in `Area.UpdateBuffer`/`Area.Buffer` (`internal/area/areas.go`).
 
 ### AutoMod
-Word-list-based automatic enforcement. Covers IC message text, IC showname, OOC message text, and OOC username — slurs in any of those fields trigger the configured action.
+Word-list-based automatic enforcement. Covers IC message text, IC showname, OOC message text, OOC username, and `/area rename` (an area name is broadcast to every connected client, so it goes through the identical path — see "`/area rename`" below) — slurs in any of those fields trigger the configured action.
 
 **Severity tiers.** `banned_words.txt` entries are no longer flat. Each line may carry a tier and a match mode, `word | tier | mode`, and an unmarked line means exactly what it always did:
 
@@ -535,13 +529,13 @@ The tier of a hit is the **worst** entry the message matches, never the first fo
 
 A match **drops the packet entirely** rather than substituting a placeholder — a name nobody can see is the point, and a placeholder still tells the room somebody tried. A `nuke`-tier match also bans, and bans the **owner** of the name, resolved from the `PU`'s own ID field, never the client the packet was headed for: the join replay carries other people's names to whoever is connecting, so acting on the recipient would ban an arbitrary bystander and re-fire on every join for as long as the name existed. Acting on the owner is correct from every call site and self-limiting, since the first hit closes that connection. Two carve-outs: moderators are never banned by this path, and `/forcename` is refused at the command instead (a moderator typing a slur into someone else's showname is the moderator's doing — banning the target for it would be indefensible). Only PU types 0 and 2 are filtered; type 1 is the character name from `characters.txt` (operator-controlled) and type 3 is an area index, so neither is player-supplied text. `broadcastToArea` — the per-message IC path — does not go through this at all, so nothing here is reachable from the hot path.
 
-**Where the content gate runs (bug fix).** The censor block used to sit part-way down `pktIC`, after the state-update section. That was a leak: the showname is broadcast to **every client** in a `PU` packet as part of that state update, and the showname censor ran roughly forty lines later — so a slur worn as a showname rendered in every client in the room and the filter never got a look at it. Nothing errored and nothing was logged; it simply did not work. The same placement also put the censor *after* `quickdrawOnIC`, `typingRaceOnIC` and `unscrambleOnIC`, so a censored line could still win the unscramble chip prize. The gate now runs immediately after field validation, before any other handling at all — nothing it checks depends on the punishment transforms further down, since `msgText` is decoded exactly once and never reassigned, so it examines the identical string the old placement did. Ordering against the other suppression mechanisms is unchanged and deliberate: censoring runs before the torment branch, before the stealthmute/truepossess silencing and before the escalating kick, so a censored message can never escape through the delayed torment rebroadcast and a nuked one never reaches any of them. Because this is an ordering property that cannot be observed without standing up a full client, and one that regresses silently, it is pinned against the source itself by `TestContentGatePrecedesEveryLeakInPktIC` (`censor_ordering_test.go`), which fails and names the two landmarks if anything moves above the gate.
+**Where the content gate runs (bug fix).** The censor block used to sit part-way down `pktIC`, after the state-update section. That was a leak: the showname is broadcast to **every client** in a `PU` packet as part of that state update, and the showname censor ran roughly forty lines later — so a slur worn as a showname rendered in every client in the room and the filter never got a look at it. Nothing errored and nothing was logged; it simply did not work. The same placement also put the censor *after* `quickdrawOnIC`, `typingRaceOnIC` and `unscrambleOnIC`, so a censored line could still win the unscramble chip prize. The gate now runs immediately after field validation, before any other handling at all — nothing it checks depends on the punishment transforms further down, since `msgText` is decoded exactly once and never reassigned, so it examines the identical string the old placement did. Ordering against the other suppression mechanisms is unchanged and deliberate: censoring runs before the torment branch, before the stealthmute silencing and before the escalating kick, so a censored message can never escape through the delayed torment rebroadcast and a nuked one never reaches any of them. Because this is an ordering property that cannot be observed without standing up a full client, and one that regresses silently, it is pinned against the source itself by `TestContentGatePrecedesEveryLeakInPktIC` (`censor_ordering_test.go`), which fails and names the two landmarks if anything moves above the gate.
 
-**`shadow` (default action):** the censored message is **shadow-sent** — echoed back to the sender so their client shows it as sent, while the packet is dropped for every other client, so nobody ever sees the slur. The speaker's IPID is also added to the torment list (same list as `/lag`: ghost/delayed messages and random silent disconnects, persisted across reconnects), and the connection is kicked (see above). Clean messages are unaffected — only messages that trip the censor are swallowed, but once tripped the speaker stays on the torment list until a moderator lifts it. In `pktIC` the shadow trip is folded into the existing stealthmute `silenced` delivery path (so the sender's echo is a fully-processed, well-formed packet, sent *before* the kick closes the connection) and runs **before** the torment branch, so a censored message can never leak out through `handleTormentedIC`'s delayed rebroadcast; it is also excluded from the area's IC history so `/markov`/`/icwarp` can't regurgitate it. Area logs tag suppressed lines `(censored)`.
+**`shadow` (default action):** the censored message is **shadow-sent** — echoed back to the sender so their client shows it as sent, while the packet is dropped for every other client, so nobody ever sees the slur. The speaker's IPID is also added to the torment list (ghost/delayed messages and random silent disconnects, persisted across reconnects), and the connection is kicked (see above). Clean messages are unaffected — only messages that trip the censor are swallowed, but once tripped the speaker stays on the torment list until a moderator lifts it. In `pktIC` the shadow trip is folded into the existing stealthmute `silenced` delivery path (so the sender's echo is a fully-processed, well-formed packet, sent *before* the kick closes the connection) and runs **before** the torment branch, so a censored message can never leak out through `handleTormentedIC`'s delayed rebroadcast; it is also excluded from the area's IC history so `/markov`/`/icwarp` can't regurgitate it. Area logs tag suppressed lines `(censored)`.
 
 **Staff alerts:** every censor trip (any action, and the showname censor below) sends a `[CENSOR]` OOC alert to everyone holding `MOD_CHAT` — who tripped, where, the matched entry, the (truncated) text, and what the server did about it. Every alert carries the opt-out hint; each staff member can mute them per-session with `/censoralerts off` (`/censoralerts on` re-enables; bare `/censoralerts` shows the current state). Manual torment additions (now console-only) deliberately never alert — only censor trips do.
 
-**Torment list tooling:** `/tormentlist` (MUTE) lists every IPID on the torment list with any connected sessions (UID, name, area) or `offline`. `/untorment <ipid>` (BAN) removes one entry; `/untorment all` purges the entire list — every IPID, in memory and in the DB (which also cancels all pending torment disconnect timers). There is no longer any in-game command that *adds* to the list — see "Console-Gated Commands" below.
+**Torment list tooling:** `/tormentlist` (MUTE) lists every IPID on the torment list with any connected sessions (UID, name, area) or `offline`. `/untorment <ipid>` (BAN) removes one entry; `/untorment all` purges the entire list — every IPID, in memory and in the DB (which also cancels all pending torment disconnect timers). There is no longer any in-game command that *adds* to the list — `/lag` was removed; see "Removed: Console-Gated Commands" below.
 
 **Filter-evasion normalization.** Both `banned_words.txt`/`censored_names.txt` entries and the text being checked are run through `normalizeForFilter` (`internal/athena/text_filter_normalize.go`) before matching, so stylizing, spacing out, or leetspeaking a slur doesn't evade the filter. Only letters survive normalization — everything else is either substituted into a letter or dropped — which defeats:
 - stylized Unicode letters — mathematical bold/script/fraktur, fullwidth, circled, superscript, etc. — via NFKD compatibility decomposition (`golang.org/x/text/unicode/norm`), which folds e.g. `𝓷𝓲𝓰𝓰𝓮𝓻` or fullwidth `ｎｉｇｇｅｒ` back to plain `nigger`
@@ -621,7 +615,7 @@ Implemented in `internal/athena/joincaptcha.go` (state, gating, commands), `join
 ### Censored Showname Shadow-Send
 `config/censored_names.txt` lists shownames (or substrings of them, case-insensitive) that nobody is allowed to speak under — independent of `automod_enabled`/`banned_words.txt`. Matching goes through the same `normalizeForFilter` Unicode-bypass normalization as AutoMod. Every IC message a player sends while their showname matches an entry is:
 - **shadow-dropped** — echoed back to only the sender (their client shows it as sent) while no other client ever receives it, including the very message that tripped the check.
-- **torment-listed** — their IPID goes into the torment set exactly like `/lag` (persisted), so they get the ghost/delayed-message treatment and eventual silent disconnects until a moderator removes them (`/untorment <ipid|all>`, `/unpunish -t lag`, or `/unlag`).
+- **torment-listed** — their IPID goes into the torment set (persisted, the same list the AutoMod censor arms), so they get the ghost/delayed-message treatment and eventual silent disconnects until a moderator removes them (`/untorment <ipid|all>`, `/unpunish -t lag`, or `/unlag`).
 - **kicked** — same escalating kick as an AutoMod `shadow`/`torment` trip (see "Repeat-Offender Autoban" above); repeated trips count toward the same shared autoban counter.
 - **reported to staff** — the same `[CENSOR]` OOC alert as AutoMod trips, with the `/censoralerts off` opt-out hint.
 
@@ -699,7 +693,7 @@ A single message-based rate-limit violation (`message_rate_limit`, `ooc_rate_lim
 
 Both are now unified into one repeat-offender system. When `rate_limit_kick_autoban` is enabled (default: on), an IPID that racks up `rate_limit_kick_autoban_threshold` kicks (default: **2**) within a rolling `rate_limit_kick_autoban_window` (default: 600s / 10 minutes) is handed a short automatic ban lasting `rate_limit_kick_autoban_duration` (default: 15 minutes) — long enough to break a spam bot's reconnect loop without being a full moderator-length ban. **The counter is shared across both kick kinds**: a rate-limit kick and a censor-trip kick on the same IPID count toward the exact same spree, so a player who trips one of each is treated as a repeat offender exactly like one who trips the same check twice. A kick that arrives after the window has elapsed starts a fresh count instead of adding to an old one, so the autoban targets an active spam spree, not kicks earned far apart over a connection's whole lifetime on the server.
 
-Every call site of `KickForRateLimit` funnels through the same choke point — `pktIC`, `pktChangeChar`, `pktAM` (music/area-change), and both the general and IP-specific OOC rate limiters in `pktOOC` — so the rate-limit half covers IC and OOC alike, and in every one of those handlers the check runs before any packet parsing or broadcasting, so the message that trips the limit is never broadcast to anyone. The censor half is covered by `Client.KickForCensorTrip`, called from every `autoModCheck` call site (IC message, IC showname, OOC username, OOC message) whenever the configured action is `shadow` or `torment`, **and** from the separate `checkCensoredShowname` (`censored_names.txt`) match in `pktIC` — so a name-based trip escalates exactly like a message-content trip. `kick`/`mute`/`ban` AutoMod actions are untouched (already a stronger consequence on their own). This is only ever wired into the automatic, server-triggered censor path — a moderator's manual `/lag` (which calls `addTormentedIP` directly) never counts toward the autoban, since that's a deliberate staff action, not something that should also escalate on its own.
+Every call site of `KickForRateLimit` funnels through the same choke point — `pktIC`, `pktChangeChar`, `pktAM` (music/area-change), and both the general and IP-specific OOC rate limiters in `pktOOC` — so the rate-limit half covers IC and OOC alike, and in every one of those handlers the check runs before any packet parsing or broadcasting, so the message that trips the limit is never broadcast to anyone. The censor half is covered by `Client.KickForCensorTrip`, called from every `autoModCheck` call site (IC message, IC showname, OOC username, OOC message) whenever the configured action is `shadow` or `torment`, **and** from the separate `checkCensoredShowname` (`censored_names.txt`) match in `pktIC` — so a name-based trip escalates exactly like a message-content trip. `kick`/`mute`/`ban` AutoMod actions are untouched (already a stronger consequence on their own). This is only ever wired into the automatic, server-triggered censor path — the console's manual `torment <ipid>` (which calls `addTormentedIP` directly) never counts toward the autoban, since that's a deliberate staff action, not something that should also escalate on its own.
 
 **Three playtime tiers — lenient toward real players, aggressive toward obvious bots.** How many kicks it takes to escalate depends on `rateLimitAutobanThresholdFor`'s read of the IPID's accumulated all-time playtime (the same figure `/playtime` and the Lockdown Playtime Purge use):
 - **Aggressive** — below `rate_limit_kick_autoban_lenient_playtime` minutes (default: 2 hours), including a brand-new connection with no playtime at all: the base `rate_limit_kick_autoban_threshold` (default: **2**) applies. This is the tier aimed at the intended target — a fresh connection that's purely there to spam.
@@ -872,69 +866,37 @@ The command as a whole is gated on `MOD_CHAT` rather than `BAN` so that everyone
 | `/musicunban <uid\|ipid>` | `MUTE` | Lift a music-ban. Accepts a connected target's UID or a raw IPID, so offline players can still be unbanned. |
 | `/musicbans` | `MUTE` | List every active music-ban with reason, issuer and timestamp (newest first). |
 
-### Shadow Disconnect / Stealth Ban (`/shadowdisconnect`)
-`ADMIN`-only stealth ban, distinct from `/ban`: the target is never told why — or that — they're blocked. Every current and future connection attempt from the target's IPID is dropped with **no packet and no reason**, forever, until an admin lifts it. Persisted by IPID via the `SHADOW_DISCONNECTS` table (DB migration 24), the same way `/musicban`/`/curserandomchar` persist — an in-memory-only flag would vanish the instant the target reconnects.
+### Removed: Shadow Disconnect (`/shadowdisconnect`) — enforcement retained
+
+`/shadowdisconnect` is gone for the same reason possession is: to its target a shadow-ban is indistinguishable from a bad router, forever, with nothing to notice or appeal. The `grant` gate it sat behind is gone with it.
+
+**The enforcement half stays**, so entries written before the removal can still be found and lifted rather than silently outliving the command:
 
 | Command | Behaviour |
 |---------|-----------|
-| `/shadowdisconnect <uid\|ipid> [-r reason]` | **Console-gated** — needs `grant shadowdisconnect` at the console for each use; `ADMIN` alone is not enough (see "Console-Gated Commands"). Persistently shadow-bans the target's IPID. Accepts a connected target's UID or a raw IPID, so an offline player can be preemptively listed. Drops every live connection sharing that IPID immediately, and every future one silently. Idempotent; re-issuing overwrites the reason/issuer. |
-| `/shadowundisconnect <uid\|ipid\|all>` | Lifts a shadow-disconnect. Accepts a UID, a raw IPID (so offline players can be lifted too), or the literal `all` to clear the entire list at once. |
-| `/shadowdisconnectlist` | Lists every active shadow-disconnect entry with reason, issuer and timestamp (newest first). |
+| `/shadowundisconnect <uid\|ipid\|all>` | `ADMIN`. Lifts a shadow-disconnect by UID, raw IPID (offline players), or `all`. |
+| `/shadowdisconnectlist` | `ADMIN`. Lists every remaining entry with reason, issuer and timestamp (newest first). |
 
-**Why this isn't just `conn.Close()`.** Every other disconnect path in this codebase (`/kick`, `/ban`, `CheckBanned`) sends a typed packet (`KK`/`KB`/`BD`) naming the reason before closing — the opposite of what a shadow ban needs. For a raw TCP AO2 client, a bare `conn.Close()` with nothing sent first is already indistinguishable from a network drop. For a WebAO/WSS client it is not: `client.conn` wraps `nhooyr.io/websocket`, and `conn.Close()` on it performs a *clean* WebSocket closing handshake (status 1000, "Normal Closure") — a browser reports that as a deliberate, well-behaved close, not an error. `shadowDisconnectNow()` (`internal/athena/shadowdisconnect.go`) forces the library's abrupt path instead — an already-expired write deadline plus a doomed `Write` — which closes the raw connection with no Close frame, surfacing to a browser as a generic, unexplained connection error ("a typical websocket error"). The same helper is used whether disconnecting an online target immediately or rejecting a reconnect attempt.
+The persisted list (`SHADOW_DISCONNECTS`, DB migration 24), its in-memory cache, and the three enforcement points are unchanged — nothing adds to the list any more, so they only ever act on pre-existing rows:
+- `ListenTCP`'s accept loop (`internal/athena/server.go`) — checked the instant the IPID is computed, before a `*Client` exists. A match is a silent `conn.Close()`.
+- `HandleWS` (`internal/athena/server.go`) — checked before the WebSocket upgrade; a match responds with a bare `500` and no body.
+- `Client.HandleClient` (`internal/athena/client.go`) — a defense-in-depth re-check alongside `CheckBanned`/the torment check.
 
-**Where the block is enforced (defense in depth, mirroring how the torment list re-checks at multiple points):**
-- `ListenTCP`'s accept loop (`internal/athena/server.go`) — the IPID is checked the instant it's computed from the raw connection, before any other rate-limit/firewall work, before a `*Client` even exists. A match is a silent `conn.Close()`.
-- `HandleWS` (`internal/athena/server.go`) — checked before the WebSocket upgrade is even attempted; a match responds with a bare `500` and no body, so the browser sees a generic failed handshake rather than an explained rejection.
-- `Client.HandleClient` (`internal/athena/client.go`) — a defense-in-depth re-check right alongside `CheckBanned`/the torment check, for a connection that was already past the accept-loop gate when `/shadowdisconnect` was issued mid-handshake.
+**Why the close isn't just `conn.Close()`.** Kept because the enforcement path still relies on it. Every other disconnect path in this codebase (`/kick`, `/ban`, `CheckBanned`) sends a typed packet (`KK`/`KB`/`BD`) naming the reason before closing. For a raw TCP AO2 client a bare `conn.Close()` with nothing sent first is already indistinguishable from a network drop; for a WebAO/WSS client it is not, since `client.conn` wraps `nhooyr.io/websocket` and `conn.Close()` performs a *clean* closing handshake (status 1000, "Normal Closure") that a browser reports as deliberate. `shadowDisconnectNow()` (`internal/athena/shadowdisconnect.go`) forces the library's abrupt path — an already-expired write deadline plus a doomed `Write` — closing with no Close frame so a browser sees a generic connection error.
 
-The in-memory set (`internal/athena/shadowdisconnect.go`) is a `map[string]struct{}` behind an `RWMutex`, seeded from the DB at startup, so every one of the above checks is a single lock-free-ish map lookup — cheap enough to run before any handshake work. A moderator target cannot be shadow-disconnected via UID (mirrors `/musicban`'s guard); an offline IPID has no such check, matching `/ban`'s offline-IPID path.
+### Removed: Console-Gated Commands (`grant`)
 
-### Console-Gated Commands (`grant`)
+There was briefly a console `grant` gate in front of `/possess`, `/fullpossess`, `/truepossess` and `/shadowdisconnect`: `ADMIN` was not sufficient, each use had to be armed from the server console with `grant <command>`, and one arming bought one use.
 
-A few commands are powerful in a way that is **invisible to the person they are used on**. Possession speaks as somebody and silences them so they cannot say otherwise; a shadow-disconnect looks to its target exactly like a bad network; a torment listing makes their messages ghost and their connection drop for no stated reason. Holding `ADMIN` is no longer sufficient for any of them.
+All four commands have since been **removed outright**, so the gate has nothing left to guard and `grant` / `grant status` / `grant revoke` are gone from the console along with `console_gate.go`. The reasoning that motivated the gate is what finished the job: the thing wrong with those commands was never who could fire them, it was that their target could not tell they had been fired at all.
 
-Console is the authority instead, because it is the one place that cannot be reached over the network at all: it needs shell access to the host, which is a different and stronger thing than any in-game credential. This is the mirror image of the console-only `punishment disable` kill switch — there, console is the only thing that can take a power away; here, it is the only thing that can hand one out.
+**What survived, and is unchanged:**
 
-**Two different shapes, because the commands differ in what they need.**
+- **The console-only punishment kill switch.** `punishment <enable|disable|status>` still outranks every in-game tier and is still reachable only from stdin.
+- **The torment list.** AutoMod still arms it automatically on a censor trip. `/lag` was removed from the game in the same change as the gate, so the console's `torment <ipid>` is the only remaining manual route in; `untorment <ipid|all>` is the console half of `/untorment`. `addTormentedIP` still has exactly two callers (the AutoMod censor path and the console helper), so `/stack lag`, the roulette pool and `/maso` cannot put anyone on it.
+- **Lifting is never restricted.** `/untorment`, `/unlag` and `/shadowundisconnect` all stay in game at their existing permissions, so whoever is online can always undo a listing.
 
-*Armed for one use* — the command stays in game (possession structurally has to: `beginPossession` sets state on the **possessor**, whose own IC is then spoofed as the target, so there is nobody to do the possessing from a console). The console arms it, the admin uses it, and it re-locks:
-
-| Command | What it does |
-|---------|--------------|
-| `/possess` | Speak one IC message as another player |
-| `/fullpossess` | Become a player and silence them until `/unpossess` |
-| `/truepossess` | Same handler as `/fullpossess`, under its other name |
-| `/shadowdisconnect` | Stealth-ban an IPID with no message, ever |
-
-```
-grant <command>          # arm ONE use
-grant status             # what is armed, and how long it has left
-grant revoke <cmd|all>   # disarm before it is used
-```
-
-*Moved to the console outright* — the manual half of the torment list. `/lag` has been **removed** from the game entirely; nothing in game adds to the list any more.
-
-```
-torment <ipid>           # the only remaining manual way onto the torment list
-untorment <ipid|all>     # console half of /untorment
-```
-
-**The torment system itself is unchanged.** AutoMod still arms it automatically on a censor trip, exactly as before. What is gone is a moderator's ability to apply it by hand.
-
-**Design properties, and why each one is there:**
-
-- **One arming buys one use, not a window.** Re-arming an already-armed command refreshes its expiry rather than stacking a second use — a console operator who types the command twice should not silently be handing out two.
-- **An unused grant lapses after 5 minutes** (`consoleGrantTTL`). A grant armed and then forgotten would otherwise leave the power continuously available again, which is the exact thing the gate exists to prevent.
-- **A grant is spent on the command taking effect, not on the attempt.** Each gate sits after every validation branch in its handler and immediately before the only observable effect, so a mistyped UID costs nothing and the console operator is not re-arming for typos. It authorises one *action*, not one keystroke. `/shadowdisconnect` is the one documented exception: its gate has to precede the database write (on the far side, a refusal would leave an unauthorised row already persisted), so a DB failure on the next line spends the grant even though nothing happened — rare, fixed by re-arming, and the right way round to be wrong.
-- **Applying is restricted; lifting never is.** `/unpossess`, `/untorment`, `/unlag` and `/shadowundisconnect` all stay available in game at their existing permissions. Requiring console to apply while letting staff undo means a mistake can always be fixed by whoever is online — the asymmetry is what makes the gate safe to be strict.
-- **ADMIN is still required, just no longer sufficient.** The permission stays as a floor so an armed grant cannot be raced for by an arbitrary player; the grant is the added authority, not a replacement for the old one.
-- **Every arm, consumption and refusal is written to the audit log** (`logger.WriteAudit`, `CONSOLE_GRANT` lines) as well as the console, so the record of who used one survives a restart.
-- **Both possession names are gated.** `/fullpossess` and `/truepossess` are one handler behind two names, so gating either alone would gate nothing. Pinned by `TestBothPossessionAliasesAreGated`.
-
-There is no bypass: `parsePunishmentType` never reaches the torment list (`addTormentedIP` has exactly two callers — the AutoMod censor path and the console helper), so `/stack lag`, the roulette pool and `/maso` cannot put anyone on it, and no Discord slash command reaches any gated command.
-
-Implemented in `internal/athena/console_gate.go` (the grant store and `consumeConsoleGrant`), with the console verbs in `internal/athena/cli.go` and the torment helpers in `internal/athena/commands_punishment.go`.
+Console verbs live in `internal/athena/cli.go`; the torment helpers in `internal/athena/commands_punishment.go`.
 
 ### Hot Config Reload (`/reload`)
 `/reload` (in-game, `ADMIN`) atomically re-reads every supported config/data file from disk and swaps it in without restarting the server. Also available as the `reload` CLI command on stdin and via `SIGHUP`.
@@ -1022,7 +984,11 @@ Joining an area — the initial connect into area 0, or any subsequent `/area` c
 
 **Custom tracks are now what gets synced (bug fix).** Only the two MC-packet paths in `pktAM` recorded the area's current song; `/play` (Discord/CDN URLs), `/randomsong` and the YouTube pipeline broadcast their MC packet without recording it. The area therefore stayed pointed at the last **jukebox** entry, so leaving the area and coming back — or any fresh join — resynced the client to that stale jukebox track instead of the custom track actually playing. Every BGM path now goes through the shared `playAreaMusic` helper (`internal/athena/music_sync.go`), which records the track and broadcasts it in one place. One-shot sound effects (the `/sfxcurse` MC fallback, `Looping "0"`) deliberately bypass the helper so they never overwrite the area's BGM.
 
-### `/area mute` / `/area unmute`
+### `/area` — CM/moderator area tools
+
+Registered as the `area` command with `mute` / `unmute` / `rename` / `unrename` sub-commands, gated on the `CM` permission (which every mod role carries, and which `clientCanUseCommand` also grants to area CMs), so both area CMs and moderators can run all of them. Listed under the `area` help category (`/help area`, `/area -h`).
+
+#### `/area mute` / `/area unmute`
 Area-wide moderation for CMs and moderators. `/area mute` silences **everyone in the caller's area except CMs and moderators** — both IC and OOC (`ICOOCMuted`). `/area unmute` **reverses it so people can talk again**. The caller, area CMs, CM-permission holders, and moderators are all exempt.
 
 **Scoped to the room — in-memory only (bug fix).** Unlike a real `/mute`, an `/area mute` is meant to silence someone only while they're actually in that area. It records its origin area (`Client.SetAreaMuted`/`AreaMuteOrigin`), and leaving that area — via `ChangeArea` or `forceChangeArea` (e.g. a jail placement) — automatically lifts it (`Client.liftAreaMuteOnDeparture`). `/area unmute` likewise only reverses a mute whose origin is the caller's own area, so it can never accidentally lift a real `/mute` or one applied by a different room.
@@ -1031,7 +997,48 @@ The mute lives **purely in memory and is never persisted to the DB**. It used to
 
 The two commands are a clean inverse pair that never disturbs separate individual mutes: `/area mute` only silences players who are currently unmuted (it won't clobber a deliberate `/mute`), and `/area unmute` only lifts the `ICOOCMuted` state that `/area mute` itself set (an IC-only or OOC-only individual mute, or one from another area, is left intact).
 
-Gated on the `CM` permission (which every mod role carries, and which `clientCanUseCommand` also grants to area CMs), so both CMs and moderators can run it. Registered as the `area` command with `mute`/`unmute` sub-commands (`internal/athena/commands_area_mute.go`); listed under the `area` help category (`/help area`, `/area -h`).
+Implemented in `internal/athena/commands_area_mute.go`.
+
+#### `/area rename <name>` / `/area unrename`
+
+Lets whoever is running a room name it after what is actually happening in it — a CM staging a Danganronpa case in "Courtroom 3" runs `/area rename DR Killing Game` and the area list says so.
+
+```
+/area rename DR Killing Game     # rename the caller's own area
+/area rename                     # report the current name and the configured one
+/area unrename                   # restore the configured name immediately
+```
+
+**The name is a loan, not a transfer.** `areas.toml` holds the area's real identity and it comes back on its own:
+- when the area **empties** (`releaseAreaNameOnEmpty`, called from the same three departure paths that call `Area.Reset()` — `clientCleanup`, `ChangeArea`, `forceChangeArea`), or
+- when the area **loses its last CM** (`releaseAreaNameOnLastCMLeaving`, called immediately after every `RemoveCM` — the three departure paths plus both branches of `/uncm`).
+
+Nothing is persisted, so a restart also returns every area to its configured name. That is what stops a rename from being a way to permanently vandalise the area list: nobody has to remember to undo one, and there is no state to clean up.
+
+**The CM-held condition is real state, not a call-site convention.** `Area.SetName` records whether the area had a CM at rename time (`Area.NameHeldByCM`), and the last-CM release checks it. A moderator does not have to be a CM to rename a room, and for a room that never had one "no CMs are left" is true from the moment of the rename — so without that bit a moderator's name would snap back on the next unrelated departure. Such a room keeps its name until it empties instead.
+
+**Three things are derived from an area's name and all of them are republished together** (`republishAreaNames`, under `areaRenameMu`):
+- `areaNames`, the `#`-joined string `pktAM` matches an incoming area change against. It moved from a plain package global to an `atomic.Pointer[string]` (`getAreaNames`/`setAreaNames` in `livereload.go`) for this — it is read on the IC/music hot path and is now written at runtime.
+- the pre-built **SM** blob every joining client is handed.
+- the area list held by clients that are **already connected**, pushed as an **FA** packet.
+
+FA rather than a fresh SM is deliberate: SM is a handshake packet, and a client that receives one mid-session re-runs its join ladder and answers with RD. FA carries the area list on its own and is what area-list changes are normally delivered with. (`pktReqDone` ignores a second RD anyway, so the SM route would not have *broken* anything — it would just have shown everyone a loading screen to change one string.)
+
+**Validation** (`areaNameRejection`) — an area name is not just a label; it is the key clients send back to change area, the string the area list is built from, and the directory area logs are written into:
+
+| Rule | Why |
+|------|-----|
+| 1–32 runes, non-empty after trimming | The area list is a narrow column in every AO2 client. |
+| No `#`, `%`, `$`, `&` | AO2's escape table. Area names are the one player-settable string this server emits **unencoded** (`buildSMPacket` writes them verbatim; `pktAM` compares against them after decoding), so one of these would split the list entry or make the area unreachable by name. |
+| No control characters | They break the area list and the area-log line format. |
+| Not a music-list entry or an `http(s)` URL | `pktAM` tests the music list before the area names, so the room would become unreachable by name and play a song instead. |
+| Not another area's current **or configured** name (case-insensitive) | A configured name returns the instant that area empties, so allowing it would produce a silent duplicate later rather than an error now. Re-checked under `areaRenameMu` so two rooms cannot race onto one name. |
+
+**The name goes through the same word filter as IC and OOC**, which is the point rather than an extra: it is broadcast to every connected client, so there is no argument for a weaker standard than one line of chat. `cmdAreaRename` mirrors `checkCensored` in `pktIC` exactly — `autoModCheckTiered` with source `"area rename"`, `applyAutoModNuke` on a `nuke` match (the rename is destroyed and the IPID banned), `raidGuardOnWordHit` for everything below nuke, and the configured `automod_action` otherwise. `watch` tier still passes, as it does in chat. Under the default `shadow` action the caller is sent exactly the confirmation a successful rename sends while the area is untouched and no other client ever sees the name — shadow semantics preserved.
+
+A new name also gets its area-log directory created (`logger.CreateAreaLogDirectory`); a failure is logged and non-fatal.
+
+Implemented in `internal/athena/commands_area_rename.go`, with `SetName`/`DefaultName`/`Renamed`/`ResetName`/`NameHeldByCM` in `internal/area/areas.go`. `Area.Reset()` deliberately does **not** restore the name — undoing a rename needs a server-wide republish the area package cannot perform — so the athena-side helper handles it at the same call sites. Pinned by `commands_area_rename_test.go`.
 
 ### `/8ball <question>`
 For every player. Picks an answer from `config/8ball.txt` if present, otherwise from the built-in 20 classic Magic 8-Ball responses. The sample shipped in `config_sample/8ball.txt` adds a few cheeky extras.
@@ -1149,7 +1156,7 @@ Lets **any** player opt into being automatically disconnected after a chosen str
 - Chip Giveaway system
 - Area Roulette
 - Wardrobe/character management commands
-- `/randomchar`, `/possess`
+- `/randomchar`
 - In-place server restart via `syscall.Exec`
 - Testimony recorder (inherited from upstream Athena)
 - `/about` credits SyntaxNyah's fork and full credit to MangosArentLiterature's upstream Athena.

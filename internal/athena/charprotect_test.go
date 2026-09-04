@@ -46,7 +46,7 @@ func TestCmdCharProtectToggle(t *testing.T) {
 	setCharacters([]string{"Phoenix Wright", "Miles Edgeworth"})
 
 	a := area.NewArea(area.AreaData{}, len(getCharacters()), 10, area.EviAny)
-	client := &Client{conn: &testConn{}, uid: 1, char: 0, possessing: -1, pair: ClientPairInfo{wanted_id: -1}}
+	client := &Client{conn: &testConn{}, uid: 1, char: 0, pair: ClientPairInfo{wanted_id: -1}}
 	client.SetArea(a)
 	a.AddChar(0)
 
@@ -66,7 +66,7 @@ func TestCmdCharProtectToggle(t *testing.T) {
 }
 
 func TestCmdCharProtectRejectsWhileSpectating(t *testing.T) {
-	client := &Client{conn: &testConn{}, uid: 1, char: -1, possessing: -1, pair: ClientPairInfo{wanted_id: -1}}
+	client := &Client{conn: &testConn{}, uid: 1, char: -1, pair: ClientPairInfo{wanted_id: -1}}
 
 	cmdCharProtect(client, []string{"on"}, "usage")
 
@@ -91,9 +91,9 @@ func setupCharProtectTestArea(t *testing.T) (a *area.Area, protector, holder *Cl
 	// but not yet counted in area a's taken map — mirrors the moment
 	// resolveCharProtectOnJoin is invoked from ChangeArea, after the client
 	// has left their old area but before JoinArea adds them to the new one.
-	protector = &Client{conn: &testConn{}, uid: 1, char: 0, possessing: -1, pair: ClientPairInfo{wanted_id: -1}}
+	protector = &Client{conn: &testConn{}, uid: 1, char: 0, pair: ClientPairInfo{wanted_id: -1}}
 
-	holder = &Client{conn: &testConn{}, uid: 2, char: 0, possessing: -1, pair: ClientPairInfo{wanted_id: -1}}
+	holder = &Client{conn: &testConn{}, uid: 2, char: 0, pair: ClientPairInfo{wanted_id: -1}}
 	holder.SetArea(a)
 	a.AddChar(0)
 

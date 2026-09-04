@@ -27,17 +27,24 @@ import (
 
 	"github.com/MangosArentLiterature/Athena/internal/db"
 	"github.com/MangosArentLiterature/Athena/internal/logger"
-	"github.com/MangosArentLiterature/Athena/internal/permissions"
 )
 
-// /shadowdisconnect — admin-only stealth ban. Unlike /ban or /kick, a
-// shadow-disconnected IPID is never told why (or that) it's blocked: every
-// future connection attempt is dropped in a way indistinguishable from an
-// ordinary network failure, forever, until an admin lifts it with
-// /shadowundisconnect. Persisted by IPID in the SHADOW_DISCONNECTS table
-// (see internal/db/db.go), the same way /musicban and /curserandomchar
-// persist — an in-memory-only flag would vanish the instant the target
-// reconnects, since a fresh connection gets a brand new *Client.
+// The shadow-disconnect list — a stealth ban whose target is never told why
+// (or that) it's blocked: every connection attempt from a listed IPID is
+// dropped in a way indistinguishable from an ordinary network failure,
+// forever, until an admin lifts it with /shadowundisconnect. Persisted by
+// IPID in the SHADOW_DISCONNECTS table (see internal/db/db.go), the same way
+// /musicban and /curserandomchar persist — an in-memory-only flag would
+// vanish the instant the target reconnects, since a fresh connection gets a
+// brand new *Client.
+//
+// NOTHING ADDS TO THIS LIST ANY MORE. The /shadowdisconnect command that used
+// to has been removed: a power whose effect is invisible to the person it
+// lands on left them with no way to tell a ban from a broken router, and no
+// way to appeal something they cannot see. What remains here is enforcement
+// and removal, kept so that entries written before the command was removed
+// can still be found (/shadowdisconnectlist) and lifted
+// (/shadowundisconnect) rather than silently outliving it forever.
 //
 // The in-memory set (shadowDisconnects) is seeded from the DB at startup so
 // the reject-at-connect checks are a single RWMutex map lookup, cheap enough
@@ -132,88 +139,6 @@ func (client *Client) shadowDisconnectNow() {
 	client.conn.SetWriteDeadline(time.Now()) //nolint:errcheck
 	client.conn.Write([]byte{0})             //nolint:errcheck
 	client.markClosed()
-}
-
-// cmdShadowDisconnect handles /shadowdisconnect <uid|ipid> [-r reason].
-// ADMIN only (enforced by the command registry). Accepts a connected
-// target's UID or a raw IPID, so an offline player can be preemptively
-// shadow-banned. Persists the listing by IPID, drops every live connection
-// sharing that IPID right now, and silently drops every future connection
-// attempt from it — forever, until lifted with /shadowundisconnect.
-func cmdShadowDisconnect(client *Client, args []string, usage string) {
-	if len(args) == 0 {
-		client.SendServerMessage("Not enough arguments:\n" + usage)
-		return
-	}
-
-	reason := ""
-	rest := args
-	for i := 0; i < len(rest); i++ {
-		if rest[i] == "-r" && i+1 < len(rest) {
-			reason = strings.Join(rest[i+1:], " ")
-			rest = rest[:i]
-			break
-		}
-	}
-	if len(rest) == 0 {
-		client.SendServerMessage("Not enough arguments:\n" + usage)
-		return
-	}
-
-	arg := strings.TrimSpace(rest[0])
-	ipid := arg
-	uidNote := ""
-	if uid, err := strconv.Atoi(arg); err == nil {
-		target, terr := getClientByUid(uid)
-		if terr != nil {
-			client.SendServerMessage(fmt.Sprintf("Client with UID %d not found; pass an IPID directly to shadow-disconnect an offline player.", uid))
-			return
-		}
-		if permissions.IsModerator(target.Perms()) {
-			client.SendServerMessage("You cannot shadow-disconnect a moderator.")
-			return
-		}
-		ipid = target.Ipid()
-		uidNote = fmt.Sprintf(" (UID %d)", uid)
-	}
-
-	// Console gate. The target has resolved and the moderator check has passed,
-	// so a mistyped UID or a protected target is already rejected without
-	// spending the grant, and a refusal here leaves the target's connection
-	// untouched.
-	//
-	// It has to sit before the write rather than after it: on the far side, a
-	// refusal would leave an unauthorised row already persisted. The cost of
-	// that ordering is that a database failure on the next line spends the
-	// grant even though nothing happened -- rare, recoverable by re-arming, and
-	// the right way round to be wrong.
-	if !consumeConsoleGrant(client, "shadowdisconnect") {
-		return
-	}
-
-	if err := db.AddShadowDisconnect(ipid, reason, client.ModName(), time.Now().UTC().Unix()); err != nil {
-		client.SendServerMessage(fmt.Sprintf("Failed to persist shadow-disconnect: %v", err))
-		return
-	}
-	addShadowDisconnectMemory(ipid)
-
-	dropped := 0
-	for _, c := range getClientsByIpid(ipid) {
-		c.shadowDisconnectNow()
-		dropped++
-	}
-
-	summary := fmt.Sprintf("IPID %v%v is now shadow-disconnected: every future connection attempt will be dropped silently — no ban message, no reason given — until an admin lifts it with /shadowundisconnect.", ipid, uidNote)
-	if dropped > 0 {
-		summary += fmt.Sprintf(" %d active connection(s) were just dropped.", dropped)
-	}
-	if reason != "" {
-		summary += " Reason: " + reason
-	}
-	client.SendServerMessage(summary)
-	addToBuffer(client, "CMD", fmt.Sprintf("Shadow-disconnected IPID %v%v.", ipid, uidNote), true)
-	logger.WriteAudit(fmt.Sprintf("%v | SHADOWDISCONNECT | IPID:%v | %v | By: %v",
-		time.Now().UTC().Format("15:04:05"), ipid, reason, client.ModName()))
 }
 
 // cmdShadowUndisconnect handles /shadowundisconnect <uid|ipid|all>. ADMIN

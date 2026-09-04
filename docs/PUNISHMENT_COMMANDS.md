@@ -45,7 +45,7 @@ The universal removal command. Clears **all** punishment types including lag.
 /unpunish all                            # Remove all punishments from every player in your area
 ```
 
-`/unpunish all` also clears `/lag` (the torment list). `/unpunish -t lag <uid>` removes lag from a specific target.
+`/unpunish all` also clears the torment list (`lag`). `/unpunish -t lag <uid>` removes it from a specific target. Nothing in game *adds* to that list any more — `/lag` was removed; the AutoMod censor arms it automatically, and the server console keeps `torment <ipid>`.
 
 **Examples:**
 ```
@@ -71,7 +71,7 @@ Some punishments have dedicated removal commands as a convenience:
 
 | Remove | Lifts |
 |--------|-------|
-| `/unlag <uid>` | `/lag` |
+| `/unlag <uid>` | The torment list (formerly `/lag`, now armed only by the AutoMod censor or the server console) |
 | `/unsfx <uid>` | `/sfxcurse` |
 | `/unshrink <uid>` | `/shrink` |
 | `/ungrow <uid>` | `/grow` |
@@ -335,16 +335,20 @@ Every value written passes the same packet validators as client input (flip/shak
 
 ---
 
-## Timing & Throughput (4)
+## Timing & Throughput (3)
 
 | Command | Effect |
 |---------|--------|
 | `/slowpoke` | Delays messages before sending |
 | `/fastspammer` | Heavily rate limits messages |
-| `/lag` | Adds IPID to torment list (ghost/delayed messages, silent disconnect timer) |
 | `/lifo` | Buffers messages and releases them in **reverse order** — say three things, they arrive third-second-first. Flushes every 3 messages or 6 seconds, whichever comes first. |
 
-**`/lag` note:** This is IPID-scoped (affects all sessions from the same IP). Remove with `/unlag <uid>`, `/unpunish -t lag <uid>`, or `/unpunish <uid>`. The same list backs the censor's automatic torment additions: view it with `/tormentlist` (shows offline IPIDs too), remove a specific offline IPID with `/untorment <ipid>`, or purge the whole list with `/untorment all`. Adding someone by hand with `/lag` never notifies other mods — only censor trips send the `[CENSOR]` OOC alerts (silence them for yourself with `/censoralerts off`).
+**The torment list (`lag`).** Ghost/delayed messages plus a silent disconnect timer, IPID-scoped so it affects every session from the same IP. **`/lag` has been removed** — a punishment nobody is told about, applied by hand, gives its target nothing to notice or appeal. What remains:
+
+- The AutoMod censor still arms it automatically on a `shadow` or `torment` trip, exactly as before.
+- The **server console** (shell access to the host, not an in-game credential) keeps `torment <ipid>` and `untorment <ipid|all>`.
+- Removal is unchanged and still fully available in game: `/unlag <uid>`, `/unpunish -t lag <uid>`, `/unpunish <uid>`, `/untorment <ipid>` for an offline IPID, or `/untorment all` to purge the list. View it with `/tormentlist` (offline IPIDs included).
+- Only censor trips send the `[CENSOR]` OOC alerts (silence them for yourself with `/censoralerts off`); the console's `torment` does not.
 
 ---
 
@@ -403,7 +407,7 @@ The target's IC **and** OOC messages echo back to them normally — but reach no
 /punishments <uid>    # Moderators (MUTE): inspect any player
 ```
 
-Lists every active punishment with remaining duration, custom data (e.g. the forcecolor colour or translator language), reason, and — for moderator viewers — the issuer tier (`[by admin]`, `[by shadow]`, `[by mod]`). Also covers the effects that live outside the punishment list: `/lag` (torment list), mutes, and jail.
+Lists every active punishment with remaining duration, custom data (e.g. the forcecolor colour or translator language), reason, and — for moderator viewers — the issuer tier (`[by admin]`, `[by shadow]`, `[by mod]`). Also covers the effects that live outside the punishment list: the torment list (`lag`), mutes, and jail.
 
 ```
 ⛓️ Active punishments for [7] Phoenix (3):

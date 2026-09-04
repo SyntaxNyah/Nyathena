@@ -101,8 +101,8 @@ func TestContentGatePrecedesEveryLeakInPktIC(t *testing.T) {
 		{"the typing-race hook", "typingRaceOnIC(client, msgText)"},
 		{"the unscramble hook (a censored line could claim the chip prize)",
 			"unscrambleOnIC(client, msgText)"},
-		{"the stealthmute/truepossess silencing decision",
-			"silenced := stealthMuted || trueMuted"},
+		{"the stealthmute silencing decision",
+			"silenced := hasPunishmentType(punishments, PunishmentStealthMute)"},
 		{"LastMsg being updated from the uncensored packet", "client.SetLastMsg(ms.Message)"},
 	}
 

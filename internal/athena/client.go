@@ -387,10 +387,6 @@ type Client struct {
 	lastRandomSongTime  time.Time      // Tracks last /randomsong time for cooldown
 	lastTranslateTime   time.Time      // Tracks last /translate time for cooldown
 	forcePairUID        int            // UID of the client this client is force-paired with (-1 if none)
-	possessing          int            // UID of the client being possessed (-1 if not possessing anyone)
-	possessedPos        string         // Position of the possessed target (saved at time of possession)
-	trueMuted           bool           // True when this client's IC/OOC is silenced by an active /truepossess (see possess.go)
-	truePossessedBy     int            // UID of the possessor who applied the /truepossess silence (only meaningful while trueMuted)
 	forcedShowname      string         // Showname forced by a moderator ("" if none)
 	nameReversed        bool           // gates /reversename so it cannot double-apply
 	preReverseShowname  string         // forcedShowname before /reversename; restored by /unreversename
@@ -554,7 +550,6 @@ func NewClient(conn net.Conn, ipid string) *Client {
 		pair:               ClientPairInfo{wanted_id: -1},
 		ipid:               ipid,
 		forcePairUID:       -1,
-		possessing:         -1,
 		jailAreaID:         -1,
 		charStuckCharID:    -1,
 		shuffledOrigCharID: -2,         // -2 = "not shuffled" sentinel; -1 = shuffled but original was charselect
@@ -1137,38 +1132,17 @@ func (client *Client) clientCleanup() {
 		// released for reuse at the end of this function.
 		clearPairLinksOnDisconnect(client)
 
-		// Clear possession links if this client was possessing someone. If it was
-		// a /truepossess, lift the target's silent mute first (before the link is
-		// cleared, since endTruePossession reads it).
-		if client.Possessing() != -1 {
-			endTruePossession(client)
-			client.SetPossessing(-1)
-			client.SetPossessedPos("")
-		}
-
-		// If this client was itself being truepossessed, release the mute so a
-		// disconnect can't leak the activeTruePossess hot-path gate. No-ops (and
-		// leaves the gate untouched) when the client wasn't truepossessed.
-		client.SetTruePossessed(false, -1)
-
-		// Clear possession links if anyone was possessing this client
-		uid := client.Uid()
-		clients.ForEach(func(c *Client) {
-			if c.Possessing() == uid {
-				c.SetPossessing(-1)
-				c.SetPossessedPos("")
-			}
-		})
-
 		leaveVoiceForClient(client)
 		if client.Area().PlayerCount() <= 1 {
 			client.Area().Reset()
+			releaseAreaNameOnEmpty(client.Area())
 			sendLockArup()
 			sendStatusArup()
 			sendCMArup()
 		} else if client.Area().HasCM(client.Uid()) {
 			a := client.Area()
 			a.RemoveCM(client.Uid())
+			releaseAreaNameOnLastCMLeaving(a)
 			sendCMArup()
 			if autoUnlockIfLastCMGone(a) {
 				sendLockArup()
@@ -1847,11 +1821,13 @@ func (client *Client) ChangeArea(a *area.Area) bool {
 		leaveVoiceForClient(client)
 		if client.Area().PlayerCount() <= 1 {
 			client.Area().Reset()
+			releaseAreaNameOnEmpty(client.Area())
 			sendLockArup()
 			sendStatusArup()
 			sendCMArup()
 		} else if client.Area().HasCM(client.Uid()) {
 			client.Area().RemoveCM(client.Uid())
+			releaseAreaNameOnLastCMLeaving(client.Area())
 			sendCMArup()
 		}
 		client.Area().RemoveChar(client.CharID())
@@ -2069,7 +2045,7 @@ func (client *Client) ChangeCharacter(id int) {
 		client.SetCharID(id)
 		// Do not reset showname here; it is set from IC messages so the
 		// player's display name (e.g. "Adachi") persists across character
-		// changes and is used correctly by possession commands.
+		// changes.
 		client.Send(&packet.PV{PlayerID: 0, CharID: id})
 		broadcastToAreaOnce(client.Area(), &packet.CharsCheck{Entries: client.Area().Taken()})
 		if client.Uid() != -1 {
@@ -2322,11 +2298,13 @@ func (client *Client) forceChangeArea(a *area.Area) {
 	addToBuffer(client, "AREA", "Left area.", false)
 	if client.Area().PlayerCount() <= 1 {
 		client.Area().Reset()
+		releaseAreaNameOnEmpty(client.Area())
 		sendLockArup()
 		sendStatusArup()
 		sendCMArup()
 	} else if client.Area().HasCM(client.Uid()) {
 		client.Area().RemoveCM(client.Uid())
+		releaseAreaNameOnLastCMLeaving(client.Area())
 		sendCMArup()
 	}
 	client.Area().RemoveChar(client.CharID())
@@ -3317,34 +3295,6 @@ func (client *Client) CheckRawPacketRateLimit() bool {
 
 	client.rawPktCount++
 	return client.rawPktCount > config.RawPacketRateLimit
-}
-
-// Possessing returns the UID of the client being possessed, or -1 if not possessing anyone.
-func (client *Client) Possessing() int {
-	client.mu.Lock()
-	defer client.mu.Unlock()
-	return client.possessing
-}
-
-// SetPossessing sets the UID of the client being possessed.
-func (client *Client) SetPossessing(uid int) {
-	client.mu.Lock()
-	client.possessing = uid
-	client.mu.Unlock()
-}
-
-// PossessedPos returns the saved position of the possessed target.
-func (client *Client) PossessedPos() string {
-	client.mu.Lock()
-	defer client.mu.Unlock()
-	return client.possessedPos
-}
-
-// SetPossessedPos sets the saved position of the possessed target.
-func (client *Client) SetPossessedPos(pos string) {
-	client.mu.Lock()
-	defer client.mu.Unlock()
-	client.possessedPos = pos
 }
 
 // ConnectedAt returns the time the client joined the server (was assigned a UID).

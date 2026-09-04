@@ -66,13 +66,13 @@ func newMusicTestClient(t *testing.T) (*Client, *captureConn) {
 	a := area.NewArea(area.AreaData{Name: "Lobby"}, 4, 50, area.EviAny)
 	conn := &captureConn{}
 	client := &Client{
-		conn:       conn,
-		uid:        1,
-		char:       0,
-		possessing: -1,
-		ipid:       "ipid-a",
-		hdid:       "hdid-a",
-		pair:       ClientPairInfo{wanted_id: -1},
+		conn: conn,
+		uid:  1,
+		char: 0,
+
+		ipid: "ipid-a",
+		hdid: "hdid-a",
+		pair: ClientPairInfo{wanted_id: -1},
 	}
 	client.SetArea(a)
 	clients.AddClient(client)
@@ -144,7 +144,7 @@ func TestJoinAreaSyncsCurrentMusic(t *testing.T) {
 	a.SetCurrentSong("[aatnt] godot.opus")
 
 	conn := &captureConn{}
-	client := &Client{conn: conn, uid: 1, char: 0, possessing: -1, pair: ClientPairInfo{wanted_id: -1}}
+	client := &Client{conn: conn, uid: 1, char: 0, pair: ClientPairInfo{wanted_id: -1}}
 	clients.AddClient(client)
 
 	client.JoinArea(a)
@@ -169,7 +169,7 @@ func TestJoinAreaNoCurrentMusicSendsStop(t *testing.T) {
 	areas = []*area.Area{a}
 
 	conn := &captureConn{}
-	client := &Client{conn: conn, uid: 1, char: 0, possessing: -1, pair: ClientPairInfo{wanted_id: -1}}
+	client := &Client{conn: conn, uid: 1, char: 0, pair: ClientPairInfo{wanted_id: -1}}
 	clients.AddClient(client)
 
 	client.JoinArea(a)
@@ -232,7 +232,7 @@ func TestPlayCommandRecordsCurrentSong(t *testing.T) {
 	t.Cleanup(func() { areas = origAreas })
 	areas = []*area.Area{client.Area()}
 	conn := &captureConn{}
-	joiner := &Client{conn: conn, uid: 2, char: 1, possessing: -1, pair: ClientPairInfo{wanted_id: -1}}
+	joiner := &Client{conn: conn, uid: 2, char: 1, pair: ClientPairInfo{wanted_id: -1}}
 	clients.AddClient(joiner)
 	joiner.JoinArea(client.Area())
 

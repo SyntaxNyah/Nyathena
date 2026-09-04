@@ -59,11 +59,13 @@ Permission bits are configured in `config/roles.toml`. Multiple bits are granted
 | `/joincaptcha verify <uid>` | BAN | Release a player the captcha caught (a false positive), verifying them outright |
 | `/joincaptcha reset <uid\|ipid\|all>` | BAN | Clear a stored verification so that IPID is challenged again on its next connection; `all` clears every one |
 | `/lockdown exemptlist` | BAN | List every IPID currently exempt via a verified passkey |
-| `/tormentlist` | MUTE | List every IPID on the torment/lag list, with any connected sessions |
+| `/tormentlist` | MUTE | List every IPID on the torment list, with any connected sessions |
 | `/untorment <ipid\|all>` | BAN | Remove one IPID from the torment list, or `all` to purge the entire list |
+| `/shadowundisconnect <uid\|ipid\|all>` | ADMIN | Lift a shadow-disconnect. Nothing adds to that list any more — `/shadowdisconnect` was removed — so this is for clearing entries made before then. |
+| `/shadowdisconnectlist` | ADMIN | List every remaining shadow-disconnect entry, newest first |
 | `/censoralerts [on\|off]` | MOD_CHAT | Toggle the OOC alerts you receive when a player trips the word censor (per-session; defaults to on) |
 
-Censor trips (AutoMod banned words and `censored_names.txt` shownames) alert every online moderator in OOC. With the default `automod_action = "shadow"`, the offending message is shadow-sent — the sender's client shows it as sent, but no other client ever receives it — and the speaker is put on the torment list. Manual `/lag` additions never alert other mods; only censor trips do.
+Censor trips (AutoMod banned words and `censored_names.txt` shownames) alert every online moderator in OOC. With the default `automod_action = "shadow"`, the offending message is shadow-sent — the sender's client shows it as sent, but no other client ever receives it — and the speaker is put on the torment list. Only censor trips reach the torment list from in game; there is no longer any in-game command that adds to it by hand. The console's `torment <ipid>` does not alert other mods.
 
 ---
 
@@ -106,7 +108,46 @@ Censor trips (AutoMod banned words and `censored_names.txt` shownames) alert eve
 | `/evimode <mode>` | NONE (CM) | Set evidence mode (any/cms/mods) |
 | `/status <status>` | NONE (CM) | Set area status |
 | `/spectate [invite\|uninvite <uids>]` | NONE (CM) | Toggle spectate mode, or grant/revoke IC speaking rights while it's on. Listed in `/help` for **all** players (not just CMs) so everyone can discover how spectate mode works, though only CMs can run it. |
+| `/area mute` / `/area unmute` | NONE (CM) | Silence everyone in the area except CMs and moderators (IC and OOC), and lift it again. Scoped to the room: leaving the area lifts it automatically. |
+| `/area rename <name>` | NONE (CM) | Rename the area you are standing in — see [Renaming an area](#renaming-an-area-area-rename) below. |
+| `/area unrename` | NONE (CM) | Restore the area's configured name immediately. |
 | `/areadesc [-c] [text]` | NONE | Set/clear area entry description |
+
+---
+
+### Renaming an area (`/area rename`)
+
+A CM running a case in "Courtroom 3" can make the area list say what the room actually is:
+
+```
+/area rename DR Killing Game     # the area list now reads "DR Killing Game"
+/area rename                     # show the current name and the configured one
+/area unrename                   # put the configured name back now
+```
+
+Gated on `CM`, which both **area CMs** (anyone who ran `/cm`) and **moderators** hold, so it needs no special role.
+
+**The name is a loan, not a transfer.** The name in `areas.toml` is the area's real identity and it comes back on its own:
+
+- when the **last person leaves** the area, or
+- when the area **loses its last CM** (they ran `/uncm`, moved to another area, or disconnected).
+
+A name a moderator set in a room that had no CM at all is kept until the room empties — otherwise it would snap back the moment any unrelated player walked out. Nothing is persisted, so a restart also returns every area to its configured name.
+
+**Renames reach players who are already connected.** The server rebuilds the area-name list and the join packet, and pushes the new list to every client (`FA`), so nobody has to reconnect to see it.
+
+**What a name is refused for**, and why each rule exists — an area name is not just a label, it is the key clients send back to change area and the directory area logs are written into:
+
+| Rule | Reason |
+|------|--------|
+| 1–32 characters | The area list is a narrow column in every AO2 client. |
+| No `#`, `%`, `$` or `&` | AO2 spends those on its packet format; area names are sent unencoded, so one would split the list or make the area unreachable. |
+| No control characters | They break the area list and the area-log line format. |
+| Not a music-list entry or a stream URL | A music change is matched before an area change, so the room would become unreachable by name. |
+| Not another area's current **or configured** name | A configured name comes back the instant that area empties, so allowing it would produce a silent duplicate later rather than an error now. |
+| Passes the AutoMod word list | See below. |
+
+**The name goes through the same word filter as IC and OOC** — same tiered `banned_words.txt`, same evasion normalization (spacing, leetspeak, homoglyphs, zalgo), same configured `automod_action`, same `[CENSOR]` staff alert, and the same `nuke` tier that destroys the attempt and bans the IPID. A room name is broadcast to every connected client, so there is no argument for holding it to a weaker standard than a single line of chat. A `watch`-tier word still passes, exactly as it does in chat. Under the default `shadow` action the caller is told the rename worked while the area is untouched and no other client ever sees the name.
 
 ---
 
@@ -131,18 +172,16 @@ Censor trips (AutoMod banned words and `censored_names.txt` shownames) alert eve
 
 ---
 
-## Possession
+## Removed: possession and stealth-disconnect
 
-Speak through another player's character. All three flavours fully copy the target's appearance — character, emote, position, text colour, showname — **and** spoof the target's pairing, so if the target is paired their partner's sprite still renders next to them in the viewport (no "the pair vanished" tell).
+`/possess`, `/fullpossess`, `/truepossess`, `/unpossess` and `/shadowdisconnect` **no longer exist**. They were briefly gated behind a server-console `grant` before being removed outright; the `grant` console verbs are gone too.
 
-| Command | Permission | Description |
-|---------|-----------|-------------|
-| `/possess <uid> <message>` | ADMIN | Make the target say one message, rendered exactly as them. |
-| `/fullpossess <uid>` | ADMIN | Become the target persistently — see below. Identical to `/truepossess`. |
-| `/truepossess <uid>` | ADMIN | Become the target persistently — see below. Identical to `/fullpossess`. |
-| `/unpossess` | SHADOW | Stop a full/true possession (lifts the target's mute). |
+What the five had in common is that their effect was invisible to the person it landed on. A possession spoke as somebody and silenced them so they could not say otherwise; a shadow-disconnect looked to its target exactly like a bad router. Neither leaves the person on the receiving end anything to notice, report or appeal — which is a bad property for a moderation tool to have, however it is gated.
 
-`/fullpossess` and `/truepossess` are the **same command** (two names for the same behaviour): every one of *your* IC messages renders as the target until `/unpossess`, **and** the target is silently muted — their own IC and OOC are echoed only back to them (so their client still looks normal) but reach nobody, their commands (`/global`, `/pm`, `/modchat`, …) are swallowed, and their showname / OOC name are frozen. Combined with the pair-spoof, an onlooker sees the target talking normally (with their partner) while you drive every line, and the target has no in-game channel to shout "it's not me". Suppressed IC/OOC and swallowed commands are still written to the area log (tagged `(truepossessed)` / `(suppressed during /truepossess)`) for staff audit. A possession ends automatically — and the mute lifts — if either party disconnects.
+Two things deliberately remain:
+
+- **`/shadowundisconnect <uid|ipid|all>` and `/shadowdisconnectlist` (ADMIN)** still work, so any entry written before the command was removed can be found and lifted. Nothing adds to that list any more.
+- **The torment list is unchanged.** AutoMod still arms it automatically on a censor trip, and `/tormentlist` / `/untorment` still manage it. What is gone is the ability to apply it by hand from in game (`/lag` was removed in the same change); the console keeps `torment <ipid>` / `untorment <ipid|all>`.
 
 ---
 
@@ -159,7 +198,7 @@ Speak through another player's character. All three flavours fully copy the targ
 | Animal filters (14) | `/monkey /snake /dog /cat /bird /cow /frog /duck /horse /lion /trex /fish /zoo /bunny` — `/trex` roars RAAASRFH, `/fish` blubs, and `/horse` also swaps the target onto a random uma character |
 | Visibility / cosmetic | `/emoji /invisible /shrink /grow /wide /areainiswap /hidedisplay /forcedisplay` (and `/unshrink /ungrow /unwide`) |
 | Protocol / viewport (6) | `/teleport /shakecurse /randomflip /forcecolor /nopreanim /forcepreanim` |
-| Timing | `/slowpoke /fastspammer /lag /lifo` |
+| Timing | `/slowpoke /fastspammer /lifo` |
 | Audio | `/sfxcurse <uid> <sfx-url>` and `/unsfx` |
 | Voice chat (5) | `/voicemute /voicestatic /voicegarble /voicecutout /voicestutter` |
 | Traps & contagion (4) | `/contagious <type> /minefield /silencebell /stealthmute` |
@@ -193,7 +232,7 @@ The target's IC packet's SFX field is overwritten with the URL on every line unt
 
 ### `/unpunish` — Full Coverage
 
-`/unpunish` now covers **every** active punishment including `/lag` (the torment list). Forms:
+`/unpunish` covers **every** active punishment including the torment list (which AutoMod arms on a censor trip; `/lag` itself was removed). Forms:
 
 - `/unpunish <uid>` — removes all punishments, mute, jail, and lag from a specific target.
 - `/unpunish -t lag <uid>` — removes only lag.
@@ -268,6 +307,24 @@ Each reloadable list lives behind a `sync/atomic.Pointer` so a swap is a single 
 **`characters.txt` safety constraint — append-only.** Connected AO2 clients reference characters by **slot index**, so inserting in the middle, removing, reordering or renaming an existing slot would silently desync every connected player. The reload **validates that every existing slot is unchanged** and only accepts entries appended at the end of the file. If the new file changes any pre-existing slot, the reload is rejected with a precise message naming the first bad slot — change those operations require a restart.
 
 **NOT reloaded** (would require invasive work and is unsafe without restart): areas, listener ports/addr, rate-limit windows, max_players, roles, the server name.
+
+### Server console (stdin)
+
+Reachable only with shell access to the host, which is a different and stronger thing than any in-game credential — so it is where the powers that outrank every in-game tier live.
+
+| Console command | Description |
+|-----------------|-------------|
+| `help` | List the console commands |
+| `mkusr <username> <password> <role>` / `rmusr <username>` | Create / delete a moderator account |
+| `players` | List connected players |
+| `getlog <area>` | Dump an area's report buffer |
+| `say <message>` | Broadcast an OOC message to every connected player |
+| `reload` | The same hot reload as `/reload` (also on `SIGHUP`) |
+| `punishment <enable\|disable\|status>` | Global kill switch for the punishment system. Console-only by design: no in-game or Discord command can reach it. |
+| `torment <ipid>` | Add an IPID to the torment list by hand. The only remaining manual route — `/lag` was removed from the game. |
+| `untorment <ipid\|all>` | The console half of `/untorment` |
+
+There is no longer a `grant` verb: the four commands it armed have been removed (see [Removed: possession and stealth-disconnect](#removed-possession-and-stealth-disconnect)).
 
 ---
 
