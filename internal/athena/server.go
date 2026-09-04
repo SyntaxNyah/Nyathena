@@ -1133,11 +1133,39 @@ func sendStatusArup() {
 	broadcastToAll(&packet.ARUP{Type: packet.ARUPStatuses, Data: statuses})
 }
 
+// areaLockDisplay returns the lock state to advertise for an area in the lock
+// ARUP, which is what the client's area list renders in its lock column.
+//
+// /spectate deliberately leaves the area's stored lock alone (it restricts
+// speech, not entry), so an area in spectate mode reported its raw LockFree and
+// the area list showed it as FREE — nothing anywhere told a player looking at
+// the list that the room was watch-only, not even the CM who had just enabled
+// it. SPECTATABLE is precisely AO2's name for "you may enter and watch, but not
+// take part", which is what spectate mode does, so that is what gets sent.
+//
+// A locked area keeps reporting LOCKED: that is a claim about entry, which
+// spectate mode makes no claim about, and it is the stronger of the two.
+//
+// Display only — the area's stored lock is never changed. /unlock, the
+// auto-unlock when the last CM leaves, and the LockSpectatable branches in
+// CanSpeakIC/CanChangeMusic/CanJud (which gate on the /lock invite list, not
+// the separate spectate-invite list) all keep reasoning about the lock the area
+// actually has, so advertising this can't quietly rewrite what /spectate means.
+func areaLockDisplay(a *area.Area) area.Lock {
+	if l := a.Lock(); l != area.LockFree {
+		return l
+	}
+	if a.SpectateMode() {
+		return area.LockSpectatable
+	}
+	return area.LockFree
+}
+
 // sendLockArup sends a lock ARUP to all connected clients.
 func sendLockArup() {
 	locks := make([]string, 0, len(areas))
 	for _, a := range areas {
-		locks = append(locks, a.Lock().String())
+		locks = append(locks, areaLockDisplay(a).String())
 	}
 	broadcastToAll(&packet.ARUP{Type: packet.ARUPLocks, Data: locks})
 }

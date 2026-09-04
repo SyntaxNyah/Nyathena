@@ -1274,6 +1274,14 @@ func cmdUnlock(client *Client, _ []string, _ string) {
 		return
 	}
 	if client.Area().Lock() == area.LockFree {
+		// A lock-free area in spectate mode now advertises itself as
+		// SPECTATABLE in the area list (see areaLockDisplay), so a flat "not
+		// locked" would be a dead end for a CM reading that status off the list
+		// — /spectate is what lifts it, and /unlock has no business guessing.
+		if client.Area().SpectateMode() {
+			client.SendServerMessage("This area is not locked — it's in spectate mode. Use /spectate to turn spectate mode off.")
+			return
+		}
 		client.SendServerMessage("This area is not locked.")
 		return
 	}
@@ -1290,12 +1298,23 @@ func cmdUnlock(client *Client, _ []string, _ string) {
 // isn't locked/spectatable, or is sealed by /adminlock — that seal is lifted
 // only by an admin. Caller is responsible for broadcasting the ARUP/message
 // afterward; this only touches the area's own state.
+//
+// /spectate mode counts as spectatable here even though it leaves the stored
+// lock free, which is what the "or un-spectates" in the contract above always
+// claimed and never did: the LockFree early-out matched exactly the state
+// /spectate leaves an area in, so a room whose CM enabled spectate mode and
+// then disconnected stayed IC-silent for everyone still in it, with nobody
+// holding the CM/mod permission /spectate needs to lift it.
 func autoUnlockIfLastCMGone(a *area.Area) bool {
-	if len(a.CMs()) != 0 || a.Lock() == area.LockFree || a.AdminLocked() {
+	if len(a.CMs()) != 0 || a.AdminLocked() {
+		return false
+	}
+	if a.Lock() == area.LockFree && !a.SpectateMode() {
 		return false
 	}
 	a.SetLock(area.LockFree)
 	a.ClearInvited()
+	a.SetSpectateMode(false)
 	return true
 }
 
@@ -1339,6 +1358,10 @@ func cmdSpectate(client *Client, args []string, usage string) {
 			client.SendServerMessage("Spectate mode enabled. Only CMs and invited players can speak in IC.")
 			addToBuffer(client, "CMD", "Enabled spectate mode.", false)
 		}
+		// Spectate mode is advertised in the lock ARUP (see areaLockDisplay), so
+		// the area list has to be told about the toggle or it keeps showing the
+		// area's pre-toggle state to everyone, the caller included.
+		sendLockArup()
 		return
 	}
 
