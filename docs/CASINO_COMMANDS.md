@@ -486,6 +486,25 @@ Tags are permanent cosmetic labels that appear **next to your name** in `/gas` a
 | `tag_godlike` | [Godlike] | 7,500,000 chips |
 | `tag_infinite` | [Infinite] | 10,000,000 chips |
 
+### 🏷️ The Other Tag Categories (87 more tags)
+
+The table above is only the gambling category. Six more are browsable in game
+with `/shop <category>`, which prints each one with its id, name and price:
+
+| Category | Command | Tags |
+|----------|---------|------|
+| ⚖️ Ace Attorney | `/shop attorney` | 15 |
+| 🌸 Anime | `/shop anime` | 15 |
+| 🎮 Gamer | `/shop gamer` | 15 |
+| 🌷 Girly | `/shop girly` | 12 |
+| 😂 Silly & Memes | `/shop meme` | 20 |
+| 👑 Prestige | `/shop prestige` | 10 |
+
+A few from the meme category: `tag_bruh` (100), `tag_sus` (200),
+`tag_gigachad` (50,000), **`tag_mrbeast` (75,000 — "You buried 100 chips and
+gave the rest away. Subscribe.")**, `tag_goat` (250,000),
+`tag_exists_confused` (9,999,999).
+
 Tags are **purely cosmetic** — they have no gameplay effect. Buy them all to collect them!
 
 After purchasing a tag, it is **automatically equipped** as your active tag. You can switch at any time with `/settag <tag_id>`.

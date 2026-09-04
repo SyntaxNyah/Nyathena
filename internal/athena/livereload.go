@@ -50,6 +50,7 @@ import (
 var (
 	charactersPtr      atomic.Pointer[[]string]
 	charIndexPtr       atomic.Pointer[map[string]int]
+	umaCharIDsPtr      atomic.Pointer[[]int]
 	musicPtr           atomic.Pointer[[]string]
 	backgroundsPtr     atomic.Pointer[[]string]
 	bgListStrPtr       atomic.Pointer[string]
@@ -122,11 +123,17 @@ func getSMPacket() string {
 
 func setCharacters(chars []string) {
 	idx := buildCharIndex(chars)
+	uma := buildUmaCharIDs(chars)
 	// Publish the index first, then the list: getCharacterID consults the index
 	// and falls back to a linear scan of the list, so during the brief window
 	// between the two stores a lookup is still correct (it just may scan the old
 	// list). Both are append-only relative to each other, so no lookup breaks.
+	//
+	// The uma pool is published in the same order and for the same reason: its
+	// entries are slots into the character list, so publishing it before the
+	// list means it can only ever be a subset of what a reader can index.
 	charIndexPtr.Store(&idx)
+	umaCharIDsPtr.Store(&uma)
 	storeStrSlice(&charactersPtr, chars)
 }
 

@@ -78,9 +78,15 @@ func extractHiddenFlag(args []string) ([]string, bool) {
 	return out, hidden
 }
 
-func cmdPunishment(client *Client, args []string, usage string, pType PunishmentType) {
+// cmdPunishment applies pType to the parsed targets and returns the clients it
+// actually punished — the caller's own targets minus anyone shielded by a
+// punishment-safe area. Almost every handler ignores the result and calls this
+// as a plain statement; /horse uses it to apply its uma character swap to
+// exactly the players the punishment landed on, so the two can never disagree
+// about who was spared.
+func cmdPunishment(client *Client, args []string, usage string, pType PunishmentType) []*Client {
 	if punishmentsSystemDisabled(client) {
-		return
+		return nil
 	}
 	// -h suppresses the per-target OOC notification so the punishment applies
 	// silently. Extracted before flag.Parse because Go's flag package stops at
@@ -96,14 +102,14 @@ func cmdPunishment(client *Client, args []string, usage string, pType Punishment
 
 	if len(flags.Args()) == 0 {
 		client.SendServerMessage("Not enough arguments:\n" + usage)
-		return
+		return nil
 	}
 
 	// Parse duration
 	duration, err := str2duration.ParseDuration(*durationStr)
 	if err != nil {
 		client.SendServerMessage("Invalid duration format. Use format like: 10m, 1h, 30s")
-		return
+		return nil
 	}
 
 	// Cap at 24 hours
@@ -129,6 +135,7 @@ func cmdPunishment(client *Client, args []string, usage string, pType Punishment
 		var report string
 		var skipped int
 		var skippedReport string
+		var punished []*Client
 		targetArea := client.Area()
 		issuerUID := client.Uid()
 		clients.ForEach(func(c *Client) {
@@ -152,6 +159,7 @@ func cmdPunishment(client *Client, args []string, usage string, pType Punishment
 			}
 			count++
 			report += fmt.Sprintf("%v, ", c.Uid())
+			punished = append(punished, c)
 		})
 		report = strings.TrimSuffix(report, ", ")
 		summary := fmt.Sprintf("Applied '%v' punishment globally to %v client(s) in area.", pType.String(), count)
@@ -162,7 +170,7 @@ func cmdPunishment(client *Client, args []string, usage string, pType Punishment
 		client.SendServerMessage(summary)
 		addToBuffer(client, "CMD", fmt.Sprintf("Applied '%v' punishment globally to %v.", pType.String(), report), false)
 		alertPunishmentIssued(client, pType.String(), report, count, duration, *reason, hidden)
-		return
+		return punished
 	}
 
 	toPunish := getUidList(strings.Split(flags.Arg(0), ","))
@@ -170,6 +178,7 @@ func cmdPunishment(client *Client, args []string, usage string, pType Punishment
 	var report string
 	var skipped int
 	var skippedReport string
+	var punished []*Client
 
 	for _, c := range toPunish {
 		if punishmentSafeBlocked(c) {
@@ -189,6 +198,7 @@ func cmdPunishment(client *Client, args []string, usage string, pType Punishment
 		}
 		count++
 		report += fmt.Sprintf("%v, ", c.Uid())
+		punished = append(punished, c)
 	}
 
 	report = strings.TrimSuffix(report, ", ")
@@ -200,6 +210,7 @@ func cmdPunishment(client *Client, args []string, usage string, pType Punishment
 	client.SendServerMessage(summary)
 	addToBuffer(client, "CMD", fmt.Sprintf("Applied '%v' punishment to %v.", pType.String(), report), false)
 	alertPunishmentIssued(client, pType.String(), report, count, duration, *reason, hidden)
+	return punished
 }
 
 // Handlers for all punishment commands
@@ -458,12 +469,60 @@ func cmdDuck(client *Client, args []string, usage string) {
 	cmdPunishment(client, args, usage, PunishmentDuck)
 }
 
+// cmdHorse applies the horse-sound punishment and, on servers whose
+// characters.txt carries uma characters, also swaps each punished player onto
+// a random free one — you don't just sound like a horse, you look like one.
+//
+// The swap is driven by the clients cmdPunishment reports it actually
+// punished, so a target shielded by a punishment-safe area is never swapped
+// either. On a server with no uma characters (the upstream default) nothing
+// is swapped and /horse behaves exactly as it always has.
 func cmdHorse(client *Client, args []string, usage string) {
-	cmdPunishment(client, args, usage, PunishmentHorse)
+	punished := cmdPunishment(client, args, usage, PunishmentHorse)
+	turnTargetsIntoUma(client, punished)
+}
+
+// turnTargetsIntoUma swaps each punished client onto a random free uma
+// character and reports the swaps back to the issuing moderator. Targets that
+// could not be swapped — no free uma slot, spectating, or already pinned by a
+// /charstuck or forced iniswap — are skipped silently: the punishment itself
+// has already landed, and the swap is a cosmetic extra that must never look
+// like the command failed.
+func turnTargetsIntoUma(client *Client, punished []*Client) {
+	var swapped []string
+	for _, c := range punished {
+		name, ok := turnIntoRandomUma(c)
+		if !ok {
+			continue
+		}
+		c.SendServerMessage(fmt.Sprintf("You have been turned into %v.", name))
+		swapped = append(swapped, fmt.Sprintf("%v → %v", c.Uid(), name))
+	}
+	if len(swapped) == 0 {
+		return
+	}
+	client.SendServerMessage("Turned into uma: " + strings.Join(swapped, ", ") + ".")
+	addToBuffer(client, "CMD", "Turned into uma: "+strings.Join(swapped, ", ")+".", false)
 }
 
 func cmdLion(client *Client, args []string, usage string) {
 	cmdPunishment(client, args, usage, PunishmentLion)
+}
+
+func cmdTrex(client *Client, args []string, usage string) {
+	cmdPunishment(client, args, usage, PunishmentTrex)
+}
+
+func cmdFish(client *Client, args []string, usage string) {
+	cmdPunishment(client, args, usage, PunishmentFish)
+}
+
+// cmdUmaHorse applies the every-message uma re-roll. Unlike /horse it changes
+// no text and claims no character slot — the sprite is rewritten on the way out
+// (see applyUmaHorseSprite) — so running /horse alongside it gives a target the
+// noises as well as the rotating sprite.
+func cmdUmaHorse(client *Client, args []string, usage string) {
+	cmdPunishment(client, args, usage, PunishmentUmaHorse)
 }
 
 func cmdZoo(client *Client, args []string, usage string) {
@@ -821,6 +880,12 @@ func parsePunishmentType(s string) PunishmentType {
 		return PunishmentDuck
 	case "horse":
 		return PunishmentHorse
+	case "trex":
+		return PunishmentTrex
+	case "fish":
+		return PunishmentFish
+	case "umahorse":
+		return PunishmentUmaHorse
 	case "lion":
 		return PunishmentLion
 	case "zoo":

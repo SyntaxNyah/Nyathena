@@ -156,7 +156,7 @@ Speak through another player's character. All three flavours fully copy the targ
 | Themed quote replacers | `/gordonramsay /biblebot /grounded /mime /subtitles /spotlight /recipe /rickroll /pickup /brainrot` |
 | Persona / personality | `/clown /jester /joker /tourettes /translator` |
 | Dere archetypes (26) | `/tsundere /yandere /kuudere /dandere /deredere /himedere /kamidere /undere /bakadere /mayadere /smugdere /deretsun /bokodere /thugdere /teasedere /dorodere /hinedere /hajidere /rindere /utsudere /darudere /butsudere /sdere /mdere /tsuyodere /omnidere` |
-| Animal filters (12) | `/monkey /snake /dog /cat /bird /cow /frog /duck /horse /lion /zoo /bunny` |
+| Animal filters (15) | `/monkey /snake /dog /cat /bird /cow /frog /duck /horse /umahorse /lion /trex /fish /zoo /bunny` — `/trex` roars RAAASRFH, `/fish` blubs, `/horse` also swaps the target onto a random uma character, and `/umahorse` re-rolls their uma sprite on every message |
 | Visibility / cosmetic | `/emoji /invisible /shrink /grow /wide /areainiswap /hidedisplay /forcedisplay` (and `/unshrink /ungrow /unwide`) |
 | Protocol / viewport (6) | `/teleport /shakecurse /randomflip /forcecolor /nopreanim /forcepreanim` |
 | Timing | `/slowpoke /fastspammer /lag /lifo` |

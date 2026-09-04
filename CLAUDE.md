@@ -209,6 +209,28 @@ Wave-2 additions (14): `/zalgo` (combining-mark corruption), `/leetspeak`, `/sma
 
 `/cheese` discards the target's text entirely and replaces every message with one of **100+ "statements about cheese"** (facts, puns, varieties, and the running gag that cheese is, technically, a sauce). Same shared punishment plumbing as the others (`-d`/`-r`/`-h`, comma UID lists, `global`, `/stack`, persistence, `/unpunish -t cheese`). Corpus size is pinned by `cheeseLineCount` in tests so it can't silently shrink. Like `/medieval` it requires `MUTE` (mod-only) and is **not** in the self-applied `/maso`/`/megamaso` pool.
 
+#### Animal Filters (15)
+`/monkey`, `/snake`, `/dog`, `/cat`, `/bird`, `/cow`, `/frog`, `/duck`, `/horse`, `/lion`, `/bunny`, `/zoo` (a random one of the others per message), plus:
+
+- `/trex` — every word becomes a tyrannosaur roar: `RAAASRFH`, `RAWR`, `GRAAAH`, `*tiny arms flail*`.
+- `/fish` — every word becomes a bubble: `blub`, `blublublib`, `glub`, `*bubbles*`.
+
+Both use the same `applyAnimalSounds` word-for-word substitution the older filters use (so a long message stays long), require `MUTE`, and are in the `/zoo`, roulette and punishment-area pools alongside the rest. Transforms live in `internal/athena/punishments_trex_fish.go`.
+
+#### Uma Characters — `/horse` and `/umahorse`
+Two commands turn the target into a horse girl on servers whose `characters.txt` carries uma characters. Both require `MUTE` and take the standard flags (`-d`/`-r`/`-h`, comma UID lists, `global`, `/stack`, persistence, `/unpunish -t`).
+
+- `/horse <uid>` — the animal filter above, **plus a one-shot swap** onto a random free uma character (a real `Client.ChangeCharacter`, so the area's taken-slot table, `/players` and every client agree). The target may change away afterwards, like `/charcurse`.
+- `/umahorse <uid>` — **changes no text.** The target's sprite is re-rolled to a *different* random uma on **every IC message**, so they flicker through the roster as they talk. Run both for sounds *and* a rotating sprite.
+
+The one-shot swap belongs to the **`/horse` command**, not to `PunishmentHorse` — so `/stack horse`, `/randompunishall`, the roulette pool and a `punishment_area` roll all apply the sounds without swapping anyone, exactly as before. Keeping it at the command level is what stops a punishment the server rolls *at* a player from silently taking their character away.
+
+**The roster is discovered by marker, not by name.** `getUmaCharIDs` (`internal/athena/uma.go`) collects every slot in `characters.txt` whose name contains `(uma)` or `(uma_h)`, case-insensitively — the two are disjoint substrings, so a name can never be counted twice. An operator adds new horse girls to `characters.txt` with one of those suffixes and `/reload`s; no rebuild and no code change, which is the whole point of the convention. Same-franchise characters carrying a different marker (`gold ship (gbf)`) or none (`still in love`) are deliberately excluded — the marker is the opt-in. The pool is a derived cache of the character list, rebuilt by `setCharacters` in lockstep with the name→ID index (and published before the list, so it can only ever be a subset of what a reader can index), so a `/reload` picks new entries up automatically and readers pay one atomic load.
+
+**An empty pool is a silent no-op, never an error.** On a server with no marked characters — the upstream default — `/horse` applies its sounds and swaps nobody and `/umahorse` leaves every sprite alone. `/horse` likewise skips the swap, without reporting a failure, for a target who is spectating, already pinned by `/charstuck` or a forced iniswap (`/tung`), or standing where every uma slot is taken: the swap is additive, so it must never look like the punishment failed. It is driven off the clients `cmdPunishment` reports it *actually* punished (that applicator now returns them), so a target shielded by a punishment-safe area is never swapped either — the two can't disagree about who was spared.
+
+**`/umahorse` rewrites the outgoing IC packet rather than changing character.** `applyUmaHorseSprite` stamps `Character`/`CharID` just before broadcast — the technique `/forcedisplay` and the forced iniswap already use — and is placed before `maybeApplyForceDisplay` so that keeps the final word on the sprite. A real per-message `ChangeCharacter` was rejected: it broadcasts a `CharsCheck` to the whole area, ~9 KB per recipient on a large roster (see "CharsCheck Fan-Out" below), so one per IC message would be a serious regression; the rewrite costs two string assignments and claims no slot, so several punished players can render as the same uma at once. The emote is reset to `normal` and the preanim stripped, since the speaker's own emote and preanim names come from their real character's ini and will not exist on a randomly-drawn uma. The draw never lands on the packet's pair partner (a character paired with itself renders badly on desktop AO2), and steps to the next slot rather than rejection-sampling, so it always succeeds.
+
 #### Persona / Personality (5)
 `/clown`, `/jester`, `/joker`, `/tourettes`, `/translator`
 
@@ -445,7 +467,7 @@ Enabled with `enable_casino = true`. Requires player accounts (`/register`).
 - Jobs with cooldowns: `/busker`, `/janitor`, `/paperboy`, `/clerk`, `/bailiffjob`
 - Unscramble events every 30 min–3 h (first correct IC answer wins 10 chips)
 
-**Shop (`/shop`):** 30 cosmetic tags (1,000–10,000,000 chips), job cooldown reduction passes, job reward bonus passes.
+**Shop (`/shop`):** 117 cosmetic tags across seven categories — gambling (30), Ace Attorney (15), anime (15), gamer (15), girly (12), silly & memes (20, including `tag_mrbeast`), prestige (10) — priced 100–10,000,000 chips, plus job cooldown reduction passes and job reward bonus passes.
 
 **Staff:** `/casinoenable`, `/casinoset`, `/grantchips`
 

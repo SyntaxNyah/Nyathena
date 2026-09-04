@@ -286,7 +286,7 @@ var shopItems = []shopItem{
 		description: "You have transcended the ordinary. A force of nature made manifest."},
 
 	// ══════════════════════════════════════════════════════════════════════════
-	// 😂 SILLY & MEME TAGS (18 tags)
+	// 😂 SILLY & MEME TAGS (20 tags)
 	// ══════════════════════════════════════════════════════════════════════════
 
 	{id: "tag_bruh", name: "Bruh", kind: shopKindTag, category: "meme", price: 100,
@@ -313,6 +313,8 @@ var shopItems = []shopItem{
 		description: "You know every meme format and you use them all wrong."},
 	{id: "tag_gigachad", name: "Gigachad", kind: shopKindTag, category: "meme", price: 50_000,
 		description: "The jawline. The confidence. The absolute unit."},
+	{id: "tag_mrbeast", name: "MrBeast", kind: shopKindTag, category: "meme", price: 75_000,
+		description: "You buried 100 chips and gave the rest away. Subscribe."},
 	{id: "tag_main_character", name: "Main Character", kind: shopKindTag, category: "meme", price: 100_000,
 		description: "The plot revolves around you. The NPCs can tell."},
 	{id: "tag_goat", name: "GOAT", kind: shopKindTag, category: "meme", price: 250_000,
