@@ -53,15 +53,15 @@ func setupCharStealTestClients(t *testing.T) (a, other *area.Area, caller, targe
 	a = area.NewArea(area.AreaData{Name: "Courtroom"}, len(getCharacters()), 10, area.EviAny)
 	other = area.NewArea(area.AreaData{Name: "Basement"}, len(getCharacters()), 10, area.EviAny)
 
-	caller = &Client{conn: &testConn{}, uid: 1, ipid: "ip-caller", char: 0, possessing: -1, pair: ClientPairInfo{wanted_id: -1}}
+	caller = &Client{conn: &testConn{}, uid: 1, ipid: "ip-caller", char: 0, pair: ClientPairInfo{wanted_id: -1}}
 	caller.SetArea(a)
 	a.AddChar(0)
 
-	target = &Client{conn: &testConn{}, uid: 2, ipid: "ip-target", char: 1, possessing: -1, pair: ClientPairInfo{wanted_id: -1}}
+	target = &Client{conn: &testConn{}, uid: 2, ipid: "ip-target", char: 1, pair: ClientPairInfo{wanted_id: -1}}
 	target.SetArea(a)
 	a.AddChar(1)
 
-	elsewhere = &Client{conn: &testConn{}, uid: 3, ipid: "ip-else", char: 2, possessing: -1, pair: ClientPairInfo{wanted_id: -1}}
+	elsewhere = &Client{conn: &testConn{}, uid: 3, ipid: "ip-else", char: 2, pair: ClientPairInfo{wanted_id: -1}}
 	elsewhere.SetArea(other)
 	other.AddChar(2)
 

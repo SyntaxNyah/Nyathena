@@ -1214,6 +1214,7 @@ func cmdUnCM(client *Client, args []string, _ string) {
 			return
 		}
 		client.Area().RemoveCM(client.Uid())
+		releaseAreaNameOnLastCMLeaving(client.Area())
 		client.SendServerMessage("You are no longer a CM in this area.")
 		addToBuffer(client, "CMD", "Un-CMed self.", false)
 	} else {
@@ -1225,6 +1226,7 @@ func cmdUnCM(client *Client, args []string, _ string) {
 				continue
 			}
 			c.Area().RemoveCM(c.Uid())
+			releaseAreaNameOnLastCMLeaving(c.Area())
 			c.SendServerMessage("You are no longer a CM in this area.")
 			count++
 			report += fmt.Sprintf("%v, ", c.Uid())

@@ -35,6 +35,10 @@ func cmdArea(client *Client, args []string, usage string) {
 		areaMuteAll(client, false)
 	case "unmute":
 		areaMuteAll(client, true)
+	case "rename":
+		cmdAreaRename(client, args[1:], usage)
+	case "unrename":
+		cmdAreaUnrename(client, args[1:], usage)
 	default:
 		client.SendServerMessage("Unknown /area sub-command.\n" + usage)
 	}

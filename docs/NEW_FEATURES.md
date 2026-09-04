@@ -968,3 +968,51 @@ so every written value is validator-legal by construction.
 - Covered by `go test -race`: round-trip parsing for all 24 new types,
   transform output budgets, cipher escalation, markov corpus generation,
   LIFO release order, protocol field legality, and pool integrity.
+
+---
+
+## Feature 9: Area Renaming, and the Removal of the Invisible-Effect Commands
+
+### Overview
+
+Two changes that pull in the same direction: give the people running a room a visible tool they were missing, and delete the tools whose whole design was that their target could not see them.
+
+### `/area rename <name>` — CMs and moderators name their room
+
+```
+/area rename DR Killing Game     # the area list now reads "DR Killing Game"
+/area rename                     # report the current name and the configured one
+/area unrename                   # restore the configured name immediately
+```
+
+Gated on `CM`, so both **area CMs** (anyone who ran `/cm`) and moderators can use it. It renames the caller's own area only.
+
+**The name is a loan.** `areas.toml` holds the area's real identity and it comes back on its own when the room stops belonging to anyone:
+
+- the **last person leaves** the area, or
+- the area **loses its last CM** (`/uncm`, an area change, or a disconnect).
+
+Nothing is persisted, so a restart also returns every area to its configured name. Nobody has to remember to undo a rename, and there is no way to leave one permanently on the server's area list.
+
+A name a moderator set in a room that never had a CM is kept until the room empties — the "last CM left" release is keyed on whether a CM actually took the name out (`Area.NameHeldByCM`), so it cannot fire on a room that never had one.
+
+**Already-connected players see it.** The server rebuilds the joined area-name string and the pre-built SM join blob, then pushes the new list to every client as an `FA` packet — chosen over re-sending SM, which is a handshake packet a client would answer by re-running its join ladder.
+
+**Validation.** 1–32 characters; no `#`, `%`, `$` or `&` (AO2's escape table — area names go out unencoded); no control characters; not a music-list entry or a stream URL (a music change is matched before an area change, so the room would become unreachable by name); and not another area's current **or configured** name, since a configured name returns the instant that area empties.
+
+**The name goes through the same word filter as IC and OOC** — the same tiered `banned_words.txt`, the same evasion-resistant normalization, the same configured `automod_action`, the same `[CENSOR]` staff alert, and the same `nuke` tier that destroys the attempt and bans the IPID. A room name is shown to every connected client, so it is held to exactly the standard one line of chat is. `watch` tier still passes. Under the default `shadow` action the caller sees the confirmation a successful rename would send while the area is untouched.
+
+Implemented in `internal/athena/commands_area_rename.go` and `internal/area/areas.go`; covered by `commands_area_rename_test.go`.
+
+### Removed: `/possess`, `/fullpossess`, `/truepossess`, `/unpossess`, `/shadowdisconnect`, `/lag`
+
+These applied an effect the person on the receiving end could not see. A possession spoke as somebody, spoofed their pairing so the room noticed nothing, and silenced their IC, OOC and commands so they had no channel to say "that isn't me". A shadow-disconnect looked exactly like a bad router, forever. A torment listing ghosted their messages and dropped their connection for no stated reason.
+
+They were briefly gated behind a server-console `grant` verb instead of plain `ADMIN`. That made them harder to reach and did not change what they did to a target, so they have been removed outright, and the `grant` machinery with them.
+
+**What remains:**
+
+- **The torment list is unchanged.** AutoMod still arms it automatically on a censor trip, `/tormentlist` and `/untorment` still manage it, and the server console keeps `torment <ipid>` / `untorment <ipid|all>`.
+- **`/shadowundisconnect` and `/shadowdisconnectlist`** (ADMIN) still work, so entries written before the removal can be found and lifted. Nothing adds to that list any more.
+- **Lifting is never restricted.** Every undo command stays in game at its existing permission.
+- The console-only `punishment <enable|disable|status>` kill switch is untouched.

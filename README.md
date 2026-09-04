@@ -30,7 +30,7 @@ This is the main thing Nyathena exists for. All punishment commands support `-d 
 
 **Protocol / Viewport (6):** `/teleport` (sprite pops to random screen positions), `/shakecurse` (forced screenshake), `/randomflip` (coin-flipped sprite facing), `/forcecolor` (locked text colour — all-red rage or full rainbow), `/nopreanim`, `/forcepreanim`
 
-**Timing (4):** `/slowpoke`, `/fastspammer`, `/lag`, `/lifo` (messages release in REVERSE order — say three things, they arrive backwards)
+**Timing (3):** `/slowpoke`, `/fastspammer`, `/lifo` (messages release in REVERSE order — say three things, they arrive backwards)
 
 **Traps & Contagion (4):** `/contagious <type>` (plague mode — spreads to anyone who speaks within 5s of an infected player; mods immune), `/minefield` (1-in-6 chance per message to detonate a random 2-minute punishment), `/silencebell` (area trap: the next person to speak gets cursed), `/stealthmute` (messages echo back to the sender but reach nobody — they never know)
 
@@ -190,6 +190,8 @@ UID-based mutual pairing that survives area and character changes. Pair messages
 
 - **`/punishments [uid]`** — the punishment dashboard: every active effect with remaining duration; players self-inspect, mods inspect anyone (includes lag/mute/jail and issuer tier)
 - **`/clients <uid>`** — every connection sharing a target's IPID at a glance (multiclient overview, MUTE)
+- **`/area rename <name>`** — CMs and moderators name the room they are standing in (`/area rename DR Killing Game`). The name is a loan: it reverts to the `areas.toml` default when the room empties or loses its last CM, and it goes through the same word filter as IC and OOC. `/area unrename` restores it early. See [docs/MOD_COMMANDS.md](docs/MOD_COMMANDS.md#renaming-an-area-area-rename)
+- **`/area mute` / `/area unmute`** — silence everyone in the room except CMs and moderators; scoped to the room, so leaving lifts it
 - **Doki Area Effect** — literature-club-themed chaos per area (`doki_area = true` in `areas.toml`)
 - **Persistent `/musicban`** — bans an IPID from playing music across sessions; bypassed in areas with fewer than 3 people. `/musicunban` and `/musicbans` round out the set
 - **Hot `/reload`** — atomic, race-free reload of `characters.txt` (append-only), `music.txt`, `cdns.txt`, `backgrounds.txt`, `parrot.txt`, `8ball.txt`, `banned_words.txt` and `config.toml` motd/desc without restarting; also bound to stdin `reload` and `SIGHUP`
@@ -210,7 +212,11 @@ UID-based mutual pairing that survives area and character changes. Pair messages
 - **`/gas`** hides empty areas with a count at the bottom
 - Locked-room kick lockout bug fix (kicked players can no longer walk back in)
 - Hot Potato, Quick Draw, Chip Giveaway, Area Roulette minigames
-- Wardrobe management, `/possess`, in-place server restart via `syscall.Exec`
+- Wardrobe management, in-place server restart via `syscall.Exec`
+
+### Removed
+
+- **`/possess`, `/fullpossess`, `/truepossess`, `/unpossess`, `/shadowdisconnect`, `/lag`** — these applied an effect the person on the receiving end could not see: speaking as somebody while silencing them, a disconnect indistinguishable from a bad router, ghosted messages for no stated reason. Nothing to notice, report or appeal is a bad property for a moderation tool, so they are gone rather than gated. The AutoMod censor still arms the torment list automatically, `/tormentlist` and `/untorment` still manage it, and the server console keeps `torment <ipid>` / `untorment <ipid|all>`. `/shadowundisconnect` and `/shadowdisconnectlist` remain so entries written before the removal can still be lifted.
 
 ---
 
