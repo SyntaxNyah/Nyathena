@@ -1093,6 +1093,39 @@ func raidGuardSilence(client *Client) {
 	}
 }
 
+// raidAlertHint is appended to every raid-guard staff alert so a moderator
+// buried in them always knows how to silence them for their own session.
+const raidAlertHint = "(Disable these alerts for yourself with /raidguard alert off)"
+
+// RaidAlertsDisabled reports whether this client has muted raid-guard staff
+// alerts for their current session.
+func (c *Client) RaidAlertsDisabled() bool {
+	return c.raidAlertsOff.Load()
+}
+
+// SetRaidAlertsDisabled mutes or unmutes raid-guard staff alerts for this
+// client's current session.
+func (c *Client) SetRaidAlertsDisabled(off bool) {
+	c.raidAlertsOff.Store(off)
+}
+
+// sendRaidGuardAlert delivers one [RAIDGUARD] OOC alert to every staff member
+// holding MOD_CHAT, minus those who ran /raidguard alert off. The opt-out hint
+// is appended here rather than by each caller so no alert can ever go out
+// without telling its reader how to turn it off.
+func sendRaidGuardAlert(msg string) {
+	out := &packet.CTToClient{Name: "[RAIDGUARD]", Message: encode(msg + "\n" + raidAlertHint), IsFromServer: "1"}
+	clients.ForEach(func(c *Client) {
+		if !permissions.HasPermission(c.Perms(), permissions.PermissionField["MOD_CHAT"]) {
+			return
+		}
+		if c.RaidAlertsDisabled() {
+			return
+		}
+		c.Send(out)
+	})
+}
+
 // alertRaidGuard tells every staff member holding MOD_CHAT what the guard did
 // and why, naming the signals so a false positive is obvious at a glance and
 // can be reversed with /raidguard clear.
@@ -1112,11 +1145,5 @@ func alertRaidGuard(client *Client, v Verdict, score int, signals []string) {
 		"If this is a real player, clear them with /raidguard clear %d.",
 		oocDisplayName(client), client.Uid(), client.Ipid(), areaName, v, score,
 		strings.Join(signals, "; "), selfService, client.Uid())
-	out := &packet.CTToClient{Name: "[RAIDGUARD]", Message: encode(msg), IsFromServer: "1"}
-	clients.ForEach(func(c *Client) {
-		if !permissions.HasPermission(c.Perms(), permissions.PermissionField["MOD_CHAT"]) {
-			return
-		}
-		c.Send(out)
-	})
+	sendRaidGuardAlert(msg)
 }

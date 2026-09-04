@@ -451,6 +451,11 @@ type Client struct {
 	// fresh connection defaults back to alerts on. See censor_alerts.go.
 	censorAlertsOff atomic.Bool
 
+	// raidAlertsOff mutes the staff raid-guard OOC alerts for this session
+	// (/raidguard alert off). Only consulted for clients holding MOD_CHAT;
+	// every fresh connection defaults back to alerts on. See raidguard.go.
+	raidAlertsOff atomic.Bool
+
 	// punishAuditOff mutes the punishment-audit OOC alerts for this session
 	// (/punishaudit off). Only consulted for clients holding ADMIN; every
 	// fresh connection defaults back to alerts on. See punishment_audit.go.

@@ -825,18 +825,23 @@ Three properties make it safe to be aggressive here, and they are why this is no
 
 **Kept honest by replay.** `TestSlowFanOutIsCorroboratedEarly` asserts the guard corroborates the 2026-08-31 raid no later than its fourth message; `TestSlowFanOutSparesTheRealPlayers` asserts the four ordinary players talking in that same room — two of them *about* the raid, using its vocabulary — stay completely clean; `TestSlowFanOutCannotReachTheBanGate` asserts the strong signal still never fires on that capture, so the ban gate stays shut on this class of evidence. A third capture, `aftermath_capture.log` (the same server two minutes later: 24 players, agitated, several shouting in caps and using the objection button while discussing what happened), is now replayed by the main validation harness alongside the quiet-evening baseline, because a loud upset room is the traffic a loosened threshold would actually eat. It scores a maximum of 20 with zero correlation hits.
 
-**`/raidguard` command** (`BAN`, `internal/athena/raidguard_cmd.go`):
+**`/raidguard` command** (`internal/athena/raidguard_cmd.go`):
 ```
 /raidguard status         # settings, live under-attack state, correlation window size,
-                           # current echo breadth, and every connected client with a
-                           # nonzero score
+                           # current echo breadth, whether alerts are on for you, and
+                           # every connected client with a nonzero score
 /raidguard clear <uid>    # the false-positive escape hatch: wipe one connection's
                            # score and lift any captcha action the guard placed on it
 /raidguard clear all      # the same, for every connected client
 /raidguard test <text>    # show the normalised form, fingerprints, and shouty-spam
                            # verdict for a line of text without acting on anyone —
                            # read-only, never touches the correlation window
+/raidguard alert <on|off> # mute the [RAIDGUARD] staff alerts for your own session
 ```
+**Alerts and who can silence them.** Every `[RAIDGUARD]` alert — a verdict the guard reached on a connection, and the notice that it engaged lockdown on its own — goes to everyone holding `MOD_CHAT`, and now carries the hint `(Disable these alerts for yourself with /raidguard alert off)`. During a real raid these arrive in bulk, which is exactly when a moderator working an unrelated incident needs to be able to quiet them, so `/raidguard alert off` mutes them for that moderator's session (`/raidguard alert on` re-enables; the bare form reports the current state, and `/raidguard status` shows it too). Per-session and never persisted, mirroring `/censoralerts`: a mute taken during one raid can never quietly outlive it, since every fresh connection defaults back to alerts on. The fan-out is centralised in `sendRaidGuardAlert` (`raidguard.go`), which appends the hint and applies the mute in one place, so no alert can go out without telling its reader how to turn it off. `alertRaidGuard` and `alertRaidLockdown` both route through it.
+
+The command as a whole is gated on `MOD_CHAT` rather than `BAN` so that everyone who *receives* the alerts can also turn them off; `status`, `clear` and `test` re-check `BAN` inside the handler, so lowering the registry gate widens nothing but the toggle. Pinned by `raidguard_alerts_test.go`, which asserts a muted moderator receives nothing while an unmuted one does (with the hint), that a non-staff client is never a recipient, and that a `MOD_CHAT`-only holder gets the toggle and a permission refusal on everything else.
+
 `/raidguard clear` is the important one operationally: it resets the connection's accumulated score and fired signals back to a clean slate, and — if the raid guard itself was the reason the connection is currently gated or restricted by the join captcha — releases that restriction through the same `releaseJoinCaptcha` path `/joincaptcha verify` uses, so a cleared player can chat again immediately rather than waiting out a timer.
 
 ### Persistent Music Ban (`/musicban`)
