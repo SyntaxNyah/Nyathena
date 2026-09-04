@@ -1264,6 +1264,15 @@ func pktIC(client *Client, p *packet.Packet) {
 		}
 	}
 
+	// UmaHorse: a punished speaker's sprite is re-rolled to a different random
+	// uma character on every message. A packet rewrite rather than a real
+	// character change on purpose — ChangeCharacter broadcasts a CharsCheck to
+	// the whole area, which is ~9 KB per recipient on a large roster, and one
+	// of those per IC message would be a serious regression (see the
+	// "CharsCheck Fan-Out" note in CLAUDE.md). Placed before forcedisplay so
+	// that keeps the final word on the outgoing sprite.
+	applyUmaHorseSprite(ms, punishments)
+
 	// ForceDisplay: if a punished player in this area is pinned, rewrite this
 	// (non-moderator) speaker's sprite to that character and clear any pairing,
 	// so the whole room renders as the pinned character. Applied last so it has

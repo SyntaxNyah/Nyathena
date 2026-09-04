@@ -239,6 +239,8 @@ var (
 		applyHorse,
 		applyLion,
 		applyBunny,
+		applyTrex,
+		applyFish,
 	}
 
 	// ── ThesaurusOverload ────────────────────────────────────────────────────
@@ -1593,6 +1595,10 @@ func ApplyPunishmentToText(text string, pType PunishmentType) string {
 		return applyMedieval(text)
 	case PunishmentCheese:
 		return applyCheese(text)
+	case PunishmentTrex:
+		return applyTrex(text)
+	case PunishmentFish:
+		return applyFish(text)
 	default:
 		return text
 	}
@@ -2659,6 +2665,8 @@ var areaRandomPunishments = []PunishmentType{
 	PunishmentDuck,
 	PunishmentHorse,
 	PunishmentLion,
+	PunishmentTrex,
+	PunishmentFish,
 	PunishmentZoo,
 	PunishmentBunny,
 	PunishmentTsundere,
