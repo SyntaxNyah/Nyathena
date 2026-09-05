@@ -928,6 +928,7 @@ func (client *Client) SendPacket(header string, contents ...string) {
 			}
 		}
 	} else {
+		contents = escapeOutgoing(header, contents)
 		// Pre-size the FantaCode buffer in a single allocation:
 		// header + ('#' + content)*N + "#%".
 		n := len(header) + 2
@@ -985,6 +986,7 @@ func (client *Client) SendPacketSync(header string, contents ...string) {
 		}
 		b.Write(jb)
 	} else {
+		contents = escapeOutgoing(header, contents)
 		b.WriteString(header)
 		for _, c := range contents {
 			b.WriteByte('#')
