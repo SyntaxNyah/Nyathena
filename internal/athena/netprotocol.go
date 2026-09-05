@@ -1816,8 +1816,8 @@ func pktCaseAnn(client *Client, p *packet.Packet) {
 	// CASEA fields via BuildJSON).
 	title := fmt.Sprintf("CASE ANNOUNCEMENT: %v in %v needs players for %v",
 		client.CurrentCharacter(), client.Area().Name(), ca.CaseTitle)
-	needs := strings.Join([]string{ca.NeedDef, ca.NeedPro, ca.NeedJudge, ca.NeedJury, ca.NeedSteno}, "#")
-	fantaCodePacket := fmt.Sprintf("CASEA#%v#%v#1#%%", title, needs)
+	needs := strings.Join(escapeOutgoing("CASEA", []string{ca.NeedDef, ca.NeedPro, ca.NeedJudge, ca.NeedJury, ca.NeedSteno}), "#")
+	fantaCodePacket := fmt.Sprintf("CASEA#%v#%v#1#%%", encode(title), needs)
 	typedPacket := &packet.CASEA{
 		CaseTitle: title,
 		NeedDef:   ca.NeedDef, NeedPro: ca.NeedPro,
@@ -1970,6 +1970,33 @@ func decode(s string) string {
 // encode returns a decoded string in AO2-encoded form.
 func encode(s string) string {
 	return encoder.Replace(s)
+}
+
+// encoderNoAnd is the evidence-packet escape: LE and SC carry pre-joined
+// "name&desc&image" items where '&' is a structural delimiter that must reach
+// the client intact, so '&' is preserved while '#', '%' and '$' are escaped
+// (mirrors Akashi's AOPacket::escapeEvidence).
+var encoderNoAnd = strings.NewReplacer("%", "<percent>", "#", "<num>", "$", "<dollar>")
+
+// escapeOutgoing escapes packet content immediately before it is serialized to
+// the FantaCode wire format. Every outgoing field must pass through here so a
+// chat message can never smuggle a raw '#' (field delimiter) or '%' (packet
+// terminator) into the stream and forge packets such as KK (kick) or KB (ban).
+//
+// LE and SC are the one exception: their items are already pre-joined as
+// "name&desc&image"/"name&desc&evidence", where '&' is a structural separator
+// that must survive to the client, so those headers leave '&' alone (mirrors
+// Akashi's AOPacket::escapeEvidence).
+func escapeOutgoing(header string, contents []string) []string {
+	esc := encoder
+	if header == "LE" || header == "SC" {
+		esc = encoderNoAnd
+	}
+	out := make([]string, len(contents))
+	for i, c := range contents {
+		out[i] = esc.Replace(c)
+	}
+	return out
 }
 
 // isMusicURL reports whether a music-change name is a streaming http(s) URL

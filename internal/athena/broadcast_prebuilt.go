@@ -110,13 +110,14 @@ func (pb *prebuiltPacket) forClient(client *Client) []byte {
 		return pb.jsonb
 	}
 	if pb.fanta == nil {
+		esc := escapeOutgoing(pb.header, pb.args)
 		n := len(pb.header) + 2
-		for _, c := range pb.args {
+		for _, c := range esc {
 			n += 1 + len(c)
 		}
 		buf := make([]byte, 0, n)
 		buf = append(buf, pb.header...)
-		for _, c := range pb.args {
+		for _, c := range esc {
 			buf = append(buf, '#')
 			buf = append(buf, c...)
 		}
