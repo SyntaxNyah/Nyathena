@@ -796,7 +796,19 @@ func cmdMove(client *Client, args []string, usage string) {
 		toMove := getUidList(*uids)
 		var count int
 		var report string
+		var skipped int
+		var skippedReport string
 		for _, c := range toMove {
+			// Never drag a player out of a punishment-free (safe) area into an
+			// area where punishment effects can still be applied — that would
+			// let a mod teleport someone from a shelter straight into a
+			// punishment area like trashpit. The target must leave the safe
+			// area on their own first.
+			if punishmentSafeArea(c.Area()) && !punishmentSafeArea(wantedArea) {
+				skipped++
+				skippedReport += fmt.Sprintf("%v, ", c.Uid())
+				continue
+			}
 			if !c.ChangeArea(wantedArea) {
 				continue
 			}
@@ -805,60 +817,17 @@ func cmdMove(client *Client, args []string, usage string) {
 			report += fmt.Sprintf("%v, ", c.Uid())
 		}
 		report = strings.TrimSuffix(report, ", ")
-		client.SendServerMessage(fmt.Sprintf("Moved %v users.", count))
+		summary := fmt.Sprintf("Moved %v users.", count)
+		if skipped > 0 {
+			summary += fmt.Sprintf(" %d client(s) could not be moved out of a punishment-free area: %v.", skipped, strings.TrimSuffix(skippedReport, ", "))
+		}
+		client.SendServerMessage(summary)
 		addToBuffer(client, "CMD", fmt.Sprintf("Moved %v to %v.", report, wantedArea.Name()), false)
 	} else {
 		if !client.ChangeArea(wantedArea) {
 			client.SendServerMessage("You are not invited to that area.")
 		}
 		client.SendServerMessage(fmt.Sprintf("Moved to %v.", wantedArea.Name()))
-	}
-}
-
-// Handles /summon
-
-func cmdSummon(client *Client, args []string, usage string) {
-	if len(args) < 1 {
-		client.SendServerMessage("Not enough arguments:\n" + usage)
-		return
-	}
-
-	areaID, err := strconv.Atoi(args[0])
-	if err != nil || areaID < 0 || areaID > len(areas)-1 {
-		client.SendServerMessage("Invalid area.")
-		return
-	}
-	wantedArea := areas[areaID]
-	wantedAreaName := wantedArea.Name()
-
-	var count int
-	var reportBuilder strings.Builder
-
-	// Move each client to the target area
-	clients.ForEach(func(c *Client) {
-		if !c.ChangeArea(wantedArea) {
-			return
-		}
-
-		// Send appropriate message based on whether this is the admin
-		if c == client {
-			c.SendServerMessage(fmt.Sprintf("Summoned all users to %v.", wantedAreaName))
-		} else {
-			c.SendServerMessage(fmt.Sprintf("You were summoned to %v.", wantedAreaName))
-		}
-
-		if reportBuilder.Len() > 0 {
-			reportBuilder.WriteString(", ")
-		}
-		reportBuilder.WriteString(fmt.Sprintf("%v", c.Uid()))
-		count++
-	})
-
-	report := reportBuilder.String()
-	if count > 0 {
-		addToBuffer(client, "CMD", fmt.Sprintf("Summoned %v user(s) (%v) to %v.", count, report, wantedArea.Name()), false)
-	} else {
-		client.SendServerMessage("No users were summoned.")
 	}
 }
 

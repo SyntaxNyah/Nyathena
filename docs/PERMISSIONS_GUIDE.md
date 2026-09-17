@@ -42,7 +42,7 @@ You will normally reach for roles when setting up your regular staff team, and r
 | `BYPASS_LOCK` | Bypass locked areas |
 | `MOD_EVI` | Modify evidence when an area's evidence mode is "mods" |
 | `MODIFY_AREA` | Modify area settings (BG/music locks, force CMs, etc.) |
-| `MOVE_USERS` | Move/summon users to different areas |
+| `MOVE_USERS` | Move users to different areas |
 | `MOD_SPEAK` | Speak officially as a moderator with `/mod` |
 | `BAN_INFO` | View server bans (`/getban`) |
 | `MOD_CHAT` | Use `/modchat` |
@@ -163,17 +163,17 @@ grantcmd defense_attorney testify,add,delete,update,testimony,examine
 
 Note `examine` doesn't actually need a grant (it has no permission requirement at all — anyone can play back existing testimony), it's included here just so the same player can also start cross-examination; the rest (`testify`/`add`/`delete`/`update`/`testimony`) are the ones that are otherwise CM-only.
 
-### Example 4 — Giving an event DJ the ability to summon people to a stage area
+### Example 4 — Giving an event DJ the ability to move people to a stage area
 
-`eventdj` has the `dj` role (just the `DJ` bit) and is running tonight's event. You want them able to pull everyone into the stage area with `/summon`, which normally needs `MOVE_USERS`.
+`eventdj` has the `dj` role (just the `DJ` bit) and is running tonight's event. You want them able to pull everyone into the stage area with `/move -u`, which normally needs `MOVE_USERS`.
 
 ```
-grantcmd eventdj summon
+grantcmd eventdj move
 ```
 
 When the event's over:
 ```
-revokecmd eventdj summon
+revokecmd eventdj move
 ```
 
 ### Example 5 — Granting several commands at once, and checking what's live

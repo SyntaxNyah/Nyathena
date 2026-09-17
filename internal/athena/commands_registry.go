@@ -1109,14 +1109,6 @@ func initCommands() {
 			reqPerms: permissions.PermissionField["CM"],
 			category: "area",
 		},
-		"summon": {
-			handler:  cmdSummon,
-			minArgs:  1,
-			usage:    "Usage: /summon <area>",
-			desc:     "Summons all users to the specified area.",
-			reqPerms: permissions.PermissionField["MOVE_USERS"],
-			category: "moderation",
-		},
 		"swapevi": {
 			handler:  cmdSwapEvi,
 			minArgs:  2,

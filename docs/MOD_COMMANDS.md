@@ -13,7 +13,7 @@ For player-facing commands, see [`PLAYER_COMMANDS.md`](PLAYER_COMMANDS.md).
 | `MUTE` | The minimum tier for punishments | All punishment text effects, gag, tournament |
 | `KICK` | + ability to remove players from the server | Includes /charcurse |
 | `BAN` | + connection-level moderation | /ban, /unban, /firewall |
-| `MOVE_USERS` | Move/summon players between areas | /summon |
+| `MOVE_USERS` | Move players between areas | /move -u, /cleararea |
 | `MODIFY_AREA` | Override area settings | BG/music locks, force CMs |
 | `BAN_INFO` | View ban records | /getban, /listbans |
 | `ADMIN` | Server runtime configuration | /arealog, /reloadplaytime, /grantchips |
@@ -106,7 +106,6 @@ Censor trips (AutoMod banned words and `censored_names.txt` shownames) alert eve
 | `/kick <uid>` (in-area) | NONE (CM) | Eject a player from the area. Now also pulls them from the invite list, so they can't walk back into a locked room. |
 | `/cleararea` | MOVE_USERS | Move all players out of an area to the lobby |
 | `/forcemove <uid> <area>` | MOVE_USERS | Force-move a player |
-| `/summon <area>` | MOVE_USERS | Summon all players to an area |
 | `/jail <uid>` | MUTE | Restrict a player to the jail area |
 | `/unjail <uid>` | MUTE | Lift jail |
 | `/bg <bg>` | DJ / CM / MODIFY_AREA | Set background (DJs rate-limited to once per minute) |
