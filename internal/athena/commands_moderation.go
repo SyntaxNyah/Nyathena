@@ -85,85 +85,98 @@ func cmdBan(client *Client, args []string, usage string) {
 	var count int
 	var reportBuilder strings.Builder
 	seenIPIDs := make(map[string]struct{})
+	// Resolve -u UIDs into their IPIDs. A UID is only a handle for grabbing the
+	// player's IPID: banning by UID bans that IPID outright (purging every
+	// client on it), never just the single named connection.
 	if len(*uids) > 0 {
-		for _, c := range getUidList(*uids) {
-			id, err := db.AddBan(c.Ipid(), c.Hdid(), banTime, until, reason, client.StoredModName())
+		resolved := make(map[string]struct{})
+		for _, s := range *uids {
+			uid, err := strconv.Atoi(s)
+			if err != nil || uid == -1 {
+				continue
+			}
+			c, err := getClientByUid(uid)
+			if err != nil {
+				client.SendServerMessage(fmt.Sprintf("Failed to ban: no client with UID %v is online.", uid))
+				continue
+			}
+			if _, done := resolved[c.Ipid()]; !done {
+				resolved[c.Ipid()] = struct{}{}
+				*ipids = append(*ipids, c.Ipid())
+			}
+		}
+	}
+
+	// Deduplicate so -i and -u (or several UIDs on one IP) can't re-ban the
+	// same IPID or double-count it in the report.
+	{
+		seen := make(map[string]struct{})
+		unique := make([]string, 0, len(*ipids))
+		for _, ipid := range *ipids {
+			if _, ok := seen[ipid]; ok {
+				continue
+			}
+			seen[ipid] = struct{}{}
+			unique = append(unique, ipid)
+		}
+		*ipids = unique
+	}
+
+	// Ban every resolved IPID outright: record the ban (plus each online
+	// client's HDID so it holds across an IP change) and disconnect every
+	// client on that IPID.
+	for _, ipid := range *ipids {
+		onlineClients := getClientsByIpid(ipid)
+		if len(onlineClients) == 0 {
+			// Offline ban – no HDID available.
+			id, err := db.AddBan(ipid, "", banTime, until, reason, client.StoredModName())
 			if err != nil {
 				continue
 			}
-			if _, seen := seenIPIDs[c.Ipid()]; !seen {
-				seenIPIDs[c.Ipid()] = struct{}{}
-				if reportBuilder.Len() > 0 {
-					reportBuilder.WriteString(", ")
-				}
-				reportBuilder.WriteString(c.Ipid())
-			}
-			c.SendSync(&packet.KB{Reason: fmt.Sprintf("%v\nUntil: %v\nID: %v", reason, untilS, id)})
-			c.conn.Close()
-			forgetIP(c.Ipid())
-			count++
-			if err := webhook.PostBan(c.CurrentCharacter(), c.Showname(), c.OOCName(), c.Ipid(), c.Uid(), id, *duration, reason, client.DisplayModName()); err != nil {
+			forgetIP(ipid)
+			if err := webhook.PostBan("N/A", "N/A", "N/A", ipid, -1, id, *duration, reason, client.DisplayModName()); err != nil {
 				logger.LogErrorf("while posting ban webhook: %v", err)
 			}
-		}
-	} else {
-		for _, ipid := range *ipids {
-			onlineClients := getClientsByIpid(ipid)
-			if len(onlineClients) == 0 {
-				// Offline ban – no HDID available.
-				id, err := db.AddBan(ipid, "", banTime, until, reason, client.StoredModName())
-				if err != nil {
+		} else {
+			// Online ban – record each unique HDID so the ban holds if the user
+			// reconnects from a different IP address.
+			banIDByHdid := make(map[string]int)
+			for _, c := range onlineClients {
+				if _, done := banIDByHdid[c.Hdid()]; done {
 					continue
 				}
-				forgetIP(ipid)
-				if err := webhook.PostBan("N/A", "N/A", "N/A", ipid, -1, id, *duration, reason, client.DisplayModName()); err != nil {
-					logger.LogErrorf("while posting ban webhook: %v", err)
-				}
-			} else {
-				// Online ban – record each unique HDID so the ban holds if the user
-				// reconnects from a different IP address.
-				banIDByHdid := make(map[string]int)
-				for _, c := range onlineClients {
-					if _, done := banIDByHdid[c.Hdid()]; done {
-						continue
-					}
-					id, err := db.AddBan(c.Ipid(), c.Hdid(), banTime, until, reason, client.StoredModName())
-					if err == nil {
-						banIDByHdid[c.Hdid()] = id
-					}
-				}
-				if len(banIDByHdid) == 0 {
-					continue
-				}
-				forgetIP(ipid)
-				for _, c := range onlineClients {
-					if id, ok := banIDByHdid[c.Hdid()]; ok {
-						c.SendSync(&packet.KB{Reason: fmt.Sprintf("%v\nUntil: %v\nID: %v", reason, untilS, id)})
-						if err := webhook.PostBan(c.CurrentCharacter(), c.Showname(), c.OOCName(), ipid, c.Uid(), id, *duration, reason, client.DisplayModName()); err != nil {
-							logger.LogErrorf("while posting ban webhook: %v", err)
-						}
-					} else {
-						c.SendSync(&packet.KB{Reason: fmt.Sprintf("%v\nUntil: %v", reason, untilS)})
-					}
-					c.conn.Close()
+				id, err := db.AddBan(c.Ipid(), c.Hdid(), banTime, until, reason, client.StoredModName())
+				if err == nil {
+					banIDByHdid[c.Hdid()] = id
 				}
 			}
-			if _, seen := seenIPIDs[ipid]; !seen {
-				seenIPIDs[ipid] = struct{}{}
-				if reportBuilder.Len() > 0 {
-					reportBuilder.WriteString(", ")
-				}
-				reportBuilder.WriteString(ipid)
+			if len(banIDByHdid) == 0 {
+				continue
 			}
-			count++
+			forgetIP(ipid)
+			for _, c := range onlineClients {
+				if id, ok := banIDByHdid[c.Hdid()]; ok {
+					c.SendSync(&packet.KB{Reason: fmt.Sprintf("%v\nUntil: %v\nID: %v", reason, untilS, id)})
+					if err := webhook.PostBan(c.CurrentCharacter(), c.Showname(), c.OOCName(), ipid, c.Uid(), id, *duration, reason, client.DisplayModName()); err != nil {
+						logger.LogErrorf("while posting ban webhook: %v", err)
+					}
+				} else {
+					c.SendSync(&packet.KB{Reason: fmt.Sprintf("%v\nUntil: %v", reason, untilS)})
+				}
+				c.conn.Close()
+			}
 		}
+		if _, seen := seenIPIDs[ipid]; !seen {
+			seenIPIDs[ipid] = struct{}{}
+			if reportBuilder.Len() > 0 {
+				reportBuilder.WriteString(", ")
+			}
+			reportBuilder.WriteString(ipid)
+		}
+		count++
 	}
 	report := reportBuilder.String()
-	if len(*ipids) > 0 {
-		client.SendServerMessage(fmt.Sprintf("Banned %v IPID(s).", count))
-	} else {
-		client.SendServerMessage(fmt.Sprintf("Banned %v clients.", count))
-	}
+	client.SendServerMessage(fmt.Sprintf("Banned %v IPID(s).", count))
 	sendPlayerArup()
 	addToBuffer(client, "CMD", fmt.Sprintf("Banned %v from server for %v: %v.", report, *duration, reason), true)
 	alertBannedAccountLinks(seenIPIDs)
