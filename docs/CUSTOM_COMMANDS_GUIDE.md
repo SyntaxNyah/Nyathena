@@ -431,6 +431,11 @@ permission to use that command."
 The match is case-insensitive. Leave it empty (`""`) for normal role-based
 permissions.
 
+To hand a command to an account *without* touching its role, use the console
+`grantcmd <username> <command>` — or pick **10** in the builder menu, which
+prompts for the username and command. (Revoke with `revokecmd <username>
+<command>`, or list everything with `grants`.)
+
 ## 8. Punishment effects reference
 
 The `punish` action's `effect` field takes any of the server's named effects

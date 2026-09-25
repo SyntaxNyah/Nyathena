@@ -131,7 +131,9 @@ Inside `text`, `reason`, and `run` args: `{args.N}`, `{caller.uid}`,
 
 ## Granting to an account
 
-Any custom command can be granted to one account without changing its role:
+Any custom command can be granted to one account without changing its role.
+Do it from the console, or from inside the builder by picking **10** (Grant a
+command to an account):
 
 ```
 grantcmd  <username> <customcmd>

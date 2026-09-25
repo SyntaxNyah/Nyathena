@@ -31,6 +31,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/MangosArentLiterature/Athena/internal/db"
 	"github.com/MangosArentLiterature/Athena/internal/logger"
 	"github.com/MangosArentLiterature/Athena/internal/permissions"
 )
@@ -188,6 +189,7 @@ func runCustomCommandMenu(scanner *bufio.Scanner) {
 		fmt.Println("  3. Edit a command          8. Examples")
 		fmt.Println("  4. Delete a command        9. Validate files")
 		fmt.Println("  5. Test a command (dry-run)  0. Exit")
+		fmt.Println(" 10. Grant a command to an account")
 		line, ok := readLine(scanner, "  Pick a number > ")
 		if !ok {
 			return
@@ -213,10 +215,12 @@ func runCustomCommandMenu(scanner *bufio.Scanner) {
 			cmdCustomExamples()
 		case "9", "validate":
 			cmdCustomValidate()
+		case "10", "grant", "grantcmd":
+			cmdCustomGrant(scanner)
 		case "?", "help":
 			printMenuHelp()
 		default:
-			fmt.Println("  (type a number 0-9, or a keyword like 'list', 'test', 'reload')")
+			fmt.Println("  (type a number 0-10, or a keyword like 'list', 'test', 'reload')")
 		}
 	}
 }
@@ -232,6 +236,7 @@ func printMenuHelp() {
 	fmt.Println("    7/reload     re-read all JSON files from disk")
 	fmt.Println("    8/example    print example templates")
 	fmt.Println("    9/validate   check every JSON file for errors")
+	fmt.Println("    10/grant     grant one command to one account")
 	fmt.Println("    0/exit       return to the main console")
 	fmt.Println("  Console shortcuts (no menu):")
 	fmt.Println("    customcmd list | show <name> | test <name> [args] | reload | validate")
@@ -580,6 +585,34 @@ func importPastedJSON(scanner *bufio.Scanner) {
 		return
 	}
 	fmt.Printf("  saved /%s → %s\n", cmd.Name, path)
+}
+
+// cmdCustomGrant grants one command to one account from inside the builder menu.
+// It is the menu form of the console `grantcmd` command: pick an account username
+// and a command (a custom one or any built-in), and that account can run it
+// regardless of its role. Usernames are checked case-sensitively against the
+// USERS table, matching /mkusr and /register.
+func cmdCustomGrant(scanner *bufio.Scanner) {
+	username, ok := readLine(scanner, "  account username > ")
+	if !ok || strings.TrimSpace(username) == "" {
+		return
+	}
+	username = strings.TrimSpace(username)
+	if !db.UserExists(username) {
+		fmt.Printf("  no account named %q exists (checked case-sensitively). nothing granted.\n", username)
+		return
+	}
+	name, ok := readLine(scanner, "  command to grant (e.g. shoe, ban) > ")
+	if !ok || strings.TrimSpace(name) == "" {
+		return
+	}
+	msg, err := grantCommand(username, name, "customcmd")
+	if err != nil {
+		fmt.Printf("  grant failed: %v\n", err)
+		return
+	}
+	fmt.Printf("  %s\n", msg)
+	fmt.Printf("  revoke with: revokecmd %s <command>\n", username)
 }
 
 func cmdCustomExamples() {
