@@ -22,6 +22,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/MangosArentLiterature/Athena/internal/webhook"
@@ -105,6 +106,18 @@ var (
 	areaLogFiles sync.Map // map[string]*areaLogState
 )
 
+// consoleMuted, when set, suppresses the stdout write in log() so interactive
+// console menus (e.g. the customcmd builder) can run without the streaming
+// server log interleaving with their prompts. File logging, the /terminal ring
+// and TUITap are unaffected.
+var consoleMuted atomic.Bool
+
+// MuteConsole suppresses log output to stdout until UnmuteConsole is called.
+func MuteConsole() { consoleMuted.Store(true) }
+
+// UnmuteConsole restores log output to stdout.
+func UnmuteConsole() { consoleMuted.Store(false) }
+
 // areaLogState holds the open file handle and the path it was opened for.
 // When either the LogPath or the calendar date changes the file is closed and
 // reopened so that daily rotation and test isolation both work correctly.
@@ -132,7 +145,7 @@ func log(level LogLevel, s string) {
 	buf = append(buf, s...)
 	buf = append(buf, '\n')
 
-	if LogStdOut {
+	if LogStdOut && !consoleMuted.Load() {
 		outputLock.Lock()
 		os.Stdout.Write(buf)
 		outputLock.Unlock()

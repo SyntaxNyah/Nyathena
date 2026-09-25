@@ -555,6 +555,8 @@ func pktIC(client *Client, p *packet.Packet) {
 				} else {
 					modifiedMsg = decodedMsg
 				}
+			} else if p.punishmentType == PunishmentCustomText {
+				modifiedMsg = applyCustomText(decodedMsg, p.customData)
 			} else {
 				modifiedMsg = ApplyPunishmentToText(decodedMsg, p.punishmentType)
 			}

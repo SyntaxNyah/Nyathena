@@ -1,0 +1,21 @@
+{
+  "name": "shoe",
+  "desc": "Turn a player's periods into commas; sometimes their whole sentence becomes 'tuff'.",
+  "category": "fun",
+  "reqPerms": "NONE",
+  "usage": "/shoe <uid>",
+  "minArgs": 1,
+  "publicHelp": true,
+  "actions": [
+    {
+      "type": "text",
+      "target": "@args",
+      "duration": "10m",
+      "replace": [
+        { "from": ".", "to": "," }
+      ],
+      "random": ["thas tuff", "lowk tuff", "tuff"],
+      "chance": 0.25
+    }
+  ]
+}

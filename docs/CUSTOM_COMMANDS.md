@@ -69,6 +69,11 @@ changes without restarting.
 `MODIFY_AREA`, `MOVE_USERS`, `BYPASS_LOCK`, `BAN_INFO`, `MOD_CHAT`, `LOG`,
 `SHADOW`, `ADMIN`.
 
+`account` (optional) is a hard gate: when set, only the authenticated account
+with that name (case-insensitive) can run the command, regardless of role
+permissions. Pick it in the wizard with "Custom account name", or set it in JSON
+as `"account": "someusername"`.
+
 ## Actions
 
 | `type` | what it does | key fields |
@@ -82,12 +87,33 @@ changes without restarting.
 | `mute` / `unmute` | mute / unmute | `target`, `scope`, `duration` |
 | `move` | move target(s) to an area | `target`, `area` |
 | `run` | run any existing built-in command | `command`, `args` |
+| `text` | a custom text effect (find/replace + random whole-message swap) | `target`, `replace`, `random`, `chance`, `duration` |
 | `random` | pick one branch | `choices` |
 | `wait` | pause before the next action | `duration` |
 | `grant` / `revoke` | console-level command grants | `target` (account), `command` |
 
 `scope` for mute is `ic`, `ooc`, `both`, `music`, or `jud`.
 Durations use `30s`, `10m`, `1h30m` etc.
+
+### Text effects (`text` action)
+
+`text` applies a per-message transform to every IC message the target sends for
+the duration. It has two optional parts, applied in order:
+
+- `replace` — an ordered list of `{"from": "...", "to": "..."}` rules
+  (e.g. `{"from": ".", "to": ","}` turns every period into a comma).
+- `random` — a list of strings; with probability `chance` (default `0.25`) the
+  whole message is replaced by a random entry from the list.
+
+This is how operator-invented effects like `/shoe` are expressed without code:
+
+```json
+{
+  "type": "text", "target": "@args", "duration": "10m",
+  "replace": [{ "from": ".", "to": "," }],
+  "random": ["thas tuff", "lowk tuff", "tuff"], "chance": 0.25
+}
+```
 
 ## Targets
 
@@ -112,4 +138,4 @@ grants    [username]
 ## Example commands
 
 See `config_sample/custom_commands/` and `customcmd example` for `boop`,
-`silence`, `megapunish`, `rouletteparty`, `cleanup`, and more.
+`silence`, `megapunish`, `rouletteparty`, `cleanup`, `shoe`, and more.

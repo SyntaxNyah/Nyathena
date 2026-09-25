@@ -57,9 +57,10 @@ type TestArea struct {
 
 // TestPunishment is one active punishment on a TestPlayer.
 type TestPunishment struct {
-	Type      PunishmentType
-	ExpiresAt time.Time
-	Reason    string
+	Type       PunishmentType
+	ExpiresAt  time.Time
+	Reason     string
+	CustomData string
 }
 
 // TestPlayer is a snapshot of a connected player's command-relevant state.
@@ -126,6 +127,7 @@ type Effect struct {
 	Command    string
 	Args       []string
 	Account    string
+	Data       string // serialized customData for PunishmentCustomText
 }
 
 // Result is the complete output state of a command evaluation.
@@ -284,6 +286,20 @@ func addTestPunishment(p *TestPlayer, t PunishmentType, d time.Duration, reason 
 	p.Punishments = append(p.Punishments, TestPunishment{Type: t, ExpiresAt: exp, Reason: reason})
 }
 
+func addTestPunishmentData(p *TestPlayer, t PunishmentType, d time.Duration, reason, data string, now time.Time) {
+	for i := range p.Punishments {
+		if p.Punishments[i].Type == t {
+			p.Punishments = append(p.Punishments[:i], p.Punishments[i+1:]...)
+			break
+		}
+	}
+	exp := time.Time{}
+	if d > 0 {
+		exp = now.Add(d)
+	}
+	p.Punishments = append(p.Punishments, TestPunishment{Type: t, ExpiresAt: exp, Reason: reason, CustomData: data})
+}
+
 func removeTestPunishment(p *TestPlayer, t PunishmentType) {
 	for i := range p.Punishments {
 		if p.Punishments[i].Type == t {
@@ -355,6 +371,28 @@ func runAction(w *TestWorld, a CustomAction, args []string, now time.Time, calle
 			}
 			addTestPunishment(tp, pType, d, reason, now)
 			effects = append(effects, Effect{Kind: EffectPunishApplied, To: []int{uid}, Punishment: pType, Duration: d, Reason: reason})
+		}
+
+	case ActionText:
+		if w.Config.PunishmentsDisabled {
+			return effects
+		}
+		d := parseDuration(a.Duration, 10*time.Minute)
+		if d > 24*time.Hour {
+			d = 24 * time.Hour
+		}
+		reason := renderTemplate(a.Reason, base)
+		data := customTextSpecJSON(a)
+		for _, uid := range resolveTargetUIDs(*w, a.Target, caller, args) {
+			tp := w.Players[uid]
+			if tp == nil {
+				continue
+			}
+			if ar, ok := areaByName(*w, tp.AreaName); ok && ar.PunishmentSafe {
+				continue
+			}
+			addTestPunishmentData(tp, PunishmentCustomText, d, reason, data, now)
+			effects = append(effects, Effect{Kind: EffectPunishApplied, To: []int{uid}, Punishment: PunishmentCustomText, Duration: d, Reason: reason, Data: data})
 		}
 
 	case ActionUnpunish:
@@ -576,13 +614,24 @@ func applyEffectLive(caller *Client, e Effect) {
 			if err != nil || punishmentSafeBlocked(c) {
 				continue
 			}
-			c.AddPunishmentBy(e.Punishment, e.Duration, e.Reason, tier)
 			var expires int64
 			if e.Duration > 0 {
 				expires = time.Now().UTC().Add(e.Duration).Unix()
 			}
-			if err := db.UpsertTextPunishmentBy(c.Ipid(), int(e.Punishment), expires, e.Reason, int(tier)); err != nil {
-				logger.LogErrorf("custom command: persist punishment: %v", err)
+			if e.Punishment == PunishmentCustomText {
+				c.AddPunishmentWithData(e.Punishment, e.Duration, e.Reason, e.Data)
+				// Pack the spec into the reason column behind a 0x1F separator
+				// (the same convention the translator uses) so it survives a
+				// server restart via restorePunishments.
+				stored := e.Data + "\x1f" + e.Reason
+				if err := db.UpsertTextPunishmentBy(c.Ipid(), int(e.Punishment), expires, stored, int(tier)); err != nil {
+					logger.LogErrorf("custom command: persist text effect: %v", err)
+				}
+			} else {
+				c.AddPunishmentBy(e.Punishment, e.Duration, e.Reason, tier)
+				if err := db.UpsertTextPunishmentBy(c.Ipid(), int(e.Punishment), expires, e.Reason, int(tier)); err != nil {
+					logger.LogErrorf("custom command: persist punishment: %v", err)
+				}
 			}
 			c.SendServerMessage(fmt.Sprintf("You have been punished with the '%v' effect.", e.Punishment.String()))
 		}

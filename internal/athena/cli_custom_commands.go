@@ -31,6 +31,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/MangosArentLiterature/Athena/internal/logger"
 	"github.com/MangosArentLiterature/Athena/internal/permissions"
 )
 
@@ -116,31 +117,56 @@ func readYesNo(scanner *bufio.Scanner, prompt string, def bool) bool {
 	}
 }
 
-// readPermission prompts for a permission by number or name, returning the key.
-func readPermission(scanner *bufio.Scanner) string {
+// readPermission prompts for who may use the command. It returns the permission
+// key plus an optional account name: when the operator picks "custom account
+// name", the returned permission is "NONE" and account is the username that may
+// use the command (a hard gate checked in dispatchCustomCommand).
+func readPermission(scanner *bufio.Scanner) (string, string) {
 	fmt.Println("Who can use it? (pick a number, or type a permission name)")
 	for i, p := range permissionChoices {
 		fmt.Printf("  %d. %s (%s)\n", i+1, p.label, p.key)
 	}
+	fmt.Printf("  %d. Custom account name (only that account, no perms needed)\n", len(permissionChoices)+1)
 	for {
 		line, ok := readLine(scanner, "  > ")
 		if !ok {
-			return "NONE"
+			return "NONE", ""
 		}
-		line = strings.TrimSpace(strings.ToUpper(line))
-		if line == "" {
-			return "NONE"
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "" {
+			return "NONE", ""
 		}
-		if n, err := strconv.Atoi(line); err == nil && n >= 1 && n <= len(permissionChoices) {
-			return permissionChoices[n-1].key
-		}
-		for _, p := range permissionChoices {
-			if strings.EqualFold(p.key, line) {
-				return p.key
+		if n, err := strconv.Atoi(trimmed); err == nil {
+			if n >= 1 && n <= len(permissionChoices) {
+				return permissionChoices[n-1].key, ""
+			}
+			if n == len(permissionChoices)+1 {
+				return readCustomAccount(scanner)
 			}
 		}
-		fmt.Printf("  (unknown — pick 1-%d, or type a name like MUTE)\n", len(permissionChoices))
+		lower := strings.ToLower(trimmed)
+		if lower == "account" || lower == "custom" {
+			return readCustomAccount(scanner)
+		}
+		for _, p := range permissionChoices {
+			if strings.EqualFold(p.key, trimmed) {
+				return p.key, ""
+			}
+		}
+		fmt.Printf("  (unknown — pick 1-%d, or type a name like MUTE)\n", len(permissionChoices)+1)
 	}
+}
+
+// readCustomAccount prompts for an account username for the "custom account
+// name" permission option.
+func readCustomAccount(scanner *bufio.Scanner) (string, string) {
+	name, _ := readLine(scanner, "  account username > ")
+	name = strings.TrimSpace(name)
+	if name == "" {
+		fmt.Println("  (no account given — everyone can use it)")
+		return "NONE", ""
+	}
+	return "NONE", name
 }
 
 // runCustomCommandMenu is the interactive console menu. It is invoked from
@@ -226,7 +252,7 @@ func cmdCustomList() {
 	fmt.Printf("  %d custom command(s):\n", len(names))
 	for _, n := range names {
 		c := cmds[n]
-		fmt.Printf("    /%-20s %s\n", c.Name, c.Desc)
+		fmt.Printf("    /%-20s [%s] %s\n", c.Name, c.Category, c.Desc)
 	}
 }
 
@@ -688,7 +714,7 @@ func wizardNew(scanner *bufio.Scanner, name string) {
 			cmd.Category = "custom"
 		}
 	}
-	cmd.ReqPerms = readPermission(scanner)
+	cmd.ReqPerms, cmd.Account = readPermission(scanner)
 	if cmd.Usage == "" {
 		cmd.Usage = "/" + cmd.Name
 	}
@@ -729,7 +755,11 @@ func wizardNew(scanner *bufio.Scanner, name string) {
 // wizardSummary prints a plain-English description of the finished command.
 func wizardSummary(cmd CustomCommand) {
 	fmt.Println("  ── That's it! Here's what /" + cmd.Name + " will do: ──")
-	fmt.Printf("    • permission: %s\n", cmd.ReqPerms)
+	if cmd.Account != "" {
+		fmt.Printf("    • account only: %s\n", cmd.Account)
+	} else {
+		fmt.Printf("    • permission: %s\n", cmd.ReqPerms)
+	}
 	for _, a := range cmd.Actions {
 		fmt.Printf("    • %s\n", actionSummary(a))
 	}
@@ -760,6 +790,19 @@ func actionSummary(a CustomAction) string {
 		return fmt.Sprintf("run /%s %s", a.Command, strings.Join(a.Args, " "))
 	case ActionRandom:
 		return fmt.Sprintf("pick one of %d random options", len(a.Choices))
+	case ActionText:
+		var parts []string
+		for _, r := range a.Replace {
+			parts = append(parts, fmt.Sprintf("%q→%q", r.From, r.To))
+		}
+		s := "text-effect " + a.Target
+		if len(parts) > 0 {
+			s += " replace " + strings.Join(parts, ", ")
+		}
+		if len(a.Random) > 0 {
+			s += fmt.Sprintf(" (sometimes → %q)", strings.Join(a.Random, "/"))
+		}
+		return s
 	case ActionWait:
 		return fmt.Sprintf("wait %s", orDefault(a.Duration, "0s"))
 	case ActionGrant:
@@ -814,6 +857,8 @@ func matchActionKeyword(s string) (CustomActionType, bool) {
 		return ActionMessage, true
 	case containsAny(s, "announce", "broadcast", "shout", "yell"):
 		return ActionAnnounce, true
+	case containsAny(s, "text effect", "text transform", "find and replace", "replace ", "punctuation", "period"):
+		return ActionText, true
 	case containsAny(s, "unpunish", "remove punishment", "cleanse", "clear effect"):
 		return ActionUnpunish, true
 	case containsAny(s, "punish", "punishment", "effect"):
@@ -866,16 +911,17 @@ func wizardPickAction(scanner *bufio.Scanner) (CustomAction, bool) {
 	fmt.Println("      9. move        move them to an area")
 	fmt.Println("      10. run        run an existing command")
 	fmt.Println("      11. random     pick one of several at random")
-	fmt.Println("      12. wait       pause before the next action")
-	fmt.Println("      13. grant      grant a command to an account")
-	fmt.Println("      14. revoke     revoke a command")
-	fmt.Println("      15. done       finish and save")
+	fmt.Println("      12. text       change how their messages come out (find/replace, random words)")
+	fmt.Println("      13. wait       pause before the next action")
+	fmt.Println("      14. grant      grant a command to an account")
+	fmt.Println("      15. revoke     revoke a command")
+	fmt.Println("      16. done       finish and save")
 	line, ok := readLine(scanner, "    > ")
 	if !ok {
 		return CustomAction{}, true
 	}
 	line = strings.TrimSpace(line)
-	if line == "" || line == "15" || line == "done" || line == "save" || line == "finish" {
+	if line == "" || line == "16" || line == "done" || line == "save" || line == "finish" {
 		return CustomAction{}, true
 	}
 	if n, err := strconv.Atoi(line); err == nil && n >= 1 && n <= len(validActionTypes) {
@@ -884,7 +930,7 @@ func wizardPickAction(scanner *bufio.Scanner) (CustomAction, bool) {
 	if t, ok := matchActionKeyword(line); ok {
 		return wizardFillAction(scanner, t), false
 	}
-	fmt.Println("    (unknown — pick 1-15 or type a keyword like 'mute')")
+	fmt.Println("    (unknown — pick 1-16 or type a keyword like 'mute')")
 	return wizardPickAction(scanner)
 }
 
@@ -939,6 +985,34 @@ func wizardFillAction(scanner *bufio.Scanner, t CustomActionType) CustomAction {
 		}
 		if len(a.Choices) < 2 {
 			fmt.Println("    (random needs at least 2 effects — it will be skipped; add more next time)")
+		}
+	case ActionText:
+		a.Target = readTarget(scanner, "@args")
+		a.Duration = readWithDefault(scanner, "    for how long? [10m] > ", "10m")
+		a.Reason = readOptional(scanner, "    why? (optional) > ")
+		for {
+			from := readOptional(scanner, "    replace this (e.g. . ) — Enter to stop > ")
+			if from == "" {
+				break
+			}
+			to := readWithDefault(scanner, "    with what? > ", "")
+			a.Replace = append(a.Replace, TextReplace{From: from, To: to})
+		}
+		pool := readOptional(scanner, "    sometimes replace the whole message with (comma-separated) > ")
+		if pool != "" {
+			for _, s := range strings.Split(pool, ",") {
+				if s = strings.TrimSpace(s); s != "" {
+					a.Random = append(a.Random, s)
+				}
+			}
+		}
+		if len(a.Random) > 0 {
+			chance := readWithDefault(scanner, "    how often? (0-1, e.g. 0.25) [0.25] > ", "0.25")
+			if f, err := strconv.ParseFloat(chance, 64); err == nil {
+				a.Chance = f
+			} else {
+				a.Chance = 0.25
+			}
 		}
 	case ActionWait:
 		a.Duration = readWithDefault(scanner, "    how long to wait? [1s] > ", "1s")
@@ -1019,6 +1093,10 @@ func customcmdConsole(scanner *bufio.Scanner, cmd []string) {
 		return
 	}
 	if len(cmd) == 1 {
+		// Suppress the streaming server log while the interactive menu is open
+		// so prompts don't interleave with "Client timed out" and friends.
+		logger.MuteConsole()
+		defer logger.UnmuteConsole()
 		runCustomCommandMenu(scanner)
 		return
 	}

@@ -304,6 +304,14 @@ const (
 	// existing persisted SUBTYPE values keep their meaning.
 	PunishmentTrex // RAAASRFH — dinosaur roars
 	PunishmentFish // blublublib — fish noises
+	// CustomText is a generic, operator-defined text transform. Its rules live
+	// in the punishment's customData field as JSON (an ordered find/replace list
+	// plus an optional random whole-message replacement pool). It is what backs
+	// the custom-command builder's "text" action, so operators can author
+	// effects like /shoe (periods -> commas, sometimes -> "tuff") without
+	// writing any Go. Appended last so existing persisted SUBTYPE values keep
+	// their meaning.
+	PunishmentCustomText
 )
 
 // IssuerTier records the permission tier of the moderator who applied a
@@ -3278,6 +3286,8 @@ func (p PunishmentType) String() string {
 		return "trex"
 	case PunishmentFish:
 		return "fish"
+	case PunishmentCustomText:
+		return "texteffect"
 	default:
 		return "none"
 	}

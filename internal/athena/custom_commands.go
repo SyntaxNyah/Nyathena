@@ -65,6 +65,7 @@ const (
 	ActionMove     CustomActionType = "move"
 	ActionRun      CustomActionType = "run"
 	ActionRandom   CustomActionType = "random"
+	ActionText     CustomActionType = "text"
 	ActionWait     CustomActionType = "wait"
 	ActionGrant    CustomActionType = "grant"
 	ActionRevoke   CustomActionType = "revoke"
@@ -74,7 +75,7 @@ const (
 // them, so the menu and the validator share one source of truth.
 var validActionTypes = []CustomActionType{
 	ActionMessage, ActionAnnounce, ActionPunish, ActionUnpunish, ActionKick, ActionBan,
-	ActionMute, ActionUnmute, ActionMove, ActionRun, ActionRandom, ActionWait, ActionGrant, ActionRevoke,
+	ActionMute, ActionUnmute, ActionMove, ActionRun, ActionRandom, ActionText, ActionWait, ActionGrant, ActionRevoke,
 }
 
 func isValidActionType(t CustomActionType) bool {
@@ -100,6 +101,16 @@ type CustomAction struct {
 	Command  string             `json:"command,omitempty"`
 	Args     []string           `json:"args,omitempty"`
 	Choices  []CustomActionList `json:"choices,omitempty"`
+	// Replace/Random/Chance drive the "text" action (ActionText).
+	Replace []TextReplace `json:"replace,omitempty"`
+	Random  []string      `json:"random,omitempty"`
+	Chance  float64       `json:"chance,omitempty"`
+}
+
+// TextReplace is one find/replace rule for the "text" action.
+type TextReplace struct {
+	From string `json:"from"`
+	To   string `json:"to"`
 }
 
 // CustomActionList is a named branch of a "random" action.
@@ -109,14 +120,18 @@ type CustomActionList struct {
 
 // CustomCommand is a fully-resolved custom command definition.
 type CustomCommand struct {
-	Name       string         `json:"name"`
-	Desc       string         `json:"desc"`
-	Category   string         `json:"category"`
-	ReqPerms   string         `json:"reqPerms"`
-	Usage      string         `json:"usage"`
-	MinArgs    int            `json:"minArgs"`
-	PublicHelp bool           `json:"publicHelp"`
-	Actions    []CustomAction `json:"actions"`
+	Name       string `json:"name"`
+	Desc       string `json:"desc"`
+	Category   string `json:"category"`
+	ReqPerms   string `json:"reqPerms"`
+	Usage      string `json:"usage"`
+	MinArgs    int    `json:"minArgs"`
+	PublicHelp bool   `json:"publicHelp"`
+	// Account, when non-empty, is a hard access gate: only the authenticated
+	// account with this name (case-insensitive) may run the command, regardless
+	// of role permissions or console grants.
+	Account string         `json:"account,omitempty"`
+	Actions []CustomAction `json:"actions"`
 }
 
 // resolved returns a copy of the command with sane defaults filled in so that
@@ -141,6 +156,17 @@ func (c CustomCommand) reqPermBits() uint64 {
 		return v
 	}
 	return 0
+}
+
+// customAccountAllows reports whether a command's account gate is satisfied.
+// When Account is empty there is no gate (the normal permission check applies);
+// otherwise only an authenticated account whose name matches (case-insensitive)
+// may pass — role permissions and console grants are not consulted.
+func customAccountAllows(c CustomCommand, authenticated bool, accountName string) bool {
+	if c.Account == "" {
+		return true
+	}
+	return authenticated && strings.EqualFold(accountName, c.Account)
 }
 
 // customNameRegex matches a valid bare command name (no leading slash).
@@ -239,6 +265,18 @@ func validateCustomAction(name string, a CustomAction) error {
 	case ActionRun:
 		if strings.TrimSpace(a.Command) == "" {
 			return fmt.Errorf("run action requires a \"command\" name")
+		}
+	case ActionText:
+		if len(a.Replace) == 0 && len(a.Random) == 0 {
+			return fmt.Errorf("text action requires at least one replace rule or a random pool")
+		}
+		for i, r := range a.Replace {
+			if r.From == "" {
+				return fmt.Errorf("text replace rule %d has an empty \"from\"", i+1)
+			}
+		}
+		if a.Chance < 0 || a.Chance > 1 {
+			return fmt.Errorf("text action chance must be between 0 and 1")
 		}
 	case ActionRandom:
 		if len(a.Choices) < 2 {
@@ -450,6 +488,24 @@ func renderTemplate(s string, ctx renderContext) string {
 	return s
 }
 
+// customTextSpecJSON serializes the "text" action's transform rules to the JSON
+// shape PunishmentCustomText stores in its customData field.
+func customTextSpecJSON(a CustomAction) string {
+	spec := customTextSpec{
+		Replace: make([]customTextReplace, len(a.Replace)),
+		Random:  a.Random,
+		Chance:  a.Chance,
+	}
+	for i, r := range a.Replace {
+		spec.Replace[i] = customTextReplace{From: r.From, To: r.To}
+	}
+	b, err := json.Marshal(spec)
+	if err != nil {
+		return ""
+	}
+	return string(b)
+}
+
 // dispatchCustomCommand is the ParseCommand fallback for custom commands. It
 // synthesizes a Command carrying the custom command's permission requirement so
 // the exact same clientCanUseCommand chokepoint (role bits + CM/DJ + console
@@ -463,6 +519,10 @@ func dispatchCustomCommand(client *Client, custom CustomCommand, args []string) 
 		reqPerms:   custom.reqPermBits(),
 		category:   custom.Category,
 		publicHelp: custom.PublicHelp,
+	}
+	if !customAccountAllows(custom, client.Authenticated(), client.ModName()) {
+		client.SendServerMessage("You do not have permission to use that command.")
+		return
 	}
 	if !clientCanUseCommand(client, custom.Name, synth) {
 		client.SendServerMessage("You do not have permission to use that command.")

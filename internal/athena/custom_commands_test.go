@@ -329,6 +329,75 @@ func TestGrantCommandAcceptsCustomName(t *testing.T) {
 	}
 }
 
+// TestCustomAccountAllows covers the "custom account name" permission option.
+func TestCustomAccountAllows(t *testing.T) {
+	cmd := CustomCommand{Account: "bob"}
+	if customAccountAllows(cmd, false, "bob") {
+		t.Error("an unauthenticated client must not pass the account gate")
+	}
+	if customAccountAllows(cmd, true, "alice") {
+		t.Error("a different account must not pass the account gate")
+	}
+	if !customAccountAllows(cmd, true, "BOB") {
+		t.Error("the account gate must be case-insensitive")
+	}
+	if !customAccountAllows(CustomCommand{}, false, "") {
+		t.Error("a command with no account gate must always pass")
+	}
+}
+
+// TestExecuteTextAction verifies the "text" action produces a
+// PunishmentCustomText effect carrying the serialized transform spec.
+func TestExecuteTextAction(t *testing.T) {
+	caller := testPlayer(1, "mod", permissions.PermissionField["MUTE"])
+	target := testPlayer(3, "bob", 0)
+	w := testWorld(1, caller, target)
+
+	cmd := CustomCommand{Name: "shoe", MinArgs: 1, Actions: []CustomAction{{
+		Type:     ActionText,
+		Target:   "@args",
+		Duration: "10m",
+		Replace:  []TextReplace{{From: ".", To: ","}},
+		Random:   []string{"thas tuff", "lowk tuff", "tuff"},
+		Chance:   0.25,
+	}}}
+	res := executeCustomCommandPure(w, cmd, []string{"3"}, testNow)
+
+	if res.Decision != DecisionAccepted || len(res.Effects) != 1 {
+		t.Fatalf("expected one text effect, got %+v", res.Effects)
+	}
+	e := res.Effects[0]
+	if e.Kind != EffectPunishApplied || e.Punishment != PunishmentCustomText {
+		t.Fatalf("unexpected effect %+v", e)
+	}
+	if e.Data == "" || !strings.Contains(e.Data, "\"from\":\".\"") {
+		t.Errorf("effect data should carry the serialized spec, got %q", e.Data)
+	}
+	p := res.World.Players[3]
+	if len(p.Punishments) != 1 || p.Punishments[0].Type != PunishmentCustomText {
+		t.Fatalf("world state should hold a PunishmentCustomText, got %+v", p.Punishments)
+	}
+	if p.Punishments[0].CustomData != e.Data {
+		t.Errorf("world state customData mismatch")
+	}
+}
+
+// TestCustomTextSpecRoundTrip checks that the serialized spec parses back and
+// the deterministic transform core applies find/replace + random replacement.
+func TestCustomTextSpecRoundTrip(t *testing.T) {
+	action := CustomAction{Replace: []TextReplace{{From: ".", To: ","}}, Random: []string{"tuff"}, Chance: 0.5}
+	spec := parseCustomTextSpec(customTextSpecJSON(action))
+
+	got := applyCustomTextSpec("hello. world.", spec, func(int) int { return 0 }, func() float64 { return 0.99 })
+	if got != "hello, world," {
+		t.Errorf("find/replace should turn periods into commas, got %q", got)
+	}
+	got = applyCustomTextSpec("hello", spec, func(int) int { return 0 }, func() float64 { return 0.0 })
+	if got != "tuff" {
+		t.Errorf("low roll should replace the whole message, got %q", got)
+	}
+}
+
 // TestCustomCommandsEnabled covers the opt-in gate: the feature is inert unless
 // enable_custom_commands is set, so servers that don't use it pay nothing.
 func TestCustomCommandsEnabled(t *testing.T) {
