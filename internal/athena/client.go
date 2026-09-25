@@ -294,11 +294,9 @@ const (
 	// last so existing persisted SUBTYPE values keep their meaning.
 	PunishmentMedieval // rewrites IC text into Olde-English / medieval speak
 	PunishmentCheese   // replaces every message with a random statement about cheese
-	// RandomArea — a "moves on its own" punishment like Contagious/Minefield:
-	// a per-connection watcher goroutine periodically force-warps the target
-	// to a random open area, independent of anything they say. See
-	// randomarea_punishment.go. Appended last so existing persisted SUBTYPE
-	// values keep their meaning.
+	// PunishmentRandomArea is a reserved slot. The /randomarea command was
+	// removed; the value is never reused so the persisted SUBTYPE values of
+	// the types declared after it keep their meaning.
 	PunishmentRandomArea
 	// Animal filters, wave 2 (see punishments_trex_fish.go). Appended last so
 	// existing persisted SUBTYPE values keep their meaning.
@@ -510,15 +508,6 @@ type Client struct {
 	// renaming can't escape it — this field is just the runtime half tied to
 	// this connection.
 	shownamePunishWatcherStarted atomic.Bool
-
-	// /randomarea punishment (randomarea_punishment.go): gates the lazy spawn
-	// of the per-connection watcher goroutine that performs the periodic
-	// forced area-warps. Unlike curseRandomChar/shownamePunish there is no
-	// separate "active" flag or external persistence table — the watcher's
-	// liveness check is simply HasActivePunishment(PunishmentRandomArea),
-	// since this punishment already lives in, and persists via, the normal
-	// punishment slice/DB like any other cmdPunishment-backed effect.
-	randomAreaWatcherStarted atomic.Bool
 
 	// Outbound packet queue. SendPacket enqueues here non-blockingly; a
 	// dedicated writer goroutine (started in HandleClient) drains sendCh and
@@ -2656,14 +2645,6 @@ func (client *Client) AddPunishmentBy(pType PunishmentType, duration time.Durati
 	if pType == PunishmentForceDisplay && !existed {
 		activeForceDisplay.Add(1)
 	}
-	// /randomarea has no customData, so — like /forcedisplay above — it only
-	// ever routes through AddPunishmentBy, both for a fresh apply and for a
-	// DB restore on reconnect (restorePunishments). Arming is CAS-gated and
-	// idempotent, so a re-apply that refreshes the duration on an existing
-	// randomarea punishment is harmless here.
-	if pType == PunishmentRandomArea {
-		client.armRandomAreaWatch()
-	}
 }
 
 // PunishmentIssuerTier returns the tier of the moderator who applied the given
@@ -3280,8 +3261,6 @@ func (p PunishmentType) String() string {
 		return "medieval"
 	case PunishmentCheese:
 		return "cheese"
-	case PunishmentRandomArea:
-		return "randomarea"
 	case PunishmentTrex:
 		return "trex"
 	case PunishmentFish:

@@ -469,7 +469,7 @@ of writing, grouped for browsing:
 
 **Display / movement / misc** — `spotlight`, `hidedisplay`, `forcedisplay`,
 `shrink`, `grow`, `wide`, `teleport`, `forcecolor`, `nopreanim`, `forcepreanim`,
-`grounded`, `randomarea`, `icwarp`, `roulette`, `torment`, `lovebomb`, `degrade`,
+`grounded`, `icwarp`, `roulette`, `torment`, `lovebomb`, `degrade`,
 `tourettes`, `slang`, `megamaso`, `lifo`, `contagious`, `minefield`,
 `stealthmute`, `trex`, `fish`.
 

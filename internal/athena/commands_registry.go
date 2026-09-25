@@ -3297,14 +3297,6 @@ func initCommands() {
 			reqPerms: permissions.PermissionField["MUTE"],
 			category: "punishment",
 		},
-		"randomarea": {
-			handler:  cmdRandomArea,
-			minArgs:  1,
-			usage:    "Usage: /randomarea [-d duration] [-r reason] [-h] global | <uid1>,<uid2>...",
-			desc:     "Every 20-45 seconds, force-warps the target to a random open area, on its own — no message needed.",
-			reqPerms: permissions.PermissionField["MUTE"],
-			category: "punishment",
-		},
 		"silencebell": {
 			handler:  cmdSilencebell,
 			minArgs:  0,
