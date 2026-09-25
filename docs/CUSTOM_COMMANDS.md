@@ -1,5 +1,9 @@
 # Custom Command Builder
 
+> **New here?** Start with the [hands-on guide](CUSTOM_COMMANDS_GUIDE.md) — it
+> walks through building a command using `/shoe` as the worked example. This
+> page is the compact field reference.
+
 A console-only system for creating slash commands **at runtime** — no restart,
 no `git pull`, no Go. An operator builds a command out of small "actions" using
 a beginner-friendly menu (or a JSON file), tests it against a fake player, and
