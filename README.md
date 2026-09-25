@@ -187,6 +187,12 @@ Daily-rotating log files per area under `logs/<AreaName>/`. Format: `[HH:MM:SS] 
 
 UID-based mutual pairing that survives area and character changes. Pair messages use each player's showname when set. `/unpair` does a full bidirectional reset — no stale pair state left on the peer. Flag yourself `/lfp` (Looking For Pair) and browse the area's flagged players with `/pairlist`.
 
+### Custom Command Builder (Console)
+
+A console-only way to author new slash commands **at runtime** — no restart, no `git pull`, no Go. An operator types `customcmd` in the server console to open a beginner-friendly menu (numbered options, a guided wizard, keyword shortcuts, and one-liners like `customcmd quick mute uwu 10m`), or drops a JSON definition in `config/custom_commands/` and runs `customcmd reload`. Commands are built from small actions — `message`, `punish`, `kick`, `ban`, `mute`, `move`, `run` (any existing built-in), `random`, and more — with targets (`@args`, `@global`, …) and `{caller.name}`-style templating. Every command is testable with `customcmd test <name>` against a fake player, and grantable to any account via `grantcmd <username> <name>`.
+
+**Opt-in and off by default** — set `enable_custom_commands = true` in `config.toml` to enable it. See [docs/CUSTOM_COMMANDS.md](docs/CUSTOM_COMMANDS.md) for the full reference.
+
 ### Other Additions
 
 - **`/punishments [uid]`** — the punishment dashboard: every active effect with remaining duration; players self-inspect, mods inspect anyone (includes lag/mute/jail and issuer tier)

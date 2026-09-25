@@ -1016,3 +1016,24 @@ They were briefly gated behind a server-console `grant` verb instead of plain `A
 - **`/shadowundisconnect` and `/shadowdisconnectlist`** (ADMIN) still work, so entries written before the removal can be found and lifted. Nothing adds to that list any more.
 - **Lifting is never restricted.** Every undo command stays in game at its existing permission.
 - The console-only `punishment <enable|disable|status>` kill switch is untouched.
+
+## Feature 10: Custom Command Builder
+
+### Overview
+A console-only system for creating slash commands at runtime — no restart, no recompile, no `git pull`. Commands are declarative JSON (or built through the `customcmd` wizard) composed of reusable actions (`message`, `punish`, `kick`, `ban`, `mute`, `move`, `run`, `random`, …). Off by default; enable with `enable_custom_commands = true` in `config.toml`.
+
+### Usage
+```
+customcmd               # open the builder menu
+customcmd list          # list commands
+customcmd test <name>   # dry-run against a fake player
+customcmd quick mute uwu 10m   # one-liner
+grantcmd <user> <name>  # grant a custom command to an account
+```
+
+### Notes
+- Every command is a JSON file in `config/custom_commands/`.
+- `customcmd reload` hot-swaps definitions without a restart.
+- `customcmd import <file>` (or `customcmd import paste`) installs a definition.
+- See `docs/CUSTOM_COMMANDS.md` for the full reference.
+

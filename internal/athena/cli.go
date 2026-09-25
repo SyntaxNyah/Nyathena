@@ -35,7 +35,8 @@ func ListenInput() {
 		cmd[0] = strings.TrimPrefix(cmd[0], "/")
 		switch cmd[0] {
 		case "help":
-			logger.LogInfo("Recognized commands: help, mkusr, rmusr, players, getlog, say, reload, punishment, torment, untorment, grantcmd, revokecmd, grants.")
+			logger.LogInfo("Recognized commands: help, mkusr, rmusr, players, getlog, say, reload, punishment, torment, untorment, grantcmd, revokecmd, grants, customcmd.")
+			logger.LogInfo("  customcmd                 Open the custom command builder menu (create/list/test/import/reload).")
 			logger.LogInfo("  torment <ipid>           Manually add an IPID to the torment list (no in-game equivalent).")
 			logger.LogInfo("  untorment <ipid|all>     Remove one or every IPID from the torment list.")
 			logger.LogInfo("  grantcmd <username> <command1>[,<command2>...]")
@@ -47,6 +48,8 @@ func ListenInput() {
 			logger.LogInfo("  revokecmd <username> <command1>[,<command2>...]|all")
 			logger.LogInfo("                           Revoke one, several, or (with \"all\") every command grant on an account.")
 			logger.LogInfo("  grants [username]        List every command grant on the server, or just one account's.")
+		case "customcmd":
+			customcmdConsole(input, cmd)
 		case "reload":
 			// Full hot-reload: characters.txt (append-only), music.txt, cdns.txt,
 			// backgrounds.txt, parrot.txt, 8ball.txt, banned_words.txt and the

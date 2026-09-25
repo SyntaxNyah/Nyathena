@@ -560,6 +560,15 @@ func NewServer(conf *settings.Config) (*Server, error) {
 
 	initCommands()
 	validateCommands()
+	// Load console-authored custom commands (opt-in via enable_custom_commands).
+	// Non-fatal: a malformed definition file is logged and the server continues
+	// without that command, so a bad file never prevents startup (operators fix
+	// it and run "customcmd reload").
+	if conf.EnableCustomCommands {
+		if err := loadCustomCommands(); err != nil {
+			logger.LogErrorf("failed to load custom commands: %v", err)
+		}
+	}
 	initAutoMod(conf)
 	initShownameCensor()
 	initShownamePunisher()

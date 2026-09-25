@@ -1,0 +1,14 @@
+{
+  "name": "cleanup",
+  "desc": "Lift every effect and unmute.",
+  "category": "moderation",
+  "reqPerms": "MUTE",
+  "usage": "/cleanup <uid>",
+  "minArgs": 1,
+  "publicHelp": true,
+  "actions": [
+    { "type": "unpunish", "target": "@args", "effect": "all" },
+    { "type": "unmute",   "target": "@args" },
+    { "type": "message",  "target": "@args", "text": "You have been cleaned up by {caller.name}." }
+  ]
+}

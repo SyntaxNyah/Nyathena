@@ -1,0 +1,12 @@
+{
+  "name": "boop",
+  "desc": "Boop a player on the nose.",
+  "category": "fun",
+  "reqPerms": "MOD_SPEAK",
+  "usage": "/boop <uid>",
+  "minArgs": 1,
+  "publicHelp": true,
+  "actions": [
+    { "type": "message", "target": "@args", "text": "You were booped by {caller.name}!" }
+  ]
+}

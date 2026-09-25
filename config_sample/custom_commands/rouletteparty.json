@@ -1,0 +1,19 @@
+{
+  "name": "rouletteparty",
+  "desc": "Random punishment for the target.",
+  "category": "punishment",
+  "reqPerms": "MUTE",
+  "usage": "/rouletteparty <uid>",
+  "minArgs": 1,
+  "publicHelp": true,
+  "actions": [
+    {
+      "type": "random",
+      "choices": [
+        { "actions": [ { "type": "punish", "target": "@args", "effect": "uwu", "duration": "5m" } ] },
+        { "actions": [ { "type": "punish", "target": "@args", "effect": "backward", "duration": "5m" } ] },
+        { "actions": [ { "type": "punish", "target": "@args", "effect": "drunk", "duration": "5m" } ] }
+      ]
+    }
+  ]
+}

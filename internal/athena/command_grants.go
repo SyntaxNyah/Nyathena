@@ -141,7 +141,7 @@ func grantCommand(username, command, grantedBy string) (string, error) {
 	if command == "" {
 		return "", fmt.Errorf("empty command name")
 	}
-	if _, ok := Commands[command]; !ok {
+	if _, ok := Commands[command]; !ok && !customCommandExists(command) {
 		return "", fmt.Errorf("no such command %q (see /help in-game, or the Commands registry, for valid names)", command)
 	}
 	if err := db.AddCommandGrant(username, command, grantedBy, time.Now().Unix()); err != nil {

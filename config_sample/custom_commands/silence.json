@@ -1,0 +1,14 @@
+{
+  "name": "silence",
+  "desc": "Mute + whisper + notify a player.",
+  "category": "moderation",
+  "reqPerms": "MUTE",
+  "usage": "/silence <uid>",
+  "minArgs": 1,
+  "publicHelp": true,
+  "actions": [
+    { "type": "mute",     "target": "@args", "scope": "ic", "duration": "10m", "reason": "being too loud" },
+    { "type": "punish",   "target": "@args", "effect": "whisper", "duration": "10m" },
+    { "type": "message",  "target": "@args", "text": "You have been silenced by {caller.name}." }
+  ]
+}

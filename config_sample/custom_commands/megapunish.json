@@ -1,0 +1,14 @@
+{
+  "name": "megapunish",
+  "desc": "Stack several punishments via run.",
+  "category": "punishment",
+  "reqPerms": "ADMIN",
+  "usage": "/megapunish <uid>",
+  "minArgs": 1,
+  "publicHelp": false,
+  "actions": [
+    { "type": "run", "command": "backward", "args": ["{args.0}", "-d", "5m"] },
+    { "type": "run", "command": "uwu",      "args": ["{args.0}", "-d", "5m"] },
+    { "type": "run", "command": "tsundere", "args": ["{args.0}", "-d", "5m"] }
+  ]
+}

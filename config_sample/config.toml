@@ -1010,6 +1010,15 @@ translate_cooldown = 25
 # Default: false
 enable_casino = false
 
+# Enable the console-only custom command builder: author new slash commands at
+# runtime from the server console ("customcmd") or from JSON files in
+# config/custom_commands/ — no restart and no code required. Custom commands can
+# also be granted to any account with "grantcmd <username> <command>".
+# Off by default: when false, no definition files are scanned, the dispatch path
+# never consults custom commands, and the "customcmd" console menu is disabled.
+# Default: false
+enable_custom_commands = false
+
 # Enable the lightweight player account system even when the casino is disabled.
 # When true, players can still /register and use non-gambling account features:
 #   • 👗 Wardrobe (/favourite, /wardrobe) — save and swap between favourite characters.

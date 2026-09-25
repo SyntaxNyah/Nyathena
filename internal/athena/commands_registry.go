@@ -3550,6 +3550,12 @@ func ParseCommand(client *Client, command string, args []string) {
 
 	cmd := Commands[command]
 	if cmd.handler == nil {
+		if customCommandsEnabled() {
+			if custom, ok := getCustomCommand(command); ok {
+				dispatchCustomCommand(client, custom, args)
+				return
+			}
+		}
 		client.SendServerMessage("Invalid command.")
 		return
 	}

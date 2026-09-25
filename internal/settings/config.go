@@ -140,6 +140,12 @@ type ServerConfig struct {
 	TranslatorAPIKey                     string   `toml:"translator_api_key"`
 	TranslateCooldown                    int      `toml:"translate_cooldown"`
 	EnableCasino                         bool     `toml:"enable_casino"`
+	// EnableCustomCommands turns on the console-only custom command builder.
+	// Off by default: when false, no definition files are scanned at startup,
+	// the dispatch path never consults the custom-command registry, and the
+	// "customcmd" console menu refuses with a notice.
+	EnableCustomCommands                 bool     `toml:"enable_custom_commands"`
+
 	EnableAccounts                       bool     `toml:"enable_accounts"`
 	RegisterCaptcha                      bool     `toml:"register_captcha"`
 	JoinCaptcha                          bool     `toml:"join_captcha"`
