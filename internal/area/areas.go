@@ -117,6 +117,8 @@ type Area struct {
 	invited             map[int]struct{}
 	doc                 string
 	description         string
+	motd                string
+	motdHeldByCM        bool // whether the current room motd was set while the area had a CM
 	tr                  TestimonyRecorder
 	activePoll          *Poll
 	lastPollTime        time.Time
@@ -573,6 +575,10 @@ func (a *Area) RemoveCM(uid int) bool {
 		return false
 	}
 	delete(a.cms, uid)
+	if len(a.cms) == 0 && a.motdHeldByCM {
+		a.motd = ""
+		a.motdHeldByCM = false
+	}
 	return true
 }
 
@@ -824,6 +830,8 @@ func (a *Area) Reset() {
 	a.playerVotes = nil
 	a.spectateMode = false
 	a.spectateInvited = make(map[int]struct{})
+	a.motd = ""
+	a.motdHeldByCM = false
 	a.mu.Unlock()
 }
 
@@ -976,6 +984,33 @@ func (a *Area) SetDescription(s string) {
 	a.mu.Lock()
 	a.description = s
 	a.mu.Unlock()
+}
+
+// Motd returns the area's room motd, shown to players as a popup on entry.
+func (a *Area) Motd() string {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return a.motd
+}
+
+// SetMotd sets the area's room motd. It also records whether the area had a CM
+// at the time, which is what decides later whether the motd is cleared when the
+// area runs out of CMs. See MotdHeldByCM.
+func (a *Area) SetMotd(s string) {
+	a.mu.Lock()
+	a.motd = s
+	a.motdHeldByCM = len(a.cms) > 0
+	a.mu.Unlock()
+}
+
+// MotdHeldByCM reports whether the current room motd was set while somebody was
+// CMing the area. Mirrors NameHeldByCM: a moderator with the global CM
+// permission does not have to be an area CM to set a motd, so "no CMs are left"
+// cannot on its own mean the motd's owner is gone.
+func (a *Area) MotdHeldByCM() bool {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return a.motdHeldByCM
 }
 
 // HasTestimony returns whether the area has a recorded testimony.

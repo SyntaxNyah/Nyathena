@@ -1427,6 +1427,73 @@ func cmdAreaDesc(client *Client, args []string, _ string) {
 	}
 }
 
+// cmdRoomMotd prints, sets, or clears the area's room motd — a message shown to
+// players as a popup when they join this area. Only a CM (or a command-grant
+// holder) may change it. The text is run through the same censor as chat, so a
+// banned word blocks the change and trips AutoMod exactly like a chat message.
+// Usage: /roommotd [-c] [message]
+func cmdRoomMotd(client *Client, args []string, _ string) {
+	flags := flag.NewFlagSet("", 0)
+	flags.SetOutput(io.Discard)
+	clear := flags.Bool("c", false, "")
+	flags.Parse(args)
+
+	if len(args) == 0 {
+		if client.Area().Motd() == "" {
+			client.SendServerMessage("This area does not have a room motd set.")
+			return
+		}
+		client.SendServerMessage("Room motd: " + client.Area().Motd())
+		return
+	}
+
+	if !client.HasCMPermission() && !clientHasCommandGrant(client, "roommotd") {
+		client.SendServerMessage("You do not have permission to change the room motd.")
+		return
+	}
+
+	if *clear {
+		client.Area().SetMotd("")
+		sendAreaServerMessage(client.Area(), fmt.Sprintf("%v cleared the room motd.", client.OOCName()))
+		addToBuffer(client, "CMD", "Cleared room motd.", false)
+		return
+	}
+
+	text := strings.Join(flags.Args(), " ")
+
+	// The same tiered word list, the same evasion normalization and the same
+	// configured action IC and OOC messages get — a room motd is shown to every
+	// player who joins the area, so there is no argument for holding it to a
+	// weaker standard than a single line of chat. Mirrors cmdAreaRename.
+	m, result, kickAfter := autoModCheckTiered(client, text, "room motd")
+	if m.Matched && m.Entry.Severity == SeverityNuke {
+		applyAutoModNuke(client, m, "room motd")
+		return
+	}
+	raidGuardOnWordHit(client, m)
+	switch result {
+	case autoModBlocked:
+		if kickAfter {
+			client.KickForCensorTrip()
+		}
+		return
+	case autoModShadow:
+		// Shadow semantics, kept intact: the sender is told exactly what a
+		// successful set would tell them, while the motd is not stored and no
+		// other client ever sees it. Sent before the kick so the confirmation
+		// lands before the connection closes.
+		client.SendServerMessage(fmt.Sprintf("Room motd set to: %v", text))
+		if kickAfter {
+			client.KickForCensorTrip()
+		}
+		return
+	}
+
+	client.Area().SetMotd(text)
+	sendAreaServerMessage(client.Area(), fmt.Sprintf("%v set the room motd.", client.OOCName()))
+	addToBuffer(client, "CMD", fmt.Sprintf("Set room motd: %v", text), false)
+}
+
 // Handles /arealog
 
 func cmdAreaLog(client *Client, args []string, _ string) {

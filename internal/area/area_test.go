@@ -210,6 +210,75 @@ func TestInvited(t *testing.T) {
 	}
 }
 
+func TestMotd(t *testing.T) {
+	a := NewArea(AreaData{}, 50, 0, EviAny)
+
+	if a.Motd() != "" {
+		t.Errorf("new area motd: got %q, want empty", a.Motd())
+	}
+	if a.MotdHeldByCM() {
+		t.Errorf("new area MotdHeldByCM: got true, want false")
+	}
+
+	// A CM takes the room and sets the motd; it is remembered and overwrites.
+	a.AddCM(1)
+	a.SetMotd("no gods, no masters")
+	if a.Motd() != "no gods, no masters" {
+		t.Fatalf("Motd after set: got %q, want %q", a.Motd(), "no gods, no masters")
+	}
+	if !a.MotdHeldByCM() {
+		t.Errorf("MotdHeldByCM after CM set: got false, want true")
+	}
+
+	a.SetMotd("read the rules")
+	if a.Motd() != "read the rules" {
+		t.Errorf("Motd after overwrite: got %q, want %q", a.Motd(), "read the rules")
+	}
+
+	// A second CM leaving keeps the motd; the last CM leaving clears it.
+	a.AddCM(2)
+	a.RemoveCM(2)
+	if a.Motd() != "read the rules" {
+		t.Errorf("Motd after a non-final CM left: got %q, want %q", a.Motd(), "read the rules")
+	}
+	a.RemoveCM(1)
+	if a.Motd() != "" {
+		t.Errorf("Motd after last CM left: got %q, want empty", a.Motd())
+	}
+	if a.MotdHeldByCM() {
+		t.Errorf("MotdHeldByCM after last CM left: got true, want false")
+	}
+}
+
+func TestMotdClearedOnReset(t *testing.T) {
+	a := NewArea(AreaData{}, 50, 0, EviAny)
+	a.AddCM(1)
+	a.SetMotd("rules")
+	a.Reset()
+	if a.Motd() != "" {
+		t.Errorf("Motd after Reset: got %q, want empty", a.Motd())
+	}
+	if a.MotdHeldByCM() {
+		t.Errorf("MotdHeldByCM after Reset: got true, want false")
+	}
+}
+
+func TestMotdNotHeldByCMSurvivesCMChurn(t *testing.T) {
+	a := NewArea(AreaData{}, 50, 0, EviAny)
+	// A moderator with global CM permission (not an area CM) sets a motd while
+	// the room has no CM. It must not be tied to CM churn.
+	a.SetMotd("staff note")
+	if a.MotdHeldByCM() {
+		t.Errorf("MotdHeldByCM with no CM present: got true, want false")
+	}
+	// An unrelated CM appears and then leaves; the staff motd must survive.
+	a.AddCM(9)
+	a.RemoveCM(9)
+	if a.Motd() != "staff note" {
+		t.Errorf("Motd after unrelated CM left: got %q, want %q", a.Motd(), "staff note")
+	}
+}
+
 // TestPunishmentSafe verifies the antipunish TOML field seeds PunishmentSafe()
 // and that SetPunishmentSafe toggles it at runtime, mirroring DokiArea/
 // SetDokiArea.

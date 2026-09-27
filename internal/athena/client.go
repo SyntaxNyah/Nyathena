@@ -1851,6 +1851,9 @@ func (client *Client) JoinArea(area *area.Area) {
 	if desc := area.Description(); desc != "" {
 		client.SendServerMessage("📍 " + desc)
 	}
+	if motd := area.Motd(); motd != "" {
+		client.Send(&packet.BB{Message: encode(motd)})
+	}
 	// Sync the joining client to the area's music state.
 	//
 	// If a track is playing, send it so a client that connects or walks into
