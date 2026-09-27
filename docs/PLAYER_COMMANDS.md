@@ -78,6 +78,7 @@ For moderator-only commands, see [`MOD_COMMANDS.md`](MOD_COMMANDS.md). For casin
 |---------|-------------|
 | `/doc [-c] [url]` | Show or set the area's case document |
 | `/areadesc [-c] [text]` | Show or set the area's entry description |
+| `/roommotd [-c] [message]` | Show or set this area's welcome popup (CM only; run it bare for formatting help — `\n` makes a new line) |
 | `/bg <background>` | Set the area's background (subject to the area's BG lock; DJs are limited to once a minute) |
 | `/bglist` | List every available background |
 | `/swapevi <id1> <id2>` | Swap two pieces of evidence |

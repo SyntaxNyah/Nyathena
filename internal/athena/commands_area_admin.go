@@ -1427,6 +1427,23 @@ func cmdAreaDesc(client *Client, args []string, _ string) {
 	}
 }
 
+// roomMotdHelp is the guide shown when /roommotd is run bare. The \n escapes in
+// the Go source become real newlines in the rendered message; the \\n sequences
+// are shown to the user literally so they learn the formatting trick.
+const roomMotdHelp = "Usage: /roommotd [-c] [message]\n" +
+	"-c: Clear the room motd.\n" +
+	"\n" +
+	"Sets the welcome popup shown to players when they join this area.\n" +
+	"\n" +
+	"Formatting:\n" +
+	"  \\n    new line (type a backslash, then n)\n" +
+	"  \\n\\n  blank line between paragraphs\n" +
+	"  Unicode symbols (• ━━━ → and emoji) also render\n" +
+	"\n" +
+	"Example: /roommotd Welcome!\\nRules:\\n- Be nice\\n- No spoilers\n" +
+	"\n" +
+	"Only a CM can set it. It clears when the room empties or its last CM leaves."
+
 // cmdRoomMotd prints, sets, or clears the area's room motd — a message shown to
 // players as a popup when they join this area. Only a CM (or a command-grant
 // holder) may change it. The text is run through the same censor as chat, so a
@@ -1439,11 +1456,10 @@ func cmdRoomMotd(client *Client, args []string, _ string) {
 	flags.Parse(args)
 
 	if len(args) == 0 {
-		if client.Area().Motd() == "" {
-			client.SendServerMessage("This area does not have a room motd set.")
-			return
+		client.SendServerMessage(roomMotdHelp)
+		if motd := client.Area().Motd(); motd != "" {
+			client.SendServerMessage("Current room motd:\n" + motd)
 		}
-		client.SendServerMessage("Room motd: " + client.Area().Motd())
 		return
 	}
 
@@ -1460,6 +1476,15 @@ func cmdRoomMotd(client *Client, args []string, _ string) {
 	}
 
 	text := strings.Join(flags.Args(), " ")
+	// Formatting: a literal \n (backslash + n) becomes a newline; pasted CRLF is
+	// normalized to LF so the popup renders one clean line break.
+	text = strings.ReplaceAll(text, "\\n", "\n")
+	text = strings.ReplaceAll(text, "\r\n", "\n")
+	text = strings.ReplaceAll(text, "\r", "\n")
+	if strings.TrimSpace(text) == "" {
+		client.SendServerMessage(roomMotdHelp)
+		return
+	}
 
 	// The same tiered word list, the same evasion normalization and the same
 	// configured action IC and OOC messages get — a room motd is shown to every

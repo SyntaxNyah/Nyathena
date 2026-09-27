@@ -238,8 +238,8 @@ func initCommands() {
 		"roommotd": {
 			handler:  cmdRoomMotd,
 			minArgs:  0,
-			usage:    "Usage: /roommotd [-c] [message]\n-c: Clear the room motd.",
-			desc:     "Prints or sets this area's room motd — a welcome message shown to players as a popup when they join the area. Only a CM can change it, and it clears automatically when the area empties or its last CM leaves.",
+			usage:    "Usage: /roommotd [-c] [message]\n-c: Clear the room motd.\nRun bare for formatting help.",
+			desc:     "Prints or sets this area's room motd — a welcome message shown to players as a popup when they join. Run it bare for formatting help (new lines etc.). Only a CM can change it; it clears when the area empties or its last CM leaves.",
 			reqPerms: permissions.PermissionField["NONE"],
 			category: "area",
 		},

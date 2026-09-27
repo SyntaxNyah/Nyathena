@@ -17,6 +17,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>. */
 package athena
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/MangosArentLiterature/Athena/internal/area"
@@ -102,5 +103,37 @@ func TestRoomMotdCensorBlocksBannedWord(t *testing.T) {
 
 	if a.Motd() != "" {
 		t.Errorf("banned word set the motd: got %q, want empty", a.Motd())
+	}
+}
+
+// TestRoomMotdBareShowsFormattingHelp verifies running /roommotd with no
+// arguments prints the formatting guide (and does not require CM status).
+func TestRoomMotdBareShowsFormattingHelp(t *testing.T) {
+	newTestClients(t)
+	a := area.NewArea(area.AreaData{}, 50, 0, area.EviAny)
+
+	cm, conn := newRoomMotdClient(a, 4, true)
+	t.Cleanup(func() { clients.RemoveClient(cm) })
+
+	cmdRoomMotd(cm, nil, "")
+
+	if out := conn.String(); !strings.Contains(out, "Formatting:") {
+		t.Errorf("bare /roommotd did not print the formatting guide; got %q", out)
+	}
+}
+
+// TestRoomMotdNewlineFormatting verifies a literal \n in the message becomes a
+// real newline in the stored motd.
+func TestRoomMotdNewlineFormatting(t *testing.T) {
+	newTestClients(t)
+	a := area.NewArea(area.AreaData{}, 50, 0, area.EviAny)
+
+	cm, _ := newRoomMotdClient(a, 5, true)
+	t.Cleanup(func() { clients.RemoveClient(cm) })
+
+	cmdRoomMotd(cm, []string{"Line", "one\\nLine", "two"}, "")
+
+	if got, want := a.Motd(), "Line one\nLine two"; got != want {
+		t.Fatalf("motd = %q, want %q", got, want)
 	}
 }
