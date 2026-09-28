@@ -489,9 +489,12 @@ func renderTemplate(s string, ctx renderContext) string {
 }
 
 // customTextSpecJSON serializes the "text" action's transform rules to the JSON
-// shape PunishmentCustomText stores in its customData field.
-func customTextSpecJSON(a CustomAction) string {
+// shape PunishmentCustomText stores in its customData field. name is the
+// originating command (e.g. "shoe") and is carried so the effect can label itself
+// with the command instead of the generic "texteffect".
+func customTextSpecJSON(name string, a CustomAction) string {
 	spec := customTextSpec{
+		Name:    name,
 		Replace: make([]customTextReplace, len(a.Replace)),
 		Random:  a.Random,
 		Chance:  a.Chance,

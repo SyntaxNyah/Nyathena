@@ -119,6 +119,11 @@ This is how operator-invented effects like `/shoe` are expressed without code:
 }
 ```
 
+When a `text` effect is applied, the target is told they were punished with the
+**command's name** (e.g. `/shoe` reports "the 'shoe' effect") rather than a generic
+"texteffect" label — the name is stored inside the effect's data, so it also shows
+up correctly in `/punishments` and survives a restart.
+
 ## Targets
 
 `@self`, `@args` (UIDs typed after the command), `@global` (non-staff in the

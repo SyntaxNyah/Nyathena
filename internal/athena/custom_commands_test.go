@@ -373,6 +373,9 @@ func TestExecuteTextAction(t *testing.T) {
 	if e.Data == "" || !strings.Contains(e.Data, "\"from\":\".\"") {
 		t.Errorf("effect data should carry the serialized spec, got %q", e.Data)
 	}
+	if !strings.Contains(e.Data, "\"name\":\"shoe\"") {
+		t.Errorf("effect data should carry the command name, got %q", e.Data)
+	}
 	p := res.World.Players[3]
 	if len(p.Punishments) != 1 || p.Punishments[0].Type != PunishmentCustomText {
 		t.Fatalf("world state should hold a PunishmentCustomText, got %+v", p.Punishments)
@@ -386,7 +389,7 @@ func TestExecuteTextAction(t *testing.T) {
 // the deterministic transform core applies find/replace + random replacement.
 func TestCustomTextSpecRoundTrip(t *testing.T) {
 	action := CustomAction{Replace: []TextReplace{{From: ".", To: ","}}, Random: []string{"tuff"}, Chance: 0.5}
-	spec := parseCustomTextSpec(customTextSpecJSON(action))
+	spec := parseCustomTextSpec(customTextSpecJSON("shoe", action))
 
 	got := applyCustomTextSpec("hello. world.", spec, func(int) int { return 0 }, func() float64 { return 0.99 })
 	if got != "hello, world," {
@@ -395,6 +398,20 @@ func TestCustomTextSpecRoundTrip(t *testing.T) {
 	got = applyCustomTextSpec("hello", spec, func(int) int { return 0 }, func() float64 { return 0.0 })
 	if got != "tuff" {
 		t.Errorf("low roll should replace the whole message, got %q", got)
+	}
+}
+
+// TestCustomTextEffectLabel verifies the display label prefers the command name
+// and falls back to the generic "texteffect" when no name is present.
+func TestCustomTextEffectLabel(t *testing.T) {
+	if got := customTextEffectLabel(customTextSpecJSON("shoe", CustomAction{})); got != "shoe" {
+		t.Errorf("label should be the command name, got %q", got)
+	}
+	if got := customTextEffectLabel(""); got != "texteffect" {
+		t.Errorf("empty spec should fall back to %q, got %q", "texteffect", got)
+	}
+	if got := customTextEffectLabel("not json"); got != "texteffect" {
+		t.Errorf("unparsable spec should fall back to %q, got %q", "texteffect", got)
 	}
 }
 

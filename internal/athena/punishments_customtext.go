@@ -32,6 +32,7 @@ import (
 // Random, when non-empty, replaces the whole message with a random entry with
 // probability Chance.
 type customTextSpec struct {
+	Name    string              `json:"name,omitempty"`
 	Replace []customTextReplace `json:"replace"`
 	Random  []string            `json:"random"`
 	Chance  float64             `json:"chance"`
@@ -54,6 +55,16 @@ func parseCustomTextSpec(customData string) customTextSpec {
 		return customTextSpec{}
 	}
 	return spec
+}
+
+// customTextEffectLabel returns the human-facing label for a custom text effect:
+// the originating command's name (e.g. "shoe") when the spec carries one, and the
+// generic "texteffect" otherwise — older persisted effects predate the name field.
+func customTextEffectLabel(customData string) string {
+	if spec := parseCustomTextSpec(customData); spec.Name != "" {
+		return spec.Name
+	}
+	return "texteffect"
 }
 
 // applyCustomText applies a custom text transform to one IC message. It is the

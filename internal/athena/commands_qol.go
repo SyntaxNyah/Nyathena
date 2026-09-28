@@ -52,13 +52,17 @@ func cmdPunishments(client *Client, args []string, usage string) {
 	var lines []string
 	for i := range active {
 		p := &active[i]
-		line := "  • " + p.punishmentType.String()
+		label := p.punishmentType.String()
+		if p.punishmentType == PunishmentCustomText {
+			label = customTextEffectLabel(p.customData)
+		}
+		line := "  • " + label
 		if p.expiresAt.IsZero() {
 			line += " — permanent"
 		} else {
 			line += fmt.Sprintf(" — %v left", time.Until(p.expiresAt).Round(time.Second))
 		}
-		if p.customData != "" {
+		if p.customData != "" && p.punishmentType != PunishmentCustomText {
 			line += fmt.Sprintf(" (%v)", p.customData)
 		}
 		if p.reason != "" {

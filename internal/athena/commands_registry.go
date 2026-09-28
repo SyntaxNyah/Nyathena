@@ -235,6 +235,15 @@ func initCommands() {
 			reqPerms: permissions.PermissionField["NONE"],
 			category: "area",
 		},
+		"room": {
+			handler:    cmdRoom,
+			minArgs:    1,
+			usage:      "Usage: /room invite <uid> | /room invite accept",
+			desc:       "Invite another player to your area. They accept with /room invite accept and are moved straight to you — even into a locked area, as long as you're still there.",
+			reqPerms:   permissions.PermissionField["NONE"],
+			category:   "area",
+			publicHelp: true,
+		},
 		"roommotd": {
 			handler:  cmdRoomMotd,
 			minArgs:  0,

@@ -324,14 +324,14 @@ func executeCustomCommandPure(world TestWorld, cmd CustomCommand, args []string,
 
 	var effects []Effect
 	for _, a := range cmd.Actions {
-		effects = runAction(&world, a, args, now, caller, effects)
+		effects = runAction(&world, a, cmd.Name, args, now, caller, effects)
 	}
 	return Result{Decision: DecisionAccepted, Effects: effects, World: world}
 }
 
 // runAction applies one action to the world, appending the resulting effects.
 // It mutates *w in place (w is already a private copy from executeCustomCommandPure).
-func runAction(w *TestWorld, a CustomAction, args []string, now time.Time, caller *TestPlayer, effects []Effect) []Effect {
+func runAction(w *TestWorld, a CustomAction, cmdName string, args []string, now time.Time, caller *TestPlayer, effects []Effect) []Effect {
 	base := renderContext{args: args, callerUID: caller.UID, callerName: caller.Name}
 	switch a.Type {
 	case ActionMessage:
@@ -382,7 +382,7 @@ func runAction(w *TestWorld, a CustomAction, args []string, now time.Time, calle
 			d = 24 * time.Hour
 		}
 		reason := renderTemplate(a.Reason, base)
-		data := customTextSpecJSON(a)
+		data := customTextSpecJSON(cmdName, a)
 		for _, uid := range resolveTargetUIDs(*w, a.Target, caller, args) {
 			tp := w.Players[uid]
 			if tp == nil {
@@ -633,7 +633,11 @@ func applyEffectLive(caller *Client, e Effect) {
 					logger.LogErrorf("custom command: persist punishment: %v", err)
 				}
 			}
-			c.SendServerMessage(fmt.Sprintf("You have been punished with the '%v' effect.", e.Punishment.String()))
+			label := e.Punishment.String()
+			if e.Punishment == PunishmentCustomText {
+				label = customTextEffectLabel(e.Data)
+			}
+			c.SendServerMessage(fmt.Sprintf("You have been punished with the '%v' effect.", label))
 		}
 
 	case EffectPunishRemoved:
