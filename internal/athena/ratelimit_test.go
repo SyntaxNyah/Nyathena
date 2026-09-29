@@ -1471,6 +1471,42 @@ func TestRawPacketRateLimitIndependentFromMessage(t *testing.T) {
 	}
 }
 
+// TestIsVoicePacket verifies the raw-packet-flood exemption set. Voice traffic
+// runs at audio-frame rate and must not be counted against the raw packet rate
+// limit; the four client→server voice headers are exempt, everything else is not.
+func TestIsVoicePacket(t *testing.T) {
+	cases := []struct {
+		raw  string
+		want bool
+	}{
+		// Client→server voice packets — exempt.
+		{"VS_FRAME#//8NBJpa9Aa...==#", true},
+		{"VS_FRAME#opaqbase64#", true},
+		{"VS_JOIN#", true},
+		{"VS_LEAVE#", true},
+		{"VS_SPEAK#1#", true},
+		{"VS_SPEAK#0#", true},
+		// Server→client voice headers — a client never legitimately sends these,
+		// so they are NOT exempt (a flooder must not use them to bypass the limit).
+		{"VS_AUDIO#5#opaq#", false},
+		{"VS_CAPS#1#0#10#opus#48000#20#4000#", false},
+		{"VS_PEERS#1,2,3#", false},
+		// Ordinary traffic — not exempt.
+		{"MS#0#1#2#3#4#5#6#7#8#9#10#11#12#13#14#15#", false},
+		{"CH#", false},
+		{"CC#0#0#0#", false},
+		{"ZZ#", false},
+		// Empty and JSON packets — not voice.
+		{"", false},
+		{`{"header":"VS_FRAME"}`, false},
+	}
+	for _, c := range cases {
+		if got := isVoicePacket(c.raw); got != c.want {
+			t.Errorf("isVoicePacket(%q) = %v, want %v", c.raw, got, c.want)
+		}
+	}
+}
+
 // resetRateLimitKickTracker resets the rate-limit-kick tracker for a clean test.
 func resetRateLimitKickTracker() {
 	rateLimitKickTracker.mu.Lock()

@@ -866,6 +866,13 @@ func (client *Client) HandleClient() {
 		// Raw packet rate limit: disconnect bots/flooders that send far more packets per
 		// second than any legitimate client ever would.
 		//
+		// Voice chat is the one deliberate exception. A 20 ms Opus frame means a speaker
+		// streams ~50 VS_FRAME packets per second, which blows straight past the limit
+		// below (tuned for chat/menu traffic) and would disconnect or ban every voice
+		// user. Voice has its own per-UID frame limiter (frame_rate_limit, applied by
+		// allowVoiceFrame inside pktVSFrame), so voice packets are exempted here and
+		// remain rate-limited where it actually matters.
+		//
 		// packet_flood_autoban decides whether that disconnect is also a ban. It is
 		// honoured here rather than assumed: the flag existed and was documented for a
 		// long time while nothing read it, so this path banned unconditionally and an
@@ -873,7 +880,7 @@ func (client *Client) HandleClient() {
 		// still fully protects the server -- the flood is off the socket either way, and
 		// the rate limit keeps rejecting it on every reconnect -- so the flag only
 		// controls whether a mistake is durable.
-		if client.CheckRawPacketRateLimit() {
+		if !isVoicePacket(rawPacket) && client.CheckRawPacketRateLimit() {
 			banning := config.PacketFloodAutoban
 			if banning {
 				client.SendServerMessage("You have been banned for packet flooding.")
@@ -3390,6 +3397,34 @@ func (client *Client) CheckOOCRateLimit() bool {
 	}
 
 	client.oocMsgTimestamps = append(client.oocMsgTimestamps, now)
+	return false
+}
+
+// isVoicePacket reports whether raw is a voice-chat packet sent by the client.
+//
+// Voice traffic is the one legitimate packet class that runs at audio-frame
+// rate (a 20 ms Opus frame is ~50 VS_FRAME/s), so it must not be counted
+// against the raw packet flood detector, which is tuned for chat/menu traffic.
+// Voice has its own per-UID frame limiter (frame_rate_limit, applied by
+// allowVoiceFrame inside pktVSFrame), so exempting it here loses nothing.
+//
+// Only the four client→server voice headers count; the remaining VS_* headers
+// (VS_CAPS, VS_PEERS, VS_AUDIO) are server→client only and are never sent by a
+// legitimate client, so they are deliberately NOT exempted.
+func isVoicePacket(raw string) bool {
+	if raw == "" || raw[0] == '{' {
+		// Empty packets are handled earlier in the read loop; JSON-encoded
+		// voice chat is not supported.
+		return false
+	}
+	// The header is everything before the first '#' separator (see NewPacket).
+	if idx := strings.IndexByte(raw, '#'); idx >= 0 {
+		raw = raw[:idx]
+	}
+	switch raw {
+	case "VS_JOIN", "VS_LEAVE", "VS_FRAME", "VS_SPEAK":
+		return true
+	}
 	return false
 }
 

@@ -347,7 +347,7 @@ func TestPacketFloodAutobanIsHonoured(t *testing.T) {
 		t.Fatalf("reading client.go: %v", err)
 	}
 	body := string(src)
-	i := strings.Index(body, "if client.CheckRawPacketRateLimit() {")
+	i := strings.Index(body, "client.CheckRawPacketRateLimit() {")
 	if i < 0 {
 		t.Fatal("could not find the raw-packet-flood branch in client.go")
 	}

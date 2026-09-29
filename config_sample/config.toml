@@ -757,6 +757,11 @@ packet_flood_autoban = true
 #   The default of 20 per 2 seconds (10/s average) sits safely between those two extremes:
 #   no legitimate player will ever reach it; any flooding bot is caught within 2 seconds.
 #
+# Voice-chat packets (VS_JOIN, VS_LEAVE, VS_FRAME, VS_SPEAK) are exempt from this limit:
+# a 20 ms Opus frame is ~50 packets/second while a speaker holds the mic, which would
+# otherwise trip this counter on every voice user. Voice has its own per-UID limiter
+# (frame_rate_limit below), so the exemption costs no protection.
+#
 # Set to 0 to disable raw packet rate limiting.
 # Default: 20 packets
 raw_packet_rate_limit = 20
