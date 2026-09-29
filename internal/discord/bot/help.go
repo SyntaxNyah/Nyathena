@@ -56,6 +56,8 @@ var commandHelp = map[string]struct {
 	"pm":                 {"/pm <player> <message>", "Send a private server message to a player.", "Moderator", "/pm 3 Hello!", []string{"announce"}},
 	"announce":           {"/announce <message>", "Send a server-wide announcement to all players.", "Moderator", "/announce Welcome everyone!", []string{"pm", "announce_player"}},
 	"announce_player":    {"/announce_player <player> <message>", "Send an announcement to a specific player.", "Moderator", "/announce_player 3 You're special!", []string{"announce", "pm"}},
+	"useralert":          {"/useralert <player> <message>", "Send a popup alert (BB packet) to a specific player.", "Moderator", "/useralert 3 Stop spamming OOC", []string{"useralert_global", "announce_player"}},
+	"useralert_global":   {"/useralert_global <message>", "Send a popup alert (BB packet) to every connected player.", "Moderator", "/useralert_global Maintenance in 10 minutes", []string{"useralert", "announce"}},
 	"forcemove":          {"/forcemove <player> <area>", "Force move a player to a specified area.", "Moderator", "/forcemove 3 Courtroom", []string{"cleararea"}},
 	"cleararea":          {"/cleararea <area>", "Force move all players out of an area.", "Moderator", "/cleararea Lobby", []string{"forcemove", "lock"}},
 	"lock":               {"/lock <area>", "Lock an area so only invited players can enter.", "Moderator", "/lock Courtroom", []string{"unlock"}},
@@ -148,7 +150,9 @@ func (b *Bot) handleHelp(s *discordgo.Session, i *discordgo.InteractionCreate) {
 				Name: "💬 Communication",
 				Value: "`/pm` — Private message a player\n" +
 					"`/announce` — Server-wide announcement\n" +
-					"`/announce_player` — Announcement to one player",
+					"`/announce_player` — Announcement to one player\n" +
+					"`/useralert` — Popup alert to one player\n" +
+					"`/useralert_global` — Popup alert to everyone",
 				Inline: false,
 			},
 			{

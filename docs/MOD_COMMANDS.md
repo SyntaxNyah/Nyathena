@@ -76,6 +76,8 @@ Censor trips (AutoMod banned words and `censored_names.txt` shownames) alert eve
 | Command | Permission | Description |
 |---------|-----------|-------------|
 | `/announce <message>` | MUTE | Broadcasts a `[Announcement] <message>` server OOC message to every connected player. In-game equivalent of the Discord bot's `/announce` slash command — use it without needing the Discord bridge configured. |
+| `/useralert <uid> <message>` | MUTE | Sends a **popup** (BB packet) to a specific player by UID. Moderators only. |
+| `/useralert global <message>` | MUTE | Sends a **popup** (BB packet) to **every** connected player. Moderators only. |
 
 ---
 
@@ -377,6 +379,7 @@ Notes:
 | `/mute /unmute /ban /unban /kick /gag /ungag /warn /warnings` | Moderation actions |
 | `/parrot /drunk /slowpoke /roulette /spotlight /whisper /stutterstep /backward` | Apply punishments |
 | `/pm /announce /announce_player` | Communication. `/announce` mirrors the in-game `/announce <message>` (see [Communication](#communication) above). |
+| `/useralert /useralert_global` | Popup alerts. `/useralert <player> <message>` sends a BB popup to one player; `/useralert_global <message>` sends it to everyone — the Discord equivalent of the in-game `/useralert` (see [Communication](#communication) above). |
 | `/forcemove /cleararea /lock /unlock` | Area control |
 | `/logs /auditlog /banlist` | Audit & logs |
 | `/firewall on\|off` | Toggle IPHub VPN screening |

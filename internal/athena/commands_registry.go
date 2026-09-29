@@ -612,6 +612,14 @@ func initCommands() {
 			reqPerms: permissions.PermissionField["MUTE"],
 			category: "moderation",
 		},
+		"useralert": {
+			handler:  cmdUserAlert,
+			minArgs:  0,
+			usage:    "Usage: /useralert <uid> <message> | /useralert global <message>",
+			desc:     "Sends a popup (BB packet) to a specific player by UID, or to every connected player with 'global'. Moderators only. Run it bare for formatting help (new lines etc.).",
+			reqPerms: permissions.PermissionField["MUTE"],
+			category: "moderation",
+		},
 		"motd": {
 			handler:  cmdMotd,
 			minArgs:  0,

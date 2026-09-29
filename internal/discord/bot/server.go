@@ -86,6 +86,8 @@ type ServerInterface interface {
 	SendPrivateMessage(uid int, message string) error
 	SendAnnouncement(message string) error
 	SendAnnouncementToPlayer(uid int, message string) error
+	SendUserAlert(uid int, message string) error
+	SendGlobalAlert(message string) error
 
 	// Area control
 	ForceMove(uid int, areaName string) error

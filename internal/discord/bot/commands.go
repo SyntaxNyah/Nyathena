@@ -230,6 +230,21 @@ func applicationCommands() []*discordgo.ApplicationCommand {
 				{Type: discordgo.ApplicationCommandOptionString, Name: "message", Description: "Message to send.", Required: true},
 			},
 		},
+		{
+			Name:        "useralert",
+			Description: "Send a popup alert (BB packet) to a specific player.",
+			Options: []*discordgo.ApplicationCommandOption{
+				{Type: discordgo.ApplicationCommandOptionString, Name: "player", Description: "UID or OOC name.", Required: true},
+				{Type: discordgo.ApplicationCommandOptionString, Name: "message", Description: "Popup text to send.", Required: true},
+			},
+		},
+		{
+			Name:        "useralert_global",
+			Description: "Send a popup alert (BB packet) to every connected player.",
+			Options: []*discordgo.ApplicationCommandOption{
+				{Type: discordgo.ApplicationCommandOptionString, Name: "message", Description: "Popup text to send.", Required: true},
+			},
+		},
 		// Area control
 		{
 			Name:        "forcemove",
@@ -359,9 +374,11 @@ func (b *Bot) commandHandlers() map[string]func(*discordgo.Session, *discordgo.I
 		"stutterstep": b.handlePunishment("stutterstep"),
 		"backward":    b.handlePunishment("backward"),
 		// Communication
-		"pm":              b.handlePM,
-		"announce":        b.handleAnnounce,
-		"announce_player": b.handleAnnouncePlayer,
+		"pm":               b.handlePM,
+		"announce":         b.handleAnnounce,
+		"announce_player":  b.handleAnnouncePlayer,
+		"useralert":        b.handleUserAlert,
+		"useralert_global": b.handleUserAlertGlobal,
 		// Area control
 		"forcemove": b.handleForceMove,
 		"cleararea": b.handleClearArea,

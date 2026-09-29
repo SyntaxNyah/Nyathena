@@ -420,6 +420,24 @@ func (a *ServerAdapter) SendAnnouncementToPlayer(uid int, message string) error 
 	return nil
 }
 
+// SendUserAlert sends a BB popup to a specific player. This is the Discord
+// bridge for the in-game /useralert <uid> <message> command.
+func (a *ServerAdapter) SendUserAlert(uid int, message string) error {
+	c, err := getClientByUid(uid)
+	if err != nil {
+		return fmt.Errorf("player not found: UID %d", uid)
+	}
+	c.Send(&packet.BB{Message: encode(message)})
+	return nil
+}
+
+// SendGlobalAlert sends a BB popup to every connected player. This is the
+// Discord bridge for the in-game /useralert global <message> command.
+func (a *ServerAdapter) SendGlobalAlert(message string) error {
+	broadcastToAll(&packet.BB{Message: encode(message)})
+	return nil
+}
+
 // ForceMove moves a player to an area by name.
 func (a *ServerAdapter) ForceMove(uid int, areaName string) error {
 	c, err := getClientByUid(uid)

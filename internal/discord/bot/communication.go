@@ -78,3 +78,40 @@ func (b *Bot) handleAnnouncePlayer(s *discordgo.Session, i *discordgo.Interactio
 	}
 	respondEmbed(s, i, successEmbed("Announcement Sent", fmt.Sprintf("Announcement sent to **%s** [UID %d]:\n> %s", p.Character, p.UID, message)))
 }
+
+// handleUserAlert handles the /useralert command — a BB popup to one player.
+func (b *Bot) handleUserAlert(s *discordgo.Session, i *discordgo.InteractionCreate) {
+	if !b.requireMod(s, i) {
+		return
+	}
+	opts := i.ApplicationCommandData().Options
+	playerArg := optionString(opts, "player")
+	message := optionString(opts, "message")
+
+	p := b.resolvePlayer(playerArg)
+	if p == nil {
+		respondEmbed(s, i, errorEmbed(fmt.Sprintf("Player not found: `%s`", playerArg)))
+		return
+	}
+
+	if err := b.server.SendUserAlert(p.UID, message); err != nil {
+		respondEmbed(s, i, errorEmbed(fmt.Sprintf("Failed to send popup alert: %v", err)))
+		return
+	}
+	respondEmbed(s, i, successEmbed("Popup Alert Sent", fmt.Sprintf("Popup sent to **%s** [UID %d]:\n> %s", p.Character, p.UID, message)))
+}
+
+// handleUserAlertGlobal handles the /useralert_global command — a BB popup to
+// every connected player.
+func (b *Bot) handleUserAlertGlobal(s *discordgo.Session, i *discordgo.InteractionCreate) {
+	if !b.requireMod(s, i) {
+		return
+	}
+	message := optionString(i.ApplicationCommandData().Options, "message")
+
+	if err := b.server.SendGlobalAlert(message); err != nil {
+		respondEmbed(s, i, errorEmbed(fmt.Sprintf("Failed to send global popup alert: %v", err)))
+		return
+	}
+	respondEmbed(s, i, successEmbed("Global Popup Alert Sent", fmt.Sprintf("Popup broadcast to every connected player:\n> %s", message)))
+}
