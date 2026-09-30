@@ -197,6 +197,7 @@ The server already has the schema-driven JSON codec split across:
 | `schemas/MSBroadcast.schema.json` | add the `additional_chars` list (§3) |
 | `internal/packet/mspacket.go` | add `AdditionalChars []AdditionalChar` + `JSONExtra()` |
 | `internal/packet/jsoncodec.go` | `BuildJSONPacket` merges `JSONExtra()` into the JSON object |
+| `internal/packet/registry.go` | direction registry (`c2sDecoders` / `s2cDecoders`) — replaces the decode `switch` |
 | `internal/packet/types.go` | add a `JSONOutgoing` interface (`JSONExtra() map[string]any`) |
 | `internal/athena/client.go` | `Send` builds JSON via `BuildJSONPacket` for JSON clients; `pairGroup` + client feature state; capability gate |
 | `internal/athena/netprotocol.go` | add `multi_pair` to `FL`; inject group partners in `pktIC`; handle client→server `FL` (`pktFL`) |
@@ -206,6 +207,26 @@ The server already has the schema-driven JSON codec split across:
 `MSPacket.Args()` (the classic positional form) **stays at 30 fields** — that is
 the FantaCode contract. `AdditionalChars` is carried only in `JSONExtra()`, which
 `BuildJSONPacket` merges into the JSON object, so it never reaches FantaCode.
+
+### Codec + session structure (aolib-go)
+
+The packet codec is **registry-driven, not a `switch`**:
+
+- `internal/packet/registry.go` maps each wire header to its decoder per
+  direction (`c2sDecoders` for client→server, `s2cDecoders` for server→client).
+  `codec.go` looks a header up in the registry instead of dispatching by hand.
+- `internal/packet/types.go` gives the client→server packets (`HI`, `IDServer`,
+  `CC`, `MCFromClient`) `Header()`/`Args()` — so they implement `Outgoing` and
+  can be *sent* as well as parsed — and adds `ParseIDClient`, `ParsePV`, and
+  `ParseMCToClient` for the server→client direction.
+
+On top of that, aolib-go publishes a **typed session layer** mirroring aolib-ts:
+`aolib.NewServer(cfg)` (client-side, remote server) and `aolib.NewClient(cfg)`
+(server-side, remote client) return `*ServerSession` / `*ClientSession` whose
+`SendX` / `OnX` methods are keyed by header-as-type — wrong-direction calls
+don't compile, `Receive` never panics (failures route to `SessionConfig` hooks),
+and the surface is regenerated from the schemas by `cmd/aolib-gen`. See
+`aolib-go/examples/{client,server}`.
 
 ---
 

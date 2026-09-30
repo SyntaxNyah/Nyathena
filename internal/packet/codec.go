@@ -19,7 +19,7 @@ const (
 // case; FantaCode positional framing is handled opaquely behind this function,
 // so callers work with named struct fields and never touch positional args.
 //
-//	raw, _ := packet.Encode(&packet.FL{Features: []string{"multi_pair"}}, packet.WireFanta)
+//	raw, _ := aolib.Encode(&aolib.FL{Features: []string{"multi_pair"}}, aolib.WireFanta)
 func Encode(p Outgoing, mode WireMode) ([]byte, error) {
 	header, args := p.Header(), p.Args()
 	switch mode {
@@ -39,10 +39,18 @@ func Encode(p Outgoing, mode WireMode) ([]byte, error) {
 // The concrete return type depends on the packet header (e.g. *FL, *MSPacket,
 // *HPPacket); unrecognised headers fall back to the generic *Packet.
 //
-//	v, _ := packet.Decode([]byte("FL#multi_pair#%"), packet.WireFanta)
-//	fl := v.(*packet.FL)
+//	v, _ := aolib.Decode([]byte("FL#multi_pair#%"), aolib.WireFanta)
+//	fl := v.(*aolib.FL)
 //	_ = fl.Features
 func Decode(raw []byte, mode WireMode) (any, error) {
+	_, p, err := decodeWire(raw, mode, c2sDecoders)
+	return p, err
+}
+
+// parseFrame reads a raw wire packet into its header + positional body without
+// typed decoding. JSON is normalised to the same positional body FantaCode
+// uses, so the registry decoders run identically for both wire formats.
+func parseFrame(raw []byte, mode WireMode) (string, []string, error) {
 	var pkt *Packet
 	var err error
 	switch mode {
@@ -54,12 +62,28 @@ func Decode(raw []byte, mode WireMode) (any, error) {
 		// so Decode round-trips Encode's output.
 		pkt, err = NewPacket(strings.TrimSuffix(string(raw), "%"))
 	default:
-		return nil, fmt.Errorf("aolib: unknown wire mode %d", mode)
+		return "", nil, fmt.Errorf("aolib: unknown wire mode %d", mode)
 	}
 	if err != nil {
-		return nil, err
+		return "", nil, err
 	}
-	return decodeBody(pkt.Header, pkt.Body)
+	return pkt.Header, pkt.Body, nil
+}
+
+// decodeWire parses raw and returns the packet header plus its typed struct by
+// looking the header up in the supplied direction registry. Unknown headers
+// fall back to the generic *Packet.
+func decodeWire(raw []byte, mode WireMode, decoders map[string]decoder) (string, any, error) {
+	header, body, err := parseFrame(raw, mode)
+	if err != nil {
+		return "", nil, err
+	}
+	dec, ok := decoders[header]
+	if !ok {
+		return header, &Packet{Header: header, Body: body}, nil
+	}
+	p, err := dec(body)
+	return header, p, err
 }
 
 // frameFanta frames header + positional args into HEADER#a#b#...#%.
@@ -75,46 +99,4 @@ func frameFanta(header string, args []string) []byte {
 	return []byte(b.String())
 }
 
-// decodeBody dispatches a positional body to the matching typed struct.
-func decodeBody(header string, body []string) (any, error) {
-	switch header {
-	case "FL":
-		return &FL{Features: body}, nil
-	case "MS":
-		return ParseMSClient(body), nil
-	case "HI":
-		return ParseHI(body)
-	case "ID":
-		return ParseIDServer(body)
-	case "CC":
-		return ParseCC(body)
-	case "MC":
-		return ParseMCFromClient(body)
-	case "HP":
-		return ParseHP(body)
-	case "RT":
-		return ParseRT(body)
-	case "TT":
-		return ParseTT(body)
-	case "CT":
-		return ParseCTFromClient(body)
-	case "PE":
-		return ParsePE(body)
-	case "DE":
-		return ParseDE(body)
-	case "EE":
-		return ParseEE(body)
-	case "ZZ":
-		return ParseZZ(body)
-	case "SETCASE":
-		return ParseSETCASE(body)
-	case "CASEA":
-		return ParseCASEA(body)
-	case "VS_FRAME":
-		return ParseVSFrame(body)
-	case "VS_SPEAK":
-		return ParseVSSpeak(body)
-	default:
-		return &Packet{Header: header, Body: body}, nil
-	}
-}
+
