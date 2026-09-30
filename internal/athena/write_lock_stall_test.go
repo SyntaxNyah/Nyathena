@@ -89,7 +89,7 @@ func TestStuckWriterCannotStallBroadcasts(t *testing.T) {
 	// While that write is stuck, an ordinary broadcast must still complete.
 	done := make(chan struct{})
 	go func() {
-		broadcastToArea(a, &packet.CTToClient{Name: "server", Message: "hello", IsFromServer: "1"})
+		broadcastToArea(a, &packet.CTToClient{Name: "server", Message: "hello", IsFromServer: true})
 		close(done)
 	}()
 
@@ -141,7 +141,7 @@ func TestStuckSyncSendCannotStallBroadcasts(t *testing.T) {
 
 	done := make(chan struct{})
 	go func() {
-		broadcastToArea(a, &packet.CTToClient{Name: "server", Message: "hello", IsFromServer: "1"})
+		broadcastToArea(a, &packet.CTToClient{Name: "server", Message: "hello", IsFromServer: true})
 		close(done)
 	}()
 	select {

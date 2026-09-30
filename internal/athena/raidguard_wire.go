@@ -28,7 +28,6 @@ package athena
 import (
 	"time"
 
-	"github.com/MangosArentLiterature/Athena/internal/packet"
 	"github.com/MangosArentLiterature/Athena/internal/permissions"
 )
 
@@ -170,7 +169,7 @@ func raidGuardOnCharPick(client *Client) {
 // silently, in a way no test that exercises this function could ever catch.
 // Deriving it from the packet removes the parameter and the failure mode with
 // it; the cost is one Cut and one Atoi per scored message.
-func raidGuardOnIC(client *Client, ms *packet.MSToClient, text string) {
+func raidGuardOnIC(client *Client, ms *MSToClient, text string) {
 	if raidGuardExempt(client) {
 		return
 	}

@@ -24,7 +24,7 @@ import (
 
 // applyHideDisplay pushes the speaker's own sprite off-screen via Offset.
 func TestApplyHideDisplay_SetsOffscreenOffset(t *testing.T) {
-	ms := &packet.MSToClient{Offset: ""}
+	ms := &MSToClient{Offset: ""}
 	punishments := []PunishmentState{
 		{punishmentType: PunishmentHideDisplay},
 	}
@@ -38,7 +38,7 @@ func TestApplyHideDisplay_SetsOffscreenOffset(t *testing.T) {
 // Without a HideDisplay punishment in the active set, the offset is untouched —
 // so /hidedisplay never interferes with /shrink / /grow / /wide or normal play.
 func TestApplyHideDisplay_NoOpWithoutPunishment(t *testing.T) {
-	ms := &packet.MSToClient{Offset: "X&Y"}
+	ms := &MSToClient{Offset: "X&Y"}
 	applyHideDisplay(ms, []PunishmentState{
 		{punishmentType: PunishmentWhisper},
 		{punishmentType: PunishmentFancy},
@@ -63,11 +63,11 @@ func TestApplyForceDisplaySprite_OverwritesAndClearsPair(t *testing.T) {
 		pos:  "pro",
 	}
 
-	ms := &packet.MSToClient{
+	ms := &MSToClient{
 		Character:   "Phoenix Wright",
 		CharID:      "0",
 		Emote:       "normal",
-		Side:        packet.SideDefense,
+		Side:        packet.SideDef,
 		Flip:        packet.FlipNone,
 		PairedCharID: "0",
 		PairedName:   "somebody",
@@ -86,17 +86,17 @@ func TestApplyForceDisplaySprite_OverwritesAndClearsPair(t *testing.T) {
 	if ms.Emote != "smug" {
 		t.Errorf("Emote = %q, want smug (from target PairInfo)", ms.Emote)
 	}
-	if ms.Side != packet.SideProsecution {
+	if ms.Side != packet.SidePro {
 		t.Errorf("Side = %q, want pro (from target Pos)", ms.Side)
 	}
 	if ms.Flip != packet.FlipHorizontal {
-		t.Errorf("Flip = %d, want 1", ms.Flip)
+		t.Errorf("Flip = %v, want 1", ms.Flip)
 	}
 	if ms.PairedCharID != "-1" {
 		t.Errorf("PairedCharID = %q, want -1 (pair must be cleared, no \"^\" suffix)", ms.PairedCharID)
 	}
 	if ms.PairedName != "" || ms.PairedEmote != "" || ms.PairedOffset != "" || ms.PairedFlip != packet.FlipNone {
-		t.Errorf("expected all Other* fields cleared, got name=%q emote=%q offset=%q flip=%d",
+		t.Errorf("expected all Other* fields cleared, got name=%q emote=%q offset=%q flip=%v",
 			ms.PairedName, ms.PairedEmote, ms.PairedOffset, ms.PairedFlip)
 	}
 }
@@ -109,7 +109,7 @@ func TestApplyForceDisplaySprite_SkipsSpectatorTarget(t *testing.T) {
 	setCharacters([]string{"Phoenix Wright"})
 
 	target := &Client{uid: 9, char: -1, pair: ClientPairInfo{wanted_id: -1}}
-	ms := &packet.MSToClient{Character: "Original", CharID: "0", Emote: "kept"}
+	ms := &MSToClient{Character: "Original", CharID: "0", Emote: "kept"}
 	applyForceDisplaySprite(ms, target)
 
 	if ms.Character != "Original" || ms.CharID != "0" || ms.Emote != "kept" {

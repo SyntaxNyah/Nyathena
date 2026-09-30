@@ -18,14 +18,12 @@ package athena
 
 import (
 	"testing"
-
-	"github.com/MangosArentLiterature/Athena/internal/packet"
 )
 
 // applyPairSanitization replicates the no-pair sanitization branch of pktIC:
 // when PairedCharID is "" or "-1", PairedName and PairedEmote must be cleared
 // regardless of any value the client may have leaked into those slots.
-func applyPairSanitization(ms *packet.MSToClient) {
+func applyPairSanitization(ms *MSToClient) {
 	if ms.PairedCharID == "" || ms.PairedCharID == "-1" {
 		ms.PairedName = ""
 		ms.PairedEmote = ""
@@ -39,7 +37,7 @@ func TestPairArgSanitizationNoPair(t *testing.T) {
 	// Construct a server-format MS packet that simulates a stale PairedName /
 	// PairedEmote left over from a previous pair, with PairedCharID set to
 	// "-1" (no pair wanted).
-	ms := &packet.MSToClient{
+	ms := &MSToClient{
 		PairedCharID: "-1",
 		PairedName:   "leftover_pair_char",
 		PairedEmote:  "leftover_pair_emote",
@@ -62,7 +60,7 @@ func TestPairArgSanitizationNoPair(t *testing.T) {
 // non-default offset-shaped strings — the sanitization must not care what
 // the contents look like, only that PairedCharID indicates "no pair".
 func TestPairArgSanitizationGarbageOffsets(t *testing.T) {
-	ms := &packet.MSToClient{
+	ms := &MSToClient{
 		PairedCharID: "-1",
 		PairedName:   "0     0",
 		PairedEmote:  "0",
@@ -81,7 +79,7 @@ func TestPairArgSanitizationGarbageOffsets(t *testing.T) {
 // TestPairArgSanitizationEmptyCharId verifies sanitization when PairedCharID
 // is completely absent (blank string) — also a "no pair" state.
 func TestPairArgSanitizationEmptyCharId(t *testing.T) {
-	ms := &packet.MSToClient{
+	ms := &MSToClient{
 		// PairedCharID left as "" (client did not send a pair char id)
 		PairedName:  "50",
 		PairedEmote: "-25",
@@ -109,7 +107,7 @@ func TestParseMSToServerToServerExpands(t *testing.T) {
 	body[17] = "0&0" // self_offset on the client side (client slot 17)
 	body[18] = "0"   // noninterrupting_preanim on the client side (client slot 18)
 
-	ms := packet.ParseMSToServer(body)
+	ms := ParseMSToServer(body)
 	if ms.PairedCharID != "-1" {
 		t.Errorf("PairedCharID = %q, want -1", ms.PairedCharID)
 	}

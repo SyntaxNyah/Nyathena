@@ -21,7 +21,6 @@ import (
 	"time"
 
 	"github.com/MangosArentLiterature/Athena/internal/area"
-	"github.com/MangosArentLiterature/Athena/internal/packet"
 )
 
 const (
@@ -33,7 +32,7 @@ type lifoPending struct {
 	ipid  string
 	isMod bool
 	a     *area.Area
-	ms    *packet.MSToClient
+	ms    *MSToClient
 }
 
 type lifoQueue struct {
@@ -56,7 +55,7 @@ var lifoBroadcastFn = func(e lifoPending) {
 // The caller has already verified the speaker carries an active /lifo
 // punishment. The packet is retained as-is; pktIC builds a fresh MSToClient
 // per message so holding the pointer is safe.
-func lifoEnqueueIC(client *Client, ms *packet.MSToClient) {
+func lifoEnqueueIC(client *Client, ms *MSToClient) {
 	entry := lifoPending{
 		ipid: client.Ipid(),
 		// Mirrors the live IC bypass: real mods override ignore lists, shadow

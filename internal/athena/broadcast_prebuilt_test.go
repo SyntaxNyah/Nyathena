@@ -36,7 +36,7 @@ func benchClients(n int) (*ClientList, *area.Area) {
 }
 
 func charsCheck(a *area.Area) *packet.CharsCheck {
-	return &packet.CharsCheck{Taken: a.Taken()}
+	return &packet.CharsCheck{Taken: packet.StrsToInts(a.Taken())}
 }
 
 // The bytes each recipient receives must be byte-identical to what the

@@ -257,7 +257,7 @@ func downloadYouTubeAudio(ctx context.Context, rawURL, id, destDir string) error
 func broadcastYouTubeReady(targetArea *area.Area, id, ext string, charID int, showname string) {
 	playAreaMusic(targetArea, &packet.MCToClient{
 		Name: youTubePlayURL(id, ext), CharID: charID, Showname: showname,
-		Looping: "1", Channel: "0", Effects: "0",
+		Looping: true, Channel: 0, Effects: 0,
 	})
 }
 

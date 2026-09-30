@@ -12,14 +12,14 @@ const (
 	AreaUpdateTypeLocked AreaUpdateType = "locked"
 )
 
-var areaUpdateTypeToWire = map[AreaUpdateType]int{
+var AreaUpdateTypeToWire = map[AreaUpdateType]int{
 	AreaUpdateTypePlayerCount: 0,
 	AreaUpdateTypeStatus: 1,
 	AreaUpdateTypeCaseManager: 2,
 	AreaUpdateTypeLocked: 3,
 }
 
-var areaUpdateTypeFromWire = map[int]AreaUpdateType{
+var AreaUpdateTypeFromWire = map[int]AreaUpdateType{
 	0: AreaUpdateTypePlayerCount,
 	1: AreaUpdateTypeStatus,
 	2: AreaUpdateTypeCaseManager,
@@ -38,7 +38,7 @@ const (
 	DeskModifierShowDuringPreanimThenCenter DeskModifier = "show_during_preanim_then_center"
 )
 
-var deskModifierToWire = map[DeskModifier]int{
+var DeskModifierToWire = map[DeskModifier]int{
 	DeskModifierHidden: 0,
 	DeskModifierShown: 1,
 	DeskModifierHideDuringPreanim: 2,
@@ -47,7 +47,7 @@ var deskModifierToWire = map[DeskModifier]int{
 	DeskModifierShowDuringPreanimThenCenter: 5,
 }
 
-var deskModifierFromWire = map[int]DeskModifier{
+var DeskModifierFromWire = map[int]DeskModifier{
 	0: DeskModifierHidden,
 	1: DeskModifierShown,
 	2: DeskModifierHideDuringPreanim,
@@ -69,7 +69,7 @@ const (
 	EmoteModifierObjectionZoom EmoteModifier = "objection_zoom"
 )
 
-var emoteModifierToWire = map[EmoteModifier]int{
+var EmoteModifierToWire = map[EmoteModifier]int{
 	EmoteModifierNoPreanim: 0,
 	EmoteModifierPreanim: 1,
 	EmoteModifierPreanimAndObjection: 2,
@@ -79,7 +79,7 @@ var emoteModifierToWire = map[EmoteModifier]int{
 	EmoteModifierObjectionZoom: 6,
 }
 
-var emoteModifierFromWire = map[int]EmoteModifier{
+var EmoteModifierFromWire = map[int]EmoteModifier{
 	0: EmoteModifierNoPreanim,
 	1: EmoteModifierPreanim,
 	2: EmoteModifierPreanimAndObjection,
@@ -99,14 +99,14 @@ const (
 	FlipHorizontalAndVertical Flip = "horizontal_and_vertical"
 )
 
-var flipToWire = map[Flip]int{
+var FlipToWire = map[Flip]int{
 	FlipNone: 0,
 	FlipHorizontal: 1,
 	FlipVertical: 2,
 	FlipHorizontalAndVertical: 3,
 }
 
-var flipFromWire = map[int]Flip{
+var FlipFromWire = map[int]Flip{
 	0: FlipNone,
 	1: FlipHorizontal,
 	2: FlipVertical,
@@ -124,7 +124,7 @@ const (
 	ShoutModifierCustom ShoutModifier = "custom"
 )
 
-var shoutModifierToWire = map[ShoutModifier]int{
+var ShoutModifierToWire = map[ShoutModifier]int{
 	ShoutModifierNone: 0,
 	ShoutModifierHoldIt: 1,
 	ShoutModifierObjection: 2,
@@ -132,7 +132,7 @@ var shoutModifierToWire = map[ShoutModifier]int{
 	ShoutModifierCustom: 4,
 }
 
-var shoutModifierFromWire = map[int]ShoutModifier{
+var ShoutModifierFromWire = map[int]ShoutModifier{
 	0: ShoutModifierNone,
 	1: ShoutModifierHoldIt,
 	2: ShoutModifierObjection,
@@ -170,7 +170,7 @@ const (
 	TextColorRainbow TextColor = "rainbow"
 )
 
-var textColorToWire = map[TextColor]int{
+var TextColorToWire = map[TextColor]int{
 	TextColorWhite: 0,
 	TextColorGreen: 1,
 	TextColorRed: 2,
@@ -183,7 +183,7 @@ var textColorToWire = map[TextColor]int{
 	TextColorRainbow: 9,
 }
 
-var textColorFromWire = map[int]TextColor{
+var TextColorFromWire = map[int]TextColor{
 	0: TextColorWhite,
 	1: TextColorGreen,
 	2: TextColorRed,

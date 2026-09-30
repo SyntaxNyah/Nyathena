@@ -250,7 +250,7 @@ func cmdPairRequests(client *Client, _ []string, _ string) {
 // an active group: the standard paired_* fields from the first partner (so
 // FantaCode/legacy clients render a pair) and the JSON-only additional_chars
 // list from the remaining partners.
-func applyPairGroupInjection(client *Client, ms *packet.MSToClient) {
+func applyPairGroupInjection(client *Client, ms *MSToClient) {
 	g := client.PairGroup()
 	if g == nil || !g.active() {
 		return
@@ -267,11 +267,11 @@ func applyPairGroupInjection(client *Client, ms *packet.MSToClient) {
 	ms.PairedEmote = info.emote
 	ms.PairedOffset = info.offset
 	otherFlip, _ := strconv.Atoi(info.flip)
-	ms.PairedFlip = packet.Flip(otherFlip)
+	ms.PairedFlip = packet.FlipFromWire[otherFlip]
 
 	for _, p := range others[1:] {
 		pi := p.PairInfo()
-		ms.AdditionalChars = append(ms.AdditionalChars, packet.AdditionalChar{
+		ms.AdditionalChars = append(ms.AdditionalChars, AdditionalChar{
 			CharID: p.CharID(),
 			Name:   pi.name,
 			Emote:  pi.emote,

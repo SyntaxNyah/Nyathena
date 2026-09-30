@@ -164,7 +164,7 @@ func pktHdid(client *Client, p *packet.Packet) {
 		return
 	}
 
-	client.Send(&packet.IDToClient{PlayerNumber: 0, Software: "Nyathena", Version: encode(version)})
+	client.Send(&packet.IDToClient{PlayerID: 0, Software: "Nyathena", Version: encode(version)})
 }
 
 // Handles ID#%
@@ -193,7 +193,7 @@ func pktId(client *Client, p *packet.Packet) {
 	}})
 
 	if config.AssetURL != "" {
-		client.Send(&packet.ASS{AssetURL: config.AssetURL})
+		client.Send(&packet.ASS{AssetUrl: config.AssetURL})
 	}
 	sendVoiceCaps(client)
 }
@@ -236,15 +236,15 @@ func pktResCount(client *Client, _ *packet.Packet) {
 	client.joining = true // This simply exists to prevent skipping the askchaa#% packet and bypassing the player count check.
 	client.Send(&packet.SI{
 		CharCount:     len(getCharacters()),
-		EvidenceCount: len(areas[0].Evidence()),
-		MusicCount:    len(getMusicList()),
+		EviCount: len(areas[0].Evidence()),
+		MusCount:    len(getMusicList()),
 	})
 }
 
 // Handles RC#%
 func pktReqChar(client *Client, _ *packet.Packet) {
 	raidGuardOnHandshakeStep(client)
-	client.Send(&packet.SC{Entries: getCharacters()})
+	client.Send(&packet.SC{CharData: getCharacters()})
 }
 
 // Handles RM#%
@@ -309,7 +309,7 @@ func pktReqDone(client *Client, _ *packet.Packet) {
 	sendStatusArup()
 	sendLockArup()
 	// Notify the client of their actual UID so the player list widget filters correctly.
-	client.Send(&packet.IDToClient{PlayerNumber: client.Uid(), Software: "Nyathena", Version: encode(version)})
+	client.Send(&packet.IDToClient{PlayerID: client.Uid(), Software: "Nyathena", Version: encode(version)})
 	sendPlayerListToClient(client)
 	broadcastPlayerJoin(client)
 	sendModIPIDsToClient(client) // no-op unless this connection is already BAN_INFO-permissioned at join
@@ -445,7 +445,7 @@ func pktIC(client *Client, p *packet.Packet) {
 	// type exactly once. From this point on the IC pipeline operates on named
 	// fields; nothing else in this function indexes into the packet by slot.
 	// The reverse encode happens once at the bottom via ms.Args().
-	ms := packet.ParseMSToServer(p.Body).ToClient()
+	ms := ParseMSToServer(p.Body).ToClient()
 
 	// The client's own values, saved before any moderator override below so that
 	// state updates (showname, pairInfo, textColor) always reflect what the
@@ -677,10 +677,10 @@ func pktIC(client *Client, p *packet.Packet) {
 	}
 	if flip := client.CheckAndToggleDanceFlip(); flip != "" {
 		n, _ := strconv.Atoi(flip)
-		ms.Flip = packet.Flip(n)
+		ms.Flip = packet.FlipFromWire[n]
 	}
 	// EmoteModifier 4 crashes old clients, remap to PREANIM_ZOOM; only {0,1,2,5,6} are valid (matches Akashi).
-	emote_mod := int(ms.EmoteModifier)
+	emote_mod := packet.EmoteModifierToWire[ms.EmoteModifier]
 	if emote_mod == 4 {
 		emote_mod = 6
 		ms.EmoteModifier = packet.EmoteModifierObjectionZoom
@@ -699,7 +699,7 @@ func pktIC(client *Client, p *packet.Packet) {
 		logger.LogWarningf("dropped MS from IPID:%v UID:%v — Evidence not an integer; value=%q", client.Ipid(), client.Uid(), ms.Evidence)
 		return
 	}
-	text := int(ms.TextColor)
+	text := packet.TextColorToWire[ms.TextColor]
 
 	if ms.NoninterruptingPreanim == "" {
 		ms.NoninterruptingPreanim = "0"
@@ -746,11 +746,11 @@ func pktIC(client *Client, p *packet.Packet) {
 	stuckCharID := client.charStuckID()
 
 	// DeskModifier "chat" is a legacy alias for "1"; it is already mapped to the shown
-	// value at parse time (see packet.ParseMSToServer), so only the integer range
+	// value at parse time (see ParseMSToServer), so only the integer range
 	// needs validating here.
 	switch {
 	case ms.DeskModifier < packet.DeskModifierHidden || ms.DeskModifier > packet.DeskModifierShowDuringPreanimThenCenter:
-		logger.LogWarningf("dropped MS from IPID:%v UID:%v — DeskModifier out of range [0,5]; value=%d", client.Ipid(), client.Uid(), ms.DeskModifier)
+		logger.LogWarningf("dropped MS from IPID:%v UID:%v — DeskModifier out of range [0,5]; value=%v", client.Ipid(), client.Uid(), ms.DeskModifier)
 		return
 	case !hasForcedIniswap && !strings.EqualFold(getCharacters()[client.CharID()], ms.Character) && !client.Area().IniswapAllowed(): // character name (skip check when forced iniswap)
 		client.SendServerMessage("Iniswapping is not allowed in this area.")
@@ -779,7 +779,7 @@ func pktIC(client *Client, p *packet.Packet) {
 		logger.LogWarningf("dropped MS from IPID:%v UID:%v — Evidence id out of range; value=%d max=%d", client.Ipid(), client.Uid(), evi, len(client.Area().Evidence()))
 		return
 	case ms.Flip != packet.FlipNone && ms.Flip != packet.FlipHorizontal:
-		logger.LogWarningf("dropped MS from IPID:%v UID:%v — Flip not 0/1; value=%d", client.Ipid(), client.Uid(), ms.Flip)
+		logger.LogWarningf("dropped MS from IPID:%v UID:%v — Flip not 0/1; value=%v", client.Ipid(), client.Uid(), ms.Flip)
 		return
 	case ms.Realization != "0" && ms.Realization != "1":
 		logger.LogWarningf("dropped MS from IPID:%v UID:%v — Realization not \"0\"/\"1\"; value=%q", client.Ipid(), client.Uid(), ms.Realization)
@@ -960,7 +960,7 @@ func pktIC(client *Client, p *packet.Packet) {
 				ms.PairedEmote = pairinfo.emote
 				ms.PairedOffset = pairinfo.offset
 				otherFlip, _ := strconv.Atoi(pairinfo.flip)
-				ms.PairedFlip = packet.Flip(otherFlip)
+				ms.PairedFlip = packet.FlipFromWire[otherFlip]
 				pairing = true
 			}
 		})
@@ -1044,19 +1044,19 @@ func pktIC(client *Client, p *packet.Packet) {
 		if s != "" {
 			if strings.ContainsRune(s, '<') {
 				client.Area().TstRewind()
-				broadcastToArea(client.Area(), packet.ParseMSToClientString(client.Area().CurrentTstStatement()))
+				broadcastToArea(client.Area(), ParseMSToClientString(client.Area().CurrentTstStatement()))
 				return
 			}
 			_, idStr, _ := strings.Cut(s, ">")
 			id, err := strconv.Atoi(idStr)
 			if err != nil {
 				client.Area().TstAdvance()
-				broadcastToArea(client.Area(), packet.ParseMSToClientString(client.Area().CurrentTstStatement()))
+				broadcastToArea(client.Area(), ParseMSToClientString(client.Area().CurrentTstStatement()))
 				return
 			} else {
 				if id > 0 && id < client.Area().TstLen() {
 					client.Area().TstJump(id)
-					broadcastToArea(client.Area(), packet.ParseMSToClientString(client.Area().CurrentTstStatement()))
+					broadcastToArea(client.Area(), ParseMSToClientString(client.Area().CurrentTstStatement()))
 					return
 				}
 			}
@@ -1066,9 +1066,9 @@ func pktIC(client *Client, p *packet.Packet) {
 	// Use the client's own values (saved before any moderator-forced showname or
 	// iniswap override above) for state updates, so a forced substitute is never
 	// written back as the client's own stored state.
-	client.SetPairInfo(ownCharName, ownEmote, strconv.Itoa(int(ownFlip)), ownOffset)
+	client.SetPairInfo(ownCharName, ownEmote, strconv.Itoa(packet.FlipToWire[ownFlip]), ownOffset)
 	client.SetLastMsg(ms.Message)
-	client.SetLastTextColor(strconv.Itoa(int(ownTextColor)))
+	client.SetLastTextColor(strconv.Itoa(packet.TextColorToWire[ownTextColor]))
 	newShowname := ownShowname
 	if strings.TrimSpace(ownShowname) == "" {
 		newShowname = getCharacters()[client.CharID()]
@@ -1220,7 +1220,7 @@ func pktIC(client *Client, p *packet.Packet) {
 	if sfxCurseExternalURL != "" && !silenced {
 		broadcastToArea(client.Area(), &packet.MCToClient{
 			Name: sfxCurseExternalURL, CharID: client.CharID(),
-			Showname: client.Showname(), Looping: "0", Channel: "0", Effects: "",
+			Showname: client.Showname(), Looping: false, Channel: 0, Effects: 0,
 		})
 	}
 	// Record the original (pre-punishment) decoded message in the area's icwarp
@@ -1336,8 +1336,8 @@ func pktAM(client *Client, p *packet.Packet) {
 		if mc.Showname != "" {
 			name = mc.Showname
 		}
-		effects := "0"
-		if mc.Effects != "" {
+		effects := 0
+		if mc.Effects != 0 {
 			effects = mc.Effects
 		}
 		// Re-broadcast the URL byte-for-byte as it arrived (mc.Name, still in
@@ -1346,7 +1346,7 @@ func pktAM(client *Client, p *packet.Packet) {
 		addToBuffer(client, "MUSIC", fmt.Sprintf("Changed music to %v.", decodedSong), false)
 		playAreaMusic(client.Area(), &packet.MCToClient{
 			Name: mc.Name, CharID: mc.CharID, Showname: name,
-			Looping: "1", Channel: "0", Effects: effects,
+			Looping: true, Channel: 0, Effects: effects,
 		})
 		return
 	}
@@ -1357,7 +1357,7 @@ func pktAM(client *Client, p *packet.Packet) {
 		}
 		song := mc.Name
 		name := client.Showname()
-		effects := "0"
+		effects := 0
 		if !strings.ContainsRune(decodedSong, '.') { // Chosen song is a category, and should stop the music.
 			song = "~stop.mp3"
 			addToBuffer(client, "MUSIC", "Stopped the music.", false)
@@ -1367,14 +1367,14 @@ func pktAM(client *Client, p *packet.Packet) {
 		if mc.Showname != "" {
 			name = mc.Showname
 		}
-		if mc.Effects != "" {
+		if mc.Effects != 0 {
 			effects = mc.Effects
 		}
 		// Track the current song so /getmusic can re-fetch it for clients
 		// whose audio dropped or who joined mid-track.
 		playAreaMusic(client.Area(), &packet.MCToClient{
 			Name: song, CharID: mc.CharID, Showname: name,
-			Looping: "1", Channel: "0", Effects: effects,
+			Looping: true, Channel: 0, Effects: effects,
 		})
 	} else if strings.Contains(getAreaNames(), decodedSong) {
 		if decodedSong == client.Area().Name() {
@@ -1445,7 +1445,7 @@ func pktWTCE(client *Client, p *packet.Packet) {
 	if err != nil {
 		return
 	}
-	broadcastToArea(client.Area(), &packet.RTToClient{Animation: rt.Animation, Variant: rt.Variant})
+	broadcastToArea(client.Area(), &packet.RTToClient{Animation: rt.Animation, JudgeID: rt.JudgeID})
 	addToBuffer(client, "JUD", "Played WT/CE animation.", false)
 }
 
@@ -1455,7 +1455,7 @@ func pktTT(client *Client, p *packet.Packet) {
 		client.SendServerMessage("You are not allowed to set testimony titles in this area.")
 		return
 	}
-	tt, err := packet.ParseTT(p.Body)
+	tt, err := ParseTT(p.Body)
 	if err != nil {
 		return
 	}
@@ -1564,7 +1564,7 @@ func pktOOC(client *Client, p *packet.Packet) {
 		if tag := formatTagDisplay(db.GetActiveTag(client.Ipid())); tag != "" {
 			display = tag + " " + display
 		}
-		client.Send(&packet.CTToClient{Name: encode(display), Message: ct.Message, IsFromServer: "0"})
+		client.Send(&packet.CTToClient{Name: encode(display), Message: ct.Message, IsFromServer: false})
 		addToBuffer(client, "OOC", "\""+ct.Message+"\" (censored username)", false)
 		if kick {
 			client.KickForCensorTrip()
@@ -1651,7 +1651,7 @@ func pktOOC(client *Client, p *packet.Packet) {
 		}
 		return
 	case autoModShadow:
-		client.Send(&packet.CTToClient{Name: encode(displayUsername), Message: msg, IsFromServer: "0"})
+		client.Send(&packet.CTToClient{Name: encode(displayUsername), Message: msg, IsFromServer: false})
 		addToBuffer(client, "OOC", "\""+msg+"\" (censored)", false)
 		if kick {
 			client.KickForCensorTrip()
@@ -1667,14 +1667,14 @@ func pktOOC(client *Client, p *packet.Packet) {
 	// notice the room can't hear them. The buffer entry is marked so mods
 	// reviewing logs can tell the message was suppressed.
 	if client.HasActivePunishment(PunishmentStealthMute) {
-		client.Send(&packet.CTToClient{Name: encode(displayUsername), Message: msg, IsFromServer: "0"})
+		client.Send(&packet.CTToClient{Name: encode(displayUsername), Message: msg, IsFromServer: false})
 		addToBuffer(client, "OOC", "\""+msg+"\" (stealthmuted)", false)
 		return
 	}
 	// Captcha restriction: same routing the IC path uses.
 	if activeCaptchaRestricted.Load() > 0 && client.captchaRestricted.Load() {
 		deliverRestricted(client, client.Area(),
-			&packet.CTToClient{Name: encode(displayUsername), Message: msg, IsFromServer: "0"})
+			&packet.CTToClient{Name: encode(displayUsername), Message: msg, IsFromServer: false})
 		addToBuffer(client, "OOC", "\""+msg+"\" (captcha-muted)", false)
 		return
 	}
@@ -1686,7 +1686,7 @@ func pktOOC(client *Client, p *packet.Packet) {
 	raidGuardOnOOC(client, ct.Name, decode(msg))
 
 	broadcastOOCToArea(client.Ipid(), senderBypassesIgnore(client.Perms()), client.Area(),
-		&packet.CTToClient{Name: encode(displayUsername), Message: msg, IsFromServer: "0"})
+		&packet.CTToClient{Name: encode(displayUsername), Message: msg, IsFromServer: false})
 	addToBuffer(client, "OOC", "\""+msg+"\"", false)
 }
 
@@ -1790,7 +1790,7 @@ func pktModcall(client *Client, p *packet.Packet) {
 
 // Handles SETCASE#%
 func pktSetCase(client *Client, p *packet.Packet) {
-	sc, err := packet.ParseSETCASE(p.Body)
+	sc, err := ParseSETCASE(p.Body)
 	if err != nil {
 		return
 	}
@@ -1814,7 +1814,7 @@ func pktCaseAnn(client *Client, p *packet.Packet) {
 		client.SendServerMessage("You are not allowed to send case alerts in this area.")
 		return
 	}
-	ca, err := packet.ParseCASEA(p.Body)
+	ca, err := ParseCASEA(p.Body)
 	if err != nil {
 		return
 	}
@@ -1827,7 +1827,7 @@ func pktCaseAnn(client *Client, p *packet.Packet) {
 		client.CurrentCharacter(), client.Area().Name(), ca.CaseTitle)
 	needs := strings.Join(escapeOutgoing("CASEA", []string{ca.NeedDef, ca.NeedPro, ca.NeedJudge, ca.NeedJury, ca.NeedSteno}), "#")
 	fantaCodePacket := fmt.Sprintf("CASEA#%v#%v#1#%%", encode(title), needs)
-	typedPacket := &packet.CASEA{
+	typedPacket := &CASEA{
 		CaseTitle: title,
 		NeedDef:   ca.NeedDef, NeedPro: ca.NeedPro,
 		NeedJudge: ca.NeedJudge, NeedJury: ca.NeedJury, NeedSteno: ca.NeedSteno,

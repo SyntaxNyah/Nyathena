@@ -73,7 +73,7 @@ func parseFrame(raw []byte, mode WireMode) (string, []string, error) {
 // decodeWire parses raw and returns the packet header plus its typed struct by
 // looking the header up in the supplied direction registry. Unknown headers
 // fall back to the generic *Packet.
-func decodeWire(raw []byte, mode WireMode, decoders map[string]decoder) (string, any, error) {
+func decodeWire(raw []byte, mode WireMode, decoders map[string]Decoder) (string, any, error) {
 	header, body, err := parseFrame(raw, mode)
 	if err != nil {
 		return "", nil, err

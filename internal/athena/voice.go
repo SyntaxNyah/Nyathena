@@ -47,7 +47,6 @@ package athena
 
 import (
 	"fmt"
-	"strconv"
 	"sync"
 
 	"github.com/MangosArentLiterature/Athena/internal/area"
@@ -111,20 +110,17 @@ func sendVoiceCaps(client *Client) {
 	if !voiceEnabled() {
 		logger.LogInfof("voice: emitting VS_CAPS#0 to UID %d (voice disabled)", client.Uid())
 		client.Send(&packet.VS_CAPS{
-			Enabled: "0", PTT: "1", MaxPeers: "0", Codec: voiceCodec,
+			Enabled: false, PttOnly: true, MaxPeers: 0, Codec: voiceCodec,
 			SampleRate: voiceSampleRate, FrameMs: voiceFrameMs, MaxFrameBytes: maxFrameBytes(),
 		})
 		return
 	}
-	ptt := "0"
-	if config.PTTOnly {
-		ptt = "1"
-	}
-	maxPeers := strconv.Itoa(config.MaxPeersPerArea)
-	logger.LogInfof("voice: emitting VS_CAPS#1#%s#%s#%s#%d#%d#%d to UID %d",
+	ptt := config.PTTOnly
+	maxPeers := config.MaxPeersPerArea
+	logger.LogInfof("voice: emitting VS_CAPS#1#%t#%d#%s#%d#%d#%d to UID %d",
 		ptt, maxPeers, voiceCodec, voiceSampleRate, voiceFrameMs, maxFrameBytes(), client.Uid())
 	client.Send(&packet.VS_CAPS{
-		Enabled: "1", PTT: ptt, MaxPeers: maxPeers, Codec: voiceCodec,
+		Enabled: true, PttOnly: ptt, MaxPeers: maxPeers, Codec: voiceCodec,
 		SampleRate: voiceSampleRate, FrameMs: voiceFrameMs, MaxFrameBytes: maxFrameBytes(),
 	})
 }
@@ -315,7 +311,7 @@ func pktVSJoin(client *Client, _ *packet.Packet) {
 			}
 			others = append(others, p)
 		}
-		client.Send(&packet.VS_PEERS{UIDs: others})
+		client.Send(&packet.VS_PEERS{Uids: others})
 		return
 	}
 	if ok, retry := allowVoiceJoin(uid); !ok {
@@ -334,7 +330,7 @@ func pktVSJoin(client *Client, _ *packet.Packet) {
 		}
 		others = append(others, p)
 	}
-	client.Send(&packet.VS_PEERS{UIDs: others})
+	client.Send(&packet.VS_PEERS{Uids: others})
 	broadcastToAreaVoice(a, uid, &packet.VS_JOINToClient{UID: uid})
 }
 
@@ -406,9 +402,5 @@ func pktVSSpeak(client *Client, p *packet.Packet) {
 	if a == nil || !inVoiceRoom(a, client.Uid()) {
 		return
 	}
-	state := "0"
-	if vs.On {
-		state = "1"
-	}
-	broadcastToAreaVoice(a, client.Uid(), &packet.VS_SPEAKToClient{UID: client.Uid(), On: state})
+	broadcastToAreaVoice(a, client.Uid(), &packet.VS_SPEAKToClient{UID: client.Uid(), On: vs.On})
 }

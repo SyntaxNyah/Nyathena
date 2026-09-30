@@ -1171,7 +1171,7 @@ func sendPlayerArup() {
 	for _, a := range areas {
 		plCounts = append(plCounts, strconv.Itoa(a.VisiblePlayerCount()))
 	}
-	broadcastToAll(&packet.ARUP{UpdateType: packet.AreaUpdateTypePlayerCount, Data: plCounts})
+	broadcastToAll(&packet.ARUP{UpdateType: packet.AreaUpdateTypePlayerCount, UpdateData: plCounts})
 }
 
 // sendCMArup sends a CM ARUP to all connected clients.
@@ -1193,7 +1193,7 @@ func sendCMArup() {
 		}
 		returnL = append(returnL, strings.Join(cms, ", "))
 	}
-	broadcastToAll(&packet.ARUP{UpdateType: packet.AreaUpdateTypeCaseManager, Data: returnL})
+	broadcastToAll(&packet.ARUP{UpdateType: packet.AreaUpdateTypeCaseManager, UpdateData: returnL})
 }
 
 // sendStatusArup sends a status ARUP to all connected clients.
@@ -1202,7 +1202,7 @@ func sendStatusArup() {
 	for _, a := range areas {
 		statuses = append(statuses, a.Status().String())
 	}
-	broadcastToAll(&packet.ARUP{UpdateType: packet.AreaUpdateTypeStatus, Data: statuses})
+	broadcastToAll(&packet.ARUP{UpdateType: packet.AreaUpdateTypeStatus, UpdateData: statuses})
 }
 
 // areaLockDisplay returns the lock state to advertise for an area in the lock
@@ -1239,7 +1239,7 @@ func sendLockArup() {
 	for _, a := range areas {
 		locks = append(locks, areaLockDisplay(a).String())
 	}
-	broadcastToAll(&packet.ARUP{UpdateType: packet.AreaUpdateTypeLocked, Data: locks})
+	broadcastToAll(&packet.ARUP{UpdateType: packet.AreaUpdateTypeLocked, UpdateData: locks})
 }
 
 // getRole returns the role with the corresponding name, or an error if the role does not exist.
@@ -1267,13 +1267,13 @@ func getClientsByIpid(ipid string) []*Client {
 
 // sendAreaServerMessage sends a server OOC message to all clients in an area.
 func sendAreaServerMessage(area *area.Area, message string) {
-	broadcastToArea(area, &packet.CTToClient{Name: encodedServerName, Message: encode(message), IsFromServer: "1"})
+	broadcastToArea(area, &packet.CTToClient{Name: encodedServerName, Message: encode(message), IsFromServer: true})
 }
 
 // sendAreaGamblingMessage sends a gambling-result OOC message to all clients
 // in an area who have not opted out of gambling broadcasts via /gamble hide.
 func sendAreaGamblingMessage(a *area.Area, message string) {
-	out := &packet.CTToClient{Name: encodedServerName, Message: encode(message), IsFromServer: "1"}
+	out := &packet.CTToClient{Name: encodedServerName, Message: encode(message), IsFromServer: true}
 	header, args := out.Header(), out.Args()
 	clients.ForEach(func(client *Client) {
 		if client.Area() == a && !client.GambleHide() {
@@ -1284,7 +1284,7 @@ func sendAreaGamblingMessage(a *area.Area, message string) {
 
 // sendGlobalServerMessage broadcasts a server OOC message to every joined client.
 func sendGlobalServerMessage(message string) {
-	broadcastToAll(&packet.CTToClient{Name: encodedServerName, Message: encode(message), IsFromServer: "1"})
+	broadcastToAll(&packet.CTToClient{Name: encodedServerName, Message: encode(message), IsFromServer: true})
 }
 
 // getRealIP extracts the real client IP address from an HTTP request.
@@ -2159,7 +2159,7 @@ func purgeLockdownFloodClients() {
 	logger.LogInfof("%s", msg)
 	clients.ForEach(func(c *Client) {
 		if c.Uid() != -1 && permissions.IsModerator(c.Perms()) {
-			c.Send(&packet.CTToClient{Name: "OOC", Message: msg, IsFromServer: "1"})
+			c.Send(&packet.CTToClient{Name: "OOC", Message: msg, IsFromServer: true})
 		}
 	})
 }

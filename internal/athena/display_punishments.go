@@ -103,7 +103,7 @@ func (client *Client) releaseForceDisplayGate() {
 // hidden player — they stay hidden in the partner's viewport too. punishments is
 // the speaker's already-filtered active set from pktIC, so no extra lock is
 // taken here.
-func applyHideDisplay(ms *packet.MSToClient, punishments []PunishmentState) {
+func applyHideDisplay(ms *MSToClient, punishments []PunishmentState) {
 	for i := range punishments {
 		if punishments[i].punishmentType == PunishmentHideDisplay {
 			ms.Offset = encode(hideDisplayOffset)
@@ -117,7 +117,7 @@ func applyHideDisplay(ms *packet.MSToClient, punishments []PunishmentState) {
 // that one character renders for the whole room. Moderators are exempt (their
 // own sprite still shows), matching how `global` punishments spare staff. The
 // activeForceDisplay gate keeps this free when the feature is unused.
-func maybeApplyForceDisplay(client *Client, ms *packet.MSToClient) {
+func maybeApplyForceDisplay(client *Client, ms *MSToClient) {
 	if activeForceDisplay.Load() <= 0 {
 		return
 	}
@@ -152,7 +152,7 @@ func findActiveForceDisplayTarget(a *area.Area) *Client {
 // outgoing IC packet and clears the pair fields. The speaker's message text,
 // showname and colour are left untouched, so the room sees the pinned character
 // "speaking" everyone's lines. Mirrors the fullpossess sprite-spoof logic.
-func applyForceDisplaySprite(ms *packet.MSToClient, target *Client) {
+func applyForceDisplaySprite(ms *MSToClient, target *Client) {
 	chars := getCharacters()
 	id := target.CharID()
 	if id < 0 || id >= len(chars) {
@@ -179,7 +179,7 @@ func applyForceDisplaySprite(ms *packet.MSToClient, target *Client) {
 	ms.Emote = emote
 	if info.flip == "0" || info.flip == "1" {
 		flipN, _ := strconv.Atoi(info.flip)
-		ms.Flip = packet.Flip(flipN)
+		ms.Flip = packet.FlipFromWire[flipN]
 	}
 	if pos := target.Pos(); pos != "" {
 		ms.Side = packet.Side(pos)

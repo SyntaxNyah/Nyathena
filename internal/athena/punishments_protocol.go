@@ -49,7 +49,7 @@ const (
 // applyProtocolPunishments mutates the outgoing IC packet's non-text fields
 // for the speaker's active protocol punishments. punishments is the active
 // snapshot pktIC already fetched, so no extra lock is taken here.
-func applyProtocolPunishments(ms *packet.MSToClient, punishments []PunishmentState) {
+func applyProtocolPunishments(ms *MSToClient, punishments []PunishmentState) {
 	for i := range punishments {
 		p := &punishments[i]
 		switch p.punishmentType {
@@ -67,7 +67,7 @@ func applyProtocolPunishments(ms *packet.MSToClient, punishments []PunishmentSta
 			}
 		case PunishmentForceColor:
 			if c, err := strconv.Atoi(p.customData); err == nil && c >= 0 && c <= 9 {
-				ms.TextColor = packet.TextColor(c)
+				ms.TextColor = packet.TextColorFromWire[c]
 			}
 		case PunishmentNoPreanim:
 			switch ms.EmoteModifier {

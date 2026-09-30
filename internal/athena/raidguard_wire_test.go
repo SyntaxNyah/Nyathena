@@ -45,8 +45,8 @@ func withWiring(t *testing.T) {
 	raidGuardActive.Store(true)
 }
 
-func icPacket(showname, shout string) *packet.MSToClient {
-	return &packet.MSToClient{Showname: showname, Message: "placeholder", ShoutModifier: shout}
+func icPacket(showname, shout string) *MSToClient {
+	return &MSToClient{Showname: showname, Message: "placeholder", ShoutModifier: packet.ShoutModifierFromWire[packet.AtoiOrZero(shout)]}
 }
 
 // TestWireFeatureGateOff is the property the whole hot path rests on: with the

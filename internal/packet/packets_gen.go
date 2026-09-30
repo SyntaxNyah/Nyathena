@@ -12,7 +12,7 @@ func (p *ARUP) Header() string { return "ARUP" }
 
 func (p *ARUP) Args() []string {
 	var args []string
-	args = append(args, itoa(areaUpdateTypeToWire[p.UpdateType]))
+	args = append(args, Itoa(AreaUpdateTypeToWire[p.UpdateType]))
 	args = append(args, p.UpdateData...)
 	return args
 }
@@ -21,7 +21,7 @@ func ParseARUP(body []string) (*ARUP, error) {
 	p := &ARUP{}
 	get := func(i int) string { if i < len(body) { return body[i] }; return "" }
 	cursor := 0
-	p.UpdateType = areaUpdateTypeFromWire[atoiOrZero(get(cursor))]
+	p.UpdateType = AreaUpdateTypeFromWire[AtoiOrZero(get(cursor))]
 	cursor++
 	p.UpdateData = body[cursor:]
 	cursor = len(body)
@@ -37,7 +37,7 @@ func (p *ASS) Header() string { return "ASS" }
 
 func (p *ASS) Args() []string {
 	var args []string
-	args = append(args, escapeFanta(p.AssetUrl))
+	args = append(args, EscapeFanta(p.AssetUrl))
 	return args
 }
 
@@ -45,7 +45,7 @@ func ParseASS(body []string) (*ASS, error) {
 	p := &ASS{}
 	get := func(i int) string { if i < len(body) { return body[i] }; return "" }
 	cursor := 0
-	p.AssetUrl = unescapeFanta(get(cursor))
+	p.AssetUrl = UnescapeFanta(get(cursor))
 	cursor++
 	return p, nil
 }
@@ -59,7 +59,7 @@ func (p *AUTH) Header() string { return "AUTH" }
 
 func (p *AUTH) Args() []string {
 	var args []string
-	args = append(args, itoa(p.AuthState))
+	args = append(args, Itoa(p.AuthState))
 	return args
 }
 
@@ -67,7 +67,7 @@ func ParseAUTH(body []string) (*AUTH, error) {
 	p := &AUTH{}
 	get := func(i int) string { if i < len(body) { return body[i] }; return "" }
 	cursor := 0
-	p.AuthState = atoiOrZero(get(cursor))
+	p.AuthState = AtoiOrZero(get(cursor))
 	cursor++
 	return p, nil
 }
@@ -97,7 +97,7 @@ func (p *BB) Header() string { return "BB" }
 
 func (p *BB) Args() []string {
 	var args []string
-	args = append(args, escapeFanta(p.Message))
+	args = append(args, EscapeFanta(p.Message))
 	return args
 }
 
@@ -105,7 +105,7 @@ func ParseBB(body []string) (*BB, error) {
 	p := &BB{}
 	get := func(i int) string { if i < len(body) { return body[i] }; return "" }
 	cursor := 0
-	p.Message = unescapeFanta(get(cursor))
+	p.Message = UnescapeFanta(get(cursor))
 	cursor++
 	return p, nil
 }
@@ -119,7 +119,7 @@ func (p *BD) Header() string { return "BD" }
 
 func (p *BD) Args() []string {
 	var args []string
-	args = append(args, escapeFanta(p.Reason))
+	args = append(args, EscapeFanta(p.Reason))
 	return args
 }
 
@@ -127,7 +127,7 @@ func ParseBD(body []string) (*BD, error) {
 	p := &BD{}
 	get := func(i int) string { if i < len(body) { return body[i] }; return "" }
 	cursor := 0
-	p.Reason = unescapeFanta(get(cursor))
+	p.Reason = UnescapeFanta(get(cursor))
 	cursor++
 	return p, nil
 }
@@ -142,8 +142,8 @@ func (p *BN) Header() string { return "BN" }
 
 func (p *BN) Args() []string {
 	var args []string
-	args = append(args, escapeFanta(p.Background))
-	args = append(args, escapeFanta(p.Position))
+	args = append(args, EscapeFanta(p.Background))
+	args = append(args, EscapeFanta(p.Position))
 	return args
 }
 
@@ -151,9 +151,9 @@ func ParseBN(body []string) (*BN, error) {
 	p := &BN{}
 	get := func(i int) string { if i < len(body) { return body[i] }; return "" }
 	cursor := 0
-	p.Background = unescapeFanta(get(cursor))
+	p.Background = UnescapeFanta(get(cursor))
 	cursor++
-	p.Position = unescapeFanta(get(cursor))
+	p.Position = UnescapeFanta(get(cursor))
 	cursor++
 	return p, nil
 }
@@ -169,9 +169,9 @@ func (p *CC) Header() string { return "CC" }
 
 func (p *CC) Args() []string {
 	var args []string
-	args = append(args, itoa(p.PlayerID))
-	args = append(args, itoa(p.CharID))
-	args = append(args, escapeFanta(p.CharPassword))
+	args = append(args, Itoa(p.PlayerID))
+	args = append(args, Itoa(p.CharID))
+	args = append(args, EscapeFanta(p.CharPassword))
 	return args
 }
 
@@ -179,11 +179,11 @@ func ParseCC(body []string) (*CC, error) {
 	p := &CC{}
 	get := func(i int) string { if i < len(body) { return body[i] }; return "" }
 	cursor := 0
-	p.PlayerID = atoiOrZero(get(cursor))
+	p.PlayerID = AtoiOrZero(get(cursor))
 	cursor++
-	p.CharID = atoiOrZero(get(cursor))
+	p.CharID = AtoiOrZero(get(cursor))
 	cursor++
-	p.CharPassword = unescapeFanta(get(cursor))
+	p.CharPassword = UnescapeFanta(get(cursor))
 	cursor++
 	return p, nil
 }
@@ -197,7 +197,7 @@ func (p *CH) Header() string { return "CH" }
 
 func (p *CH) Args() []string {
 	var args []string
-	args = append(args, itoa(p.CharID))
+	args = append(args, Itoa(p.CharID))
 	return args
 }
 
@@ -205,7 +205,7 @@ func ParseCH(body []string) (*CH, error) {
 	p := &CH{}
 	get := func(i int) string { if i < len(body) { return body[i] }; return "" }
 	cursor := 0
-	p.CharID = atoiOrZero(get(cursor))
+	p.CharID = AtoiOrZero(get(cursor))
 	cursor++
 	return p, nil
 }
@@ -236,7 +236,7 @@ func (p *CI) Header() string { return "CI" }
 
 func (p *CI) Args() []string {
 	var args []string
-	args = append(args, itoa(p.BatchIndex))
+	args = append(args, Itoa(p.BatchIndex))
 	args = append(args, p.Entries...)
 	return args
 }
@@ -245,7 +245,7 @@ func ParseCI(body []string) (*CI, error) {
 	p := &CI{}
 	get := func(i int) string { if i < len(body) { return body[i] }; return "" }
 	cursor := 0
-	p.BatchIndex = atoiOrZero(get(cursor))
+	p.BatchIndex = AtoiOrZero(get(cursor))
 	cursor++
 	p.Entries = body[cursor:]
 	cursor = len(body)
@@ -263,9 +263,9 @@ func (p *CTToClient) Header() string { return "CT" }
 
 func (p *CTToClient) Args() []string {
 	var args []string
-	args = append(args, escapeFanta(p.Name))
-	args = append(args, escapeFanta(p.Message))
-	args = append(args, boolToWire(p.IsFromServer))
+	args = append(args, EscapeFanta(p.Name))
+	args = append(args, EscapeFanta(p.Message))
+	args = append(args, BoolToWire(p.IsFromServer))
 	return args
 }
 
@@ -273,11 +273,11 @@ func ParseCTToClient(body []string) (*CTToClient, error) {
 	p := &CTToClient{}
 	get := func(i int) string { if i < len(body) { return body[i] }; return "" }
 	cursor := 0
-	p.Name = unescapeFanta(get(cursor))
+	p.Name = UnescapeFanta(get(cursor))
 	cursor++
-	p.Message = unescapeFanta(get(cursor))
+	p.Message = UnescapeFanta(get(cursor))
 	cursor++
-	p.IsFromServer = wireToBool(get(cursor))
+	p.IsFromServer = WireToBool(get(cursor))
 	cursor++
 	return p, nil
 }
@@ -292,8 +292,8 @@ func (p *CTToServer) Header() string { return "CT" }
 
 func (p *CTToServer) Args() []string {
 	var args []string
-	args = append(args, escapeFanta(p.Name))
-	args = append(args, escapeFanta(p.Message))
+	args = append(args, EscapeFanta(p.Name))
+	args = append(args, EscapeFanta(p.Message))
 	return args
 }
 
@@ -301,9 +301,9 @@ func ParseCTToServer(body []string) (*CTToServer, error) {
 	p := &CTToServer{}
 	get := func(i int) string { if i < len(body) { return body[i] }; return "" }
 	cursor := 0
-	p.Name = unescapeFanta(get(cursor))
+	p.Name = UnescapeFanta(get(cursor))
 	cursor++
-	p.Message = unescapeFanta(get(cursor))
+	p.Message = UnescapeFanta(get(cursor))
 	cursor++
 	return p, nil
 }
@@ -317,14 +317,14 @@ func (p *CharsCheck) Header() string { return "CharsCheck" }
 
 func (p *CharsCheck) Args() []string {
 	var args []string
-	args = append(args, intsToStrs(p.Taken)...)
+	args = append(args, IntsToStrs(p.Taken)...)
 	return args
 }
 
 func ParseCharsCheck(body []string) (*CharsCheck, error) {
 	p := &CharsCheck{}
 	cursor := 0
-	p.Taken = strsToInts(body[cursor:])
+	p.Taken = StrsToInts(body[cursor:])
 	cursor = len(body)
 	return p, nil
 }
@@ -338,7 +338,7 @@ func (p *DE) Header() string { return "DE" }
 
 func (p *DE) Args() []string {
 	var args []string
-	args = append(args, itoa(p.ID))
+	args = append(args, Itoa(p.ID))
 	return args
 }
 
@@ -346,7 +346,7 @@ func ParseDE(body []string) (*DE, error) {
 	p := &DE{}
 	get := func(i int) string { if i < len(body) { return body[i] }; return "" }
 	cursor := 0
-	p.ID = atoiOrZero(get(cursor))
+	p.ID = AtoiOrZero(get(cursor))
 	cursor++
 	return p, nil
 }
@@ -376,7 +376,7 @@ func (p *Decryptor) Header() string { return "decryptor" }
 
 func (p *Decryptor) Args() []string {
 	var args []string
-	args = append(args, escapeFanta(p.Value))
+	args = append(args, EscapeFanta(p.Value))
 	return args
 }
 
@@ -384,7 +384,7 @@ func ParseDecryptor(body []string) (*Decryptor, error) {
 	p := &Decryptor{}
 	get := func(i int) string { if i < len(body) { return body[i] }; return "" }
 	cursor := 0
-	p.Value = unescapeFanta(get(cursor))
+	p.Value = UnescapeFanta(get(cursor))
 	cursor++
 	return p, nil
 }
@@ -401,10 +401,10 @@ func (p *EE) Header() string { return "EE" }
 
 func (p *EE) Args() []string {
 	var args []string
-	args = append(args, itoa(p.ID))
-	args = append(args, escapeFanta(p.Name))
-	args = append(args, escapeFanta(p.Description))
-	args = append(args, escapeFanta(p.Image))
+	args = append(args, Itoa(p.ID))
+	args = append(args, EscapeFanta(p.Name))
+	args = append(args, EscapeFanta(p.Description))
+	args = append(args, EscapeFanta(p.Image))
 	return args
 }
 
@@ -412,13 +412,13 @@ func ParseEE(body []string) (*EE, error) {
 	p := &EE{}
 	get := func(i int) string { if i < len(body) { return body[i] }; return "" }
 	cursor := 0
-	p.ID = atoiOrZero(get(cursor))
+	p.ID = AtoiOrZero(get(cursor))
 	cursor++
-	p.Name = unescapeFanta(get(cursor))
+	p.Name = UnescapeFanta(get(cursor))
 	cursor++
-	p.Description = unescapeFanta(get(cursor))
+	p.Description = UnescapeFanta(get(cursor))
 	cursor++
-	p.Image = unescapeFanta(get(cursor))
+	p.Image = UnescapeFanta(get(cursor))
 	cursor++
 	return p, nil
 }
@@ -433,8 +433,8 @@ func (p *EI) Header() string { return "EI" }
 
 func (p *EI) Args() []string {
 	var args []string
-	args = append(args, itoa(p.ID))
-	args = append(args, escapeFanta(p.Details))
+	args = append(args, Itoa(p.ID))
+	args = append(args, EscapeFanta(p.Details))
 	return args
 }
 
@@ -442,9 +442,9 @@ func ParseEI(body []string) (*EI, error) {
 	p := &EI{}
 	get := func(i int) string { if i < len(body) { return body[i] }; return "" }
 	cursor := 0
-	p.ID = atoiOrZero(get(cursor))
+	p.ID = AtoiOrZero(get(cursor))
 	cursor++
-	p.Details = unescapeFanta(get(cursor))
+	p.Details = UnescapeFanta(get(cursor))
 	cursor++
 	return p, nil
 }
@@ -459,7 +459,7 @@ func (p *EM) Header() string { return "EM" }
 
 func (p *EM) Args() []string {
 	var args []string
-	args = append(args, itoa(p.BatchIndex))
+	args = append(args, Itoa(p.BatchIndex))
 	args = append(args, p.Entries...)
 	return args
 }
@@ -468,7 +468,7 @@ func ParseEM(body []string) (*EM, error) {
 	p := &EM{}
 	get := func(i int) string { if i < len(body) { return body[i] }; return "" }
 	cursor := 0
-	p.BatchIndex = atoiOrZero(get(cursor))
+	p.BatchIndex = AtoiOrZero(get(cursor))
 	cursor++
 	p.Entries = body[cursor:]
 	cursor = len(body)
@@ -547,7 +547,7 @@ func (p *HI) Header() string { return "HI" }
 
 func (p *HI) Args() []string {
 	var args []string
-	args = append(args, escapeFanta(p.HDID))
+	args = append(args, EscapeFanta(p.HDID))
 	return args
 }
 
@@ -555,7 +555,7 @@ func ParseHI(body []string) (*HI, error) {
 	p := &HI{}
 	get := func(i int) string { if i < len(body) { return body[i] }; return "" }
 	cursor := 0
-	p.HDID = unescapeFanta(get(cursor))
+	p.HDID = UnescapeFanta(get(cursor))
 	cursor++
 	return p, nil
 }
@@ -570,8 +570,8 @@ func (p *HPToClient) Header() string { return "HP" }
 
 func (p *HPToClient) Args() []string {
 	var args []string
-	args = append(args, itoa(p.Bar))
-	args = append(args, itoa(p.Value))
+	args = append(args, Itoa(p.Bar))
+	args = append(args, Itoa(p.Value))
 	return args
 }
 
@@ -579,9 +579,9 @@ func ParseHPToClient(body []string) (*HPToClient, error) {
 	p := &HPToClient{}
 	get := func(i int) string { if i < len(body) { return body[i] }; return "" }
 	cursor := 0
-	p.Bar = atoiOrZero(get(cursor))
+	p.Bar = AtoiOrZero(get(cursor))
 	cursor++
-	p.Value = atoiOrZero(get(cursor))
+	p.Value = AtoiOrZero(get(cursor))
 	cursor++
 	return p, nil
 }
@@ -596,8 +596,8 @@ func (p *HPToServer) Header() string { return "HP" }
 
 func (p *HPToServer) Args() []string {
 	var args []string
-	args = append(args, itoa(p.Bar))
-	args = append(args, itoa(p.Value))
+	args = append(args, Itoa(p.Bar))
+	args = append(args, Itoa(p.Value))
 	return args
 }
 
@@ -605,9 +605,9 @@ func ParseHPToServer(body []string) (*HPToServer, error) {
 	p := &HPToServer{}
 	get := func(i int) string { if i < len(body) { return body[i] }; return "" }
 	cursor := 0
-	p.Bar = atoiOrZero(get(cursor))
+	p.Bar = AtoiOrZero(get(cursor))
 	cursor++
-	p.Value = atoiOrZero(get(cursor))
+	p.Value = AtoiOrZero(get(cursor))
 	cursor++
 	return p, nil
 }
@@ -623,9 +623,9 @@ func (p *IDToClient) Header() string { return "ID" }
 
 func (p *IDToClient) Args() []string {
 	var args []string
-	args = append(args, itoa(p.PlayerID))
-	args = append(args, escapeFanta(p.Software))
-	args = append(args, escapeFanta(p.Version))
+	args = append(args, Itoa(p.PlayerID))
+	args = append(args, EscapeFanta(p.Software))
+	args = append(args, EscapeFanta(p.Version))
 	return args
 }
 
@@ -633,11 +633,11 @@ func ParseIDToClient(body []string) (*IDToClient, error) {
 	p := &IDToClient{}
 	get := func(i int) string { if i < len(body) { return body[i] }; return "" }
 	cursor := 0
-	p.PlayerID = atoiOrZero(get(cursor))
+	p.PlayerID = AtoiOrZero(get(cursor))
 	cursor++
-	p.Software = unescapeFanta(get(cursor))
+	p.Software = UnescapeFanta(get(cursor))
 	cursor++
-	p.Version = unescapeFanta(get(cursor))
+	p.Version = UnescapeFanta(get(cursor))
 	cursor++
 	return p, nil
 }
@@ -652,8 +652,8 @@ func (p *IDToServer) Header() string { return "ID" }
 
 func (p *IDToServer) Args() []string {
 	var args []string
-	args = append(args, escapeFanta(p.Software))
-	args = append(args, escapeFanta(p.Version))
+	args = append(args, EscapeFanta(p.Software))
+	args = append(args, EscapeFanta(p.Version))
 	return args
 }
 
@@ -661,9 +661,9 @@ func ParseIDToServer(body []string) (*IDToServer, error) {
 	p := &IDToServer{}
 	get := func(i int) string { if i < len(body) { return body[i] }; return "" }
 	cursor := 0
-	p.Software = unescapeFanta(get(cursor))
+	p.Software = UnescapeFanta(get(cursor))
 	cursor++
-	p.Version = unescapeFanta(get(cursor))
+	p.Version = UnescapeFanta(get(cursor))
 	cursor++
 	return p, nil
 }
@@ -677,7 +677,7 @@ func (p *JD) Header() string { return "JD" }
 
 func (p *JD) Args() []string {
 	var args []string
-	args = append(args, itoa(p.State))
+	args = append(args, Itoa(p.State))
 	return args
 }
 
@@ -685,7 +685,7 @@ func ParseJD(body []string) (*JD, error) {
 	p := &JD{}
 	get := func(i int) string { if i < len(body) { return body[i] }; return "" }
 	cursor := 0
-	p.State = atoiOrZero(get(cursor))
+	p.State = AtoiOrZero(get(cursor))
 	cursor++
 	return p, nil
 }
@@ -699,7 +699,7 @@ func (p *KB) Header() string { return "KB" }
 
 func (p *KB) Args() []string {
 	var args []string
-	args = append(args, escapeFanta(p.Reason))
+	args = append(args, EscapeFanta(p.Reason))
 	return args
 }
 
@@ -707,7 +707,7 @@ func ParseKB(body []string) (*KB, error) {
 	p := &KB{}
 	get := func(i int) string { if i < len(body) { return body[i] }; return "" }
 	cursor := 0
-	p.Reason = unescapeFanta(get(cursor))
+	p.Reason = UnescapeFanta(get(cursor))
 	cursor++
 	return p, nil
 }
@@ -721,7 +721,7 @@ func (p *KK) Header() string { return "KK" }
 
 func (p *KK) Args() []string {
 	var args []string
-	args = append(args, escapeFanta(p.Reason))
+	args = append(args, EscapeFanta(p.Reason))
 	return args
 }
 
@@ -729,7 +729,7 @@ func ParseKK(body []string) (*KK, error) {
 	p := &KK{}
 	get := func(i int) string { if i < len(body) { return body[i] }; return "" }
 	cursor := 0
-	p.Reason = unescapeFanta(get(cursor))
+	p.Reason = UnescapeFanta(get(cursor))
 	cursor++
 	return p, nil
 }
@@ -766,9 +766,9 @@ func (p *MA) Header() string { return "MA" }
 
 func (p *MA) Args() []string {
 	var args []string
-	args = append(args, itoa(p.ID))
-	args = append(args, itoa(p.Duration))
-	args = append(args, escapeFanta(p.Reason))
+	args = append(args, Itoa(p.ID))
+	args = append(args, Itoa(p.Duration))
+	args = append(args, EscapeFanta(p.Reason))
 	return args
 }
 
@@ -776,11 +776,11 @@ func ParseMA(body []string) (*MA, error) {
 	p := &MA{}
 	get := func(i int) string { if i < len(body) { return body[i] }; return "" }
 	cursor := 0
-	p.ID = atoiOrZero(get(cursor))
+	p.ID = AtoiOrZero(get(cursor))
 	cursor++
-	p.Duration = atoiOrZero(get(cursor))
+	p.Duration = AtoiOrZero(get(cursor))
 	cursor++
-	p.Reason = unescapeFanta(get(cursor))
+	p.Reason = UnescapeFanta(get(cursor))
 	cursor++
 	return p, nil
 }
@@ -799,12 +799,12 @@ func (p *MCToClient) Header() string { return "MC" }
 
 func (p *MCToClient) Args() []string {
 	var args []string
-	args = append(args, escapeFanta(p.Name))
-	args = append(args, itoa(p.CharID))
-	args = append(args, escapeFanta(p.Showname))
-	args = append(args, boolToWire(p.Looping))
-	args = append(args, itoa(p.Channel))
-	args = append(args, itoa(p.Effects))
+	args = append(args, EscapeFanta(p.Name))
+	args = append(args, Itoa(p.CharID))
+	args = append(args, EscapeFanta(p.Showname))
+	args = append(args, BoolToWire(p.Looping))
+	args = append(args, Itoa(p.Channel))
+	args = append(args, Itoa(p.Effects))
 	return args
 }
 
@@ -812,17 +812,17 @@ func ParseMCToClient(body []string) (*MCToClient, error) {
 	p := &MCToClient{}
 	get := func(i int) string { if i < len(body) { return body[i] }; return "" }
 	cursor := 0
-	p.Name = unescapeFanta(get(cursor))
+	p.Name = UnescapeFanta(get(cursor))
 	cursor++
-	p.CharID = atoiOrZero(get(cursor))
+	p.CharID = AtoiOrZero(get(cursor))
 	cursor++
-	p.Showname = unescapeFanta(get(cursor))
+	p.Showname = UnescapeFanta(get(cursor))
 	cursor++
-	p.Looping = wireToBool(get(cursor))
+	p.Looping = WireToBool(get(cursor))
 	cursor++
-	p.Channel = atoiOrZero(get(cursor))
+	p.Channel = AtoiOrZero(get(cursor))
 	cursor++
-	p.Effects = atoiOrZero(get(cursor))
+	p.Effects = AtoiOrZero(get(cursor))
 	cursor++
 	return p, nil
 }
@@ -839,10 +839,10 @@ func (p *MCToServer) Header() string { return "MC" }
 
 func (p *MCToServer) Args() []string {
 	var args []string
-	args = append(args, escapeFanta(p.Name))
-	args = append(args, itoa(p.CharID))
-	args = append(args, escapeFanta(p.Showname))
-	args = append(args, itoa(p.Effects))
+	args = append(args, EscapeFanta(p.Name))
+	args = append(args, Itoa(p.CharID))
+	args = append(args, EscapeFanta(p.Showname))
+	args = append(args, Itoa(p.Effects))
 	return args
 }
 
@@ -850,13 +850,273 @@ func ParseMCToServer(body []string) (*MCToServer, error) {
 	p := &MCToServer{}
 	get := func(i int) string { if i < len(body) { return body[i] }; return "" }
 	cursor := 0
-	p.Name = unescapeFanta(get(cursor))
+	p.Name = UnescapeFanta(get(cursor))
 	cursor++
-	p.CharID = atoiOrZero(get(cursor))
+	p.CharID = AtoiOrZero(get(cursor))
 	cursor++
-	p.Showname = unescapeFanta(get(cursor))
+	p.Showname = UnescapeFanta(get(cursor))
 	cursor++
-	p.Effects = atoiOrZero(get(cursor))
+	p.Effects = AtoiOrZero(get(cursor))
+	cursor++
+	return p, nil
+}
+
+// MSToClient is 
+type MSToClient struct {
+	DeskModifier DeskModifier `json:"desk_modifier"`
+	Preanim string `json:"preanim"`
+	Character string `json:"character"`
+	Emote string `json:"emote"`
+	Message string `json:"message"`
+	Side Side `json:"side"`
+	SfxName string `json:"sfx_name"`
+	EmoteModifier EmoteModifier `json:"emote_modifier"`
+	CharID int `json:"char_id"`
+	SfxDelay int `json:"sfx_delay"`
+	ShoutModifier ShoutModifier `json:"shout_modifier"`
+	EvidenceID int `json:"evidence_id"`
+	Flip Flip `json:"flip"`
+	Realization bool `json:"realization"`
+	TextColor TextColor `json:"text_color"`
+	Showname string `json:"showname"`
+	PairedCharID int `json:"paired_charid"`
+	PairedName string `json:"paired_name"`
+	PairedEmote string `json:"paired_emote"`
+	Offset Offset `json:"offset"`
+	PairedOffset Offset `json:"paired_offset"`
+	PairedFlip Flip `json:"paired_flip"`
+	NoninterruptingPreanim bool `json:"noninterrupting_preanim"`
+	SfxLooping bool `json:"sfx_looping"`
+	Screenshake bool `json:"screenshake"`
+	FramesShake string `json:"frames_shake"`
+	FramesRealization string `json:"frames_realization"`
+	FramesSfx string `json:"frames_sfx"`
+	Additive bool `json:"additive"`
+	Effect string `json:"effect"`
+}
+
+func (p *MSToClient) Header() string { return "MS" }
+
+func (p *MSToClient) Args() []string {
+	var args []string
+	args = append(args, Itoa(DeskModifierToWire[p.DeskModifier]))
+	args = append(args, EscapeFanta(p.Preanim))
+	args = append(args, EscapeFanta(p.Character))
+	args = append(args, EscapeFanta(p.Emote))
+	args = append(args, EscapeFanta(p.Message))
+	args = append(args, string(p.Side))
+	args = append(args, EscapeFanta(p.SfxName))
+	args = append(args, Itoa(EmoteModifierToWire[p.EmoteModifier]))
+	args = append(args, Itoa(p.CharID))
+	args = append(args, Itoa(p.SfxDelay))
+	args = append(args, Itoa(ShoutModifierToWire[p.ShoutModifier]))
+	args = append(args, Itoa(p.EvidenceID))
+	args = append(args, Itoa(FlipToWire[p.Flip]))
+	args = append(args, BoolToWire(p.Realization))
+	args = append(args, Itoa(TextColorToWire[p.TextColor]))
+	args = append(args, EscapeFanta(p.Showname))
+	args = append(args, Itoa(p.PairedCharID))
+	args = append(args, EscapeFanta(p.PairedName))
+	args = append(args, EscapeFanta(p.PairedEmote))
+	args = append(args, OffsetToWire(p.Offset))
+	args = append(args, OffsetToWire(p.PairedOffset))
+	args = append(args, Itoa(FlipToWire[p.PairedFlip]))
+	args = append(args, BoolToWire(p.NoninterruptingPreanim))
+	args = append(args, BoolToWire(p.SfxLooping))
+	args = append(args, BoolToWire(p.Screenshake))
+	args = append(args, EscapeFanta(p.FramesShake))
+	args = append(args, EscapeFanta(p.FramesRealization))
+	args = append(args, EscapeFanta(p.FramesSfx))
+	args = append(args, BoolToWire(p.Additive))
+	args = append(args, EscapeFanta(p.Effect))
+	return args
+}
+
+func ParseMSToClient(body []string) (*MSToClient, error) {
+	p := &MSToClient{}
+	get := func(i int) string { if i < len(body) { return body[i] }; return "" }
+	cursor := 0
+	p.DeskModifier = DeskModifierFromWire[AtoiOrZero(get(cursor))]
+	cursor++
+	p.Preanim = UnescapeFanta(get(cursor))
+	cursor++
+	p.Character = UnescapeFanta(get(cursor))
+	cursor++
+	p.Emote = UnescapeFanta(get(cursor))
+	cursor++
+	p.Message = UnescapeFanta(get(cursor))
+	cursor++
+	p.Side = Side(get(cursor))
+	cursor++
+	p.SfxName = UnescapeFanta(get(cursor))
+	cursor++
+	p.EmoteModifier = EmoteModifierFromWire[AtoiOrZero(get(cursor))]
+	cursor++
+	p.CharID = AtoiOrZero(get(cursor))
+	cursor++
+	p.SfxDelay = AtoiOrZero(get(cursor))
+	cursor++
+	p.ShoutModifier = ShoutModifierFromWire[AtoiOrZero(get(cursor))]
+	cursor++
+	p.EvidenceID = AtoiOrZero(get(cursor))
+	cursor++
+	p.Flip = FlipFromWire[AtoiOrZero(get(cursor))]
+	cursor++
+	p.Realization = WireToBool(get(cursor))
+	cursor++
+	p.TextColor = TextColorFromWire[AtoiOrZero(get(cursor))]
+	cursor++
+	p.Showname = UnescapeFanta(get(cursor))
+	cursor++
+	p.PairedCharID = AtoiOrZero(get(cursor))
+	cursor++
+	p.PairedName = UnescapeFanta(get(cursor))
+	cursor++
+	p.PairedEmote = UnescapeFanta(get(cursor))
+	cursor++
+	p.Offset = OffsetFromWire(get(cursor))
+	cursor++
+	p.PairedOffset = OffsetFromWire(get(cursor))
+	cursor++
+	p.PairedFlip = FlipFromWire[AtoiOrZero(get(cursor))]
+	cursor++
+	p.NoninterruptingPreanim = WireToBool(get(cursor))
+	cursor++
+	p.SfxLooping = WireToBool(get(cursor))
+	cursor++
+	p.Screenshake = WireToBool(get(cursor))
+	cursor++
+	p.FramesShake = UnescapeFanta(get(cursor))
+	cursor++
+	p.FramesRealization = UnescapeFanta(get(cursor))
+	cursor++
+	p.FramesSfx = UnescapeFanta(get(cursor))
+	cursor++
+	p.Additive = WireToBool(get(cursor))
+	cursor++
+	p.Effect = UnescapeFanta(get(cursor))
+	cursor++
+	return p, nil
+}
+
+// MSToServer is 
+type MSToServer struct {
+	DeskModifier DeskModifier `json:"desk_modifier"`
+	Preanim string `json:"preanim"`
+	Character string `json:"character"`
+	Emote string `json:"emote"`
+	Message string `json:"message"`
+	Side Side `json:"side"`
+	SfxName string `json:"sfx_name"`
+	EmoteModifier EmoteModifier `json:"emote_modifier"`
+	CharID int `json:"char_id"`
+	SfxDelay int `json:"sfx_delay"`
+	ShoutModifier ShoutModifier `json:"shout_modifier"`
+	EvidenceID int `json:"evidence_id"`
+	Flip Flip `json:"flip"`
+	Realization bool `json:"realization"`
+	TextColor TextColor `json:"text_color"`
+	Showname string `json:"showname"`
+	PairedCharID int `json:"paired_charid"`
+	Offset Offset `json:"offset"`
+	NoninterruptingPreanim bool `json:"noninterrupting_preanim"`
+	SfxLooping bool `json:"sfx_looping"`
+	Screenshake bool `json:"screenshake"`
+	FramesShake string `json:"frames_shake"`
+	FramesRealization string `json:"frames_realization"`
+	FramesSfx string `json:"frames_sfx"`
+	Additive bool `json:"additive"`
+	Effect string `json:"effect"`
+}
+
+func (p *MSToServer) Header() string { return "MS" }
+
+func (p *MSToServer) Args() []string {
+	var args []string
+	args = append(args, Itoa(DeskModifierToWire[p.DeskModifier]))
+	args = append(args, EscapeFanta(p.Preanim))
+	args = append(args, EscapeFanta(p.Character))
+	args = append(args, EscapeFanta(p.Emote))
+	args = append(args, EscapeFanta(p.Message))
+	args = append(args, string(p.Side))
+	args = append(args, EscapeFanta(p.SfxName))
+	args = append(args, Itoa(EmoteModifierToWire[p.EmoteModifier]))
+	args = append(args, Itoa(p.CharID))
+	args = append(args, Itoa(p.SfxDelay))
+	args = append(args, Itoa(ShoutModifierToWire[p.ShoutModifier]))
+	args = append(args, Itoa(p.EvidenceID))
+	args = append(args, Itoa(FlipToWire[p.Flip]))
+	args = append(args, BoolToWire(p.Realization))
+	args = append(args, Itoa(TextColorToWire[p.TextColor]))
+	args = append(args, EscapeFanta(p.Showname))
+	args = append(args, Itoa(p.PairedCharID))
+	args = append(args, OffsetToWire(p.Offset))
+	args = append(args, BoolToWire(p.NoninterruptingPreanim))
+	args = append(args, BoolToWire(p.SfxLooping))
+	args = append(args, BoolToWire(p.Screenshake))
+	args = append(args, EscapeFanta(p.FramesShake))
+	args = append(args, EscapeFanta(p.FramesRealization))
+	args = append(args, EscapeFanta(p.FramesSfx))
+	args = append(args, BoolToWire(p.Additive))
+	args = append(args, EscapeFanta(p.Effect))
+	return args
+}
+
+func ParseMSToServer(body []string) (*MSToServer, error) {
+	p := &MSToServer{}
+	get := func(i int) string { if i < len(body) { return body[i] }; return "" }
+	cursor := 0
+	p.DeskModifier = DeskModifierFromWire[AtoiOrZero(get(cursor))]
+	cursor++
+	p.Preanim = UnescapeFanta(get(cursor))
+	cursor++
+	p.Character = UnescapeFanta(get(cursor))
+	cursor++
+	p.Emote = UnescapeFanta(get(cursor))
+	cursor++
+	p.Message = UnescapeFanta(get(cursor))
+	cursor++
+	p.Side = Side(get(cursor))
+	cursor++
+	p.SfxName = UnescapeFanta(get(cursor))
+	cursor++
+	p.EmoteModifier = EmoteModifierFromWire[AtoiOrZero(get(cursor))]
+	cursor++
+	p.CharID = AtoiOrZero(get(cursor))
+	cursor++
+	p.SfxDelay = AtoiOrZero(get(cursor))
+	cursor++
+	p.ShoutModifier = ShoutModifierFromWire[AtoiOrZero(get(cursor))]
+	cursor++
+	p.EvidenceID = AtoiOrZero(get(cursor))
+	cursor++
+	p.Flip = FlipFromWire[AtoiOrZero(get(cursor))]
+	cursor++
+	p.Realization = WireToBool(get(cursor))
+	cursor++
+	p.TextColor = TextColorFromWire[AtoiOrZero(get(cursor))]
+	cursor++
+	p.Showname = UnescapeFanta(get(cursor))
+	cursor++
+	p.PairedCharID = AtoiOrZero(get(cursor))
+	cursor++
+	p.Offset = OffsetFromWire(get(cursor))
+	cursor++
+	p.NoninterruptingPreanim = WireToBool(get(cursor))
+	cursor++
+	p.SfxLooping = WireToBool(get(cursor))
+	cursor++
+	p.Screenshake = WireToBool(get(cursor))
+	cursor++
+	p.FramesShake = UnescapeFanta(get(cursor))
+	cursor++
+	p.FramesRealization = UnescapeFanta(get(cursor))
+	cursor++
+	p.FramesSfx = UnescapeFanta(get(cursor))
+	cursor++
+	p.Additive = WireToBool(get(cursor))
+	cursor++
+	p.Effect = UnescapeFanta(get(cursor))
 	cursor++
 	return p, nil
 }
@@ -872,9 +1132,9 @@ func (p *PE) Header() string { return "PE" }
 
 func (p *PE) Args() []string {
 	var args []string
-	args = append(args, escapeFanta(p.Name))
-	args = append(args, escapeFanta(p.Description))
-	args = append(args, escapeFanta(p.Image))
+	args = append(args, EscapeFanta(p.Name))
+	args = append(args, EscapeFanta(p.Description))
+	args = append(args, EscapeFanta(p.Image))
 	return args
 }
 
@@ -882,11 +1142,11 @@ func ParsePE(body []string) (*PE, error) {
 	p := &PE{}
 	get := func(i int) string { if i < len(body) { return body[i] }; return "" }
 	cursor := 0
-	p.Name = unescapeFanta(get(cursor))
+	p.Name = UnescapeFanta(get(cursor))
 	cursor++
-	p.Description = unescapeFanta(get(cursor))
+	p.Description = UnescapeFanta(get(cursor))
 	cursor++
-	p.Image = unescapeFanta(get(cursor))
+	p.Image = UnescapeFanta(get(cursor))
 	cursor++
 	return p, nil
 }
@@ -902,9 +1162,9 @@ func (p *PN) Header() string { return "PN" }
 
 func (p *PN) Args() []string {
 	var args []string
-	args = append(args, itoa(p.PlayerCount))
-	args = append(args, itoa(p.MaxPlayers))
-	args = append(args, escapeFanta(p.ServerDescription))
+	args = append(args, Itoa(p.PlayerCount))
+	args = append(args, Itoa(p.MaxPlayers))
+	args = append(args, EscapeFanta(p.ServerDescription))
 	return args
 }
 
@@ -912,11 +1172,11 @@ func ParsePN(body []string) (*PN, error) {
 	p := &PN{}
 	get := func(i int) string { if i < len(body) { return body[i] }; return "" }
 	cursor := 0
-	p.PlayerCount = atoiOrZero(get(cursor))
+	p.PlayerCount = AtoiOrZero(get(cursor))
 	cursor++
-	p.MaxPlayers = atoiOrZero(get(cursor))
+	p.MaxPlayers = AtoiOrZero(get(cursor))
 	cursor++
-	p.ServerDescription = unescapeFanta(get(cursor))
+	p.ServerDescription = UnescapeFanta(get(cursor))
 	cursor++
 	return p, nil
 }
@@ -931,8 +1191,8 @@ func (p *PR) Header() string { return "PR" }
 
 func (p *PR) Args() []string {
 	var args []string
-	args = append(args, itoa(p.ID))
-	args = append(args, itoa(p.Type))
+	args = append(args, Itoa(p.ID))
+	args = append(args, Itoa(p.Type))
 	return args
 }
 
@@ -940,9 +1200,9 @@ func ParsePR(body []string) (*PR, error) {
 	p := &PR{}
 	get := func(i int) string { if i < len(body) { return body[i] }; return "" }
 	cursor := 0
-	p.ID = atoiOrZero(get(cursor))
+	p.ID = AtoiOrZero(get(cursor))
 	cursor++
-	p.Type = atoiOrZero(get(cursor))
+	p.Type = AtoiOrZero(get(cursor))
 	cursor++
 	return p, nil
 }
@@ -958,9 +1218,9 @@ func (p *PU) Header() string { return "PU" }
 
 func (p *PU) Args() []string {
 	var args []string
-	args = append(args, itoa(p.ID))
-	args = append(args, itoa(p.Type))
-	args = append(args, escapeFanta(p.Data))
+	args = append(args, Itoa(p.ID))
+	args = append(args, Itoa(p.Type))
+	args = append(args, EscapeFanta(p.Data))
 	return args
 }
 
@@ -968,11 +1228,11 @@ func ParsePU(body []string) (*PU, error) {
 	p := &PU{}
 	get := func(i int) string { if i < len(body) { return body[i] }; return "" }
 	cursor := 0
-	p.ID = atoiOrZero(get(cursor))
+	p.ID = AtoiOrZero(get(cursor))
 	cursor++
-	p.Type = atoiOrZero(get(cursor))
+	p.Type = AtoiOrZero(get(cursor))
 	cursor++
-	p.Data = unescapeFanta(get(cursor))
+	p.Data = UnescapeFanta(get(cursor))
 	cursor++
 	return p, nil
 }
@@ -987,9 +1247,9 @@ func (p *PV) Header() string { return "PV" }
 
 func (p *PV) Args() []string {
 	var args []string
-	args = append(args, itoa(p.PlayerID))
+	args = append(args, Itoa(p.PlayerID))
 	args = append(args, "CID")
-	args = append(args, itoa(p.CharID))
+	args = append(args, Itoa(p.CharID))
 	return args
 }
 
@@ -997,10 +1257,10 @@ func ParsePV(body []string) (*PV, error) {
 	p := &PV{}
 	get := func(i int) string { if i < len(body) { return body[i] }; return "" }
 	cursor := 0
-	p.PlayerID = atoiOrZero(get(cursor))
+	p.PlayerID = AtoiOrZero(get(cursor))
 	cursor++
 	cursor++ // const slot
-	p.CharID = atoiOrZero(get(cursor))
+	p.CharID = AtoiOrZero(get(cursor))
 	cursor++
 	return p, nil
 }
@@ -1062,7 +1322,7 @@ func (p *RMC) Header() string { return "RMC" }
 
 func (p *RMC) Args() []string {
 	var args []string
-	args = append(args, escapeFanta(p.ToTime))
+	args = append(args, EscapeFanta(p.ToTime))
 	return args
 }
 
@@ -1070,7 +1330,7 @@ func ParseRMC(body []string) (*RMC, error) {
 	p := &RMC{}
 	get := func(i int) string { if i < len(body) { return body[i] }; return "" }
 	cursor := 0
-	p.ToTime = unescapeFanta(get(cursor))
+	p.ToTime = UnescapeFanta(get(cursor))
 	cursor++
 	return p, nil
 }
@@ -1085,8 +1345,8 @@ func (p *RTToClient) Header() string { return "RT" }
 
 func (p *RTToClient) Args() []string {
 	var args []string
-	args = append(args, escapeFanta(p.Animation))
-	args = append(args, itoa(p.JudgeID))
+	args = append(args, EscapeFanta(p.Animation))
+	args = append(args, Itoa(p.JudgeID))
 	return args
 }
 
@@ -1094,9 +1354,9 @@ func ParseRTToClient(body []string) (*RTToClient, error) {
 	p := &RTToClient{}
 	get := func(i int) string { if i < len(body) { return body[i] }; return "" }
 	cursor := 0
-	p.Animation = unescapeFanta(get(cursor))
+	p.Animation = UnescapeFanta(get(cursor))
 	cursor++
-	p.JudgeID = atoiOrZero(get(cursor))
+	p.JudgeID = AtoiOrZero(get(cursor))
 	cursor++
 	return p, nil
 }
@@ -1111,8 +1371,8 @@ func (p *RTToServer) Header() string { return "RT" }
 
 func (p *RTToServer) Args() []string {
 	var args []string
-	args = append(args, escapeFanta(p.Animation))
-	args = append(args, itoa(p.JudgeID))
+	args = append(args, EscapeFanta(p.Animation))
+	args = append(args, Itoa(p.JudgeID))
 	return args
 }
 
@@ -1120,9 +1380,9 @@ func ParseRTToServer(body []string) (*RTToServer, error) {
 	p := &RTToServer{}
 	get := func(i int) string { if i < len(body) { return body[i] }; return "" }
 	cursor := 0
-	p.Animation = unescapeFanta(get(cursor))
+	p.Animation = UnescapeFanta(get(cursor))
 	cursor++
-	p.JudgeID = atoiOrZero(get(cursor))
+	p.JudgeID = AtoiOrZero(get(cursor))
 	cursor++
 	return p, nil
 }
@@ -1159,9 +1419,9 @@ func (p *SI) Header() string { return "SI" }
 
 func (p *SI) Args() []string {
 	var args []string
-	args = append(args, itoa(p.CharCount))
-	args = append(args, itoa(p.EviCount))
-	args = append(args, itoa(p.MusCount))
+	args = append(args, Itoa(p.CharCount))
+	args = append(args, Itoa(p.EviCount))
+	args = append(args, Itoa(p.MusCount))
 	return args
 }
 
@@ -1169,11 +1429,11 @@ func ParseSI(body []string) (*SI, error) {
 	p := &SI{}
 	get := func(i int) string { if i < len(body) { return body[i] }; return "" }
 	cursor := 0
-	p.CharCount = atoiOrZero(get(cursor))
+	p.CharCount = AtoiOrZero(get(cursor))
 	cursor++
-	p.EviCount = atoiOrZero(get(cursor))
+	p.EviCount = AtoiOrZero(get(cursor))
 	cursor++
-	p.MusCount = atoiOrZero(get(cursor))
+	p.MusCount = AtoiOrZero(get(cursor))
 	cursor++
 	return p, nil
 }
@@ -1232,9 +1492,9 @@ func (p *TI) Header() string { return "TI" }
 
 func (p *TI) Args() []string {
 	var args []string
-	args = append(args, itoa(p.TimerID))
-	args = append(args, itoa(p.Command))
-	args = append(args, itoa(p.Time))
+	args = append(args, Itoa(p.TimerID))
+	args = append(args, Itoa(p.Command))
+	args = append(args, Itoa(p.Time))
 	return args
 }
 
@@ -1242,11 +1502,11 @@ func ParseTI(body []string) (*TI, error) {
 	p := &TI{}
 	get := func(i int) string { if i < len(body) { return body[i] }; return "" }
 	cursor := 0
-	p.TimerID = atoiOrZero(get(cursor))
+	p.TimerID = AtoiOrZero(get(cursor))
 	cursor++
-	p.Command = atoiOrZero(get(cursor))
+	p.Command = AtoiOrZero(get(cursor))
 	cursor++
-	p.Time = atoiOrZero(get(cursor))
+	p.Time = AtoiOrZero(get(cursor))
 	cursor++
 	return p, nil
 }
@@ -1261,8 +1521,8 @@ func (p *VS_AUDIO) Header() string { return "VS_AUDIO" }
 
 func (p *VS_AUDIO) Args() []string {
 	var args []string
-	args = append(args, itoa(p.FromUID))
-	args = append(args, escapeFanta(p.Payload))
+	args = append(args, Itoa(p.FromUID))
+	args = append(args, EscapeFanta(p.Payload))
 	return args
 }
 
@@ -1270,9 +1530,9 @@ func ParseVS_AUDIO(body []string) (*VS_AUDIO, error) {
 	p := &VS_AUDIO{}
 	get := func(i int) string { if i < len(body) { return body[i] }; return "" }
 	cursor := 0
-	p.FromUID = atoiOrZero(get(cursor))
+	p.FromUID = AtoiOrZero(get(cursor))
 	cursor++
-	p.Payload = unescapeFanta(get(cursor))
+	p.Payload = UnescapeFanta(get(cursor))
 	cursor++
 	return p, nil
 }
@@ -1292,13 +1552,13 @@ func (p *VS_CAPS) Header() string { return "VS_CAPS" }
 
 func (p *VS_CAPS) Args() []string {
 	var args []string
-	args = append(args, boolToWire(p.Enabled))
-	args = append(args, boolToWire(p.PttOnly))
-	args = append(args, itoa(p.MaxPeers))
-	args = append(args, escapeFanta(p.Codec))
-	args = append(args, itoa(p.SampleRate))
-	args = append(args, itoa(p.FrameMs))
-	args = append(args, itoa(p.MaxFrameBytes))
+	args = append(args, BoolToWire(p.Enabled))
+	args = append(args, BoolToWire(p.PttOnly))
+	args = append(args, Itoa(p.MaxPeers))
+	args = append(args, EscapeFanta(p.Codec))
+	args = append(args, Itoa(p.SampleRate))
+	args = append(args, Itoa(p.FrameMs))
+	args = append(args, Itoa(p.MaxFrameBytes))
 	return args
 }
 
@@ -1306,19 +1566,19 @@ func ParseVS_CAPS(body []string) (*VS_CAPS, error) {
 	p := &VS_CAPS{}
 	get := func(i int) string { if i < len(body) { return body[i] }; return "" }
 	cursor := 0
-	p.Enabled = wireToBool(get(cursor))
+	p.Enabled = WireToBool(get(cursor))
 	cursor++
-	p.PttOnly = wireToBool(get(cursor))
+	p.PttOnly = WireToBool(get(cursor))
 	cursor++
-	p.MaxPeers = atoiOrZero(get(cursor))
+	p.MaxPeers = AtoiOrZero(get(cursor))
 	cursor++
-	p.Codec = unescapeFanta(get(cursor))
+	p.Codec = UnescapeFanta(get(cursor))
 	cursor++
-	p.SampleRate = atoiOrZero(get(cursor))
+	p.SampleRate = AtoiOrZero(get(cursor))
 	cursor++
-	p.FrameMs = atoiOrZero(get(cursor))
+	p.FrameMs = AtoiOrZero(get(cursor))
 	cursor++
-	p.MaxFrameBytes = atoiOrZero(get(cursor))
+	p.MaxFrameBytes = AtoiOrZero(get(cursor))
 	cursor++
 	return p, nil
 }
@@ -1332,7 +1592,7 @@ func (p *VS_FRAME) Header() string { return "VS_FRAME" }
 
 func (p *VS_FRAME) Args() []string {
 	var args []string
-	args = append(args, escapeFanta(p.Payload))
+	args = append(args, EscapeFanta(p.Payload))
 	return args
 }
 
@@ -1340,7 +1600,7 @@ func ParseVS_FRAME(body []string) (*VS_FRAME, error) {
 	p := &VS_FRAME{}
 	get := func(i int) string { if i < len(body) { return body[i] }; return "" }
 	cursor := 0
-	p.Payload = unescapeFanta(get(cursor))
+	p.Payload = UnescapeFanta(get(cursor))
 	cursor++
 	return p, nil
 }
@@ -1354,7 +1614,7 @@ func (p *VS_JOINToClient) Header() string { return "VS_JOIN" }
 
 func (p *VS_JOINToClient) Args() []string {
 	var args []string
-	args = append(args, itoa(p.UID))
+	args = append(args, Itoa(p.UID))
 	return args
 }
 
@@ -1362,7 +1622,7 @@ func ParseVS_JOINToClient(body []string) (*VS_JOINToClient, error) {
 	p := &VS_JOINToClient{}
 	get := func(i int) string { if i < len(body) { return body[i] }; return "" }
 	cursor := 0
-	p.UID = atoiOrZero(get(cursor))
+	p.UID = AtoiOrZero(get(cursor))
 	cursor++
 	return p, nil
 }
@@ -1392,7 +1652,7 @@ func (p *VS_LEAVEToClient) Header() string { return "VS_LEAVE" }
 
 func (p *VS_LEAVEToClient) Args() []string {
 	var args []string
-	args = append(args, itoa(p.UID))
+	args = append(args, Itoa(p.UID))
 	return args
 }
 
@@ -1400,7 +1660,7 @@ func ParseVS_LEAVEToClient(body []string) (*VS_LEAVEToClient, error) {
 	p := &VS_LEAVEToClient{}
 	get := func(i int) string { if i < len(body) { return body[i] }; return "" }
 	cursor := 0
-	p.UID = atoiOrZero(get(cursor))
+	p.UID = AtoiOrZero(get(cursor))
 	cursor++
 	return p, nil
 }
@@ -1430,14 +1690,14 @@ func (p *VS_PEERS) Header() string { return "VS_PEERS" }
 
 func (p *VS_PEERS) Args() []string {
 	var args []string
-	args = append(args, intsToStrs(p.Uids)...)
+	args = append(args, IntsToStrs(p.Uids)...)
 	return args
 }
 
 func ParseVS_PEERS(body []string) (*VS_PEERS, error) {
 	p := &VS_PEERS{}
 	cursor := 0
-	p.Uids = strsToInts(body[cursor:])
+	p.Uids = StrsToInts(body[cursor:])
 	cursor = len(body)
 	return p, nil
 }
@@ -1452,8 +1712,8 @@ func (p *VS_SPEAKToClient) Header() string { return "VS_SPEAK" }
 
 func (p *VS_SPEAKToClient) Args() []string {
 	var args []string
-	args = append(args, itoa(p.UID))
-	args = append(args, boolToWire(p.On))
+	args = append(args, Itoa(p.UID))
+	args = append(args, BoolToWire(p.On))
 	return args
 }
 
@@ -1461,9 +1721,9 @@ func ParseVS_SPEAKToClient(body []string) (*VS_SPEAKToClient, error) {
 	p := &VS_SPEAKToClient{}
 	get := func(i int) string { if i < len(body) { return body[i] }; return "" }
 	cursor := 0
-	p.UID = atoiOrZero(get(cursor))
+	p.UID = AtoiOrZero(get(cursor))
 	cursor++
-	p.On = wireToBool(get(cursor))
+	p.On = WireToBool(get(cursor))
 	cursor++
 	return p, nil
 }
@@ -1477,7 +1737,7 @@ func (p *VS_SPEAKToServer) Header() string { return "VS_SPEAK" }
 
 func (p *VS_SPEAKToServer) Args() []string {
 	var args []string
-	args = append(args, boolToWire(p.On))
+	args = append(args, BoolToWire(p.On))
 	return args
 }
 
@@ -1485,7 +1745,7 @@ func ParseVS_SPEAKToServer(body []string) (*VS_SPEAKToServer, error) {
 	p := &VS_SPEAKToServer{}
 	get := func(i int) string { if i < len(body) { return body[i] }; return "" }
 	cursor := 0
-	p.On = wireToBool(get(cursor))
+	p.On = WireToBool(get(cursor))
 	cursor++
 	return p, nil
 }
@@ -1500,8 +1760,8 @@ func (p *ZZToClient) Header() string { return "ZZ" }
 
 func (p *ZZToClient) Args() []string {
 	var args []string
-	args = append(args, escapeFanta(p.Reason))
-	args = append(args, itoa(p.Target))
+	args = append(args, EscapeFanta(p.Reason))
+	args = append(args, Itoa(p.Target))
 	return args
 }
 
@@ -1509,9 +1769,9 @@ func ParseZZToClient(body []string) (*ZZToClient, error) {
 	p := &ZZToClient{}
 	get := func(i int) string { if i < len(body) { return body[i] }; return "" }
 	cursor := 0
-	p.Reason = unescapeFanta(get(cursor))
+	p.Reason = UnescapeFanta(get(cursor))
 	cursor++
-	p.Target = atoiOrZero(get(cursor))
+	p.Target = AtoiOrZero(get(cursor))
 	cursor++
 	return p, nil
 }
@@ -1526,8 +1786,8 @@ func (p *ZZToServer) Header() string { return "ZZ" }
 
 func (p *ZZToServer) Args() []string {
 	var args []string
-	args = append(args, escapeFanta(p.Reason))
-	args = append(args, itoa(p.Target))
+	args = append(args, EscapeFanta(p.Reason))
+	args = append(args, Itoa(p.Target))
 	return args
 }
 
@@ -1535,9 +1795,9 @@ func ParseZZToServer(body []string) (*ZZToServer, error) {
 	p := &ZZToServer{}
 	get := func(i int) string { if i < len(body) { return body[i] }; return "" }
 	cursor := 0
-	p.Reason = unescapeFanta(get(cursor))
+	p.Reason = UnescapeFanta(get(cursor))
 	cursor++
-	p.Target = atoiOrZero(get(cursor))
+	p.Target = AtoiOrZero(get(cursor))
 	cursor++
 	return p, nil
 }

@@ -1,7 +1,10 @@
-package packet
+package athena
 
-// Athena/Nyathena-only packets that have no canonical aolib-meta schema. Kept
-// hand-written alongside the generated packets.
+// Athena-only packets that have no canonical aolib-meta schema. They live here,
+// on the server side, and are registered into the library registry via
+// packet.RegisterDecoder / packet.RegisterServerDecoder (see register.go).
+
+import "fmt"
 
 // TTPacket sets the testimony title overlay. Wire: TT#{type}#{title}#%.
 type TTPacket struct {
@@ -10,11 +13,14 @@ type TTPacket struct {
 }
 
 func (p *TTPacket) Header() string { return "TT" }
-func (p *TTPacket) Args() []string { return []string{escapeFanta(p.Type), escapeFanta(p.Title)} }
+func (p *TTPacket) Args() []string { return []string{p.Type, p.Title} }
 
 // ParseTT decodes a TT body.
 func ParseTT(body []string) (*TTPacket, error) {
-	return &TTPacket{Type: unescapeFanta(getStr(body, 0)), Title: unescapeFanta(getStr(body, 1))}, nil
+	if len(body) < 2 {
+		return nil, fmt.Errorf("TT: expected 2 fields, got %d", len(body))
+	}
+	return &TTPacket{Type: body[0], Title: body[1]}, nil
 }
 
 // SETCASE indicates which case roles the player is willing to fill.
@@ -31,10 +37,12 @@ type SETCASE struct {
 
 // ParseSETCASE decodes a SETCASE body.
 func ParseSETCASE(body []string) (*SETCASE, error) {
-	get := func(i int) string { return unescapeFanta(getStr(body, i)) }
+	if len(body) != 7 {
+		return nil, fmt.Errorf("SETCASE: expected 7 fields, got %d", len(body))
+	}
 	return &SETCASE{
-		Caselist: get(0), CM: get(1), Def: get(2), Pro: get(3),
-		Judge: get(4), Jury: get(5), Steno: get(6),
+		Caselist: body[0], CM: body[1], Def: body[2], Pro: body[3],
+		Judge: body[4], Jury: body[5], Steno: body[6],
 	}, nil
 }
 
@@ -51,17 +59,16 @@ type CASEA struct {
 
 func (p *CASEA) Header() string { return "CASEA" }
 func (p *CASEA) Args() []string {
-	return []string{
-		escapeFanta(p.CaseTitle), p.NeedDef, p.NeedPro,
-		p.NeedJudge, p.NeedJury, p.NeedSteno,
-	}
+	return []string{p.CaseTitle, p.NeedDef, p.NeedPro, p.NeedJudge, p.NeedJury, p.NeedSteno}
 }
 
 // ParseCASEA decodes a CASEA body.
 func ParseCASEA(body []string) (*CASEA, error) {
-	get := func(i int) string { return unescapeFanta(getStr(body, i)) }
+	if len(body) != 6 {
+		return nil, fmt.Errorf("CASEA: expected 6 fields, got %d", len(body))
+	}
 	return &CASEA{
-		CaseTitle: get(0), NeedDef: get(1), NeedPro: get(2),
-		NeedJudge: get(3), NeedJury: get(4), NeedSteno: get(5),
+		CaseTitle: body[0], NeedDef: body[1], NeedPro: body[2],
+		NeedJudge: body[3], NeedJury: body[4], NeedSteno: body[5],
 	}, nil
 }

@@ -18,9 +18,20 @@ package area
 
 import (
 	"fmt"
-
-	"github.com/MangosArentLiterature/Athena/internal/packet"
+	"strings"
 )
+
+// setTextColorInServerString rewrites the TextColor slot (field 14) of a
+// server-format MS wire body. Nyathena stores testimony statements as raw MS
+// strings, so recolouring a replayed statement is a plain slot swap rather than
+// a full parse/re-encode.
+func setTextColorInServerString(s, color string) string {
+	fields := strings.Split(s, "#")
+	if len(fields) > 14 {
+		fields[14] = color
+	}
+	return strings.Join(fields, "#")
+}
 
 // TstState returns the testimony recorder's current state.
 func (a *Area) TstState() TRState {
@@ -64,7 +75,7 @@ func (a *Area) TstInsert(s string) error {
 		return fmt.Errorf("index out of range")
 	}
 	if a.tr.Index != 0 {
-		s = packet.SetTextColorInServerString(s, "1")
+		s = setTextColorInServerString(s, "1")
 	}
 	a.tr.Testimony = append(a.tr.Testimony, "")
 	copy(a.tr.Testimony[a.tr.Index+2:], a.tr.Testimony[a.tr.Index+1:])
@@ -97,7 +108,7 @@ func (a *Area) TstUpdate(s string) error {
 		return fmt.Errorf("index out of range")
 	}
 	if a.tr.Index != 0 {
-		s = packet.SetTextColorInServerString(s, "1")
+		s = setTextColorInServerString(s, "1")
 	}
 	a.tr.Testimony[a.tr.Index] = s
 	return nil
@@ -146,7 +157,7 @@ func (a *Area) TstAppend(s string) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	if a.tr.Index != 0 {
-		s = packet.SetTextColorInServerString(s, "1")
+		s = setTextColorInServerString(s, "1")
 	}
 	a.tr.Testimony = append(a.tr.Testimony, s)
 }

@@ -2,10 +2,10 @@
 
 package packet
 
-// decoder turns a positional body into its typed packet struct.
-type decoder func(body []string) (any, error)
+// Decoder turns a positional body into its typed packet struct.
+type Decoder func(body []string) (any, error)
 
-var c2sDecoders = map[string]decoder{
+var c2sDecoders = map[string]Decoder{
 	"askchaa": func(b []string) (any, error) { return ParseAskchaa(b) },
 	"CC": func(b []string) (any, error) { return ParseCC(b) },
 	"CH": func(b []string) (any, error) { return ParseCH(b) },
@@ -17,6 +17,7 @@ var c2sDecoders = map[string]decoder{
 	"ID": func(b []string) (any, error) { return ParseIDToServer(b) },
 	"MA": func(b []string) (any, error) { return ParseMA(b) },
 	"MC": func(b []string) (any, error) { return ParseMCToServer(b) },
+	"MS": func(b []string) (any, error) { return ParseMSToServer(b) },
 	"PE": func(b []string) (any, error) { return ParsePE(b) },
 	"RC": func(b []string) (any, error) { return ParseRC(b) },
 	"RD": func(b []string) (any, error) { return ParseRD(b) },
@@ -29,7 +30,7 @@ var c2sDecoders = map[string]decoder{
 	"ZZ": func(b []string) (any, error) { return ParseZZToServer(b) },
 }
 
-var s2cDecoders = map[string]decoder{
+var s2cDecoders = map[string]Decoder{
 	"ARUP": func(b []string) (any, error) { return ParseARUP(b) },
 	"ASS": func(b []string) (any, error) { return ParseASS(b) },
 	"AUTH": func(b []string) (any, error) { return ParseAUTH(b) },
@@ -54,6 +55,7 @@ var s2cDecoders = map[string]decoder{
 	"KK": func(b []string) (any, error) { return ParseKK(b) },
 	"LE": func(b []string) (any, error) { return ParseLE(b) },
 	"MC": func(b []string) (any, error) { return ParseMCToClient(b) },
+	"MS": func(b []string) (any, error) { return ParseMSToClient(b) },
 	"PN": func(b []string) (any, error) { return ParsePN(b) },
 	"PR": func(b []string) (any, error) { return ParsePR(b) },
 	"PU": func(b []string) (any, error) { return ParsePU(b) },

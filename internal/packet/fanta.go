@@ -13,8 +13,8 @@ import (
 	"strings"
 )
 
-// escapeFanta escapes the chat-format metacharacters on encode.
-func escapeFanta(s string) string {
+// EscapeFanta escapes the chat-format metacharacters on encode.
+func EscapeFanta(s string) string {
 	s = strings.ReplaceAll(s, "#", "<num>")
 	s = strings.ReplaceAll(s, "&", "<and>")
 	s = strings.ReplaceAll(s, "%", "<percent>")
@@ -22,8 +22,8 @@ func escapeFanta(s string) string {
 	return s
 }
 
-// unescapeFanta inverts escapeFanta on decode.
-func unescapeFanta(s string) string {
+// UnescapeFanta inverts EscapeFanta on decode.
+func UnescapeFanta(s string) string {
 	s = strings.ReplaceAll(s, "<num>", "#")
 	s = strings.ReplaceAll(s, "<and>", "&")
 	s = strings.ReplaceAll(s, "<percent>", "%")
@@ -31,11 +31,11 @@ func unescapeFanta(s string) string {
 	return s
 }
 
-// itoa is a short alias for strconv.Itoa.
-func itoa(n int) string { return strconv.Itoa(n) }
+// Itoa is a short alias for strconv.Itoa.
+func Itoa(n int) string { return strconv.Itoa(n) }
 
-// atoiOrZero parses a base-10 integer, returning 0 on empty/malformed input.
-func atoiOrZero(s string) int {
+// AtoiOrZero parses a base-10 integer, returning 0 on empty/malformed input.
+func AtoiOrZero(s string) int {
 	if s == "" {
 		return 0
 	}
@@ -46,54 +46,54 @@ func atoiOrZero(s string) int {
 	return n
 }
 
-// getStr returns body[i] or "" if i is out of range.
-func getStr(body []string, i int) string {
+// GetStr returns body[i] or "" if i is out of range.
+func GetStr(body []string, i int) string {
 	if i < len(body) {
 		return body[i]
 	}
 	return ""
 }
 
-// boolToWire encodes a boolean as "1"/"0".
-func boolToWire(b bool) string {
+// BoolToWire encodes a boolean as "1"/"0".
+func BoolToWire(b bool) string {
 	if b {
 		return "1"
 	}
 	return "0"
 }
 
-// wireToBool decodes a "1"/"0" token to a boolean.
-func wireToBool(s string) bool { return s == "1" }
+// WireToBool decodes a "1"/"0" token to a boolean.
+func WireToBool(s string) bool { return s == "1" }
 
-// offsetToWire encodes an Offset as "x&y".
-func offsetToWire(o Offset) string { return itoa(o.X) + "&" + itoa(o.Y) }
+// OffsetToWire encodes an Offset as "x&y".
+func OffsetToWire(o Offset) string { return Itoa(o.X) + "&" + Itoa(o.Y) }
 
-// offsetFromWire decodes "x&y" (tolerating the legacy <and> escape) into an
+// OffsetFromWire decodes "x&y" (tolerating the legacy <and> escape) into an
 // Offset.
-func offsetFromWire(s string) Offset {
+func OffsetFromWire(s string) Offset {
 	s = strings.ReplaceAll(s, "<and>", "&")
 	parts := strings.SplitN(s, "&", 2)
-	o := Offset{X: atoiOrZero(parts[0])}
+	o := Offset{X: AtoiOrZero(parts[0])}
 	if len(parts) == 2 {
-		o.Y = atoiOrZero(parts[1])
+		o.Y = AtoiOrZero(parts[1])
 	}
 	return o
 }
 
-// intsToStrs maps an int slice to its decimal string form.
-func intsToStrs(ns []int) []string {
+// IntsToStrs maps an int slice to its decimal string form.
+func IntsToStrs(ns []int) []string {
 	out := make([]string, len(ns))
 	for i, n := range ns {
-		out[i] = itoa(n)
+		out[i] = Itoa(n)
 	}
 	return out
 }
 
-// strsToInts maps a string slice to ints (lenient).
-func strsToInts(ss []string) []int {
+// StrsToInts maps a string slice to ints (lenient).
+func StrsToInts(ss []string) []int {
 	out := make([]int, len(ss))
 	for i, s := range ss {
-		out[i] = atoiOrZero(s)
+		out[i] = AtoiOrZero(s)
 	}
 	return out
 }

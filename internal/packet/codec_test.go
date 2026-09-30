@@ -5,13 +5,13 @@ import (
 	"testing"
 )
 
-func TestEncodeDecodeFLRoundTripFanta(t *testing.T) {
-	fl := FL{Features: []string{"multi_pair", "y_offset"}}
-	raw, err := Encode(&fl, WireFanta)
+func TestEncodeDecodeRoundTripFanta(t *testing.T) {
+	hi := HI{HDID: "abcd1234"}
+	raw, err := Encode(&hi, WireFanta)
 	if err != nil {
 		t.Fatalf("Encode: %v", err)
 	}
-	if string(raw) != "FL#multi_pair#y_offset#%" {
+	if string(raw) != "HI#abcd1234#%" {
 		t.Fatalf("Encode(Fanta) = %q", raw)
 	}
 
@@ -19,12 +19,12 @@ func TestEncodeDecodeFLRoundTripFanta(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Decode: %v", err)
 	}
-	got, ok := v.(*FL)
+	got, ok := v.(*HI)
 	if !ok {
-		t.Fatalf("Decode type = %T, want *FL", v)
+		t.Fatalf("Decode type = %T, want *HI", v)
 	}
-	if len(got.Features) != 2 || got.Features[0] != "multi_pair" {
-		t.Fatalf("Decode features = %#v", got.Features)
+	if got.HDID != "abcd1234" {
+		t.Fatalf("Decode hdid = %#v", got.HDID)
 	}
 }
 

@@ -76,7 +76,7 @@ func TestBroadcastOOCToAreaSkipsToggledClients(t *testing.T) {
 	}
 
 	broadcastOOCToArea("ip-sender", false, testArea,
-		&packet.CTToClient{Name: encode("Sender"), Message: encode("hello area"), IsFromServer: "0"})
+		&packet.CTToClient{Name: encode("Sender"), Message: encode("hello area"), IsFromServer: false})
 
 	if strings.Contains(hiddenConn.String(), "hello area") {
 		t.Errorf("client with /toggle global on should not receive area OOC; got %q", hiddenConn.String())
@@ -103,7 +103,7 @@ func TestBroadcastOOCToAllSkipsToggledClients(t *testing.T) {
 		clients.RegisterUID(c)
 	}
 
-	broadcastOOCToAll(&packet.CTToClient{Name: encode("[GLOBAL] Sender"), Message: encode("hello global"), IsFromServer: "1"})
+	broadcastOOCToAll(&packet.CTToClient{Name: encode("[GLOBAL] Sender"), Message: encode("hello global"), IsFromServer: true})
 
 	if strings.Contains(hiddenConn.String(), "hello global") {
 		t.Errorf("client with /toggle global on should not receive /global; got %q", hiddenConn.String())
