@@ -6,7 +6,7 @@ adoption — see `internal/packet` (strict standard) vs `internal/athena`
 
 **Goal.** Replace AsyncAO's hand-rolled wire layer — `internal/protocol` plus the
 `switch p.Header` dispatcher in `internal/courtroom/session.go` / `voice.go` —
-with the canonical `github.com/SyntaxNyah/aolib-go`, so AsyncAO (a WebSocket
+with the canonical `github.com/AO-Underground/aolib/aolib-go`, so AsyncAO (a WebSocket
 AO2 **client**) speaks the same FantaCode **and** JSON wire as Nyathena and
 LemmyAO, from one typed packet model instead of hand-parsed strings.
 
@@ -18,7 +18,8 @@ re-implementation of packet shapes.
 
 ## 1. The canonical library (source of truth)
 
-Local clone (use this, not GitHub, until it is published):
+Authoritative repo: `https://github.com/AO-Underground/aolib` — `aolib-go/` is its
+Go submodule. Local clone you work against:
 
 ```
 C:\Users\arbok\Documents\GitHub\aolib\
@@ -26,7 +27,7 @@ C:\Users\arbok\Documents\GitHub\aolib\
 │   ├── packets\schemas\*.schema.json    65 packet schemas
 │   ├── types\*.schema.json               8 enum/type schemas
 │   └── assets\                            shared schema fragments
-├── aolib-go\        generated Go  (module github.com/SyntaxNyah/aolib-go, go 1.19)
+├── aolib-go\        generated Go  (module github.com/AO-Underground/aolib/aolib-go, go 1.19)
 └── aolib-ts\        generated TypeScript (the published aolib-ts counterpart)
 ```
 
@@ -54,7 +55,7 @@ with `SetJSONMode`.
 
 ## 2. aolib-go API surface (exact)
 
-Import: `github.com/SyntaxNyah/aolib-go` (package `aolib`).
+Import: `github.com/AO-Underground/aolib/aolib-go` (package `aolib`).
 
 ### Wire primitives
 ```go
@@ -261,7 +262,7 @@ else (3) to match Nyathena's current Fanta behavior without blocking the rest.
 
 Each phase compiles and passes `go test ./...` before the next.
 
-**Phase 0 — Dependency + wiring.** Add `require github.com/SyntaxNyah/aolib-go`
+**Phase 0 — Dependency + wiring.** Add `require github.com/AO-Underground/aolib/aolib-go`
 with a `replace` to the local clone (path or `file:`), `go mod tidy`. Keep
 `internal/protocol` intact — it stays as the Fanta shim during transition.
 
@@ -306,9 +307,11 @@ connect-and-chat smoke test against Nyathena.
 - **FeatureSet gating stays local.** aolib-go parses `FL` but does not model
   AsyncAO's `FeatureSet` semantics (cccc_ic_support, custom_objections, effects,
   prezoom, auth_packet); keep `internal/protocol/features.go` or port it.
-- **Module path is provisional.** go.mod says `github.com/SyntaxNyah/aolib-go`
-  while the repo is `AO-Underground/aolib`; expect the import path to change at
-  publish — keep the `replace` directive until then.
+- **Module path.** The authoritative import is
+  `github.com/AO-Underground/aolib/aolib-go` (the `aolib-go/` subdirectory of the
+  `AO-Underground/aolib` supermodule). The checked-out `aolib-go/go.mod` still
+  declares `module github.com/SyntaxNyah/aolib-go` — correct it (or use a
+  `replace` directive) before importing.
 - **`SessionConfig.Send` is a raw write hook**, not a per-packet method — wire it
   to the WebSocket `Write` once, not per packet.
 
