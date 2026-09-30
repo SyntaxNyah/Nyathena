@@ -35,6 +35,11 @@ type SETCASE struct {
 	Steno    string
 }
 
+func (p *SETCASE) Header() string { return "SETCASE" }
+func (p *SETCASE) Args() []string {
+	return []string{p.Caselist, p.CM, p.Def, p.Pro, p.Judge, p.Jury, p.Steno}
+}
+
 // ParseSETCASE decodes a SETCASE body.
 func ParseSETCASE(body []string) (*SETCASE, error) {
 	if len(body) != 7 {

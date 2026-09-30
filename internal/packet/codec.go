@@ -21,6 +21,9 @@ const (
 //
 //	raw, _ := aolib.Encode(&aolib.FL{Features: []string{"multi_pair"}}, aolib.WireFanta)
 func Encode(p Outgoing, mode WireMode) ([]byte, error) {
+	if _, ok := codecs[p.Header()]; ok {
+		return encodeCustom(p.Header(), p, mode)
+	}
 	header, args := p.Header(), p.Args()
 	switch mode {
 	case WireJSON:
@@ -43,6 +46,9 @@ func Encode(p Outgoing, mode WireMode) ([]byte, error) {
 //	fl := v.(*aolib.FL)
 //	_ = fl.Features
 func Decode(raw []byte, mode WireMode) (any, error) {
+	if _, p, ok, err := decodeCustom(raw, mode); ok {
+		return p, err
+	}
 	_, p, err := decodeWire(raw, mode, c2sDecoders)
 	return p, err
 }

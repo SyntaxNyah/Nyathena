@@ -67,6 +67,17 @@ func Decode(raw []byte, mode WireMode) (any, error)     // NOTE: decodes via c2s
 func NewPacket(data string) (*Packet, error)            // raw framing: Header + Body (already-escaped)
 func (p Packet) String() string                          // does NOT escape — Body assumed escaped
 type Outgoing interface { Header() string; Args() []string }
+
+// Custom packets (non-canonical headers) — registered at runtime:
+type Codec struct {
+    EncodeFanta func(p any) ([]string, error)  // → positional fields (no header/%, no escape)
+    DecodeFanta func(args []string) (any, error)
+    EncodeJSON  func(p any) (string, error)    // object text; "$header" injected if omitted
+    DecodeJSON  func(raw string) (any, error)
+}
+func RegisterCodec(header string, c Codec)   // panics unless all four funcs are set
+func EscapeFanta(string) string              // exposed for codec string fields
+func UnescapeFanta(string) string
 ```
 
 Escaping is `# % $ &` → `<num> <percent> <dollar> <and>` (same set as AsyncAO's
@@ -88,8 +99,8 @@ func NewServer(cfg SessionConfig) *ServerSession  // CLIENT code — remote serv
 func NewClient(cfg SessionConfig) *ClientSession  // SERVER code — one remote client
 func (s *ServerSession) Receive(raw []byte)       // never panics
 func (s *ServerSession) SetJSONMode(bool) / JSONMode() bool
-func (s *ServerSession) SendCustom(header string, payload any) error        // JSON-only
-func (s *ServerSession) OnCustom(header string, h func(map[string]any)) error
+func (s *ServerSession) SendCustom(header string, payload any) error        // both-wire, via RegisterCodec
+func (s *ServerSession) OnCustom(header string, h func(any)) error          // codec-decoded value
 ```
 
 **AsyncAO is a client**, so it uses `aolib.NewServer(...)` → `*ServerSession`
@@ -237,24 +248,25 @@ unchanged.
 aolib-go only models the canonical protocol. For the §4 non-canonical set
 (`SD`, `CASEA`, `SETCASE`, `MU`/`UM`, `checkconnection`):
 
-1. **`SendCustom` / `OnCustom` — JSON only.** `SendCustom(header, payload)` and
-   `OnCustom(header, h)` carry packets aolib has *no schema for* as JSON with a
-   `$header` key. **There is no Fanta form** — so this path is only viable if the
-   peer also speaks JSON for those headers (Nyathena today is Fanta for these).
+1. **`RegisterCodec` — both-wire (the canonical extension point).** Register a
+   `Codec` for the header with all four functions (Fanta encode/decode + JSON
+   encode/decode). The session then ships and receives it via
+   `SendCustom`/`OnCustom` in **whichever wire mode is active** — a custom packet
+   now always has a Fanta form, not JSON alone. This is exactly how Nyathena
+   registers `TT`/`SETCASE`/`CASEA` (`internal/athena/codecs.go` +
+   `internal/athena/register.go`).
 
-2. **Promote into `spec/`** — the "true schema" route. Add
-   `spec/packets/schemas/CASEA.schema.json` (etc.) with `x-fanta-codec` where the
-   field shape is non-generic, regenerate, and the packet gets **both** Fanta and
-   JSON automatically. Best for anything genuinely shared with Nyathena/LemmyAO.
+2. **Promote into `spec/`** — the "true schema" route. Add the schema (with
+   `x-fanta-codec` where the field shape is non-generic), regenerate, and the
+   packet becomes a *canonical* typed packet with `SendX`/`OnX`. Best for
+   anything genuinely shared across Nyathena/LemmyAO/AsyncAO.
 
-3. **Local Fanta shim** — what Nyathena already did for its server extensions:
-   keep a small `internal/athena`-style package that builds/parses the raw Fanta
-   frame and writes it through the transport directly (bypassing the session for
-   those headers). Pragmatic when the header must stay Fanta and isn't worth
-   spec'ing yet.
+3. **Local Fanta shim** — still valid if a header must stay Fanta and you don't
+   want a full codec; but `RegisterCodec` is preferred because one registration
+   yields both wires.
 
-Recommend: (2) for `CASEA`/`SETCASE`/`MU`/`UM`/`SD` if Nyathena is to share them,
-else (3) to match Nyathena's current Fanta behavior without blocking the rest.
+Recommend: (1) for server-specific extensions (`TT`/`SETCASE`/`CASEA`/`SD`/`MU`/
+`UM`), (2) once a header is confirmed shared.
 
 ---
 
@@ -285,7 +297,7 @@ current `OutgoingMS` builder (its Nyathena/LemmyAO quirks are not in aolib-go);
 if it emits via `Encode`, stop hand-escaping.
 
 **Phase 4 — Non-canonical + JSON.** Move `SD`/`CASEA`/`SETCASE`/`MU`/`UM` to
-`SendCustom`/`OnCustom` (JSON) or local Fanta shims per §7. Optionally adopt
+`RegisterCodec` + `SendCustom`/`OnCustom` (both-wire) or local Fanta shims per §7. Optionally adopt
 `SetJSONMode(true)` if Nyathena offers JSON.
 
 **Phase 5 — Delete `internal/protocol`.** Once no caller remains, remove the

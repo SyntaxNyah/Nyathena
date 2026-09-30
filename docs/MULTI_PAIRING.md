@@ -32,6 +32,12 @@ whose `JSONExtra() map[string]any` supplies JSON-only fields). `BuildJSONPacket`
 (`internal/packet/jsoncodec.go`) merges `JSONExtra()` into the JSON object, so
 the extension reaches JSON clients only and never touches the FantaCode `Args()`.
 
+`additional_chars` is distinct from Nyathena's **non-canonical** headers (`TT` /
+`SETCASE` / `CASEA`): those are registered as full both-wire codecs via the
+canonical aolib-go `RegisterCodec` extension point (`internal/packet/custom.go`
++ `internal/athena/codecs.go`). `additional_chars` extends a *canonical* header
+(`MS`), so it stays a JSON-only `JSONExtra` on `MSToClient`.
+
 ---
 
 ## 1. TL;DR
@@ -190,6 +196,8 @@ The two hard guarantees that make this "no bugs for old clients":
 | `internal/athena/ic.go` | `MSToClient` (30 fields + `blips` + `AdditionalChars []AdditionalChar`) with `JSONExtra()`; `MSToServer` (26 fields + blips); `ParseMSToServer` |
 | `internal/packet/outgoing.go` | `Outgoing` + `JSONOutgoing` interfaces (the extension hook) |
 | `internal/packet/jsoncodec.go` | `BuildJSONPacket` merges `JSONExtra()` into the JSON object |
+| `internal/packet/custom.go` | `Codec` + `RegisterCodec` (both-wire custom-packet extension point) |
+| `internal/athena/codecs.go` | `ttCodec` / `setcaseCodec` / `caseaCodec` — registers `TT`/`SETCASE`/`CASEA` both-wire |
 | `internal/athena/client.go` | JSON-mode send path (`BuildJSONPacket`) + `supportsMultiPair()` gate |
 | `internal/athena/netprotocol.go` | `multi_pair` in server `FL`; `pktFL` reads client→server `FL` |
 | `internal/athena/pairgroup.go` | `PairGroup` model + `applyPairGroupInjection` + commands |
