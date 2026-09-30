@@ -111,14 +111,18 @@ Dispatch runs off one registry — `c2sDecoders`/`s2cDecoders` (Fanta) and
 `c2sJSON`/`s2cJSON` (JSON) in `registry_gen.go` — **no giant switch**.
 `Receive` never panics; every failure routes to exactly one `SessionConfig` hook.
 
-> **⚠ Known gap (verify at migration time):** the typed session surface is
-> **not exhaustive**. The client-side `ServerSession` has **no** typed `Send*`
-> for `askchaa`, `CH`, `CT`, `DE`, `EE`, `PE`, `RC`, `RD`, `RM`, `VS_FRAME`,
+> **⚠ Known gap (the session surface is hand-written, not code-generated):** the
+> typed `Send*`/`On*` surface is **not exhaustive**. `cmd/aolib-gen` emits only
+> `packets_gen.go`, `registry_gen.go`, `enums_gen.go`, `types_gen.go` — it does
+> **not** emit `session_client.go`/`session_server.go`, which are hand-written and
+> stale. So the client-side `ServerSession` has **no** typed `Send*` for
+> `askchaa`, `CH`, `CT`, `DE`, `EE`, `PE`, `RC`, `RD`, `RM`, `VS_FRAME`,
 > `VS_JOIN`, `VS_LEAVE`, `VS_SPEAK` (and `ClientSession` lacks `On*` for
 > `askchaa`, `CH`, `RC`, `RD`, `RM`, `VS_JOIN`, `VS_LEAVE`). Those headers are
 > still in `c2sDecoders` (so they *decode*), but can only be **sent** today via
 > `aolib.Encode(typedPkt, WireFanta)` + writing to the transport directly, or by
-> extending the codegen. This matters a lot to a client — see §8 Phase 1.
+> extending `cmd/aolib-gen` to also emit the session surface. This matters a lot
+> to a client — see §8 Phase 1.
 
 ---
 
