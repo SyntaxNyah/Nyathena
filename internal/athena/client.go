@@ -911,6 +911,14 @@ func (client *Client) HandleClient() {
 		var pkt *packet.Packet
 		if rawPacket[0] == '{' {
 			pkt, err = packet.ParseJSON(rawPacket)
+			if err == nil {
+				// A registered codec owns this header: decode the JSON to its
+				// typed value and re-encode to the positional body the handlers
+				// parse (so TT/SETCASE/CASEA/VS_* work over JSON too).
+				if body, ok := packet.CodecJSONToBody(pkt.Header, rawPacket); ok {
+					pkt.Body = body
+				}
+			}
 		} else {
 			pkt, err = packet.NewPacket(rawPacket)
 		}
@@ -1159,7 +1167,7 @@ func (client *Client) Send(p packet.Outgoing) {
 		if _, extra := p.(packet.JSONOutgoing); extra && client.supportsMultiPair() {
 			buf = packet.BuildJSONPacket(p) // merges JSONExtra (e.g. MS additional_chars)
 		} else {
-			buf = packet.BuildJSON(p.Header(), p.Args())
+			buf = packet.EncodeJSON(p)
 		}
 		if buf == nil {
 			return

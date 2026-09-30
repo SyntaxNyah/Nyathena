@@ -73,3 +73,22 @@ func TestSETCASEAndCASEAFantaDecode(t *testing.T) {
 		t.Fatalf("CASEA decoded = %#v", c)
 	}
 }
+
+func TestCodecJSONHotPathHelpers(t *testing.T) {
+	// EncodeJSON (outbound) → CodecJSONToBody (inbound) round-trips a
+	// codec-registered packet through the named-field JSON form.
+	raw := packet.EncodeJSON(&TTPacket{Type: "0", Title: "Cross Examination"})
+	if raw == nil {
+		t.Fatal("EncodeJSON returned nil")
+	}
+	body, ok := packet.CodecJSONToBody("TT", string(raw))
+	if !ok || len(body) != 2 || body[0] != "0" || body[1] != "Cross Examination" {
+		t.Fatalf("CodecJSONToBody = %v (ok=%v), raw=%s", body, ok, raw)
+	}
+
+	// A header with no codec is not owned by CodecJSONToBody.
+	if _, ok := packet.CodecJSONToBody("FL", `{"$header":"FL"}`); ok {
+		t.Fatal("CodecJSONToBody claimed a non-codec header")
+	}
+}
+

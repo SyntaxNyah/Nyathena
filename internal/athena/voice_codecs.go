@@ -6,10 +6,10 @@ import (
 	"github.com/MangosArentLiterature/Athena/internal/packet"
 )
 
-// voiceCodec builds a both-wire codec for a single-shape voice packet: the same
+// voicePacketCodec builds a both-wire codec for a single-shape voice packet: the same
 // type encodes (Args) and decodes (parse), and JSON marshals/unmarshals the
 // struct directly (its json tags + the injected "$header").
-func voiceCodec[T packet.Outgoing](parse func([]string) (T, error)) packet.Codec {
+func voicePacketCodec[T packet.Outgoing](parse func([]string) (T, error)) packet.Codec {
 	return packet.Codec{
 		EncodeFanta: func(p any) ([]string, error) { return p.(T).Args(), nil },
 		DecodeFanta: func(args []string) (any, error) { return parse(args) },
@@ -24,10 +24,10 @@ func voiceCodec[T packet.Outgoing](parse func([]string) (T, error)) packet.Codec
 	}
 }
 
-func vsCapsCodec() packet.Codec  { return voiceCodec[*VS_CAPS](ParseVS_CAPS) }
-func vsAudioCodec() packet.Codec { return voiceCodec[*VS_AUDIO](ParseVS_AUDIO) }
-func vsFrameCodec() packet.Codec { return voiceCodec[*VS_FRAME](ParseVS_FRAME) }
-func vsPeersCodec() packet.Codec { return voiceCodec[*VS_PEERS](ParseVS_PEERS) }
+func vsCapsCodec() packet.Codec  { return voicePacketCodec[*VS_CAPS](ParseVS_CAPS) }
+func vsAudioCodec() packet.Codec { return voicePacketCodec[*VS_AUDIO](ParseVS_AUDIO) }
+func vsFrameCodec() packet.Codec { return voicePacketCodec[*VS_FRAME](ParseVS_FRAME) }
+func vsPeersCodec() packet.Codec { return voicePacketCodec[*VS_PEERS](ParseVS_PEERS) }
 
 // The bidirectional headers (VS_JOIN / VS_LEAVE / VS_SPEAK) carry a different
 // shape per direction. From Nyathena's server perspective: encode the ToClient

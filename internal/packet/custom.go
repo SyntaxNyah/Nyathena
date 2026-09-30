@@ -112,3 +112,37 @@ func decodeCustom(raw []byte, mode WireMode) (header string, p any, ok bool, err
 		return "", nil, false, fmt.Errorf("packet: unknown wire mode %d", mode)
 	}
 }
+
+// EncodeJSON serializes an Outgoing to JSON: codec-registered headers route
+// through their codec's EncodeJSON (named fields), everything else through the
+// schema-based BuildJSON. Returns nil when the packet can't be encoded.
+func EncodeJSON(p Outgoing) []byte {
+	if _, ok := codecs[p.Header()]; ok {
+		b, err := encodeCustom(p.Header(), p, WireJSON)
+		if err != nil {
+			return nil
+		}
+		return b
+	}
+	return BuildJSON(p.Header(), p.Args())
+}
+
+// CodecJSONToBody decodes a JSON frame for a codec-registered header into the
+// positional body the packet handlers parse (via the codec's DecodeJSON →
+// EncodeFanta), so non-canonical packets work over JSON too. ok is false when
+// no codec owns the header (or the frame fails to decode).
+func CodecJSONToBody(header, raw string) ([]string, bool) {
+	c, ok := codecs[header]
+	if !ok {
+		return nil, false
+	}
+	p, err := c.DecodeJSON(raw)
+	if err != nil {
+		return nil, false
+	}
+	args, err := c.EncodeFanta(p)
+	if err != nil {
+		return nil, false
+	}
+	return args, true
+}
