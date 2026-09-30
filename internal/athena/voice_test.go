@@ -140,9 +140,11 @@ func TestPktVSJoinBroadcastsAndSendsPeerList(t *testing.T) {
 	pktVSJoin(bob, &packet.Packet{Header: "VS_JOIN"})
 
 	// Alice joined first — she gets an empty VS_PEERS and should then receive
-	// bob's VS_JOIN broadcast.
+	// bob's VS_JOIN broadcast. An empty peer list has no uid slots, so the
+	// frame is "VS_PEERS#%" (aolib-meta fans arrays out into one '#' slot per
+	// element; zero elements => zero slots).
 	aliceOut := aliceConn.String()
-	if !strings.Contains(aliceOut, "VS_PEERS##%") {
+	if !strings.Contains(aliceOut, "VS_PEERS#%") {
 		t.Errorf("alice did not receive empty VS_PEERS, got: %q", aliceOut)
 	}
 	if !strings.Contains(aliceOut, "VS_JOIN#2#%") {
