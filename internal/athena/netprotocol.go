@@ -124,6 +124,7 @@ type pktMapValue struct {
 var PacketMap = map[string]pktMapValue{
 	"HI":       {1, false, pktHdid},
 	"ID":       {2, false, pktId},
+	"FL":       {0, false, pktFL},
 	"askchaa":  {0, false, pktResCount},
 	"RC":       {0, false, pktReqChar},
 	"RM":       {0, false, pktReqAM},
@@ -199,6 +200,14 @@ func pktId(client *Client, p *packet.Packet) {
 		client.Send(&packet.ASS{AssetURL: config.AssetURL})
 	}
 	sendVoiceCaps(client)
+}
+
+// Handles FL#... (client→server capability advertisement). The client sends its
+// own FL — the same packet the server sends server→client — listing the
+// features it supports (e.g. "multi_pair"). This makes capability negotiation
+// symmetric and needs no new packet type.
+func pktFL(client *Client, p *packet.Packet) {
+	client.SetFeatures(p.Body)
 }
 
 // Handles askchaa#%

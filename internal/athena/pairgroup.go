@@ -309,20 +309,14 @@ func dissolvePairGroupOnDisconnect(client *Client) {
 	}
 }
 
-// multiPairCapableSoftware lists the client software strings known to support
-// the additional_chars extension. It is empty by default, so the extension is
-// never emitted until a client ships support and its software string is added
-// here. Populate with the exact IDClient "software" value (e.g. "LemmyAO").
-var multiPairCapableSoftware = map[string]struct{}{}
-
 // supportsMultiPair reports whether this JSON client may receive the
-// additional_chars extension. Interim gate keyed off the IDClient software
-// string; replace with a proper client→server capability packet once aolib-meta
-// defines one (see docs/MULTI_PAIRING.md §10).
+// additional_chars extension. Gated on the client's own FL advertisement: the
+// client sends its supported features (client→server FL), and the server
+// honors "multi_pair". Symmetric capability negotiation — no hardcoded client
+// list.
 func (client *Client) supportsMultiPair() bool {
 	if !client.jsonMode.Load() {
 		return false
 	}
-	_, ok := multiPairCapableSoftware[client.Software()]
-	return ok
+	return client.SupportsFeature("multi_pair")
 }

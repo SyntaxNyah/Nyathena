@@ -358,8 +358,9 @@ const emergencyBypassWindow = 30 * time.Second
 type Client struct {
 	pair      ClientPairInfo
 	pairGroup *PairGroup
-	software  string // client-advertised software from the ID handshake
-	version   string // client-advertised version from the ID handshake
+	software  string        // client-advertised software from the ID handshake
+	version   string        // client-advertised version from the ID handshake
+	features  map[string]bool // client-advertised feature flags (client→server FL)
 	mu        sync.Mutex
 	conn net.Conn
 	// writeMu serializes inline socket writes with each other. Deliberately
@@ -1814,6 +1815,23 @@ func (client *Client) SetVersion(s string) {
 	client.mu.Lock()
 	defer client.mu.Unlock()
 	client.version = s
+}
+
+// SetFeatures records the client's advertised feature flags (client→server FL).
+func (client *Client) SetFeatures(features []string) {
+	client.mu.Lock()
+	defer client.mu.Unlock()
+	client.features = make(map[string]bool, len(features))
+	for _, f := range features {
+		client.features[f] = true
+	}
+}
+
+// SupportsFeature reports whether the client advertised the given feature flag.
+func (client *Client) SupportsFeature(name string) bool {
+	client.mu.Lock()
+	defer client.mu.Unlock()
+	return client.features[name]
 }
 
 // RemoveAuth logs a client out as moderator.

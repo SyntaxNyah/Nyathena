@@ -24,7 +24,8 @@ parser per language. JSON cares about field *names* (a positional FantaCode
 parser ignores them); the schema is what makes the names canonical.
 
 Multi-pairing is therefore **not a new packet and not a FantaCode change**. It is
-a small, coordinated addition to the `MS` packet schema: 15 new named fields.
+a small, coordinated addition to the `MS` packet schema: one list field,
+`additional_chars`.
 
 ---
 
@@ -42,18 +43,25 @@ a small, coordinated addition to the `MS` packet schema: 15 new named fields.
 
 ---
 
-## 2. Feature flag (`FL`)
+## 2. Feature flag (`FL`) — bidirectional
 
-`FL` carries an open string array (`features`). The server adds one flag:
+`FL` carries an open string array (`features`). It is **bidirectional**: the
+server sends `FL` to advertise what it supports, and the **client sends its own
+`FL`** to advertise what *it* supports. That is the capability handshake — no
+new packet type is needed.
 
 | flag         | meaning |
 |--------------|---------|
 | `multi_pair` | the `MS` may carry an `additional_chars` list |
 
-Because `additional_chars` is an **unbounded list** (not a fixed number of
-slots), a single capability flag is the right granularity — a client either
-reads the list or it doesn't. The group *size* (3/4/5) is a server-side command
-concern (`/triple` `/quad` `/quint`), not a wire feature.
+The server sends `multi_pair` in its `FL` (so clients know it can emit the
+list), and the client sends `multi_pair` in its own `FL` (so the server gates
+emission on it — no hardcoded client list). Because `additional_chars` is an
+**unbounded list**, a single flag is the right granularity. Group *size* (3/4/5)
+is a command concern (`/triple` `/quad` `/quint`), not a wire feature.
+
+> JSON itself is enabled with the existing `decryptor#JSON` handshake; the
+> server auto-detects a JSON client from the first `{`-prefixed packet it sends.
 
 ---
 
@@ -124,7 +132,7 @@ message with no extra partners simply omits it. `additionalProperties` stays
 
 1. The message author is the **speaker** (normal `MS` handling).
 2. `paired_*` renders the **first** partner exactly as today's pair.
-3. `third_*` / `fourth_*` / `fifth_*` each render one more partner, drawn like a
+3. Each `additional_chars` entry renders one more partner, drawn like a
    pair partner: looping idle `(a)` animation for that partner's folder/emote,
    positioned by its own `offset`, `flip` applied.
 4. Partner display skips while the speaker zooms (`emote_modifier` 5/6), same as
@@ -133,7 +141,7 @@ message with no extra partners simply omits it. `additionalProperties` stays
    `char_id` — not the speaker's style.
 
 > Open item: precise z-order among 3+ sprites (the JSON wire has no `^order`;
-> render order = speaker, then third/fourth/fifth in block order).
+> render order = speaker, then `additional_chars` in list order).
 
 ---
 
@@ -170,13 +178,13 @@ The two hard guarantees that make this "no bugs for old clients":
 2. **`additionalProperties: false` is respected, not fought.** Because strict
    JSON clients reject unknown fields, the extra fields are added to the
    *canonical* schema (so updated clients accept them) **and** the server only
-   emits them to clients that have negotiated support. A JSON client on the old
-   schema never receives a field it would reject.
+   emits them to clients that advertised `multi_pair` in their own `FL`. A JSON
+   client on the old schema never receives a field it would reject.
 
 Emission gating on the server: the extra fields are emitted only for JSON-mode
-connections, and only when the server believes the client supports multi-pair
-(see §7). FantaCode clients and non-supporting JSON clients get the standard
-30-field MS with `paired_*` intact.
+connections whose client advertised `multi_pair` (client→server `FL`). FantaCode
+clients and non-supporting JSON clients get the standard 30-field MS with
+`paired_*` intact.
 
 ---
 
@@ -190,8 +198,8 @@ The server already has the schema-driven JSON codec split across:
 | `internal/packet/mspacket.go` | add `AdditionalChars []AdditionalChar` + `JSONExtra()` |
 | `internal/packet/jsoncodec.go` | `BuildJSONPacket` merges `JSONExtra()` into the JSON object |
 | `internal/packet/types.go` | add a `JSONOutgoing` interface (`JSONExtra() map[string]any`) |
-| `internal/athena/client.go` | `Send` builds JSON via `BuildJSONPacket` for JSON clients; `pairGroup` + software/version state; capability gate |
-| `internal/athena/netprotocol.go` | add `multi_pair` to `FL`; inject group partners in `pktIC`; store `IDClient` software/version |
+| `internal/athena/client.go` | `Send` builds JSON via `BuildJSONPacket` for JSON clients; `pairGroup` + client feature state; capability gate |
+| `internal/athena/netprotocol.go` | add `multi_pair` to `FL`; inject group partners in `pktIC`; handle client→server `FL` (`pktFL`) |
 | `internal/athena/pairgroup.go` | `PairGroup` model + `/triple` `/quad` `/quint` `/accept` `/deny` `/pair-requests` |
 | `internal/athena/commands_registry.go` | register the new commands |
 
@@ -208,7 +216,7 @@ AsyncAO currently speaks **FantaCode** over WebSocket (it parses positional
 
 1. **(Recommended, long-term)** Adopt `aolib-go` for the JSON wire — the same
    codegen-from-schema approach as `aolib-ts`. Once AsyncAO speaks JSON, it
-   reads `third_*`/`fourth_*`/`fifth_*` gated on the `FL` flags, exactly like a
+   reads `additional_chars` gated on the `multi_pair` flag, exactly like a
    TS client. Until then it keeps working over FantaCode and renders the
    standard pair (graceful).
 2. **(FantaCode-only, interim)** Do nothing for now: on FantaCode, multi-pair
@@ -217,8 +225,8 @@ AsyncAO currently speaks **FantaCode** over WebSocket (it parses positional
 
 Concrete steps for option 1:
 
-- Add `FeatureTriplex` / `FeatureQuadplex` / `FeatureQuintuplex` to the feature
-  parser (`internal/protocol/ms.go`).
+- Add `multi_pair` to the feature parser (`internal/protocol/ms.go`), and send
+  your own `FL` advertising it (client→server).
 - Extend the `MS` struct with an `additional_chars` list and parse it only
   when the `multi_pair` flag is set (mirror the `cccc_ic_support` gate).
 - In `internal/courtroom/courtroom.go`, render additional partner sprites beyond
@@ -247,13 +255,10 @@ needed** — the decoded `MS` object simply gains the new optional fields.
 
 ## 10. What still needs agreeing (before this is "pinned forever")
 
-1. **Client capability handshake.** The JSON protocol currently has no
-   client→server "supported features" packet — only server→client `FL`. To gate
-   emission correctly (§6.2) we need a way for the server to learn that a JSON
-   client supports multi-pair. **Interim:** the server now stores the
-   `IDClient` `software`/`version` and only emits `additional_chars` to clients
-   whose software string is in `multiPairCapableSoftware` (empty by default —
-   add `"LemmyAO"`, etc. as clients ship support). **The clean fix** is a
-   proper client→server capability packet in `aolib-meta` — flag to OmniTroid.
+1. **Client capability handshake — resolved with bidirectional `FL`.** The
+   client sends its own `FL` (the same packet the server sends server→client)
+   listing the features it supports — `multi_pair` included. The server reads it
+   (`pktFL`) and only emits `additional_chars` to clients that advertised
+   `multi_pair`. No new packet type, no hardcoded client list.
 2. **Multi-sprite z-order** (§4.2 open item).
 3. Whether non-members need a roster broadcast (currently participants only).
