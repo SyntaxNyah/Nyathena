@@ -21,4 +21,14 @@ func init() {
 	packet.RegisterCodec("TT", ttCodec())
 	packet.RegisterCodec("SETCASE", setcaseCodec())
 	packet.RegisterCodec("CASEA", caseaCodec())
+
+	// Voice chat (VS_*) — removed from the canonical spec (aa8d0fb); registered
+	// here as Nyathena server extensions, both-wire like TT/SETCASE/CASEA.
+	packet.RegisterCodec("VS_CAPS", vsCapsCodec())
+	packet.RegisterCodec("VS_AUDIO", vsAudioCodec())
+	packet.RegisterCodec("VS_FRAME", vsFrameCodec())
+	packet.RegisterCodec("VS_PEERS", vsPeersCodec())
+	packet.RegisterCodec("VS_JOIN", vsJoinCodec())
+	packet.RegisterCodec("VS_LEAVE", vsLeaveCodec())
+	packet.RegisterCodec("VS_SPEAK", vsSpeakCodec())
 }

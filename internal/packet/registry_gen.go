@@ -23,10 +23,6 @@ var c2sDecoders = map[string]Decoder{
 	"RD": func(b []string) (any, error) { return ParseRD(b) },
 	"RM": func(b []string) (any, error) { return ParseRM(b) },
 	"RT": func(b []string) (any, error) { return ParseRTToServer(b) },
-	"VS_FRAME": func(b []string) (any, error) { return ParseVS_FRAME(b) },
-	"VS_JOIN": func(b []string) (any, error) { return ParseVS_JOINToServer(b) },
-	"VS_LEAVE": func(b []string) (any, error) { return ParseVS_LEAVEToServer(b) },
-	"VS_SPEAK": func(b []string) (any, error) { return ParseVS_SPEAKToServer(b) },
 	"ZZ": func(b []string) (any, error) { return ParseZZToServer(b) },
 }
 
@@ -67,11 +63,5 @@ var s2cDecoders = map[string]Decoder{
 	"SM": func(b []string) (any, error) { return ParseSM(b) },
 	"SP": func(b []string) (any, error) { return ParseSP(b) },
 	"TI": func(b []string) (any, error) { return ParseTI(b) },
-	"VS_AUDIO": func(b []string) (any, error) { return ParseVS_AUDIO(b) },
-	"VS_CAPS": func(b []string) (any, error) { return ParseVS_CAPS(b) },
-	"VS_JOIN": func(b []string) (any, error) { return ParseVS_JOINToClient(b) },
-	"VS_LEAVE": func(b []string) (any, error) { return ParseVS_LEAVEToClient(b) },
-	"VS_PEERS": func(b []string) (any, error) { return ParseVS_PEERS(b) },
-	"VS_SPEAK": func(b []string) (any, error) { return ParseVS_SPEAKToClient(b) },
 	"ZZ": func(b []string) (any, error) { return ParseZZToClient(b) },
 }

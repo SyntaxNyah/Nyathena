@@ -104,7 +104,16 @@ func (s *ServerSession) OnCustom(header string, h func(any)) error          // c
 ```
 
 **AsyncAO is a client**, so it uses `aolib.NewServer(...)` → `*ServerSession`
-(`Send*` = client→server, `On*` = server→client).
+(`Send*` = client→server, `On*` = server→client). The intended usage is the
+typed methods, exactly like `aolib-go/examples/client` — never `Encode` directly:
+
+```go
+server := aolib.NewServer(aolib.SessionConfig{Send: func(wire []byte) { ws.Write(wire) }})
+server.OnID(func(p *aolib.IDToClient) { playerID = p.PlayerID })
+server.OnSM(func(p *aolib.SM) { /* music list */ })
+server.SendHI(&aolib.HI{HDID: "stub-hwid"})
+server.SendCC(&aolib.CC{PlayerID: playerID, CharID: 0, CharPassword: "..."})
+```
 
 Typed per-header methods are generated (`SendHI`, `OnID`, `SendMC`, `OnMS`, …).
 Dispatch runs off one registry — `c2sDecoders`/`s2cDecoders` (Fanta) and
@@ -116,13 +125,12 @@ Dispatch runs off one registry — `c2sDecoders`/`s2cDecoders` (Fanta) and
 > `packets_gen.go`, `registry_gen.go`, `enums_gen.go`, `types_gen.go` — it does
 > **not** emit `session_client.go`/`session_server.go`, which are hand-written and
 > stale. So the client-side `ServerSession` has **no** typed `Send*` for
-> `askchaa`, `CH`, `CT`, `DE`, `EE`, `PE`, `RC`, `RD`, `RM`, `VS_FRAME`,
-> `VS_JOIN`, `VS_LEAVE`, `VS_SPEAK` (and `ClientSession` lacks `On*` for
-> `askchaa`, `CH`, `RC`, `RD`, `RM`, `VS_JOIN`, `VS_LEAVE`). Those headers are
-> still in `c2sDecoders` (so they *decode*), but can only be **sent** today via
-> `aolib.Encode(typedPkt, WireFanta)` + writing to the transport directly, or by
-> extending `cmd/aolib-gen` to also emit the session surface. This matters a lot
-> to a client — see §8 Phase 1.
+> `askchaa`, `CH`, `CT`, `DE`, `EE`, `PE`, `RC`, `RD`, `RM` (and `ClientSession`
+> lacks `On*` for `askchaa`, `CH`, `RC`, `RD`, `RM`). Those headers are
+> still in `c2sDecoders` (so they *decode*), but their typed `Send*` methods are
+> missing. The proper fix is extending `cmd/aolib-gen` to emit the typed surface
+> (a library change) — do **not** call `aolib.Encode` directly, which bypasses
+> the session's wire-mode handling. This matters a lot to a client — see §8.
 
 ---
 
@@ -165,22 +173,20 @@ handling incoming S2C; outgoing goes through `s.reply(protocol.NewPacket("…", 
 
 ## 4. Header coverage: canonical vs AsyncAO
 
-Canonical `aolib-go` = **65 schemas → 55 unique headers** (10 bidirectional
+Canonical `aolib-go` = **55 schemas → 48 unique headers** (10 bidirectional
 headers have separate `…ToServer`/`…ToClient` schemas). The direction
 registries in `registry_gen.go` enumerate them exactly:
 
-- **client→server (22):** `askchaa`, `CC`, `CH`, `CT`, `DE`, `EE`, `HI`, `HP`,
-  `ID`, `MA`, `MC`, `MS`, `PE`, `RC`, `RD`, `RM`, `RT`, `VS_FRAME`, `VS_JOIN`,
-  `VS_LEAVE`, `VS_SPEAK`, `ZZ`.
-- **server→client (43):** `ARUP`, `ASS`, `AUTH`, `BB`, `BD`, `BN`, `CHECK`, `CI`,
+- **client→server (18):** `askchaa`, `CC`, `CH`, `CT`, `DE`, `EE`, `HI`, `HP`,
+  `ID`, `MA`, `MC`, `MS`, `PE`, `RC`, `RD`, `RM`, `RT`, `ZZ`.
+- **server→client (37):** `ARUP`, `ASS`, `AUTH`, `BB`, `BD`, `BN`, `CHECK`, `CI`,
   `CT`, `CharsCheck`, `DONE`, `decryptor`, `EI`, `EM`, `FA`, `FL`, `FM`, `HP`,
   `ID`, `JD`, `KB`, `KK`, `LE`, `MC`, `MS`, `PN`, `PR`, `PU`, `PV`, `RMC`, `RT`,
-  `SC`, `SI`, `SM`, `SP`, `TI`, `VS_AUDIO`, `VS_CAPS`, `VS_JOIN`, `VS_LEAVE`,
-  `VS_PEERS`, `VS_SPEAK`, `ZZ`.
+  `SC`, `SI`, `SM`, `SP`, `TI`, `ZZ`.
 
-Note `ASS`, `AUTH`, `CharsCheck`, `CHECK`, `decryptor`, and the whole `VS_*`
-voice family **are** canonical (they exist in `spec/packets/schemas/`) — earlier
-assumptions that they were nonstandard are wrong.
+Note `ASS`, `AUTH`, `CharsCheck`, `CHECK`, `decryptor` **are** canonical. The
+whole voice family (`VS_*`) was **removed** from the spec (commit `aa8d0fb`) and
+is now non-canonical (see the table below).
 
 **AsyncAO headers that are NOT canonical** (handled today but absent from
 `spec/` — must be kept as local shims or promoted into the spec):
@@ -192,12 +198,13 @@ assumptions that they were nonstandard are wrong.
 | `SETCASE` | c2s | case-role subscription prefs | `session.go` `SetCasingPrefs` |
 | `MU` / `UM` | s2c | mute / unmute a character | `session.go` |
 | `checkconnection` | s2c | keepalive compat (no live server sends it) | `session.go` |
+| `VS_*` (voice) | both | voice chat — `VS_CAPS`/`VS_PEERS`/`VS_JOIN`/`VS_LEAVE`/`VS_SPEAK`/`VS_AUDIO`/`VS_FRAME` | `voice.go` |
 
 (`TT`, the cross-examination title, is the canonical *example* of a nonstandard
 packet in aolib's README but AsyncAO does not currently use it.)
 
 **Canonical headers AsyncAO never touches** (available, ignorable): `CI`/`EI`/`EM`
-(server-side evidence), `MA`, `RMC`, `VS_FRAME`-as-received distinctions, etc.
+(server-side evidence), `MA`, `RMC`.
 
 ---
 
@@ -205,60 +212,52 @@ packet in aolib's README but AsyncAO does not currently use it.)
 
 | AsyncAO today | aolib-go |
 |---|---|
-| `protocol.NewPacket("CH", "7")` → `reply` | `aolib.Encode(&aolib.CH{…}, aolib.WireFanta)` → `conn.Write` *(no typed `SendCH` — see §2 gap)* |
+| `protocol.NewPacket("CH", "7")` → `reply` | `server.SendCH(&aolib.CH{…})` *(no typed `SendCH` today — see §2 gap)* |
 | `protocol.NewPacket("CC", pid, cid, hdid)` | `server.SendCC(&aolib.CC{PlayerID, CharID, CharPassword})` |
-| `protocol.NewPacket("CT", name, text)` | `aolib.Encode(&aolib.CTToServer{…}, aolib.WireFanta)` *(no typed `SendCT`)* |
+| `protocol.NewPacket("CT", name, text)` | `server.SendCT(&aolib.CTToServer{…})` *(no typed `SendCT` today — see §2 gap)* |
 | `protocol.ParsePacket(msg)` + `switch p.Header` | `server.Receive(raw)` + `OnX(h)` handlers (or type-switch on `aolib.Decode`) |
 | `protocol.ParseMS(fields, features, n)` | `aolib.ParseMSToClient(body)` → `*aolib.MSToClient` |
 | `p.Field(i)` / `p.Fields` | typed struct fields (`p.PlayerID`, `p.UpdateData`, …) |
 | `protocol.EncodeField` / `DecodeField` | internal — `Encode`/`Args` already escape; **don't re-escape** |
 | `msg.Packet(features)` (outgoing MS build) | keep local — AsyncAO's MS *send* has Nyathena/LemmyAO quirks (`NormalizeOutgoingEmoteMod`, `formatPairID`) not in aolib-go |
-| `protocol.Packet{Header, Fields}.String()` (escapes) | `aolib.Packet.String()` does **not** escape — use `Encode`, not raw framing, for typed sends |
+| `protocol.Packet{Header, Fields}.String()` (escapes) | `aolib.Packet.String()` does **not** escape — use the session's typed `SendX`, not raw framing |
 
 The **direction split** is the big win: AsyncAO's `HandlePacket` switch collapses
 into `On*` registrations, and wrong-direction sends become compile errors.
 
 ---
 
-## 6. The VS_PEERS wire discrepancy (root-cause fix)
+## 6. Voice chat (`VS_*`) is non-canonical
 
-The **one** packet where aolib-go's generic array codec is *wrong*:
+Voice chat is **not** part of the canonical protocol — commit `aa8d0fb` removed
+the whole `VS_*` family (`VS_AUDIO`, `VS_CAPS`, `VS_FRAME`, `VS_JOIN`,
+`VS_LEAVE`, `VS_PEERS`, `VS_SPEAK`) from the spec and both libs. So there is no
+canonical `VS_PEERS` codec to get wrong: each server that speaks voice owns its
+own `VS_*` packets as an extension.
 
-| | Wire |
-|---|---|
-| Real servers (LemmyAO / Nyathena voice) + AsyncAO today | `VS_PEERS#1,2,3#%` — **comma**-joined, single field |
-| aolib-go generated (`Args()` → `intsToStrs(uids)` fanned out) | `VS_PEERS#1#2#3#%` — **`#`**-separated, one slot per uid |
+Nyathena keeps voice as a server extension: the `VS_*` types live in
+`internal/athena/voice_packets.go`, registered both-wire via
+`packet.RegisterCodec` (`voice_codecs.go`). `VS_PEERS` is comma-separated
+(`VS_PEERS#1,2,3#%`) — matching what AsyncAO/LemmyAO actually parse — and an
+empty roster frames as `VS_PEERS#%`.
 
-AsyncAO parses `VS_PEERS` as CSV: `strings.Split(p.Field(0), ",")` (`voice.go`).
-aolib-go's fan-out form would make every peer after the first invisible to
-AsyncAO/LemmyAO — i.e. generated output **breaks voice** against the real
-servers. `vs_peers_test.go` in aolib-go currently pins the (wrong) `#`-fanned
-expectation.
-
-**Fix in the spec, not a local patch.** `VS_PEERS` needs a bespoke codec — an
-`x-fanta-codec` on the `uids` array that joins with `,` and splits on `,` — the
-same mechanism `ARUP` already uses for its array. Then regenerate `aolib-go`
-(`go run ./cmd/aolib-gen -meta ../spec -out .`) and update `vs_peers_test.go` to
-expect `VS_PEERS#1,2,3#%`. AsyncAO then consumes the generated `VS_PEERS`
-unchanged.
-
-> Decision: align everything on the **comma** form (it is what the real voice
-> servers actually emit). Do not hand-patch the generated `VS_PEERS` in AsyncAO —
-> the spec is the source of truth.
+AsyncAO should treat `VS_*` exactly like `TT`/`SETCASE`/`CASEA`: a non-canonical
+header it registers as a codec (or parses locally) rather than expecting it from
+`aolib-go`.
 ---
 
 ## 7. Non-canonical packets: how to keep speaking them
 
 aolib-go only models the canonical protocol. For the §4 non-canonical set
-(`SD`, `CASEA`, `SETCASE`, `MU`/`UM`, `checkconnection`):
+(`SD`, `CASEA`, `SETCASE`, `MU`/`UM`, `checkconnection`, `VS_*` voice):
 
 1. **`RegisterCodec` — both-wire (the canonical extension point).** Register a
    `Codec` for the header with all four functions (Fanta encode/decode + JSON
    encode/decode). The session then ships and receives it via
    `SendCustom`/`OnCustom` in **whichever wire mode is active** — a custom packet
    now always has a Fanta form, not JSON alone. This is exactly how Nyathena
-   registers `TT`/`SETCASE`/`CASEA` (`internal/athena/codecs.go` +
-   `internal/athena/register.go`).
+   registers `TT`/`SETCASE`/`CASEA`/`VS_*` (`internal/athena/codecs.go` +
+   `voice_codecs.go`, `internal/athena/register.go`).
 
 2. **Promote into `spec/`** — the "true schema" route. Add the schema (with
    `x-fanta-codec` where the field shape is non-generic), regenerate, and the
@@ -269,8 +268,8 @@ aolib-go only models the canonical protocol. For the §4 non-canonical set
    want a full codec; but `RegisterCodec` is preferred because one registration
    yields both wires.
 
-Recommend: (1) for server-specific extensions (`TT`/`SETCASE`/`CASEA`/`SD`/`MU`/
-`UM`), (2) once a header is confirmed shared.
+Recommend: (1) for server-specific extensions (`TT`/`SETCASE`/`CASEA`/`VS_*`/`SD`/
+`MU`/`UM`), (2) once a header is confirmed shared.
 
 ---
 
@@ -284,16 +283,17 @@ with a `replace` to the local clone (path or `file:`), `go mod tidy`. Keep
 
 **Phase 1 — Outgoing (send).** Swap `s.reply(protocol.NewPacket(...))` for typed
 `Send*` where available (`CC`, `HI`, `ID`, `HP`, `MC`, `MS`, `RT`, `ZZ`). For
-the §2-gap sends (`CH`, `CT`, `DE`, `EE`, `PE`, `RC`, `RD`, `RM`, `askchaa`,
-voice C2S) use `aolib.Encode(typed, WireFanta)` + `conn.Write` — or first extend
+the §2-gap sends (`CH`, `CT`, `DE`, `EE`, `PE`, `RC`, `RD`, `RM`, `askchaa`)
+use `aolib.Encode(typed, WireFanta)` + `conn.Write` — or first extend
 `cmd/aolib-gen` to emit the missing `Send*`/`On*` (cleaner; one-time codegen fix).
 
 **Phase 2 — Incoming (receive).** Route the WebSocket read path into
 `server.Receive(raw)`; replace the `switch` arms with `On*` handlers
 (`OnID`, `OnFL`, `OnMC`, `OnMS`, `OnBB`, …). Map `SessionConfig` hooks to the
 existing event/debug lanes (`OnDecodeError` → `EventDebug`, `OnUnhandled` →
-the current default arm). Voice: register `OnVS_CAPS/OnVS_JOIN/OnVS_LEAVE/
-OnVS_PEERS/OnVS_SPEAK/OnVS_AUDIO` and reduce `handleVoicePacket` to typed fields.
+the current default arm). Voice: `VS_*` is non-canonical, so register it as
+both-wire codecs (`RegisterCodec`) and route `SendCustom`/`OnCustom`, not the
+canonical `On*` registry.
 
 **Phase 3 — MS.** Incoming: use `aolib.ParseMSToClient` then convert to the
 existing `ChatMessage` (or adopt `MSToClient` directly). Outgoing: keep the
@@ -335,12 +335,11 @@ connect-and-chat smoke test against Nyathena.
 
 ## 10. Verification / acceptance
 
-1. `cd aolib-go && go test ./...` (after the VS_PEERS codec fix: expect
-   `VS_PEERS#1,2,3#%`).
+1. `cd aolib-go && go test ./...` (codegen determinism + conformance vectors).
 2. `cd AsyncAO && go build ./... && go test ./...`.
 3. Wire round-trip: AsyncAO-encoded frames decode in Nyathena (`internal/packet`)
-   and back, for `HI/ID/PN/SI/SC/CharsCheck/SM/FL/DONE/CT/MS/MC/…` and the `VS_*`
-   voice set.
+   and back, for `HI/ID/PN/SI/SC/CharsCheck/SM/FL/DONE/CT/MS/MC/…` (plus the
+   Nyathena `VS_*` voice extension, which is non-canonical).
 4. Live smoke test: connect to a local Nyathena, complete the handshake, send an
    IC line, join voice, confirm `VS_PEERS` carries every peer (comma form).
 5. Confirm the §4 non-canonical set still works against Nyathena.
