@@ -345,8 +345,8 @@ type PunishmentState struct {
 type ClientPairInfo struct {
 	name      string
 	emote     string
-	flip      string
-	offset    string
+	flip      packet.Flip
+	offset    packet.Offset
 	wanted_id int
 }
 
@@ -796,7 +796,7 @@ func (client *Client) HandleClient() {
 	// JSON-aware clients respond with a '{'-prefixed packet and we switch this
 	// client to JSON encoding for the rest of the session; older clients
 	// ignore the value and stay in classic FantaCode.
-	client.Send(&packet.Decryptor{})
+	client.Send(&packet.Decryptor{Value: "JSON"})
 
 	// Reading both wire formats off the same connection means we can't use a
 	// pure json.Decoder loop (which would eat FantaCode bytes thinking they
@@ -1350,7 +1350,7 @@ func (client *Client) clientCleanup() {
 
 // SendServerMessage sends a server OOC message to the client.
 func (client *Client) SendServerMessage(message string) {
-	client.Send(&packet.CTToClient{Name: encodedServerName, Message: encode(message), IsFromServer: "1"})
+	client.Send(&packet.CTToClient{Name: encodedServerName, Message: encode(message), IsFromServer: true})
 }
 
 // SendMotd sends the MOTD to the client as a single OOC message. Embedded
@@ -1741,7 +1741,7 @@ func (client *Client) PairInfo() ClientPairInfo {
 }
 
 // SetPairInfo updates a client's pairing info.
-func (client *Client) SetPairInfo(name string, emote string, flip string, offset string) {
+func (client *Client) SetPairInfo(name string, emote string, flip packet.Flip, offset packet.Offset) {
 	client.mu.Lock()
 	client.pair.name, client.pair.emote, client.pair.flip, client.pair.offset = name, emote, flip, offset
 	client.mu.Unlock()
@@ -1956,7 +1956,7 @@ func (client *Client) JoinArea(area *area.Area) {
 	}
 	def, pro := area.HP()
 	client.Send(&packet.LE{Evidence: areas[0].Evidence()})
-	client.Send(&packet.CharsCheck{Taken: area.Taken()})
+	client.Send(&packet.CharsCheck{Taken: takenToInts(area.Taken())})
 	client.Send(&packet.HPToClient{Bar: 1, Value: def})
 	client.Send(&packet.HPToClient{Bar: 2, Value: pro})
 	if desc := area.Description(); desc != "" {
@@ -1983,7 +1983,7 @@ func (client *Client) JoinArea(area *area.Area) {
 	if song == "" {
 		song = "~stop.mp3"
 	}
-	client.Send(&packet.MCToClient{Name: song, CharID: client.CharID(), Showname: "Server", Looping: "1", Channel: "0", Effects: "0"})
+	client.Send(&packet.MCToClient{Name: song, CharID: client.CharID(), Showname: "Server", Looping: true, Channel: 0, Effects: 0})
 	sendPlayerArup()
 }
 
@@ -2067,7 +2067,7 @@ func (client *Client) ChangeArea(a *area.Area) bool {
 		// mirrors pktReqDone's ordering and matches Akashi's behaviour.
 		client.Send(&packet.DONE{})
 	} else {
-		broadcastToAreaOnce(a, &packet.CharsCheck{Taken: a.Taken()})
+		broadcastToAreaOnce(a, &packet.CharsCheck{Taken: takenToInts(a.Taken())})
 	}
 	// BN always last — after any DONE — so desk-overlay images never load
 	// against an unrendered viewport on WebAO (same fix as initial join).
@@ -2269,7 +2269,7 @@ func (client *Client) ChangeCharacter(id int) {
 		// player's display name (e.g. "Adachi") persists across character
 		// changes.
 		client.Send(&packet.PV{PlayerID: 0, CharID: id})
-		broadcastToAreaOnce(client.Area(), &packet.CharsCheck{Taken: client.Area().Taken()})
+		broadcastToAreaOnce(client.Area(), &packet.CharsCheck{Taken: takenToInts(client.Area().Taken())})
 		if client.Uid() != -1 {
 			broadcastToAll(&packet.PU{ID: client.Uid(), Type: 1, Data: client.CurrentCharacter()})
 			broadcastToAll(&packet.PU{ID: client.Uid(), Type: 2, Data: decode(client.Showname())})
@@ -2545,7 +2545,7 @@ func (client *Client) forceChangeArea(a *area.Area) {
 		// must initialize the viewport before desk-overlay images load.
 		client.Send(&packet.DONE{})
 	} else {
-		broadcastToAreaOnce(a, &packet.CharsCheck{Taken: a.Taken()})
+		broadcastToAreaOnce(a, &packet.CharsCheck{Taken: takenToInts(a.Taken())})
 	}
 	// BN always after any DONE so desk overlays load correctly on WebAO.
 	client.Send(&packet.BN{Background: a.Background()})

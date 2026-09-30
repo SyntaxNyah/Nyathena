@@ -17,7 +17,6 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>. */
 package athena
 
 import (
-	"strconv"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -106,7 +105,7 @@ func (client *Client) releaseForceDisplayGate() {
 func applyHideDisplay(ms *packet.MSToClient, punishments []PunishmentState) {
 	for i := range punishments {
 		if punishments[i].punishmentType == PunishmentHideDisplay {
-			ms.Offset = encode(hideDisplayOffset)
+			ms.Offset = parseOffset(hideDisplayOffset)
 			return
 		}
 	}
@@ -175,16 +174,15 @@ func applyForceDisplaySprite(ms *packet.MSToClient, target *Client) {
 		emote = "normal"
 	}
 	ms.Character = charName
-	ms.CharID = strconv.Itoa(cid)
+	ms.CharID = cid
 	ms.Emote = emote
-	if info.flip == "0" || info.flip == "1" {
-		flipN, _ := strconv.Atoi(info.flip)
-		ms.Flip = packet.Flip(flipN)
+	if info.flip == packet.FlipNone || info.flip == packet.FlipHorizontal {
+		ms.Flip = info.flip
 	}
 	if pos := target.Pos(); pos != "" {
 		ms.Side = packet.Side(pos)
 	}
-	if info.offset != "" {
+	if info.offset != (packet.Offset{}) {
 		ms.Offset = info.offset
 	}
 	// Suppress any pairing so only the pinned character renders in the viewport.
@@ -193,7 +191,7 @@ func applyForceDisplaySprite(ms *packet.MSToClient, target *Client) {
 	ms.PairedCharID = "-1"
 	ms.PairedName = ""
 	ms.PairedEmote = ""
-	ms.PairedOffset = ""
+	ms.PairedOffset = packet.Offset{}
 	ms.PairedFlip = packet.FlipNone
 }
 

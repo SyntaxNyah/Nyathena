@@ -202,7 +202,7 @@ func alertBannedAccountLinks(ipids map[string]struct{}) {
 		msg := fmt.Sprintf("[BAN] IPID %v is linked to registered account \"%v\".", ipid, username)
 		clients.ForEach(func(c *Client) {
 			if c.Uid() != -1 && permissions.IsModerator(c.Perms()) {
-				c.Send(&packet.CTToClient{Name: "OOC", Message: encode(msg), IsFromServer: "1"})
+				c.Send(&packet.CTToClient{Name: "OOC", Message: encode(msg), IsFromServer: true})
 			}
 		})
 	}
@@ -350,7 +350,7 @@ func cmdGlobal(client *Client, args []string, _ string) {
 	out := &packet.CTToClient{
 		Name:         encode(fmt.Sprintf("[GLOBAL] [UID %d] %s%v", client.Uid(), tag, oocDisplayName(client))),
 		Message:      encode(msg),
-		IsFromServer: "1",
+		IsFromServer: true,
 	}
 	// The command branch in pktOOC returns before the content gate, so without
 	// this a global reached every client on the server unexamined. See
@@ -550,9 +550,9 @@ func cmdMod(client *Client, args []string, usage string) {
 	}
 	msg := strings.Join(flags.Args(), " ")
 	if *global {
-		broadcastToAll(&packet.CTToClient{Name: encode(fmt.Sprintf("[MOD] [GLOBAL] %v", client.OOCName())), Message: encode(msg), IsFromServer: "1"})
+		broadcastToAll(&packet.CTToClient{Name: encode(fmt.Sprintf("[MOD] [GLOBAL] %v", client.OOCName())), Message: encode(msg), IsFromServer: true})
 	} else {
-		broadcastToArea(client.Area(), &packet.CTToClient{Name: encode(fmt.Sprintf("[MOD] %v", client.OOCName())), Message: encode(msg), IsFromServer: "1"})
+		broadcastToArea(client.Area(), &packet.CTToClient{Name: encode(fmt.Sprintf("[MOD] %v", client.OOCName())), Message: encode(msg), IsFromServer: true})
 	}
 	addToBuffer(client, "OOC", msg, false)
 }
@@ -570,7 +570,7 @@ func cmdModChat(client *Client, args []string, _ string) {
 			if senderIsShadow && !permissions.IsAdmin(c.Perms()) {
 				senderLabel = "Moderator"
 			}
-			c.Send(&packet.CTToClient{Name: encode(fmt.Sprintf("[MODCHAT] %v", senderLabel)), Message: encode(msg), IsFromServer: "1"})
+			c.Send(&packet.CTToClient{Name: encode(fmt.Sprintf("[MODCHAT] %v", senderLabel)), Message: encode(msg), IsFromServer: true})
 		}
 	})
 }
@@ -877,18 +877,18 @@ func cmdPM(client *Client, args []string, _ string) {
 	// calibrate correlating private messages against.
 	if !oocCommandAllowed(client, msg, "private message",
 		&packet.CTToClient{Name: encode(fmt.Sprintf("[PM] [UID %d] %v", client.Uid(), oocDisplayName(client))),
-			Message: encode(msg), IsFromServer: "1"}) {
+			Message: encode(msg), IsFromServer: true}) {
 		return
 	}
 	toPM := getUidList(strings.Split(args[0], ","))
 	var recipientNames []string
 	for _, c := range toPM {
-		c.Send(&packet.CTToClient{Name: encode(fmt.Sprintf("[PM] [UID %d] %v", client.Uid(), oocDisplayName(client))), Message: encode(msg), IsFromServer: "1"})
+		c.Send(&packet.CTToClient{Name: encode(fmt.Sprintf("[PM] [UID %d] %v", client.Uid(), oocDisplayName(client))), Message: encode(msg), IsFromServer: true})
 		recipientNames = append(recipientNames, fmt.Sprintf("[%d] %v", c.Uid(), oocDisplayName(c)))
 	}
 	// Echo the message back to the sender so they can see what they sent.
 	if len(recipientNames) > 0 {
-		client.Send(&packet.CTToClient{Name: encode(fmt.Sprintf("[PM → %v] %v", strings.Join(recipientNames, ", "), oocDisplayName(client))), Message: encode(msg), IsFromServer: "1"})
+		client.Send(&packet.CTToClient{Name: encode(fmt.Sprintf("[PM → %v] %v", strings.Join(recipientNames, ", "), oocDisplayName(client))), Message: encode(msg), IsFromServer: true})
 	}
 }
 
@@ -1725,7 +1725,7 @@ func cmdLockdown(client *Client, args []string, usage string) {
 	if active {
 		clients.ForEach(func(c *Client) {
 			if c.Uid() != -1 && permissions.IsModerator(c.Perms()) {
-				c.Send(&packet.CTToClient{Name: "OOC", Message: "🔒 Server lockdown is now ACTIVE. New connections are restricted to known players.", IsFromServer: "1"})
+				c.Send(&packet.CTToClient{Name: "OOC", Message: "🔒 Server lockdown is now ACTIVE. New connections are restricted to known players.", IsFromServer: true})
 			}
 		})
 		client.SendServerMessage("Lockdown enabled. New IPIDs will be rejected.")
@@ -1734,7 +1734,7 @@ func cmdLockdown(client *Client, args []string, usage string) {
 	} else {
 		clients.ForEach(func(c *Client) {
 			if c.Uid() != -1 && permissions.IsModerator(c.Perms()) {
-				c.Send(&packet.CTToClient{Name: "OOC", Message: "🔓 Server lockdown has been LIFTED. New connections are now allowed.", IsFromServer: "1"})
+				c.Send(&packet.CTToClient{Name: "OOC", Message: "🔓 Server lockdown has been LIFTED. New connections are now allowed.", IsFromServer: true})
 			}
 		})
 		client.SendServerMessage("Lockdown disabled. New IPIDs are now allowed.")
@@ -1765,7 +1765,7 @@ func cmdFirewall(client *Client, args []string, usage string) {
 		firewallActive.Store(true)
 		clients.ForEach(func(c *Client) {
 			if c.Uid() != -1 && permissions.HasPermission(c.Perms(), permissions.PermissionField["BAN"]) {
-				c.Send(&packet.CTToClient{Name: "OOC", Message: "🔥 VPN firewall is now ACTIVE. New connections will be screened against IPHub.", IsFromServer: "1"})
+				c.Send(&packet.CTToClient{Name: "OOC", Message: "🔥 VPN firewall is now ACTIVE. New connections will be screened against IPHub.", IsFromServer: true})
 			}
 		})
 		client.SendServerMessage("Firewall enabled. New IPs will be checked via IPHub.")
@@ -1774,7 +1774,7 @@ func cmdFirewall(client *Client, args []string, usage string) {
 		firewallActive.Store(false)
 		clients.ForEach(func(c *Client) {
 			if c.Uid() != -1 && permissions.HasPermission(c.Perms(), permissions.PermissionField["BAN"]) {
-				c.Send(&packet.CTToClient{Name: "OOC", Message: "🔓 VPN firewall has been DISABLED. New connections are no longer screened.", IsFromServer: "1"})
+				c.Send(&packet.CTToClient{Name: "OOC", Message: "🔓 VPN firewall has been DISABLED. New connections are no longer screened.", IsFromServer: true})
 			}
 		})
 		client.SendServerMessage("Firewall disabled.")

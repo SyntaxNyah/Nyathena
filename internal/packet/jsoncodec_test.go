@@ -119,8 +119,8 @@ func TestParseJSON_MSClient(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ParseJSON: %v", err)
 	}
-	ms := ParseMSToServer(pkt.Body)
-	if ms.Character != "Phoenix" || ms.Message != "Objection!" || ms.CharID != "3" || ms.Blips != "male" {
+	ms, _ := ParseMSToServer(pkt.Body)
+	if ms.Character != "Phoenix" || ms.Message != "Objection!" || ms.CharID != 3 || ms.Blips != "male" {
 		t.Fatalf("ParseMSToServer round-trip mismatch: %+v", ms)
 	}
 }
@@ -142,7 +142,7 @@ func TestBuildJSON_HI_unknownHeaderFallback(t *testing.T) {
 func TestBuildJSON_ID_PlayerIDIsNumber(t *testing.T) {
 	// Spec says player_id is a JSON number, not a string. Verify the schema
 	// promotes it past the default "wire body is strings" treatment.
-	pkt := &IDToClient{PlayerNumber: 42, Software: "athena", Version: "1.0"}
+	pkt := &IDToClient{PlayerID: 42, Software: "athena", Version: "1.0"}
 	out := BuildJSON(pkt.Header(), pkt.Args())
 	got := decodeJSON(t, out)
 	if n, ok := got["player_id"].(float64); !ok || n != 42 {
@@ -178,7 +178,7 @@ func TestBuildJSON_FL_StringArray(t *testing.T) {
 func TestBuildJSON_ARUP_TypeAndTail(t *testing.T) {
 	// ARUP combines one leading scalar (update_type) with a variable tail
 	// (update_data). Verify both make it into the JSON object.
-	pkt := &ARUP{Type: AreaUpdatePlayerCount, Data: []string{"4", "3", "7"}}
+	pkt := &ARUP{UpdateType: AreaUpdateTypePlayerCount, UpdateData: []string{"4", "3", "7"}}
 	out := BuildJSON(pkt.Header(), pkt.Args())
 	got := decodeJSON(t, out)
 	if got["update_type"] != "0" {
@@ -196,7 +196,7 @@ func TestBuildJSON_ARUP_TypeAndTail(t *testing.T) {
 func TestBuildJSON_SC_ObjectArray(t *testing.T) {
 	// SC stores each character as "name&desc&evi" in the wire body. The
 	// JSON form should unfold each entry into an object.
-	pkt := &SC{Entries: []string{"Phoenix&Defense attorney&", "Edgeworth&Prosecutor&"}}
+	pkt := &SC{CharData: []string{"Phoenix&Defense attorney&", "Edgeworth&Prosecutor&"}}
 	out := BuildJSON(pkt.Header(), pkt.Args())
 	got := decodeJSON(t, out)
 	arr, ok := got["char_data"].([]any)
@@ -215,8 +215,9 @@ func TestBuildJSON_SC_ObjectArray(t *testing.T) {
 func TestBuildJSON_SD_SplitOnStar(t *testing.T) {
 	// SD's lone wire field is a '*'-joined position list. In JSON it
 	// should be split back into an array.
-	pkt := &SD{Sides: []string{"wit", "def", "pro"}}
-	out := BuildJSON(pkt.Header(), pkt.Args())
+	// SD's struct type was removed in the aolib migration, but the JSON codec
+	// still supports the "SD" header; build it from its raw '*'-joined wire body.
+	out := BuildJSON("SD", []string{"wit*def*pro"})
 	got := decodeJSON(t, out)
 	sides, ok := got["sides"].([]any)
 	if !ok || len(sides) != 3 || sides[0] != "wit" || sides[2] != "pro" {
@@ -245,15 +246,15 @@ func TestBuildJSON_MS_ServerDirection(t *testing.T) {
 	// relative to MS-client. Verify the outbound schema is the 30-field
 	// shape, not the 26-field client shape.
 	ms := &MSToClient{
-		DeskMod: DeskModifierShown, PreAnim: "-", Character: "Phoenix", Emote: "normal",
-		Message: "Hi", Side: SideWitness, SfxName: "0", EmoteModifier: EmoteModifierPreanim,
-		CharID: "3", SfxDelay: "0", ShoutModifier: "0", Evidence: "0",
-		Flip: FlipNone, Realization: "0", TextColor: TextColorWhite, Showname: "",
-		OtherCharID: "-1", OtherName: "Edgeworth", OtherEmote: "normal",
-		SelfOffset: "0&0", OtherOffset: "0&0", OtherFlip: FlipNone,
-		NonInterruptingPreAnim: "0", SfxLooping: "0", Screenshake: "0",
+		DeskModifier: DeskModifierShown, Preanim: "-", Character: "Phoenix", Emote: "normal",
+		Message: "Hi", Side: SideWit, SfxName: "0", EmoteModifier: EmoteModifierPreanim,
+		CharID: 3, SfxDelay: 0, ShoutModifier: ShoutModifierNone, EvidenceID: 0,
+		Flip: FlipNone, Realization: false, TextColor: TextColorWhite, Showname: "",
+		PairedCharID: "-1", PairedName: "Edgeworth", PairedEmote: "normal",
+		Offset: Offset{}, PairedOffset: Offset{}, PairedFlip: FlipNone,
+		NoninterruptingPreanim: false, SfxLooping: false, Screenshake: false,
 		FramesShake: "", FramesRealization: "", FramesSfx: "",
-		Additive: "0", Effect: "",
+		Additive: false, Effect: "",
 	}
 	out := BuildJSON(ms.Header(), ms.Args())
 	got := decodeJSON(t, out)
@@ -307,11 +308,11 @@ func TestParseJSON_MS_OffsetAsObject(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ParseJSON: %v", err)
 	}
-	ms := ParseMSToServer(pkt.Body)
-	if ms.SelfOffset != "0&0" {
-		t.Fatalf("SelfOffset = %q, want \"0&0\"", ms.SelfOffset)
+	ms, _ := ParseMSToServer(pkt.Body)
+	if ms.Offset.X != 0 || ms.Offset.Y != 0 {
+		t.Fatalf("Offset = %+v, want {0 0}", ms.Offset)
 	}
-	if ms.Character != "Maya" || ms.CharID != "37" || ms.Message != "hi" {
+	if ms.Character != "Maya" || ms.CharID != 37 || ms.Message != "hi" {
 		t.Fatalf("MS round-trip mismatch: %+v", ms)
 	}
 }
@@ -346,7 +347,7 @@ func TestParseJSON_LegacyHeaderKeyFallback(t *testing.T) {
 func TestDecryptor_AdvertisesJSON(t *testing.T) {
 	// The first packet sent on every connection — verifies our capability
 	// signal hasn't regressed back to NOENCRYPT.
-	d := &Decryptor{}
+	d := &Decryptor{Value: "JSON"}
 	if got := d.Args(); len(got) != 1 || got[0] != "JSON" {
 		t.Fatalf("Decryptor.Args = %v, want [JSON]", got)
 	}

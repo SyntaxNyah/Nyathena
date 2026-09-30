@@ -41,7 +41,6 @@ import (
 	"os"
 	"regexp"
 	"sort"
-	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -111,21 +110,6 @@ func parseRecvLog(t *testing.T, path string) []recvEvent {
 	// stably, so same-timestamp lines keep file order) rather than assume it.
 	sort.SliceStable(events, func(i, j int) bool { return events[i].ts.Before(events[j].ts) })
 	return events
-}
-
-// parseObjection reads the MS ShoutModifier field. Newer clients can suffix it
-// with a custom shout name ("4&mycustomsound"), so the numeric part is taken
-// before any '&' rather than handed to Atoi whole.
-func parseObjection(shoutModifier string) int {
-	main := shoutModifier
-	if i := strings.IndexByte(shoutModifier, '&'); i >= 0 {
-		main = shoutModifier[:i]
-	}
-	n, err := strconv.Atoi(main)
-	if err != nil {
-		return 0
-	}
-	return n
 }
 
 // fieldAt returns body[i], or "" if body is too short -- CT bodies from a
@@ -268,14 +252,14 @@ func applyEvent(ir *ipidReplay, ev recvEvent) {
 		for i, f := range body {
 			decoded[i] = decode(f)
 		}
-		ms := packet.ParseMSToServer(decoded)
+		ms, _ := packet.ParseMSToServer(decoded)
 		ir.msgCount++
 		ir.rs.observe(Observation{
 			IPID:          ir.ipid,
 			IsIC:          true,
 			Text:          ms.Message,
 			Showname:      ms.Showname,
-			Objection:     parseObjection(ms.ShoutModifier),
+			Objection:     shoutModifierWire[ms.ShoutModifier],
 			SinceConnect:  ev.ts.Sub(ir.connectedAt),
 			SinceCharPick: ir.sinceCharPick(ev.ts),
 			Now:           ev.ts,

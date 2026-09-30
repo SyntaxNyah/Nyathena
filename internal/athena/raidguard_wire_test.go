@@ -45,7 +45,7 @@ func withWiring(t *testing.T) {
 	raidGuardActive.Store(true)
 }
 
-func icPacket(showname, shout string) *packet.MSToClient {
+func icPacket(showname string, shout packet.ShoutModifier) *packet.MSToClient {
 	return &packet.MSToClient{Showname: showname, Message: "placeholder", ShoutModifier: shout}
 }
 
@@ -57,7 +57,7 @@ func TestWireFeatureGateOff(t *testing.T) {
 
 	c := wireTestClient(t, "gate-off", 0)
 	for i := 0; i < 10; i++ {
-		raidGuardOnIC(c, icPacket("shouty", "1"), "GET RAPED GET RAPED GET RAPED NOW")
+		raidGuardOnIC(c, icPacket("shouty", packet.ShoutModifierHoldIt), "GET RAPED GET RAPED GET RAPED NOW")
 		raidGuardOnOOC(c, "namechurn"+string(rune('a'+i)), "GET RAPED GET RAPED GET RAPED NOW")
 		raidGuardOnCharPick(c)
 		raidGuardOnHandshakeStep(c)
@@ -81,7 +81,7 @@ func TestWireModeratorNeverObserved(t *testing.T) {
 		t.Fatal("test client is not a moderator; the exemption is not being exercised")
 	}
 	for i := 0; i < 10; i++ {
-		raidGuardOnIC(c, icPacket("shouty", "1"), "GET RAPED GET RAPED GET RAPED NOW")
+		raidGuardOnIC(c, icPacket("shouty", packet.ShoutModifierHoldIt), "GET RAPED GET RAPED GET RAPED NOW")
 		raidGuardOnHandshakeStep(c)
 	}
 	c.mu.Lock()
@@ -102,7 +102,7 @@ func TestWireObjectionReachesEngine(t *testing.T) {
 	withWiring(t)
 	c := wireTestClient(t, "objection-ipid", 0)
 	for i := 0; i < 5; i++ {
-		raidGuardOnIC(c, icPacket("Mintisanigger", "1"), "you cannot stop the raven")
+		raidGuardOnIC(c, icPacket("Mintisanigger", packet.ShoutModifierHoldIt), "you cannot stop the raven")
 	}
 	rs := c.raidGuard()
 	if rs == nil {
@@ -121,7 +121,7 @@ func TestWireObjectionZeroIsClean(t *testing.T) {
 	withWiring(t)
 	c := wireTestClient(t, "clean-ipid", 0)
 	for i := 0; i < 5; i++ {
-		raidGuardOnIC(c, icPacket("Phoenix", "0"), "I object to that line of questioning")
+		raidGuardOnIC(c, icPacket("Phoenix", packet.ShoutModifierNone), "I object to that line of questioning")
 	}
 	if rs := c.raidGuard(); rs != nil && rs.firedSignal(SigObjectionSpam) {
 		t.Error("objection signal fired on messages carrying no shout modifier")

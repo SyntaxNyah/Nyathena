@@ -180,7 +180,7 @@ func raidGuardOnIC(client *Client, ms *packet.MSToClient, text string) {
 	}
 	// A malformed modifier cannot reach here (pktIC drops the packet first), and
 	// treating an unparseable one as "no shout" is the safe direction anyway.
-	objection, _ := ms.Shout()
+	objection := shoutModifierWire[ms.Shout()]
 	now := time.Now()
 	sinceConnect, sinceCharPick := raidGuardTimings(client, now)
 	fired, _ := rs.observe(Observation{

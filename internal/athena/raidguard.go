@@ -1114,7 +1114,7 @@ func (c *Client) SetRaidAlertsDisabled(off bool) {
 // is appended here rather than by each caller so no alert can ever go out
 // without telling its reader how to turn it off.
 func sendRaidGuardAlert(msg string) {
-	out := &packet.CTToClient{Name: "[RAIDGUARD]", Message: encode(msg + "\n" + raidAlertHint), IsFromServer: "1"}
+	out := &packet.CTToClient{Name: "[RAIDGUARD]", Message: encode(msg + "\n" + raidAlertHint), IsFromServer: true}
 	clients.ForEach(func(c *Client) {
 		if !permissions.HasPermission(c.Perms(), permissions.PermissionField["MOD_CHAT"]) {
 			return

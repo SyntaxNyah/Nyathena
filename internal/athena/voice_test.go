@@ -142,7 +142,7 @@ func TestPktVSJoinBroadcastsAndSendsPeerList(t *testing.T) {
 	// Alice joined first — she gets an empty VS_PEERS and should then receive
 	// bob's VS_JOIN broadcast.
 	aliceOut := aliceConn.String()
-	if !strings.Contains(aliceOut, "VS_PEERS##%") {
+	if !strings.Contains(aliceOut, "VS_PEERS#%") {
 		t.Errorf("alice did not receive empty VS_PEERS, got: %q", aliceOut)
 	}
 	if !strings.Contains(aliceOut, "VS_JOIN#2#%") {

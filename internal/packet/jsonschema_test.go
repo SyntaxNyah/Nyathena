@@ -105,14 +105,14 @@ func TestBuildJSON_MS_PassesBroadcastSchema(t *testing.T) {
 	loadSchemasForTest(t)
 
 	ms := &MSToClient{
-		DeskMod: DeskModifierShown, PreAnim: "-", Character: "Phoenix", Emote: "(a)pointing",
-		Message: "Objection!", Side: SideWitness, SfxName: "0", EmoteModifier: EmoteModifierPreanim,
-		CharID: "3", SfxDelay: "0", ShoutModifier: "0", Evidence: "0",
-		Flip: FlipNone, Realization: "0", TextColor: TextColorRainbow, Showname: "Nick",
-		OtherCharID: "-1", SelfOffset: "5&10",
-		NonInterruptingPreAnim: "0", SfxLooping: "0", Screenshake: "0",
+		DeskModifier: DeskModifierShown, Preanim: "-", Character: "Phoenix", Emote: "(a)pointing",
+		Message: "Objection!", Side: SideWit, SfxName: "0", EmoteModifier: EmoteModifierPreanim,
+		CharID: 3, SfxDelay: 0, ShoutModifier: ShoutModifierNone, EvidenceID: 0,
+		Flip: FlipNone, Realization: false, TextColor: TextColorRainbow, Showname: "Nick",
+		PairedCharID: "-1", Offset: Offset{X: 5, Y: 10},
+		NoninterruptingPreanim: false, SfxLooping: false, Screenshake: false,
 		FramesShake: "", FramesRealization: "", FramesSfx: "",
-		Additive: "0", Effect: "",
+		Additive: false, Effect: "",
 	}
 	out := BuildJSON(ms.Header(), ms.Args())
 	if err := ValidateMSBroadcast(out); err != nil {
@@ -141,7 +141,7 @@ func TestBuildJSON_MS_PassesBroadcastSchema(t *testing.T) {
 func TestBuildJSON_MS_OmitsBlips(t *testing.T) {
 	loadSchemasForTest(t)
 	ms := &MSToClient{
-		Character: "P", Emote: "e", Message: "m", Side: "wit", CharID: "0",
+		Character: "P", Emote: "e", Message: "m", Side: "wit", CharID: 0,
 		Blips: "sound", // set, but must not appear in the JSON output
 	}
 	out := BuildJSON(ms.Header(), ms.Args())

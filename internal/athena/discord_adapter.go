@@ -513,7 +513,7 @@ func (a *ServerAdapter) SetFirewall(on bool) error {
 		firewallActive.Store(true)
 		clients.ForEach(func(c *Client) {
 			if c.Uid() != -1 && permissions.HasPermission(c.Perms(), permissions.PermissionField["BAN"]) {
-				c.Send(&packet.CTToClient{Name: "OOC", Message: "🔥 VPN firewall enabled by a Discord moderator.", IsFromServer: "1"})
+				c.Send(&packet.CTToClient{Name: "OOC", Message: "🔥 VPN firewall enabled by a Discord moderator.", IsFromServer: true})
 			}
 		})
 		return nil
@@ -521,7 +521,7 @@ func (a *ServerAdapter) SetFirewall(on bool) error {
 	firewallActive.Store(false)
 	clients.ForEach(func(c *Client) {
 		if c.Uid() != -1 && permissions.HasPermission(c.Perms(), permissions.PermissionField["BAN"]) {
-			c.Send(&packet.CTToClient{Name: "OOC", Message: "🔓 VPN firewall disabled by a Discord moderator.", IsFromServer: "1"})
+			c.Send(&packet.CTToClient{Name: "OOC", Message: "🔓 VPN firewall disabled by a Discord moderator.", IsFromServer: true})
 		}
 	})
 	return nil
@@ -536,7 +536,7 @@ func (a *ServerAdapter) SetLockdown(on bool) error {
 	}
 	clients.ForEach(func(c *Client) {
 		if c.Uid() != -1 && permissions.IsModerator(c.Perms()) {
-			c.Send(&packet.CTToClient{Name: "OOC", Message: msg, IsFromServer: "1"})
+			c.Send(&packet.CTToClient{Name: "OOC", Message: msg, IsFromServer: true})
 		}
 	})
 	if on {

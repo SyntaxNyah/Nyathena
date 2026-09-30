@@ -35,3 +35,7 @@ require (
 	modernc.org/strutil v1.1.2 // indirect
 	modernc.org/token v1.0.0 // indirect
 )
+
+require github.com/SyntaxNyah/aolib-go v0.0.0
+
+replace github.com/SyntaxNyah/aolib-go => ../aolib/aolib-go

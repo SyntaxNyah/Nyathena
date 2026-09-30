@@ -109,15 +109,15 @@ func TestParseMSToServerToServerExpands(t *testing.T) {
 	body[17] = "0&0" // self_offset on the client side (client slot 17)
 	body[18] = "0"   // noninterrupting_preanim on the client side (client slot 18)
 
-	ms := packet.ParseMSToServer(body)
+	ms, _ := packet.ParseMSToServer(body)
 	if ms.PairedCharID != "-1" {
 		t.Errorf("PairedCharID = %q, want -1", ms.PairedCharID)
 	}
-	if ms.Offset != "0&0" {
-		t.Errorf("Offset = %q, want \"0&0\"", ms.Offset)
+	if ms.Offset.X != 0 || ms.Offset.Y != 0 {
+		t.Errorf("Offset = %+v, want {0 0}", ms.Offset)
 	}
-	if ms.NoninterruptingPreanim != "0" {
-		t.Errorf("NoninterruptingPreanim = %q, want \"0\"", ms.NoninterruptingPreanim)
+	if ms.NoninterruptingPreanim {
+		t.Errorf("NoninterruptingPreanim = %v, want false", ms.NoninterruptingPreanim)
 	}
 
 	args := ms.ToClient().Args()

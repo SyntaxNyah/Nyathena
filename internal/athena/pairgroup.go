@@ -266,8 +266,7 @@ func applyPairGroupInjection(client *Client, ms *packet.MSToClient) {
 	ms.PairedName = info.name
 	ms.PairedEmote = info.emote
 	ms.PairedOffset = info.offset
-	otherFlip, _ := strconv.Atoi(info.flip)
-	ms.PairedFlip = packet.Flip(otherFlip)
+	ms.PairedFlip = info.flip
 
 	for _, p := range others[1:] {
 		pi := p.PairInfo()
@@ -275,7 +274,7 @@ func applyPairGroupInjection(client *Client, ms *packet.MSToClient) {
 			CharID: p.CharID(),
 			Name:   pi.name,
 			Emote:  pi.emote,
-			Offset: parseOffset(pi.offset),
+			Offset: pi.offset,
 			Flip:   parsePairFlip(pi.flip),
 		})
 	}
@@ -295,10 +294,9 @@ func parseOffset(s string) packet.Offset {
 	return packet.Offset{X: x, Y: y}
 }
 
-// parsePairFlip converts a flip string ("0".."3") into an int.
-func parsePairFlip(s string) int {
-	n, _ := strconv.Atoi(s)
-	return n
+// parsePairFlip converts a flip enum value into its legacy wire integer.
+func parsePairFlip(f packet.Flip) int {
+	return flipWire[f]
 }
 
 // dissolvePairGroupOnDisconnect tears down any group a disconnecting client

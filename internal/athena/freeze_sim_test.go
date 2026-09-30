@@ -105,9 +105,9 @@ func simPopulation(t *testing.T, n int) (*ClientList, *area.Area, func()) {
 // broadcasts are included because they are part of the real per-change cost.
 func oneCharacterChange(a *area.Area, buildOnce bool) {
 	if buildOnce {
-		broadcastToAreaOnce(a, &packet.CharsCheck{Taken: a.Taken()})
+		broadcastToAreaOnce(a, &packet.CharsCheck{Taken: takenToInts(a.Taken())})
 	} else {
-		broadcastToArea(a, &packet.CharsCheck{Taken: a.Taken()})
+		broadcastToArea(a, &packet.CharsCheck{Taken: takenToInts(a.Taken())})
 	}
 	broadcastToAll(&packet.PU{ID: 1, Type: 1, Data: "Phoenix"})
 	broadcastToAll(&packet.PU{ID: 1, Type: 2, Data: "Phoenix"})

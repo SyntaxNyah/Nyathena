@@ -56,9 +56,9 @@ func applyProtocolPunishments(ms *packet.MSToClient, punishments []PunishmentSta
 		case PunishmentTeleport:
 			x := rand.Intn(2*teleportMaxX+1) - teleportMaxX
 			y := rand.Intn(2*teleportMaxY+1) - teleportMaxY
-			ms.Offset = encode(fmt.Sprintf("%d&%d", x, y))
+			ms.Offset = packet.Offset{X: x, Y: y}
 		case PunishmentShakecurse:
-			ms.Screenshake = "1"
+			ms.Screenshake = true
 		case PunishmentRandomflip:
 			if rand.Intn(2) == 0 {
 				ms.Flip = packet.FlipHorizontal
@@ -67,7 +67,7 @@ func applyProtocolPunishments(ms *packet.MSToClient, punishments []PunishmentSta
 			}
 		case PunishmentForceColor:
 			if c, err := strconv.Atoi(p.customData); err == nil && c >= 0 && c <= 9 {
-				ms.TextColor = packet.TextColor(c)
+				ms.TextColor = textColorFromWire(c)
 			}
 		case PunishmentNoPreanim:
 			switch ms.EmoteModifier {

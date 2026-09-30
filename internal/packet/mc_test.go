@@ -29,7 +29,7 @@ import (
 func TestMCToClientArgsDefaultsNumericFields(t *testing.T) {
 	p := &MCToClient{
 		Name: "https://file.garden/h.mp3", CharID: 1, Showname: "",
-		Looping: "1", Channel: "0", Effects: "", // Effects left empty, as /play used to
+		Looping: true, Channel: 0, Effects: 0, // Effects at zero value, as /play used to leave it empty
 	}
 	args := p.Args()
 	want := []string{"https://file.garden/h.mp3", "1", "", "1", "0", "0"}
@@ -56,7 +56,7 @@ func TestMCToClientArgsDefaultsNumericFields(t *testing.T) {
 // serialization layer: a streaming URL passes through Args() byte-for-byte.
 func TestMCToClientArgsPreservesURL(t *testing.T) {
 	const url = "https://host.com/stream.mp3"
-	p := &MCToClient{Name: url, CharID: 2, Looping: "1", Channel: "0", Effects: "0"}
+	p := &MCToClient{Name: url, CharID: 2, Looping: true, Channel: 0, Effects: 0}
 	if got := p.Args()[0]; got != url {
 		t.Errorf("Args()[0] = %q, want verbatim URL %q", got, url)
 	}

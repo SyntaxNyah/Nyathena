@@ -584,7 +584,7 @@ func mafiaSubWhisper(client *Client, args []string) {
 	echo := &packet.CTToClient{
 		Name:         encodedServerName,
 		Message:      encode(fmt.Sprintf("🎭 [Mafia/Private] 💬 [Whisper from %v]: %v", sender.Name(), message)),
-		IsFromServer: "1",
+		IsFromServer: true,
 	}
 	if !oocCommandAllowed(client, message, "mafia whisper", echo) {
 		return

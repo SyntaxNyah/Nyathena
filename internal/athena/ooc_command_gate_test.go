@@ -129,7 +129,7 @@ func TestOOCCommandGateVerdicts(t *testing.T) {
 
 	writeWordList(t, "slurword | severe\nalertonly | watch\n")
 
-	echo := &packet.CTToClient{Name: "[GLOBAL] [UID 1] tester", Message: "x", IsFromServer: "1"}
+	echo := &packet.CTToClient{Name: "[GLOBAL] [UID 1] tester", Message: "x", IsFromServer: true}
 
 	// A real area, because the suppressing branches write to its report buffer.
 	room := area.NewArea(area.AreaData{Name: "Courtroom"}, 5, 10, area.EviAny)
@@ -205,7 +205,7 @@ func TestOOCCommandGateVerdicts(t *testing.T) {
 func TestRaidGuardVerdictSuppressesTheGlobalThatEarnedIt(t *testing.T) {
 	withRaidConfig(t)
 	room := area.NewArea(area.AreaData{Name: "Courtroom"}, 5, 10, area.EviAny)
-	echo := &packet.CTToClient{Name: "[GLOBAL] [UID 1] tester", Message: "x", IsFromServer: "1"}
+	echo := &packet.CTToClient{Name: "[GLOBAL] [UID 1] tester", Message: "x", IsFromServer: true}
 
 	t.Run("silence stops it", func(t *testing.T) {
 		prev := activeCaptchaRestricted.Load()
@@ -250,7 +250,7 @@ func TestGlobalsHeldFromSuspiciousConnectionsDuringAnAttack(t *testing.T) {
 	defer setupShadowDisconnectTestDB(t)()
 	withRaidConfig(t)
 	room := area.NewArea(area.AreaData{Name: "Courtroom"}, 5, 10, area.EviAny)
-	echo := &packet.CTToClient{Name: "[GLOBAL] [UID 1] tester", Message: "x", IsFromServer: "1"}
+	echo := &packet.CTToClient{Name: "[GLOBAL] [UID 1] tester", Message: "x", IsFromServer: true}
 
 	prevAttack := raidAttackUntil.Load()
 	prevActive := raidGuardActive.Load()

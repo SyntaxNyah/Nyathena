@@ -906,7 +906,7 @@ func cmdPlay(client *Client, args []string, _ string) {
 	}
 	playAreaMusic(client.Area(), &packet.MCToClient{
 		Name: s, CharID: client.CharID(), Showname: client.Showname(),
-		Looping: "1", Channel: "0", Effects: "0",
+		Looping: true, Channel: 0, Effects: 0,
 	})
 }
 
@@ -956,7 +956,7 @@ func cmdRandomSong(client *Client, _ []string, _ string) {
 	song := playable[rand.Intn(len(playable))]
 	playAreaMusic(client.Area(), &packet.MCToClient{
 		Name: song, CharID: client.CharID(), Showname: client.Showname(),
-		Looping: "1", Channel: "0", Effects: "0",
+		Looping: true, Channel: 0, Effects: 0,
 	})
 	addToBuffer(client, "CMD", fmt.Sprintf("Played random song (%v).", song), false)
 }
@@ -1036,7 +1036,7 @@ func cmdPause(client *Client, _ []string, _ string) {
 	client.Area().SetTstState(area.TRIdle)
 	client.SendServerMessage("Recorder stopped.")
 	client.Area().TstJump(0)
-	broadcastToArea(client.Area(), &packet.RTToClient{Animation: "testimony1", Variant: "1"})
+	broadcastToArea(client.Area(), &packet.RTToClient{Animation: "testimony1", JudgeID: 1})
 }
 
 // Handles /examine
@@ -1130,7 +1130,7 @@ func cmdTestimony(client *Client, args []string, _ string) {
 		client.Area().SetTstState(area.TRIdle)
 		client.SendServerMessage("Recorder stopped.")
 		client.Area().TstJump(0)
-		broadcastToArea(client.Area(), &packet.RTToClient{Animation: "testimony1", Variant: "1"})
+		broadcastToArea(client.Area(), &packet.RTToClient{Animation: "testimony1", JudgeID: 1})
 	case "play":
 		if !client.Area().HasTestimony() {
 			client.SendServerMessage("No testimony recorded.")

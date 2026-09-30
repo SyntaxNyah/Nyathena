@@ -740,7 +740,7 @@ func handleTormentedOOC(client *Client, name, msg string) {
 		displayName = string(runes)
 	}
 
-	out := &packet.CTToClient{Name: displayName, Message: msg, IsFromServer: "0"}
+	out := &packet.CTToClient{Name: displayName, Message: msg, IsFromServer: false}
 	// Echo to sender immediately.
 	client.Send(out)
 

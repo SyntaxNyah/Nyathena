@@ -109,7 +109,7 @@ func TestPUFilterPassesNonPUPackets(t *testing.T) {
 		{Raw: "slurword", Pattern: "slurword", Severity: SeverityNuke, Mode: MatchSubstring},
 	})
 	for _, p := range []packet.Outgoing{
-		&packet.CTToClient{Name: "slurword", Message: "slurword", IsFromServer: "1"},
+		&packet.CTToClient{Name: "slurword", Message: "slurword", IsFromServer: true},
 		&packet.PR{ID: 1, Type: 0},
 	} {
 		if !puAllowed(p) {

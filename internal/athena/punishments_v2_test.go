@@ -4,7 +4,6 @@
 package athena
 
 import (
-	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -274,60 +273,53 @@ func TestApplyProtocolPunishments(t *testing.T) {
 		return []PunishmentState{{punishmentType: pType, customData: data}}
 	}
 
-	ms := &packet.MSToClient{Screenshake: "0"}
+	ms := &packet.MSToClient{Screenshake: false}
 	applyProtocolPunishments(ms, mk(PunishmentShakecurse, ""))
-	if ms.Screenshake != "1" {
-		t.Errorf("shakecurse: Screenshake = %q, want \"1\"", ms.Screenshake)
+	if !ms.Screenshake {
+		t.Errorf("shakecurse: Screenshake = %v, want true", ms.Screenshake)
 	}
 
 	for i := 0; i < 30; i++ {
 		ms = &packet.MSToClient{Flip: packet.FlipNone}
 		applyProtocolPunishments(ms, mk(PunishmentRandomflip, ""))
 		if ms.Flip != packet.FlipNone && ms.Flip != packet.FlipHorizontal {
-			t.Fatalf("randomflip wrote illegal Flip %d", ms.Flip)
+			t.Fatalf("randomflip wrote illegal Flip %v", ms.Flip)
 		}
 	}
 
 	ms = &packet.MSToClient{TextColor: packet.TextColorWhite}
 	applyProtocolPunishments(ms, mk(PunishmentForceColor, "9"))
 	if ms.TextColor != packet.TextColorRainbow {
-		t.Errorf("forcecolor: TextColor = %d, want 9", ms.TextColor)
+		t.Errorf("forcecolor: TextColor = %v, want rainbow", ms.TextColor)
 	}
 	ms = &packet.MSToClient{TextColor: packet.TextColorWhite}
 	applyProtocolPunishments(ms, mk(PunishmentForceColor, "57")) // out of range: ignored
 	if ms.TextColor != packet.TextColorWhite {
-		t.Errorf("forcecolor out-of-range: TextColor = %d, want 0", ms.TextColor)
+		t.Errorf("forcecolor out-of-range: TextColor = %v, want white", ms.TextColor)
 	}
 
 	ms = &packet.MSToClient{EmoteModifier: packet.EmoteModifierPreanim, Preanim: "slam"}
 	applyProtocolPunishments(ms, mk(PunishmentNoPreanim, ""))
 	if ms.EmoteModifier != packet.EmoteModifierNoPreanim || ms.Preanim != "-" {
-		t.Errorf("nopreanim: EmoteModifier=%d Preanim=%q", ms.EmoteModifier, ms.Preanim)
+		t.Errorf("nopreanim: EmoteModifier=%v Preanim=%q", ms.EmoteModifier, ms.Preanim)
 	}
 
 	ms = &packet.MSToClient{EmoteModifier: packet.EmoteModifierNoPreanim, Preanim: "slam"}
 	applyProtocolPunishments(ms, mk(PunishmentForcePreanim, ""))
 	if ms.EmoteModifier != packet.EmoteModifierPreanim {
-		t.Errorf("forcepreanim: EmoteModifier = %d, want 1", ms.EmoteModifier)
+		t.Errorf("forcepreanim: EmoteModifier = %v, want preanim", ms.EmoteModifier)
 	}
 	ms = &packet.MSToClient{EmoteModifier: packet.EmoteModifierNoPreanim, Preanim: "-"}
 	applyProtocolPunishments(ms, mk(PunishmentForcePreanim, ""))
 	if ms.EmoteModifier != packet.EmoteModifierNoPreanim {
-		t.Errorf("forcepreanim without a named preanim should not promote, got %d", ms.EmoteModifier)
+		t.Errorf("forcepreanim without a named preanim should not promote, got %v", ms.EmoteModifier)
 	}
 
 	for i := 0; i < 30; i++ {
 		ms = &packet.MSToClient{}
 		applyProtocolPunishments(ms, mk(PunishmentTeleport, ""))
-		offsets := strings.Split(decode(ms.Offset), "&")
-		if len(offsets) != 2 {
-			t.Fatalf("teleport wrote malformed Offset %q", ms.Offset)
-		}
-		for _, o := range offsets {
-			v, err := strconv.Atoi(o)
-			if err != nil || v < -100 || v > 100 {
-				t.Fatalf("teleport wrote out-of-range offset %q", ms.Offset)
-			}
+		if ms.Offset.X < -100 || ms.Offset.X > 100 || ms.Offset.Y < -100 || ms.Offset.Y > 100 {
+			t.Fatalf("teleport wrote out-of-range offset %+v", ms.Offset)
 		}
 	}
 }
