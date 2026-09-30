@@ -49,43 +49,43 @@ const (
 // applyProtocolPunishments mutates the outgoing IC packet's non-text fields
 // for the speaker's active protocol punishments. punishments is the active
 // snapshot pktIC already fetched, so no extra lock is taken here.
-func applyProtocolPunishments(ms *packet.MSPacket, punishments []PunishmentState) {
+func applyProtocolPunishments(ms *packet.MSToClient, punishments []PunishmentState) {
 	for i := range punishments {
 		p := &punishments[i]
 		switch p.punishmentType {
 		case PunishmentTeleport:
 			x := rand.Intn(2*teleportMaxX+1) - teleportMaxX
 			y := rand.Intn(2*teleportMaxY+1) - teleportMaxY
-			ms.SelfOffset = encode(fmt.Sprintf("%d&%d", x, y))
+			ms.Offset = encode(fmt.Sprintf("%d&%d", x, y))
 		case PunishmentShakecurse:
 			ms.Screenshake = "1"
 		case PunishmentRandomflip:
 			if rand.Intn(2) == 0 {
-				ms.Flip = "1"
+				ms.Flip = packet.FlipHorizontal
 			} else {
-				ms.Flip = "0"
+				ms.Flip = packet.FlipNone
 			}
 		case PunishmentForceColor:
 			if c, err := strconv.Atoi(p.customData); err == nil && c >= 0 && c <= 9 {
-				ms.TextColor = strconv.Itoa(c)
+				ms.TextColor = packet.TextColor(c)
 			}
 		case PunishmentNoPreanim:
 			switch ms.EmoteModifier {
-			case "1", "2":
-				ms.EmoteModifier = "0"
-			case "6":
-				ms.EmoteModifier = "5"
+			case packet.EmoteModifierPreanim, packet.EmoteModifierPreanimAndObjection:
+				ms.EmoteModifier = packet.EmoteModifierNoPreanim
+			case packet.EmoteModifierObjectionZoom:
+				ms.EmoteModifier = packet.EmoteModifierZoom
 			}
-			ms.PreAnim = "-"
+			ms.Preanim = "-"
 		case PunishmentForcePreanim:
 			// Only promote when the client actually named a preanim, so we
 			// never point the viewport at an animation that doesn't exist.
-			if ms.PreAnim != "" && ms.PreAnim != "-" {
+			if ms.Preanim != "" && ms.Preanim != "-" {
 				switch ms.EmoteModifier {
-				case "0":
-					ms.EmoteModifier = "1"
-				case "5":
-					ms.EmoteModifier = "6"
+				case packet.EmoteModifierNoPreanim:
+					ms.EmoteModifier = packet.EmoteModifierPreanim
+				case packet.EmoteModifierZoom:
+					ms.EmoteModifier = packet.EmoteModifierObjectionZoom
 				}
 			}
 		}

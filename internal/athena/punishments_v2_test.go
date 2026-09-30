@@ -274,59 +274,59 @@ func TestApplyProtocolPunishments(t *testing.T) {
 		return []PunishmentState{{punishmentType: pType, customData: data}}
 	}
 
-	ms := &packet.MSPacket{Screenshake: "0"}
+	ms := &packet.MSToClient{Screenshake: "0"}
 	applyProtocolPunishments(ms, mk(PunishmentShakecurse, ""))
 	if ms.Screenshake != "1" {
 		t.Errorf("shakecurse: Screenshake = %q, want \"1\"", ms.Screenshake)
 	}
 
 	for i := 0; i < 30; i++ {
-		ms = &packet.MSPacket{Flip: "0"}
+		ms = &packet.MSToClient{Flip: packet.FlipNone}
 		applyProtocolPunishments(ms, mk(PunishmentRandomflip, ""))
-		if ms.Flip != "0" && ms.Flip != "1" {
-			t.Fatalf("randomflip wrote illegal Flip %q", ms.Flip)
+		if ms.Flip != packet.FlipNone && ms.Flip != packet.FlipHorizontal {
+			t.Fatalf("randomflip wrote illegal Flip %d", ms.Flip)
 		}
 	}
 
-	ms = &packet.MSPacket{TextColor: "0"}
+	ms = &packet.MSToClient{TextColor: packet.TextColorWhite}
 	applyProtocolPunishments(ms, mk(PunishmentForceColor, "9"))
-	if ms.TextColor != "9" {
-		t.Errorf("forcecolor: TextColor = %q, want \"9\"", ms.TextColor)
+	if ms.TextColor != packet.TextColorRainbow {
+		t.Errorf("forcecolor: TextColor = %d, want 9", ms.TextColor)
 	}
-	ms = &packet.MSPacket{TextColor: "0"}
+	ms = &packet.MSToClient{TextColor: packet.TextColorWhite}
 	applyProtocolPunishments(ms, mk(PunishmentForceColor, "57")) // out of range: ignored
-	if ms.TextColor != "0" {
-		t.Errorf("forcecolor out-of-range: TextColor = %q, want \"0\"", ms.TextColor)
+	if ms.TextColor != packet.TextColorWhite {
+		t.Errorf("forcecolor out-of-range: TextColor = %d, want 0", ms.TextColor)
 	}
 
-	ms = &packet.MSPacket{EmoteModifier: "1", PreAnim: "slam"}
+	ms = &packet.MSToClient{EmoteModifier: packet.EmoteModifierPreanim, Preanim: "slam"}
 	applyProtocolPunishments(ms, mk(PunishmentNoPreanim, ""))
-	if ms.EmoteModifier != "0" || ms.PreAnim != "-" {
-		t.Errorf("nopreanim: EmoteModifier=%q PreAnim=%q", ms.EmoteModifier, ms.PreAnim)
+	if ms.EmoteModifier != packet.EmoteModifierNoPreanim || ms.Preanim != "-" {
+		t.Errorf("nopreanim: EmoteModifier=%d Preanim=%q", ms.EmoteModifier, ms.Preanim)
 	}
 
-	ms = &packet.MSPacket{EmoteModifier: "0", PreAnim: "slam"}
+	ms = &packet.MSToClient{EmoteModifier: packet.EmoteModifierNoPreanim, Preanim: "slam"}
 	applyProtocolPunishments(ms, mk(PunishmentForcePreanim, ""))
-	if ms.EmoteModifier != "1" {
-		t.Errorf("forcepreanim: EmoteModifier = %q, want \"1\"", ms.EmoteModifier)
+	if ms.EmoteModifier != packet.EmoteModifierPreanim {
+		t.Errorf("forcepreanim: EmoteModifier = %d, want 1", ms.EmoteModifier)
 	}
-	ms = &packet.MSPacket{EmoteModifier: "0", PreAnim: "-"}
+	ms = &packet.MSToClient{EmoteModifier: packet.EmoteModifierNoPreanim, Preanim: "-"}
 	applyProtocolPunishments(ms, mk(PunishmentForcePreanim, ""))
-	if ms.EmoteModifier != "0" {
-		t.Errorf("forcepreanim without a named preanim should not promote, got %q", ms.EmoteModifier)
+	if ms.EmoteModifier != packet.EmoteModifierNoPreanim {
+		t.Errorf("forcepreanim without a named preanim should not promote, got %d", ms.EmoteModifier)
 	}
 
 	for i := 0; i < 30; i++ {
-		ms = &packet.MSPacket{}
+		ms = &packet.MSToClient{}
 		applyProtocolPunishments(ms, mk(PunishmentTeleport, ""))
-		offsets := strings.Split(decode(ms.SelfOffset), "&")
+		offsets := strings.Split(decode(ms.Offset), "&")
 		if len(offsets) != 2 {
-			t.Fatalf("teleport wrote malformed SelfOffset %q", ms.SelfOffset)
+			t.Fatalf("teleport wrote malformed Offset %q", ms.Offset)
 		}
 		for _, o := range offsets {
 			v, err := strconv.Atoi(o)
 			if err != nil || v < -100 || v > 100 {
-				t.Fatalf("teleport wrote out-of-range offset %q", ms.SelfOffset)
+				t.Fatalf("teleport wrote out-of-range offset %q", ms.Offset)
 			}
 		}
 	}
@@ -345,7 +345,7 @@ func TestLifoReleasesInReverseOrder(t *testing.T) {
 	client.AddPunishment(PunishmentLifo, time.Minute, "test")
 
 	for _, m := range []string{"first", "second", "third"} {
-		lifoEnqueueIC(client, &packet.MSPacket{Message: m})
+		lifoEnqueueIC(client, &packet.MSToClient{Message: m})
 	}
 	if len(released) != 3 {
 		t.Fatalf("expected flush at %d messages, got %d released", lifoFlushCount, len(released))
@@ -356,7 +356,7 @@ func TestLifoReleasesInReverseOrder(t *testing.T) {
 
 	// Timer path: a lone message flushes via lifoFlushClient.
 	released = nil
-	lifoEnqueueIC(client, &packet.MSPacket{Message: "lonely"})
+	lifoEnqueueIC(client, &packet.MSToClient{Message: "lonely"})
 	lifoFlushClient(client)
 	if len(released) != 1 || released[0] != "lonely" {
 		t.Errorf("timer flush released %v, want [lonely]", released)

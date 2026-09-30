@@ -110,7 +110,7 @@ func maxFrameBytes() int {
 func sendVoiceCaps(client *Client) {
 	if !voiceEnabled() {
 		logger.LogInfof("voice: emitting VS_CAPS#0 to UID %d (voice disabled)", client.Uid())
-		client.Send(&packet.VSCaps{
+		client.Send(&packet.VS_CAPS{
 			Enabled: "0", PTT: "1", MaxPeers: "0", Codec: voiceCodec,
 			SampleRate: voiceSampleRate, FrameMs: voiceFrameMs, MaxFrameBytes: maxFrameBytes(),
 		})
@@ -123,7 +123,7 @@ func sendVoiceCaps(client *Client) {
 	maxPeers := strconv.Itoa(config.MaxPeersPerArea)
 	logger.LogInfof("voice: emitting VS_CAPS#1#%s#%s#%s#%d#%d#%d to UID %d",
 		ptt, maxPeers, voiceCodec, voiceSampleRate, voiceFrameMs, maxFrameBytes(), client.Uid())
-	client.Send(&packet.VSCaps{
+	client.Send(&packet.VS_CAPS{
 		Enabled: "1", PTT: ptt, MaxPeers: maxPeers, Codec: voiceCodec,
 		SampleRate: voiceSampleRate, FrameMs: voiceFrameMs, MaxFrameBytes: maxFrameBytes(),
 	})
@@ -215,7 +215,7 @@ func leaveVoiceForClient(client *Client) {
 	if !removeVoicePeer(a, client.Uid()) {
 		return
 	}
-	broadcastToAreaVoice(a, client.Uid(), &packet.VSLeaveOut{UID: client.Uid()})
+	broadcastToAreaVoice(a, client.Uid(), &packet.VS_LEAVEToClient{UID: client.Uid()})
 }
 
 // writeToAreaVoice sends a packet to every client in a's voice room, optionally
@@ -315,7 +315,7 @@ func pktVSJoin(client *Client, _ *packet.Packet) {
 			}
 			others = append(others, p)
 		}
-		client.Send(&packet.VSPeers{UIDs: others})
+		client.Send(&packet.VS_PEERS{UIDs: others})
 		return
 	}
 	if ok, retry := allowVoiceJoin(uid); !ok {
@@ -334,8 +334,8 @@ func pktVSJoin(client *Client, _ *packet.Packet) {
 		}
 		others = append(others, p)
 	}
-	client.Send(&packet.VSPeers{UIDs: others})
-	broadcastToAreaVoice(a, uid, &packet.VSJoinOut{UID: uid})
+	client.Send(&packet.VS_PEERS{UIDs: others})
+	broadcastToAreaVoice(a, uid, &packet.VS_JOINToClient{UID: uid})
 }
 
 // Handles VS_LEAVE#%
@@ -362,7 +362,7 @@ func pktVSFrame(client *Client, p *packet.Packet) {
 	if !voiceEnabled() {
 		return
 	}
-	vf, err := packet.ParseVSFrame(p.Body)
+	vf, err := packet.ParseVS_FRAME(p.Body)
 	if err != nil {
 		return
 	}
@@ -390,7 +390,7 @@ func pktVSFrame(client *Client, p *packet.Packet) {
 	if !relay {
 		return
 	}
-	broadcastToAreaVoice(a, uid, &packet.VSAudio{FromUID: uid, Payload: payload})
+	broadcastToAreaVoice(a, uid, &packet.VS_AUDIO{FromUID: uid, Payload: payload})
 }
 
 // Handles VS_SPEAK#<on_off>#%  (0 = stopped talking, 1 = started)
@@ -398,7 +398,7 @@ func pktVSSpeak(client *Client, p *packet.Packet) {
 	if !voiceEnabled() {
 		return
 	}
-	vs, err := packet.ParseVSSpeak(p.Body)
+	vs, err := packet.ParseVS_SPEAKToServer(p.Body)
 	if err != nil {
 		return
 	}
@@ -410,5 +410,5 @@ func pktVSSpeak(client *Client, p *packet.Packet) {
 	if vs.On {
 		state = "1"
 	}
-	broadcastToAreaVoice(a, client.Uid(), &packet.VSSpeakOut{UID: client.Uid(), On: state})
+	broadcastToAreaVoice(a, client.Uid(), &packet.VS_SPEAKToClient{UID: client.Uid(), On: state})
 }

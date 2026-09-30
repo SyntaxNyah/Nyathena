@@ -77,9 +77,9 @@ func TestParseJSON_NumberCoercion(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ParseJSON: %v", err)
 	}
-	hp, err := ParseHP(pkt.Body)
+	hp, err := ParseHPToServer(pkt.Body)
 	if err != nil {
-		t.Fatalf("ParseHP: %v", err)
+		t.Fatalf("ParseHPToServer: %v", err)
 	}
 	if hp.Bar != 2 || hp.Value != 10 {
 		t.Fatalf("HP = %+v, want {Bar:2 Value:10}", hp)
@@ -104,7 +104,7 @@ func TestParseJSON_BoolCoercion(t *testing.T) {
 
 func TestParseJSON_MSClient(t *testing.T) {
 	// MS-client has a 26-field body; verify a representative named field
-	// lands in the right wire slot when round-tripped through ParseMSClient.
+	// lands in the right wire slot when round-tripped through ParseMSToServer.
 	pkt, err := ParseJSON(`{
 		"$header":"MS","desk_modifier":"1","preanim":"-",
 		"character":"Phoenix","emote":"normal","message":"Objection!",
@@ -119,9 +119,9 @@ func TestParseJSON_MSClient(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ParseJSON: %v", err)
 	}
-	ms := ParseMSClient(pkt.Body)
+	ms := ParseMSToServer(pkt.Body)
 	if ms.Character != "Phoenix" || ms.Message != "Objection!" || ms.CharID != "3" || ms.Blips != "male" {
-		t.Fatalf("ParseMSClient round-trip mismatch: %+v", ms)
+		t.Fatalf("ParseMSToServer round-trip mismatch: %+v", ms)
 	}
 }
 
@@ -142,7 +142,7 @@ func TestBuildJSON_HI_unknownHeaderFallback(t *testing.T) {
 func TestBuildJSON_ID_PlayerIDIsNumber(t *testing.T) {
 	// Spec says player_id is a JSON number, not a string. Verify the schema
 	// promotes it past the default "wire body is strings" treatment.
-	pkt := &IDClient{PlayerNumber: 42, Software: "athena", Version: "1.0"}
+	pkt := &IDToClient{PlayerNumber: 42, Software: "athena", Version: "1.0"}
 	out := BuildJSON(pkt.Header(), pkt.Args())
 	got := decodeJSON(t, out)
 	if n, ok := got["player_id"].(float64); !ok || n != 42 {
@@ -178,7 +178,7 @@ func TestBuildJSON_FL_StringArray(t *testing.T) {
 func TestBuildJSON_ARUP_TypeAndTail(t *testing.T) {
 	// ARUP combines one leading scalar (update_type) with a variable tail
 	// (update_data). Verify both make it into the JSON object.
-	pkt := &ARUP{Type: ARUPPlayerCounts, Data: []string{"4", "3", "7"}}
+	pkt := &ARUP{Type: AreaUpdatePlayerCount, Data: []string{"4", "3", "7"}}
 	out := BuildJSON(pkt.Header(), pkt.Args())
 	got := decodeJSON(t, out)
 	if got["update_type"] != "0" {
@@ -244,13 +244,13 @@ func TestBuildJSON_MS_ServerDirection(t *testing.T) {
 	// MS-server adds paired_name/paired_emote/paired_offset/paired_flip
 	// relative to MS-client. Verify the outbound schema is the 30-field
 	// shape, not the 26-field client shape.
-	ms := &MSPacket{
-		DeskMod: "1", PreAnim: "-", Character: "Phoenix", Emote: "normal",
-		Message: "Hi", Side: "wit", SfxName: "0", EmoteModifier: "1",
+	ms := &MSToClient{
+		DeskMod: DeskModifierShown, PreAnim: "-", Character: "Phoenix", Emote: "normal",
+		Message: "Hi", Side: SideWitness, SfxName: "0", EmoteModifier: EmoteModifierPreanim,
 		CharID: "3", SfxDelay: "0", ShoutModifier: "0", Evidence: "0",
-		Flip: "0", Realization: "0", TextColor: "0", Showname: "",
+		Flip: FlipNone, Realization: "0", TextColor: TextColorWhite, Showname: "",
 		OtherCharID: "-1", OtherName: "Edgeworth", OtherEmote: "normal",
-		SelfOffset: "0&0", OtherOffset: "0&0", OtherFlip: "0",
+		SelfOffset: "0&0", OtherOffset: "0&0", OtherFlip: FlipNone,
 		NonInterruptingPreAnim: "0", SfxLooping: "0", Screenshake: "0",
 		FramesShake: "", FramesRealization: "", FramesSfx: "",
 		Additive: "0", Effect: "",
@@ -302,12 +302,12 @@ func TestParseJSON_UnknownHeader(t *testing.T) {
 func TestParseJSON_MS_OffsetAsObject(t *testing.T) {
 	// Real-world JSON clients send offset as {"x":..,"y":..} rather than
 	// the documented "x&y" string. Verify both forms fold to the same
-	// "0&0" wire body that ParseMSClient already understands.
+	// "0&0" wire body that ParseMSToServer already understands.
 	pkt, err := ParseJSON(`{"$header":"MS","desk_modifier":1,"preanim":"-","character":"Maya","emote":"normal","message":"hi","side":"wit","sfx_name":"0","emote_modifier":0,"char_id":37,"sfx_delay":0,"shout_modifier":0,"evidence_id":0,"flip":0,"realization":false,"text_color":0,"showname":"","paired_charid":-1,"offset":{"x":0,"y":0},"noninterrupting_preanim":false,"sfx_looping":false,"screenshake":false,"frames_shake":"-","frames_realization":"-","frames_sfx":"-","additive":false,"effect":"||"}`)
 	if err != nil {
 		t.Fatalf("ParseJSON: %v", err)
 	}
-	ms := ParseMSClient(pkt.Body)
+	ms := ParseMSToServer(pkt.Body)
 	if ms.SelfOffset != "0&0" {
 		t.Fatalf("SelfOffset = %q, want \"0&0\"", ms.SelfOffset)
 	}

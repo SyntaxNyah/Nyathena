@@ -247,8 +247,8 @@ func applyEvent(ir *ipidReplay, ev recvEvent) {
 		raidGuardCorrelate(ir.rs, ir.ipid, msg, ev.ts)
 
 	case "MS":
-		// Client-format MS: up to 26 fields, no OtherName/OtherEmote. Decoded
-		// once as a whole so packet.ParseMSClient sees plain text, then parsed
+		// Client-format MS: up to 26 fields, no PairedName/PairedEmote. Decoded
+		// once as a whole so packet.ParseMSToServer sees plain text, then parsed
 		// through the same production decoder every other MS consumer in this
 		// codebase uses -- no packet field is ever indexed by hand here.
 		//
@@ -257,18 +257,18 @@ func applyEvent(ir *ipidReplay, ev recvEvent) {
 		// (MS#1#-#char#emote#msg#side#0#0#<id>#0#0#0#0#0#0##-1#0&0#...) and a
 		// shorter "legacy" 20-field body
 		// (MS#0##colin##text##1#0#3702#0#1#0#0#0#0#showname#-1#0#0#). Indexing
-		// both bodies by hand and comparing against packet.ParseMSClient
+		// both bodies by hand and comparing against packet.ParseMSToServer
 		// confirms ShoutModifier is body-index 10 in *both* shapes -- the
 		// legacy sender omits Emote/Side's usual content and reorders nothing,
 		// it just leaves fields blank and stops early. So there is exactly one
-		// client-format layout, of variable length, and ParseMSClient (which
+		// client-format layout, of variable length, and ParseMSToServer (which
 		// is itself length-tolerant: "if len(body) > N") is the correct and
 		// only parser needed for either shape.
 		decoded := make([]string, len(body))
 		for i, f := range body {
 			decoded[i] = decode(f)
 		}
-		ms := packet.ParseMSClient(decoded)
+		ms := packet.ParseMSToServer(decoded)
 		ir.msgCount++
 		ir.rs.observe(Observation{
 			IPID:          ir.ipid,

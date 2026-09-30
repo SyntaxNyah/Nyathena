@@ -3,15 +3,15 @@ package packet
 import "testing"
 
 func TestShoutParsesCustomSuffix(t *testing.T) {
-	cases := map[string]int{"0": 0, "1": 1, "2": 2, "3": 3, "2&myshout": 2, "4&custom&x": 4}
+	cases := map[string]ShoutModifier{"0": ShoutModifierNone, "1": ShoutModifierHoldIt, "2": ShoutModifierObjection, "3": ShoutModifierTakeThat, "2&myshout": ShoutModifierObjection, "4&custom&x": ShoutModifierCustom}
 	for in, want := range cases {
-		ms := &MSPacket{ShoutModifier: in}
+		ms := &MSToClient{ShoutModifier: in}
 		got, err := ms.Shout()
 		if err != nil || got != want {
 			t.Errorf("Shout(%q) = %d, %v; want %d, nil", in, got, err, want)
 		}
 	}
-	if _, err := (&MSPacket{ShoutModifier: "abc"}).Shout(); err == nil {
+	if _, err := (&MSToClient{ShoutModifier: "abc"}).Shout(); err == nil {
 		t.Error("Shout(\"abc\") returned no error")
 	}
 }

@@ -103,10 +103,10 @@ func (client *Client) releaseForceDisplayGate() {
 // hidden player — they stay hidden in the partner's viewport too. punishments is
 // the speaker's already-filtered active set from pktIC, so no extra lock is
 // taken here.
-func applyHideDisplay(ms *packet.MSPacket, punishments []PunishmentState) {
+func applyHideDisplay(ms *packet.MSToClient, punishments []PunishmentState) {
 	for i := range punishments {
 		if punishments[i].punishmentType == PunishmentHideDisplay {
-			ms.SelfOffset = encode(hideDisplayOffset)
+			ms.Offset = encode(hideDisplayOffset)
 			return
 		}
 	}
@@ -117,7 +117,7 @@ func applyHideDisplay(ms *packet.MSPacket, punishments []PunishmentState) {
 // that one character renders for the whole room. Moderators are exempt (their
 // own sprite still shows), matching how `global` punishments spare staff. The
 // activeForceDisplay gate keeps this free when the feature is unused.
-func maybeApplyForceDisplay(client *Client, ms *packet.MSPacket) {
+func maybeApplyForceDisplay(client *Client, ms *packet.MSToClient) {
 	if activeForceDisplay.Load() <= 0 {
 		return
 	}
@@ -152,7 +152,7 @@ func findActiveForceDisplayTarget(a *area.Area) *Client {
 // outgoing IC packet and clears the pair fields. The speaker's message text,
 // showname and colour are left untouched, so the room sees the pinned character
 // "speaking" everyone's lines. Mirrors the fullpossess sprite-spoof logic.
-func applyForceDisplaySprite(ms *packet.MSPacket, target *Client) {
+func applyForceDisplaySprite(ms *packet.MSToClient, target *Client) {
 	chars := getCharacters()
 	id := target.CharID()
 	if id < 0 || id >= len(chars) {
@@ -178,22 +178,23 @@ func applyForceDisplaySprite(ms *packet.MSPacket, target *Client) {
 	ms.CharID = strconv.Itoa(cid)
 	ms.Emote = emote
 	if info.flip == "0" || info.flip == "1" {
-		ms.Flip = info.flip
+		flipN, _ := strconv.Atoi(info.flip)
+		ms.Flip = packet.Flip(flipN)
 	}
 	if pos := target.Pos(); pos != "" {
-		ms.Side = pos
+		ms.Side = packet.Side(pos)
 	}
 	if info.offset != "" {
-		ms.SelfOffset = info.offset
+		ms.Offset = info.offset
 	}
 	// Suppress any pairing so only the pinned character renders in the viewport.
 	// Plain "-1": the "^" suffix breaks clients that can't parse pair order
 	// (message dropped on some desktop forks, NaN pair id on webAO).
-	ms.OtherCharID = "-1"
-	ms.OtherName = ""
-	ms.OtherEmote = ""
-	ms.OtherOffset = ""
-	ms.OtherFlip = ""
+	ms.PairedCharID = "-1"
+	ms.PairedName = ""
+	ms.PairedEmote = ""
+	ms.PairedOffset = ""
+	ms.PairedFlip = packet.FlipNone
 }
 
 // cmdHideDisplay (/hidedisplay) hides the target's own sprite from the IC

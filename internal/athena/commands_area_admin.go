@@ -1003,7 +1003,7 @@ func cmdSwapEvi(client *Client, args []string, _ string) {
 	}
 	if client.Area().SwapEvidence(evi1, evi2) {
 		client.SendServerMessage("Evidence swapped.")
-		broadcastToArea(client.Area(), &packet.LE{Items: client.Area().Evidence()})
+		broadcastToArea(client.Area(), &packet.LE{Evidence: client.Area().Evidence()})
 		addToBuffer(client, "CMD", fmt.Sprintf("Swapped posistions of evidence %v and %v.", evi1, evi2), false)
 	} else {
 		client.SendServerMessage("Invalid arguments.")
@@ -1036,7 +1036,7 @@ func cmdPause(client *Client, _ []string, _ string) {
 	client.Area().SetTstState(area.TRIdle)
 	client.SendServerMessage("Recorder stopped.")
 	client.Area().TstJump(0)
-	broadcastToArea(client.Area(), &packet.RTPacket{Animation: "testimony1", Variant: "1"})
+	broadcastToArea(client.Area(), &packet.RTToClient{Animation: "testimony1", Variant: "1"})
 }
 
 // Handles /examine
@@ -1048,8 +1048,8 @@ func cmdExamine(client *Client, _ []string, _ string) {
 	}
 	client.Area().SetTstState(area.TRPlayback)
 	client.SendServerMessage("Starting cross-examination.")
-	broadcastToArea(client.Area(), &packet.RTPacket{Animation: "testimony2"})
-	broadcastToArea(client.Area(), packet.ParseMSServerString(client.Area().CurrentTstStatement()))
+	broadcastToArea(client.Area(), &packet.RTToClient{Animation: "testimony2"})
+	broadcastToArea(client.Area(), packet.ParseMSToClientString(client.Area().CurrentTstStatement()))
 }
 
 // Handles /update
@@ -1130,7 +1130,7 @@ func cmdTestimony(client *Client, args []string, _ string) {
 		client.Area().SetTstState(area.TRIdle)
 		client.SendServerMessage("Recorder stopped.")
 		client.Area().TstJump(0)
-		broadcastToArea(client.Area(), &packet.RTPacket{Animation: "testimony1", Variant: "1"})
+		broadcastToArea(client.Area(), &packet.RTToClient{Animation: "testimony1", Variant: "1"})
 	case "play":
 		if !client.Area().HasTestimony() {
 			client.SendServerMessage("No testimony recorded.")
@@ -1138,8 +1138,8 @@ func cmdTestimony(client *Client, args []string, _ string) {
 		}
 		client.Area().SetTstState(area.TRPlayback)
 		client.SendServerMessage("Playing testimony.")
-		broadcastToArea(client.Area(), &packet.RTPacket{Animation: "testimony2"})
-		broadcastToArea(client.Area(), packet.ParseMSServerString(client.Area().CurrentTstStatement()))
+		broadcastToArea(client.Area(), &packet.RTToClient{Animation: "testimony2"})
+		broadcastToArea(client.Area(), packet.ParseMSToClientString(client.Area().CurrentTstStatement()))
 	case "update":
 		if client.Area().TstState() != area.TRPlayback {
 			client.SendServerMessage("The recorder is not active.")

@@ -22,29 +22,29 @@ import (
 	"github.com/MangosArentLiterature/Athena/internal/packet"
 )
 
-// applyHideDisplay pushes the speaker's own sprite off-screen via SelfOffset.
+// applyHideDisplay pushes the speaker's own sprite off-screen via Offset.
 func TestApplyHideDisplay_SetsOffscreenOffset(t *testing.T) {
-	ms := &packet.MSPacket{SelfOffset: ""}
+	ms := &packet.MSToClient{Offset: ""}
 	punishments := []PunishmentState{
 		{punishmentType: PunishmentHideDisplay},
 	}
 	applyHideDisplay(ms, punishments)
 	want := encode(hideDisplayOffset)
-	if ms.SelfOffset != want {
-		t.Fatalf("expected SelfOffset=%q, got %q", want, ms.SelfOffset)
+	if ms.Offset != want {
+		t.Fatalf("expected Offset=%q, got %q", want, ms.Offset)
 	}
 }
 
 // Without a HideDisplay punishment in the active set, the offset is untouched —
 // so /hidedisplay never interferes with /shrink / /grow / /wide or normal play.
 func TestApplyHideDisplay_NoOpWithoutPunishment(t *testing.T) {
-	ms := &packet.MSPacket{SelfOffset: "X&Y"}
+	ms := &packet.MSToClient{Offset: "X&Y"}
 	applyHideDisplay(ms, []PunishmentState{
 		{punishmentType: PunishmentWhisper},
 		{punishmentType: PunishmentFancy},
 	})
-	if ms.SelfOffset != "X&Y" {
-		t.Fatalf("expected SelfOffset to be untouched, got %q", ms.SelfOffset)
+	if ms.Offset != "X&Y" {
+		t.Fatalf("expected Offset to be untouched, got %q", ms.Offset)
 	}
 }
 
@@ -63,17 +63,17 @@ func TestApplyForceDisplaySprite_OverwritesAndClearsPair(t *testing.T) {
 		pos:  "pro",
 	}
 
-	ms := &packet.MSPacket{
+	ms := &packet.MSToClient{
 		Character:   "Phoenix Wright",
 		CharID:      "0",
 		Emote:       "normal",
-		Side:        "def",
-		Flip:        "0",
-		OtherCharID: "0",
-		OtherName:   "somebody",
-		OtherEmote:  "smile",
-		OtherOffset: "0&0",
-		OtherFlip:   "0",
+		Side:        packet.SideDefense,
+		Flip:        packet.FlipNone,
+		PairedCharID: "0",
+		PairedName:   "somebody",
+		PairedEmote:  "smile",
+		PairedOffset: "0&0",
+		PairedFlip:   packet.FlipNone,
 	}
 	applyForceDisplaySprite(ms, target)
 
@@ -86,18 +86,18 @@ func TestApplyForceDisplaySprite_OverwritesAndClearsPair(t *testing.T) {
 	if ms.Emote != "smug" {
 		t.Errorf("Emote = %q, want smug (from target PairInfo)", ms.Emote)
 	}
-	if ms.Side != "pro" {
+	if ms.Side != packet.SideProsecution {
 		t.Errorf("Side = %q, want pro (from target Pos)", ms.Side)
 	}
-	if ms.Flip != "1" {
-		t.Errorf("Flip = %q, want 1", ms.Flip)
+	if ms.Flip != packet.FlipHorizontal {
+		t.Errorf("Flip = %d, want 1", ms.Flip)
 	}
-	if ms.OtherCharID != "-1" {
-		t.Errorf("OtherCharID = %q, want -1 (pair must be cleared, no \"^\" suffix)", ms.OtherCharID)
+	if ms.PairedCharID != "-1" {
+		t.Errorf("PairedCharID = %q, want -1 (pair must be cleared, no \"^\" suffix)", ms.PairedCharID)
 	}
-	if ms.OtherName != "" || ms.OtherEmote != "" || ms.OtherOffset != "" || ms.OtherFlip != "" {
-		t.Errorf("expected all Other* fields cleared, got name=%q emote=%q offset=%q flip=%q",
-			ms.OtherName, ms.OtherEmote, ms.OtherOffset, ms.OtherFlip)
+	if ms.PairedName != "" || ms.PairedEmote != "" || ms.PairedOffset != "" || ms.PairedFlip != packet.FlipNone {
+		t.Errorf("expected all Other* fields cleared, got name=%q emote=%q offset=%q flip=%d",
+			ms.PairedName, ms.PairedEmote, ms.PairedOffset, ms.PairedFlip)
 	}
 }
 
@@ -109,7 +109,7 @@ func TestApplyForceDisplaySprite_SkipsSpectatorTarget(t *testing.T) {
 	setCharacters([]string{"Phoenix Wright"})
 
 	target := &Client{uid: 9, char: -1, pair: ClientPairInfo{wanted_id: -1}}
-	ms := &packet.MSPacket{Character: "Original", CharID: "0", Emote: "kept"}
+	ms := &packet.MSToClient{Character: "Original", CharID: "0", Emote: "kept"}
 	applyForceDisplaySprite(ms, target)
 
 	if ms.Character != "Original" || ms.CharID != "0" || ms.Emote != "kept" {

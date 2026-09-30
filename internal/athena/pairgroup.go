@@ -250,7 +250,7 @@ func cmdPairRequests(client *Client, _ []string, _ string) {
 // an active group: the standard paired_* fields from the first partner (so
 // FantaCode/legacy clients render a pair) and the JSON-only additional_chars
 // list from the remaining partners.
-func applyPairGroupInjection(client *Client, ms *packet.MSPacket) {
+func applyPairGroupInjection(client *Client, ms *packet.MSToClient) {
 	g := client.PairGroup()
 	if g == nil || !g.active() {
 		return
@@ -262,11 +262,12 @@ func applyPairGroupInjection(client *Client, ms *packet.MSPacket) {
 
 	first := others[0]
 	info := first.PairInfo()
-	ms.OtherCharID = first.CharIDStr()
-	ms.OtherName = info.name
-	ms.OtherEmote = info.emote
-	ms.OtherOffset = info.offset
-	ms.OtherFlip = info.flip
+	ms.PairedCharID = first.CharIDStr()
+	ms.PairedName = info.name
+	ms.PairedEmote = info.emote
+	ms.PairedOffset = info.offset
+	otherFlip, _ := strconv.Atoi(info.flip)
+	ms.PairedFlip = packet.Flip(otherFlip)
 
 	for _, p := range others[1:] {
 		pi := p.PairInfo()
@@ -274,16 +275,16 @@ func applyPairGroupInjection(client *Client, ms *packet.MSPacket) {
 			CharID: p.CharID(),
 			Name:   pi.name,
 			Emote:  pi.emote,
-			Offset: parsePairOffset(pi.offset),
+			Offset: parseOffset(pi.offset),
 			Flip:   parsePairFlip(pi.flip),
 		})
 	}
 }
 
-// parsePairOffset converts an "x" or "x&y" offset string into a PairOffset.
-func parsePairOffset(s string) packet.PairOffset {
+// parseOffset converts an "x" or "x&y" offset string into a Offset.
+func parseOffset(s string) packet.Offset {
 	if s == "" {
-		return packet.PairOffset{}
+		return packet.Offset{}
 	}
 	parts := strings.SplitN(s, "&", 2)
 	x, _ := strconv.Atoi(parts[0])
@@ -291,7 +292,7 @@ func parsePairOffset(s string) packet.PairOffset {
 	if len(parts) > 1 {
 		y, _ = strconv.Atoi(parts[1])
 	}
-	return packet.PairOffset{X: x, Y: y}
+	return packet.Offset{X: x, Y: y}
 }
 
 // parsePairFlip converts a flip string ("0".."3") into an int.

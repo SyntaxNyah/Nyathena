@@ -682,7 +682,7 @@ func startTormentDisconnect(client *Client) {
 // time.AfterFunc is used instead of a goroutine+sleep so no goroutine stack is
 // parked during the wait; the callback runs in a fresh goroutine only when the
 // timer fires.
-func handleTormentedIC(client *Client, ms *packet.MSPacket) {
+func handleTormentedIC(client *Client, ms *packet.MSToClient) {
 	// Encode once into wire-format args via the Outgoing contract; reused
 	// for both the immediate echo and the deferred broadcast.
 	header, args := ms.Header(), ms.Args()

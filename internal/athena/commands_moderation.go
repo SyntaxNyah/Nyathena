@@ -486,7 +486,7 @@ func cmdLogin(client *Client, args []string, _ string) {
 			// AUTH#1 triggers the AO2 client's "Logged in as a moderator" popup.
 			// Only send it for actual moderators; player and DJ-only accounts get
 			// chat-based feedback instead so the client doesn't mislabel them.
-			client.Send(&packet.AUTH{State: 1})
+			client.Send(&packet.AUTH{AuthState: 1})
 		} else {
 			client.SendServerMessage("Logged in to your account.")
 		}
@@ -495,7 +495,7 @@ func cmdLogin(client *Client, args []string, _ string) {
 		return
 	}
 	registerFailedLogin(client.Ipid())
-	client.Send(&packet.AUTH{State: 0})
+	client.Send(&packet.AUTH{AuthState: 0})
 	addToBuffer(client, "AUTH", fmt.Sprintf("Failed login as %v.", args[0]), true)
 }
 
@@ -1018,7 +1018,7 @@ func cmdRemoveRole(client *Client, args []string, _ string) {
 			wasMod := permissions.IsModerator(c.Perms())
 			c.SetPerms(permissions.PermissionField["NONE"])
 			if wasMod {
-				c.Send(&packet.AUTH{State: -1})
+				c.Send(&packet.AUTH{AuthState: -1})
 			}
 			c.SendServerMessage(
 				"Your staff role has been removed by an administrator. " +
@@ -1251,7 +1251,7 @@ func cmdForceName(client *Client, args []string, _ string) {
 		return
 	}
 	// Store as AO2-encoded so it can be placed directly into the IC packet's
-	// MSPacket.Showname field without an extra encode step on every message.
+	// MSToClient.Showname field without an extra encode step on every message.
 	target.SetForcedShowname(encode(name))
 	// PU and in-server messages use the decoded (display) form.
 	broadcastToAll(&packet.PU{ID: target.Uid(), Type: 2, Data: name})

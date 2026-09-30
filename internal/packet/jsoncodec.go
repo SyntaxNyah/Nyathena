@@ -190,7 +190,7 @@ var outboundSchemas = map[string]jsonSchema{
 	"HP":         {fields: []string{"bar", "value"}},
 	"RT":         {fields: []string{"animation", "variant"}},
 	"ZZ":         {fields: []string{"reason"}},
-	// Field order matches MSPacket.ServerArgs (the positional wire body). The
+	// Field order matches MSToClient.Args (the positional wire body). The
 	// numeric/boolean/pair classifications make BuildJSON emit the typed JSON
 	// that MSBroadcast.schema.json requires ("no type nonsense"). "blips" is
 	// intentionally absent: it is not part of the MSBroadcast schema, so it is
@@ -227,7 +227,7 @@ var outboundSchemas = map[string]jsonSchema{
 
 // ParseJSON decodes a JSON-encoded AO2 packet into the same positional
 // Packet form produced by NewPacket. This means every existing ParseXxx
-// handler (ParseHI, ParseMSClient, ParseCC, ...) keeps working unchanged —
+// handler (ParseHI, ParseMSToServer, ParseCC, ...) keeps working unchanged —
 // they don't know or care which wire format produced the body slice.
 //
 // Field semantics:

@@ -1171,7 +1171,7 @@ func sendPlayerArup() {
 	for _, a := range areas {
 		plCounts = append(plCounts, strconv.Itoa(a.VisiblePlayerCount()))
 	}
-	broadcastToAll(&packet.ARUP{Type: packet.ARUPPlayerCounts, Data: plCounts})
+	broadcastToAll(&packet.ARUP{UpdateType: packet.AreaUpdateTypePlayerCount, Data: plCounts})
 }
 
 // sendCMArup sends a CM ARUP to all connected clients.
@@ -1193,7 +1193,7 @@ func sendCMArup() {
 		}
 		returnL = append(returnL, strings.Join(cms, ", "))
 	}
-	broadcastToAll(&packet.ARUP{Type: packet.ARUPCMs, Data: returnL})
+	broadcastToAll(&packet.ARUP{UpdateType: packet.AreaUpdateTypeCaseManager, Data: returnL})
 }
 
 // sendStatusArup sends a status ARUP to all connected clients.
@@ -1202,7 +1202,7 @@ func sendStatusArup() {
 	for _, a := range areas {
 		statuses = append(statuses, a.Status().String())
 	}
-	broadcastToAll(&packet.ARUP{Type: packet.ARUPStatuses, Data: statuses})
+	broadcastToAll(&packet.ARUP{UpdateType: packet.AreaUpdateTypeStatus, Data: statuses})
 }
 
 // areaLockDisplay returns the lock state to advertise for an area in the lock
@@ -1239,7 +1239,7 @@ func sendLockArup() {
 	for _, a := range areas {
 		locks = append(locks, areaLockDisplay(a).String())
 	}
-	broadcastToAll(&packet.ARUP{Type: packet.ARUPLocks, Data: locks})
+	broadcastToAll(&packet.ARUP{UpdateType: packet.AreaUpdateTypeLocked, Data: locks})
 }
 
 // getRole returns the role with the corresponding name, or an error if the role does not exist.

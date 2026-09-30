@@ -1,6 +1,7 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "title": "RT",
+  "$id": "/packets/RTBroadcast.schema.json",
+  "title": "RTBroadcast",
   "type": "object",
   "properties": {
     "$header": {
@@ -19,5 +20,6 @@
     "$header",
     "animation"
   ],
-  "additionalProperties": false
+  "additionalProperties": false,
+  "x-receiver": "client"
 }

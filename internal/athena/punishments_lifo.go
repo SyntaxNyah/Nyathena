@@ -6,7 +6,7 @@
    third-second-first. Conversation-destroying in the best way.
 
    Mechanics: pktIC runs the entire validation/transform pipeline as normal,
-   but instead of broadcasting it hands the finished MSPacket to
+   but instead of broadcasting it hands the finished MSToClient to
    lifoEnqueueIC. A queue flushes when it reaches lifoFlushCount messages or
    lifoFlushDelay after its first message, whichever comes first — so a
    single message still arrives within a few seconds, just suspiciously
@@ -33,7 +33,7 @@ type lifoPending struct {
 	ipid  string
 	isMod bool
 	a     *area.Area
-	ms    *packet.MSPacket
+	ms    *packet.MSToClient
 }
 
 type lifoQueue struct {
@@ -54,9 +54,9 @@ var lifoBroadcastFn = func(e lifoPending) {
 
 // lifoEnqueueIC queues a finished outgoing IC packet for reversed release.
 // The caller has already verified the speaker carries an active /lifo
-// punishment. The packet is retained as-is; pktIC builds a fresh MSPacket
+// punishment. The packet is retained as-is; pktIC builds a fresh MSToClient
 // per message so holding the pointer is safe.
-func lifoEnqueueIC(client *Client, ms *packet.MSPacket) {
+func lifoEnqueueIC(client *Client, ms *packet.MSToClient) {
 	entry := lifoPending{
 		ipid: client.Ipid(),
 		// Mirrors the live IC bypass: real mods override ignore lists, shadow

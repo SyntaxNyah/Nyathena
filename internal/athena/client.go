@@ -1840,7 +1840,7 @@ func (client *Client) RemoveAuth() {
 	client.authenticated, client.perms, client.mod_name = false, 0, ""
 	client.mu.Unlock()
 	client.SendServerMessage("Logged out as moderator.")
-	client.Send(&packet.AUTH{State: -1})
+	client.Send(&packet.AUTH{AuthState: -1})
 }
 
 // RemoveAccountAuth logs a client out of a player account (no moderator badge change needed).
@@ -1955,10 +1955,10 @@ func (client *Client) JoinArea(area *area.Area) {
 		area.AddVisiblePlayer()
 	}
 	def, pro := area.HP()
-	client.Send(&packet.LE{Items: areas[0].Evidence()})
-	client.Send(&packet.CharsCheck{Entries: area.Taken()})
-	client.Send(&packet.HPPacket{Bar: 1, Value: def})
-	client.Send(&packet.HPPacket{Bar: 2, Value: pro})
+	client.Send(&packet.LE{Evidence: areas[0].Evidence()})
+	client.Send(&packet.CharsCheck{Taken: area.Taken()})
+	client.Send(&packet.HPToClient{Bar: 1, Value: def})
+	client.Send(&packet.HPToClient{Bar: 2, Value: pro})
 	if desc := area.Description(); desc != "" {
 		client.SendServerMessage("📍 " + desc)
 	}
@@ -2067,7 +2067,7 @@ func (client *Client) ChangeArea(a *area.Area) bool {
 		// mirrors pktReqDone's ordering and matches Akashi's behaviour.
 		client.Send(&packet.DONE{})
 	} else {
-		broadcastToAreaOnce(a, &packet.CharsCheck{Entries: a.Taken()})
+		broadcastToAreaOnce(a, &packet.CharsCheck{Taken: a.Taken()})
 	}
 	// BN always last — after any DONE — so desk-overlay images never load
 	// against an unrendered viewport on WebAO (same fix as initial join).
@@ -2269,7 +2269,7 @@ func (client *Client) ChangeCharacter(id int) {
 		// player's display name (e.g. "Adachi") persists across character
 		// changes.
 		client.Send(&packet.PV{PlayerID: 0, CharID: id})
-		broadcastToAreaOnce(client.Area(), &packet.CharsCheck{Entries: client.Area().Taken()})
+		broadcastToAreaOnce(client.Area(), &packet.CharsCheck{Taken: client.Area().Taken()})
 		if client.Uid() != -1 {
 			broadcastToAll(&packet.PU{ID: client.Uid(), Type: 1, Data: client.CurrentCharacter()})
 			broadcastToAll(&packet.PU{ID: client.Uid(), Type: 2, Data: decode(client.Showname())})
@@ -2545,7 +2545,7 @@ func (client *Client) forceChangeArea(a *area.Area) {
 		// must initialize the viewport before desk-overlay images load.
 		client.Send(&packet.DONE{})
 	} else {
-		broadcastToAreaOnce(a, &packet.CharsCheck{Entries: a.Taken()})
+		broadcastToAreaOnce(a, &packet.CharsCheck{Taken: a.Taken()})
 	}
 	// BN always after any DONE so desk overlays load correctly on WebAO.
 	client.Send(&packet.BN{Background: a.Background()})

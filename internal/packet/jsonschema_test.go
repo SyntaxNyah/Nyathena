@@ -104,11 +104,11 @@ func TestValidateMSRequest_NoOpWhenUnloaded(t *testing.T) {
 func TestBuildJSON_MS_PassesBroadcastSchema(t *testing.T) {
 	loadSchemasForTest(t)
 
-	ms := &MSPacket{
-		DeskMod: "1", PreAnim: "-", Character: "Phoenix", Emote: "(a)pointing",
-		Message: "Objection!", Side: "wit", SfxName: "0", EmoteModifier: "1",
+	ms := &MSToClient{
+		DeskMod: DeskModifierShown, PreAnim: "-", Character: "Phoenix", Emote: "(a)pointing",
+		Message: "Objection!", Side: SideWitness, SfxName: "0", EmoteModifier: EmoteModifierPreanim,
 		CharID: "3", SfxDelay: "0", ShoutModifier: "0", Evidence: "0",
-		Flip: "0", Realization: "0", TextColor: "9", Showname: "Nick",
+		Flip: FlipNone, Realization: "0", TextColor: TextColorRainbow, Showname: "Nick",
 		OtherCharID: "-1", SelfOffset: "5&10",
 		NonInterruptingPreAnim: "0", SfxLooping: "0", Screenshake: "0",
 		FramesShake: "", FramesRealization: "", FramesSfx: "",
@@ -140,7 +140,7 @@ func TestBuildJSON_MS_PassesBroadcastSchema(t *testing.T) {
 // false, so emitting it would fail validation).
 func TestBuildJSON_MS_OmitsBlips(t *testing.T) {
 	loadSchemasForTest(t)
-	ms := &MSPacket{
+	ms := &MSToClient{
 		Character: "P", Emote: "e", Message: "m", Side: "wit", CharID: "0",
 		Blips: "sound", // set, but must not appear in the JSON output
 	}

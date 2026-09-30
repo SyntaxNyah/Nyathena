@@ -204,7 +204,7 @@ The server already has the schema-driven JSON codec split across:
 | `internal/athena/pairgroup.go` | `PairGroup` model + `/triple` `/quad` `/quint` `/accept` `/deny` `/pair-requests` |
 | `internal/athena/commands_registry.go` | register the new commands |
 
-`MSPacket.Args()` (the classic positional form) **stays at 30 fields** — that is
+`MSToClient.Args()` (the classic positional form) **stays at 30 fields** — that is
 the FantaCode contract. `AdditionalChars` is carried only in `JSONExtra()`, which
 `BuildJSONPacket` merges into the JSON object, so it never reaches FantaCode.
 
@@ -215,10 +215,13 @@ The packet codec is **registry-driven, not a `switch`**:
 - `internal/packet/registry.go` maps each wire header to its decoder per
   direction (`c2sDecoders` for client→server, `s2cDecoders` for server→client).
   `codec.go` looks a header up in the registry instead of dispatching by hand.
-- `internal/packet/types.go` gives the client→server packets (`HI`, `IDServer`,
-  `CC`, `MCFromClient`) `Header()`/`Args()` — so they implement `Outgoing` and
-  can be *sent* as well as parsed — and adds `ParseIDClient`, `ParsePV`, and
-  `ParseMCToClient` for the server→client direction.
+- `internal/packet/types.go` gives the client→server packets (`HI`, `IDToServer`,
+  `CC`, `MCToServer`) `Header()`/`Args()` — so they implement `Outgoing` and
+  can be *sent* as well as parsed — and adds `ParseIDToClient`, `ParsePV`, and
+  `ParseMCToClient` for the server→client direction. Bidirectional packets are
+  split by receiver: `MSToServer` / `MSToClient`, `HPToServer` / `HPToClient`,
+  `RTToServer` / `RTToClient`, `ZZToServer` / `ZZToClient`, and `IDToServer` /
+  `IDToClient` (each `Header()` + `Args()`, with `Parse*` per direction).
 
 On top of that, aolib-go publishes a **typed session layer** mirroring aolib-ts:
 `aolib.NewServer(cfg)` (client-side, remote server) and `aolib.NewClient(cfg)`
