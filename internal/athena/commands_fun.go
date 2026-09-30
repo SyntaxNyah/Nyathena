@@ -179,6 +179,12 @@ func cmdForcePair(client *Client, args []string, _ string) {
 // the entire client list and clear PairWantedID + ForcePairUID on anyone who
 // references us by UID OR by current/historical CharID, then clear our own.
 func cmdUnpair(client *Client, _ []string, _ string) {
+	// Leaving a multi-pair group dissolves the whole group (decided behavior).
+	if g := client.PairGroup(); g != nil {
+		g.dissolve(oocDisplayName(client) + " left — the pairing group was dissolved.")
+		return
+	}
+
 	clientUID := client.Uid()
 	clientCharID := client.CharID()
 	cancellerName := oocDisplayName(client)
@@ -239,6 +245,7 @@ func clearPairLinksOnDisconnect(client *Client) {
 	// behind lets it auto-complete against a recycled UID/CharID later — the
 	// desync this cleanup exists to prevent. Disconnects are infrequent, so the
 	// O(n) walk is cheap.
+	dissolvePairGroupOnDisconnect(client)
 	clientUID := client.Uid()
 	clientCharID := client.CharID()
 	leaverName := oocDisplayName(client)

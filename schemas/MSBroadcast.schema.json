@@ -209,6 +209,30 @@
     "effect": {
       "type": "string",
       "default": ""
+    },
+    "additional_chars": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "charid": { "type": "number" },
+          "name": { "type": "string" },
+          "emote": { "type": "string" },
+          "offset": {
+            "type": "object",
+            "properties": {
+              "x": { "type": "number" },
+              "y": { "type": "number" }
+            },
+            "required": ["x", "y"],
+            "additionalProperties": false
+          },
+          "flip": { "type": "integer", "enum": [0, 1, 2, 3] }
+        },
+        "required": ["charid", "name", "emote", "offset", "flip"],
+        "additionalProperties": false
+      },
+      "default": []
     }
   },
   "required": [

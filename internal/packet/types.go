@@ -46,6 +46,17 @@ type Outgoing interface {
 	Args() []string
 }
 
+// JSONOutgoing is an Outgoing packet whose JSON wire form carries additional
+// named fields beyond the classic positional Args(). The classic FantaCode
+// path keeps using Args(); JSON-mode clients get the extra fields merged into
+// their JSON object via JSONExtra(). Only the MS packet implements it today
+// (the multi-pair "additional_chars" list), which is what keeps that data off
+// the FantaCode wire entirely.
+type JSONOutgoing interface {
+	Outgoing
+	JSONExtra() map[string]any
+}
+
 // ----------------------------------------------------------------------------
 // internal helpers
 // ----------------------------------------------------------------------------

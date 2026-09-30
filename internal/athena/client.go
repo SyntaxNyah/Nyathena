@@ -356,8 +356,11 @@ type ClientPairInfo struct {
 const emergencyBypassWindow = 30 * time.Second
 
 type Client struct {
-	pair ClientPairInfo
-	mu   sync.Mutex
+	pair      ClientPairInfo
+	pairGroup *PairGroup
+	software  string // client-advertised software from the ID handshake
+	version   string // client-advertised version from the ID handshake
+	mu        sync.Mutex
 	conn net.Conn
 	// writeMu serializes inline socket writes with each other. Deliberately
 	// separate from mu: nothing that blocks on I/O may hold the mutex ordinary
@@ -1150,7 +1153,44 @@ func (client *Client) SendPacketSync(header string, contents ...string) {
 // escape hatch reserved for the FantaCrypt "decryptor" relic and the
 // hot-path MS broadcast helper.
 func (client *Client) Send(p packet.Outgoing) {
+	if client.jsonMode.Load() {
+		var buf []byte
+		if _, extra := p.(packet.JSONOutgoing); extra && client.supportsMultiPair() {
+			buf = packet.BuildJSONPacket(p) // merges JSONExtra (e.g. MS additional_chars)
+		} else {
+			buf = packet.BuildJSON(p.Header(), p.Args())
+		}
+		if buf == nil {
+			return
+		}
+		if p.Header() == "MS" {
+			if err := packet.ValidateMSBroadcast(buf); err != nil {
+				logger.LogWarningf("dropped outbound MS to IPID:%v UID:%v — MSBroadcast schema validation failed: %v", client.Ipid(), client.Uid(), err)
+				return
+			}
+		}
+		client.sendBytes(buf)
+		return
+	}
 	client.SendPacket(p.Header(), p.Args()...)
+}
+
+// sendBytes enqueues a pre-serialized buffer for asynchronous delivery,
+// mirroring SendPacket's tail: non-blocking, and a full queue drops the packet
+// rather than blocking. A nil sendCh (struct-literal test clients) falls back
+// to a synchronous write.
+func (client *Client) sendBytes(buf []byte) {
+	if client.sendCh == nil {
+		client.write(string(buf))
+		return
+	}
+	if client.closed.Load() {
+		return
+	}
+	select {
+	case client.sendCh <- buf:
+	default:
+	}
 }
 
 // SendSync writes a typed Outgoing packet directly to the socket,
@@ -1732,6 +1772,48 @@ func (client *Client) SetForcePairUID(uid int) {
 	client.mu.Lock()
 	defer client.mu.Unlock()
 	client.forcePairUID = uid
+}
+
+// PairGroup returns the multi-pair group this client belongs to, or nil.
+func (client *Client) PairGroup() *PairGroup {
+	client.mu.Lock()
+	defer client.mu.Unlock()
+	return client.pairGroup
+}
+
+// SetPairGroup assigns (or clears, with nil) this client's multi-pair group.
+func (client *Client) SetPairGroup(g *PairGroup) {
+	client.mu.Lock()
+	defer client.mu.Unlock()
+	client.pairGroup = g
+}
+
+// Software returns the client-advertised software string (ID handshake).
+func (client *Client) Software() string {
+	client.mu.Lock()
+	defer client.mu.Unlock()
+	return client.software
+}
+
+// SetSoftware records the client's advertised software string.
+func (client *Client) SetSoftware(s string) {
+	client.mu.Lock()
+	defer client.mu.Unlock()
+	client.software = s
+}
+
+// Version returns the client-advertised version string (ID handshake).
+func (client *Client) Version() string {
+	client.mu.Lock()
+	defer client.mu.Unlock()
+	return client.version
+}
+
+// SetVersion records the client's advertised version string.
+func (client *Client) SetVersion(s string) {
+	client.mu.Lock()
+	defer client.mu.Unlock()
+	client.version = s
 }
 
 // RemoveAuth logs a client out as moderator.

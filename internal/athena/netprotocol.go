@@ -171,13 +171,18 @@ func pktHdid(client *Client, p *packet.Packet) {
 }
 
 // Handles ID#%
-func pktId(client *Client, _ *packet.Packet) {
+func pktId(client *Client, p *packet.Packet) {
 	if client.Uid() != -1 {
 		return
 	}
-	// Body is the client-side ID handshake (software, version). We don't
-	// currently store either field, but the parse keeps the handler honest
-	// about the wire format.
+	// Store the client's advertised software/version so capability gates (e.g.
+	// multi-pair additional_chars) can key off it. Body is [software, version].
+	if len(p.Body) > 0 {
+		client.SetSoftware(p.Body[0])
+	}
+	if len(p.Body) > 1 {
+		client.SetVersion(p.Body[1])
+	}
 	client.Send(&packet.PN{
 		PlayerCount:       players.GetPlayerCount(),
 		MaxPlayers:        config.MaxPlayers,
@@ -187,7 +192,7 @@ func pktId(client *Client, _ *packet.Packet) {
 		"noencryption", "yellowtext", "prezoom", "flipping", "customobjections",
 		"fastloading", "deskmod", "evidence", "cccc_ic_support", "arup", "casing_alerts",
 		"modcall_reason", "looping_sfx", "additive", "effects", "y_offset",
-		"expanded_desk_mods", "auth_packet",
+		"expanded_desk_mods", "auth_packet", "multi_pair",
 	}})
 
 	if config.AssetURL != "" {
@@ -978,6 +983,11 @@ func pktIC(client *Client, p *packet.Packet) {
 		ms.OtherName = ""
 		ms.OtherEmote = ""
 	}
+
+	// Multi-pair injection: if the speaker belongs to an active group, fill the
+	// standard pair slots from the first partner (so FantaCode/legacy clients
+	// still render a pair) and the JSON-only additional_chars list from the rest.
+	applyPairGroupInjection(client, ms)
 
 	// Offset validation
 	if ms.SelfOffset != "" {

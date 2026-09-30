@@ -945,20 +945,18 @@ func broadcastToAll(p packet.Outgoing) {
 	if !puAllowed(p) {
 		return
 	}
-	header, args := p.Header(), p.Args()
 	clients.ForEach(func(client *Client) {
 		if client.Uid() != -1 {
-			client.SendPacket(header, args...)
+			client.Send(p)
 		}
 	})
 }
 
 // broadcastToArea fans a typed packet to every client in the given area.
 func broadcastToArea(area *area.Area, p packet.Outgoing) {
-	header, args := p.Header(), p.Args()
 	clients.ForEach(func(client *Client) {
 		if client.Area() == area {
-			client.SendPacket(header, args...)
+			client.Send(p)
 		}
 	})
 }
@@ -966,10 +964,9 @@ func broadcastToArea(area *area.Area, p packet.Outgoing) {
 // broadcastToAreaFrom fans a typed packet to an area, honoring per-recipient
 // ignore lists unless the sender is a moderator.
 func broadcastToAreaFrom(senderIPID string, senderIsMod bool, area *area.Area, p packet.Outgoing) {
-	header, args := p.Header(), p.Args()
 	clients.ForEach(func(client *Client) {
 		if client.Area() == area && (senderIsMod || !client.IgnoresIPID(senderIPID)) {
-			client.SendPacket(header, args...)
+			client.Send(p)
 		}
 	})
 }
@@ -982,10 +979,9 @@ func broadcastToAreaFrom(senderIPID string, senderIsMod bool, area *area.Area, p
 // toggle can never hide something a player was specifically sent or
 // something staff need seen.
 func broadcastOOCToArea(senderIPID string, senderIsMod bool, area *area.Area, p packet.Outgoing) {
-	header, args := p.Header(), p.Args()
 	clients.ForEach(func(client *Client) {
 		if client.Area() == area && (senderIsMod || !client.IgnoresIPID(senderIPID)) && !client.OOCHidden() {
-			client.SendPacket(header, args...)
+			client.Send(p)
 		}
 	})
 }
@@ -999,10 +995,9 @@ func broadcastOOCToAll(p packet.Outgoing) {
 	if !puAllowed(p) {
 		return
 	}
-	header, args := p.Header(), p.Args()
 	clients.ForEach(func(client *Client) {
 		if client.Uid() != -1 && !client.OOCHidden() {
-			client.SendPacket(header, args...)
+			client.Send(p)
 		}
 	})
 }
@@ -1013,9 +1008,8 @@ func broadcastToAllClients(p packet.Outgoing) {
 	if !puAllowed(p) {
 		return
 	}
-	header, args := p.Header(), p.Args()
 	clients.ForEach(func(client *Client) {
-		client.SendPacket(header, args...)
+		client.Send(p)
 	})
 }
 

@@ -70,6 +70,31 @@ type MSPacket struct {
 	Additive               string // [28]
 	Effect                 string // [29]
 	Blips                  string // [30] (2.10.2+)
+
+	// AdditionalChars holds the multi-pair partners beyond the standard pair
+	// (JSON wire only). The classic FantaCode MS ends at Blips; these are
+	// emitted solely via JSONExtra()["additional_chars"] and never reach
+	// FantaCode clients. Empty means no extra partners.
+	AdditionalChars []AdditionalChar
+}
+
+// AdditionalChar is one on-screen partner beyond the standard pair. It mirrors
+// the paired_* fields as a typed record and serialises to a JSON object
+// (charid / name / emote / offset{x,y} / flip) inside the MS additional_chars
+// array.
+type AdditionalChar struct {
+	CharID int      `json:"charid"`
+	Name   string   `json:"name"`
+	Emote  string   `json:"emote"`
+	Offset PairOffset `json:"offset"`
+	Flip   int      `json:"flip"`
+}
+
+// PairOffset is an {x,y} screen-coordinate pair (percent of viewport),
+// matching the offset / paired_offset shape in the MS JSON schema.
+type PairOffset struct {
+	X int `json:"x"`
+	Y int `json:"y"`
 }
 
 // msServerFieldCount is the maximum number of fields in a server-direction
@@ -282,6 +307,16 @@ func (ms *MSPacket) ServerArgs() []string {
 		args[30] = ms.Blips
 	}
 	return args
+}
+
+// JSONExtra returns the JSON-only MS fields: the multi-pair "additional_chars"
+// list, or nil when there are no extra partners (so the field is omitted and
+// the schema default applies). Part of the JSONOutgoing interface.
+func (ms *MSPacket) JSONExtra() map[string]any {
+	if len(ms.AdditionalChars) == 0 {
+		return nil
+	}
+	return map[string]any{"additional_chars": ms.AdditionalChars}
 }
 
 // ServerString joins ServerArgs with '#'. Used when an entire MS body needs

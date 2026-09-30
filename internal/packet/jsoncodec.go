@@ -318,22 +318,15 @@ func ParseJSON(raw string) (*Packet, error) {
 	return &Packet{Header: header, Body: body}, nil
 }
 
-// BuildJSON encodes a header + positional args into JSON wire form. The
-// inverse of ParseJSON for the server-direction schemas. Returns nil if
-// json.Marshal fails (impossible in practice — every value type used here
-// is JSON-serialisable).
-//
-// Unknown headers fall through to a generic envelope ({"header":...,
-// "body":[...]}) so that experimental or extension packets are still
-// deliverable; the alternative — silently dropping — would mask bugs.
-func BuildJSON(header string, args []string) []byte {
+// buildJSONObject maps a header + positional args to a JSON object using the
+// outbound schema. Shared core of BuildJSON and BuildJSONPacket. Unknown
+// headers fall through to a generic envelope ({"$header":..., "body":[...]})
+// so experimental or extension packets are still deliverable rather than
+// silently dropped.
+func buildJSONObject(header string, args []string) map[string]any {
 	schema, known := outboundSchemas[header]
 	if !known {
-		buf, _ := json.Marshal(struct {
-			Header string   `json:"$header"`
-			Body   []string `json:"body"`
-		}{header, args})
-		return buf
+		return map[string]any{"$header": header, "body": args}
 	}
 
 	obj := make(map[string]any, len(schema.fields)+2)
@@ -403,6 +396,31 @@ func BuildJSON(header string, args []string) []byte {
 		}
 	}
 
+	return obj
+}
+
+// BuildJSON encodes a header + positional args into JSON wire form. Returns
+// nil if json.Marshal fails (impossible in practice — every value type used
+// here is JSON-serialisable).
+func BuildJSON(header string, args []string) []byte {
+	buf, err := json.Marshal(buildJSONObject(header, args))
+	if err != nil {
+		return nil
+	}
+	return buf
+}
+
+// BuildJSONPacket encodes an Outgoing packet into JSON wire form, merging any
+// JSON-only fields the packet exposes via JSONOutgoing (e.g. the MS
+// additional_chars list) into the object produced from its classic Args().
+// Returns nil on marshal failure.
+func BuildJSONPacket(p Outgoing) []byte {
+	obj := buildJSONObject(p.Header(), p.Args())
+	if jp, ok := p.(JSONOutgoing); ok {
+		for k, v := range jp.JSONExtra() {
+			obj[k] = v
+		}
+	}
 	buf, err := json.Marshal(obj)
 	if err != nil {
 		return nil

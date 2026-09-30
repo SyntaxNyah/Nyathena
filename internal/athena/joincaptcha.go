@@ -454,10 +454,9 @@ func joinCaptchaCommandAllowed(command string) bool {
 // deliverRestricted routes a restricted client's packet away from the room.
 // Nobody outside the restricted set ever receives it.
 func deliverRestricted(sender *Client, a *area.Area, p packet.Outgoing) {
-	header, args := p.Header(), p.Args()
 	clients.ForEach(func(c *Client) {
 		if c == sender || (c.Area() == a && c.captchaRestricted.Load()) {
-			c.SendPacket(header, args...)
+			c.Send(p)
 		}
 	})
 }
