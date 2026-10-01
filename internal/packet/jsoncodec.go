@@ -263,7 +263,7 @@ var inboundSchemas = map[string]jsonSchema{
 		"additive", "effect", "blips",
 	}, pairFields: []string{"offset"}, separatorFields: map[string]separatorField{"effect": {keys: []string{"name", "folder", "sound"}, sep: "|"}}},
 	"MC":       {fields: []string{"name", "char_id", "showname", "effects"}, bitFields: map[string]bitField{"effects": {bits: map[string]int{"fade_in": 1, "fade_out": 2, "sync_position": 4}}}},
-	"HP":       {fields: []string{"bar", "value"}, enumFields: map[string]map[string]string{"bar": {"1": "defense", "2": "prosecution"}}},
+	"HP":       {fields: []string{"bar", "value"}, numericFields: []string{"value"}, enumFields: map[string]map[string]string{"bar": {"1": "defense", "2": "prosecution"}}},
 	"RT":       {fields: []string{"animation", "variant"}},
 	"CT":       {fields: []string{"name", "message"}},
 	"PE":       {fields: []string{"name", "description", "image"}},
@@ -318,7 +318,7 @@ var outboundSchemas = map[string]jsonSchema{
 	"FA":         {tailKey: "areas", tailItemKeys: []string{"name"}},
 	"FM":         {tailKey: "music_list", tailItemKeys: []string{"name"}},
 	"CASEA":      {fields: []string{"case_title", "need_def", "need_pro", "need_judge", "need_jury", "need_steno"}},
-	"HP":         {fields: []string{"bar", "value"}, enumFields: map[string]map[string]string{"bar": {"1": "defense", "2": "prosecution"}}},
+	"HP":         {fields: []string{"bar", "value"}, numericFields: []string{"value"}, enumFields: map[string]map[string]string{"bar": {"1": "defense", "2": "prosecution"}}},
 	"RT":         {fields: []string{"animation", "variant"}},
 	"ZZ":         {fields: []string{"reason"}},
 	// Field order matches MSToClient.Args (the positional wire body). The
