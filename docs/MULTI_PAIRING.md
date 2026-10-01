@@ -11,9 +11,9 @@
 
 The AO wire protocol has one canonical source of truth: the
 [`AO-Underground/aolib`](https://github.com/AO-Underground/aolib) supermodule —
-JSON Schema (draft-07) in `spec/`, generated Go in `aolib-go/`
-(module `github.com/AO-Underground/aolib/aolib-go`), generated TypeScript in
-`aolib-ts/`. Bindings are generated from the schemas by `aolib-go/cmd/aolib-gen`;
+JSON Schema (draft-07) in `spec/`, generated Go in `go/`
+(module `github.com/AO-Underground/aolib/go/v2`), generated TypeScript in
+`ts/`. Bindings are generated from the schemas by `go/cmd/aolib-gen`;
 Nyathena consumes the generated Go as `internal/packet`.
 
 The canonical `MS` (`spec/packets/schemas/MSToClient.schema.json`) is **strict**
@@ -221,7 +221,7 @@ specifically:
 1. **(FantaCode, today)** Multi-pair fields are never present, so AsyncAO renders
    the standard 2-person scene. Nothing to parse — the feature is JSON-only.
 2. **(JSON, per the migration roadmap)** Once AsyncAO adopts
-   `github.com/AO-Underground/aolib/aolib-go` and speaks JSON, it should:
+   `github.com/AO-Underground/aolib/go/v2` and speaks JSON, it should:
    - advertise `multi_pair` in its own client→server `FL`;
    - extend its `MS` model with an `additional_chars` list and parse it only
      when `multi_pair` is set (mirror the `cccc_ic_support` gate);

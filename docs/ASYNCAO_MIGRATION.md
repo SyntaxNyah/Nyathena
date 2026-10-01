@@ -6,7 +6,7 @@ adoption — see `internal/packet` (strict standard) vs `internal/athena`
 
 **Goal.** Replace AsyncAO's hand-rolled wire layer — `internal/protocol` plus the
 `switch p.Header` dispatcher in `internal/courtroom/session.go` / `voice.go` —
-with the canonical `github.com/AO-Underground/aolib/aolib-go`, so AsyncAO (a WebSocket
+with the canonical `github.com/AO-Underground/aolib/go/v2`, so AsyncAO (a WebSocket
 AO2 **client**) speaks the same FantaCode **and** JSON wire as Nyathena and
 LemmyAO, from one typed packet model instead of hand-parsed strings.
 
@@ -18,23 +18,25 @@ re-implementation of packet shapes.
 
 ## 1. The canonical library (source of truth)
 
-Authoritative repo: `https://github.com/AO-Underground/aolib` — `aolib-go/` is its
+Authoritative repo: `https://github.com/AO-Underground/aolib` — `go/` is its
 Go subdirectory. Local clone you work against:
 
 ```
 C:\Users\arbok\Documents\GitHub\aolib\
 ├── spec\            JSON Schema (draft-07) — the single source of truth
 │   ├── packets\schemas\*.schema.json    55 packet schemas
-│   ├── types\*.schema.json               15 enum/type schemas
+│   ├── types\*.schema.json               19 enum/type schemas
 │   └── assets\                            shared schema fragments
-├── aolib-go\        generated Go  (module github.com/AO-Underground/aolib/aolib-go, go 1.19)
-└── aolib-ts\        generated TypeScript (the published aolib-ts counterpart)
+├── go\        generated Go  (module github.com/AO-Underground/aolib/go/v2, go 1.21)
+└── ts\        generated TypeScript (the published aolib-ts counterpart)
 ```
 
-- **Regenerate `aolib-go`:** `cd aolib-go && go run ./cmd/aolib-gen -meta ../spec -out .`
+- **Regenerate `aolib-go`:** `cd go && go run ./cmd/aolib-gen -meta ../spec -out .`
 - **Schema keywords** (the codegen contract): `x-fanta-codec` (bespoke Fanta
-  encode/decode for a field), `x-receiver` (direction), `x-wire-ints` (enum→legacy
-  int map), `x-fanta-unescape-amp` (legacy `<and>` tolerance), `x-enum-description`.
+  encode/decode for a field), `x-fanta-separator` (a `|`-joined object slot),
+  `x-wire-bits` (an integer bitmask object slot), `x-receiver` (direction),
+  `x-wire-ints` (enum→legacy int map), `x-fanta-unescape-amp` (legacy `<and>`
+  tolerance), `x-enum-description`.
 
 **Two wire forms, one typed model.** Each packet struct encodes to either form
 and the session auto-detects JSON on inbound; outbound is flipped per-session
@@ -55,7 +57,7 @@ with `SetJSONMode`.
 
 ## 2. aolib-go API surface (exact)
 
-Import: `github.com/AO-Underground/aolib/aolib-go` (package `aolib`).
+Import: `github.com/AO-Underground/aolib/go/v2` (package `aolib`).
 
 ### Wire primitives
 ```go
@@ -105,7 +107,7 @@ func (s *ServerSession) OnCustom(header string, h func(any)) error          // c
 
 **AsyncAO is a client**, so it uses `aolib.NewServer(...)` → `*ServerSession`
 (`Send*` = client→server, `On*` = server→client). The intended usage is the
-typed methods, exactly like `aolib-go/examples/client` — never `Encode` directly:
+typed methods, exactly like `go/examples/client` — never `Encode` directly:
 
 ```go
 server := aolib.NewServer(aolib.SessionConfig{Send: func(wire []byte) { ws.Write(wire) }})
@@ -276,7 +278,7 @@ Recommend: (1) for server-specific extensions (`TT`/`SETCASE`/`CASEA`/`VS_*`/`SD
 
 Each phase compiles and passes `go test ./...` before the next.
 
-**Phase 0 — Dependency + wiring.** Add `require github.com/AO-Underground/aolib/aolib-go`
+**Phase 0 — Dependency + wiring.** Add `require github.com/AO-Underground/aolib/go/v2`
 with a `replace` to the local clone (path or `file:`), `go mod tidy`. Keep
 `internal/protocol` intact — it stays as the Fanta shim during transition.
 
@@ -323,9 +325,9 @@ connect-and-chat smoke test against Nyathena.
   AsyncAO's `FeatureSet` semantics (cccc_ic_support, custom_objections, effects,
   prezoom, auth_packet); keep `internal/protocol/features.go` or port it.
 - **Module path.** The authoritative import is
-  `github.com/AO-Underground/aolib/aolib-go` (the `aolib-go/` subdirectory of the
-  `AO-Underground/aolib` supermodule). `aolib-go/go.mod` already declares this
-  path (fixed at v2.3.0), so import it directly — no `replace` directive needed.
+  `github.com/AO-Underground/aolib/go/v2` (the `go/` subdirectory of the
+  `AO-Underground/aolib` supermodule). `go/go.mod` already declares this
+  path (finalized at v2.4.0), so import it directly — no `replace` directive needed.
 - **`SessionConfig.Send` is a raw write hook**, not a per-packet method — wire it
   to the WebSocket `Write` once, not per packet.
 
@@ -333,7 +335,7 @@ connect-and-chat smoke test against Nyathena.
 
 ## 10. Verification / acceptance
 
-1. `cd aolib-go && go test ./...` (codegen determinism + conformance vectors).
+1. `cd go && go test ./...` (codegen determinism + conformance vectors).
 2. `cd AsyncAO && go build ./... && go test ./...`.
 3. Wire round-trip: AsyncAO-encoded frames decode in Nyathena (`internal/packet`)
    and back, for `HI/ID/PN/SI/SC/CharsCheck/SM/FL/DONE/CT/MS/MC/…` (plus the
@@ -349,9 +351,9 @@ connect-and-chat smoke test against Nyathena.
 | Concern | File |
 |---|---|
 | Spec (source of truth) | `aolib\spec\packets\schemas\*.schema.json` |
-| Go codegen | `aolib\aolib-go\cmd\aolib-gen\main.go` |
-| Generated packets | `aolib\aolib-go\{packets_gen,registry_gen,session_client,session_server,types_gen,enums_gen}.go` |
-| Wire codec / framing | `aolib\aolib-go\{codec,fanta,aopacket,session,outgoing}.go` |
+| Go codegen | `aolib\go\cmd\aolib-gen\main.go` |
+| Generated packets | `aolib\go\{packets_gen,registry_gen,session_client,session_server,types_gen,enums_gen}.go` |
+| Wire codec / framing | `aolib\go\{codec,fanta,aopacket,session,outgoing}.go` |
 | AsyncAO today | `AsyncAO\internal\protocol\{packet,ms,features,pairing,conn}.go`; `AsyncAO\internal\courtroom\{session,voice}.go` |
 | Nyathena precedent | `Nyathena\internal\packet` (strict) + `Nyathena\internal\athena` (extensions) |
 

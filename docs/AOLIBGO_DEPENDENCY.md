@@ -1,8 +1,8 @@
 # Nyathena → aolib-go dependency migration
 
-**Status:** Planned (not started; the module path is unblocked at v2.3.0). This is the roadmap for replacing
+**Status:** Planned (not started; the module path is unblocked as of v2.4.0). This is the roadmap for replacing
 Nyathena's local `internal/packet` fork with the canonical
-`github.com/AO-Underground/aolib/aolib-go` module as a real `go.mod` dependency.
+`github.com/AO-Underground/aolib/go/v2` module as a real `go.mod` dependency.
 
 ## Why
 
@@ -26,14 +26,14 @@ extensions through its extension points (`RegisterCodec` / `SendCustom` /
 
 ## Module path (resolved)
 
-`aolib-go/go.mod` already declares `module github.com/AO-Underground/aolib/aolib-go`
-(fixed at v2.3.0), so Nyathena can `require` the authoritative path directly — no
+`go/go.mod` already declares `module github.com/AO-Underground/aolib/go/v2`
+(finalized at v2.4.0), so Nyathena can `require` the authoritative path directly — no
 `replace` needed for the module path.
 
 ## Plan
 
-1. ~~**Fix the module path**~~ — already `github.com/AO-Underground/aolib/aolib-go` (v2.3.0).
-2. Add `require github.com/AO-Underground/aolib/aolib-go` + a `replace`
+1. ~~**Fix the module path**~~ — already `github.com/AO-Underground/aolib/go/v2` (v2.4.0).
+2. Add `require github.com/AO-Underground/aolib/go/v2` + a `replace`
    directive (→ local clone) to Nyathena's `go.mod`.
 3. Replace `internal/packet` imports with `aolib` (package rename across
    `internal/athena`).

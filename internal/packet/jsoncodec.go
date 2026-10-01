@@ -86,6 +86,26 @@ type jsonSchema struct {
 	// tailEnum maps wire-int -> enum-name for a scalar string tail
 	// (CharsCheck.taken).
 	tailEnum map[string]string
+	// separatorFields maps a field name to a separator-joined object (MS
+	// Effect): keys are the sub-field names in wire order, sep is the wire
+	// separator.
+	separatorFields map[string]separatorField
+	// bitFields maps a field name to a bitmask object (MC MusicEffects):
+	// bits maps sub-field name -> bit value.
+	bitFields map[string]bitField
+}
+
+// separatorField describes one object-valued field packed into a single wire
+// slot by joining sub-fields with a separator (MS Effect name|folder|sound).
+type separatorField struct {
+	keys []string
+	sep  string
+}
+
+// bitField describes one object-valued field packed into a single integer
+// bitmask slot (MC MusicEffects fade_in/fade_out/sync_position).
+type bitField struct {
+	bits map[string]int
 }
 
 // fieldSkip is the placeholder used in `fields` to mean "this wire slot is a
@@ -161,6 +181,67 @@ func (s jsonSchema) tailEnumWire(name string) string {
 	return name
 }
 
+// encodeSeparatorField splits a wire value on sep into a JSON object whose
+// keys are the named sub-fields (MS Effect name|folder|sound).
+func encodeSeparatorField(val string, keys []string, sep string) map[string]string {
+	parts := strings.Split(val, sep)
+	m := make(map[string]string, len(keys))
+	for i, k := range keys {
+		if i < len(parts) {
+			m[k] = parts[i]
+		} else {
+			m[k] = ""
+		}
+	}
+	return m
+}
+
+// decodeSeparatorField joins a JSON object's sub-fields with sep back into the
+// single wire slot (inverse of encodeSeparatorField).
+func decodeSeparatorField(raw json.RawMessage, keys []string, sep string) string {
+	var sub map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &sub); err != nil {
+		return jsonValueToString(raw)
+	}
+	parts := make([]string, len(keys))
+	for i, k := range keys {
+		if v, ok := sub[k]; ok {
+			parts[i] = jsonValueToString(v)
+		}
+	}
+	return strings.Join(parts, sep)
+}
+
+// encodeBitField parses a bitfield integer into a map of named booleans
+// (MC MusicEffects fade_in/fade_out/sync_position).
+func encodeBitField(val string, bits map[string]int) map[string]bool {
+	n, _ := strconv.Atoi(val)
+	m := make(map[string]bool, len(bits))
+	for k, b := range bits {
+		m[k] = (n & b) != 0
+	}
+	return m
+}
+
+// decodeBitField combines a JSON object's named booleans into a bitfield
+// integer string (inverse of encodeBitField).
+func decodeBitField(raw json.RawMessage, bits map[string]int) string {
+	var sub map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &sub); err != nil {
+		return jsonValueToString(raw)
+	}
+	n := 0
+	for k, b := range bits {
+		if v, ok := sub[k]; ok {
+			var bv bool
+			if json.Unmarshal(v, &bv) == nil && bv {
+				n |= b
+			}
+		}
+	}
+	return strconv.Itoa(n)
+}
+
 // inboundSchemas describes the client→server packet wire shape.
 //
 // Coverage matches the Packet Reference doc plus the Athena voice-chat
@@ -180,15 +261,15 @@ var inboundSchemas = map[string]jsonSchema{
 		"noninterrupting_preanim", "sfx_looping", "screenshake",
 		"frames_shake", "frames_realization", "frames_sfx",
 		"additive", "effect", "blips",
-	}, pairFields: []string{"offset"}},
-	"MC":       {fields: []string{"name", "char_id", "showname", "effects"}},
+	}, pairFields: []string{"offset"}, separatorFields: map[string]separatorField{"effect": {keys: []string{"name", "folder", "sound"}, sep: "|"}}},
+	"MC":       {fields: []string{"name", "char_id", "showname", "effects"}, bitFields: map[string]bitField{"effects": {bits: map[string]int{"fade_in": 1, "fade_out": 2, "sync_position": 4}}}},
 	"HP":       {fields: []string{"bar", "value"}, enumFields: map[string]map[string]string{"bar": {"1": "defense", "2": "prosecution"}}},
 	"RT":       {fields: []string{"animation", "variant"}},
 	"CT":       {fields: []string{"name", "message"}},
 	"PE":       {fields: []string{"name", "description", "image"}},
 	"DE":       {fields: []string{"id"}},
 	"EE":       {fields: []string{"id", "name", "description", "image"}},
-	"ZZ":       {fields: []string{"reason"}},
+	"ZZ":       {fields: []string{"reason", "reported_player_id"}, numericFields: []string{"reported_player_id"}},
 	"SETCASE":  {fields: []string{"caselist", "cm", "def", "pro", "judge", "jury", "steno"}},
 	"CASEA":    {fields: []string{"case_title", "need_def", "need_pro", "need_judge", "need_jury", "need_steno"}},
 	"CH":       {fields: []string{"char_id"}},
@@ -221,7 +302,7 @@ var outboundSchemas = map[string]jsonSchema{
 	"PR":         {fields: []string{"id", "type"}, enumFields: map[string]map[string]string{"type": {"0": "add", "1": "remove"}}},
 	"PU":         {fields: []string{"id", "type", "data"}, enumFields: map[string]map[string]string{"type": {"0": "ooc_name", "1": "char_name", "2": "showname", "3": "area_id"}}},
 	"PV":         {fields: []string{"player_id", fieldSkip, "char_id"}},
-	"MC":         {fields: []string{"name", "char_id", "showname", "looping", "channel", "effects"}},
+	"MC":         {fields: []string{"name", "char_id", "showname", "looping", "channel", "effects"}, enumFields: map[string]map[string]string{"channel": {"0": "music", "1": "ambience"}}, bitFields: map[string]bitField{"effects": {bits: map[string]int{"fade_in": 1, "fade_out": 2, "sync_position": 4}}}},
 	"KK":         {fields: []string{"reason"}},
 	"KB":         {fields: []string{"reason"}},
 	"BD":         {fields: []string{"reason"}},
@@ -229,11 +310,11 @@ var outboundSchemas = map[string]jsonSchema{
 	"AUTH":       {fields: []string{"auth_state"}, enumFields: map[string]map[string]string{"auth_state": {"-1": "logout", "0": "failed", "1": "success"}}},
 	"JD":         {fields: []string{"state"}, enumFields: map[string]map[string]string{"state": {"-1": "by_position", "0": "hidden", "1": "shown"}}},
 	"LE":         {tailKey: "evidence", tailItemKeys: []string{"name", "description", "image"}},
-	"MA":         {fields: []string{"id", "duration", "reason"}},
+	"MA":         {fields: []string{"player_id", "duration_minutes", "reason"}},
 	"SP":         {fields: []string{"side"}},
 	"SD":         {fields: []string{"sides"}, splitOnStar: true},
 	"ST":         {fields: []string{"subtheme_name", "should_reload"}},
-	"TI":         {fields: []string{"timer_id", "command", "time"}, enumFields: map[string]map[string]string{"command": {"0": "start", "1": "pause", "2": "show", "3": "hide"}}},
+	"TI":         {fields: []string{"timer_id", "command", "time"}, numericFields: []string{"timer_id", "time"}, enumFields: map[string]map[string]string{"command": {"0": "start", "1": "pause", "2": "show", "3": "hide"}}},
 	"FA":         {tailKey: "areas", tailItemKeys: []string{"name"}},
 	"FM":         {tailKey: "music_list", tailItemKeys: []string{"name"}},
 	"CASEA":      {fields: []string{"case_title", "need_def", "need_pro", "need_judge", "need_jury", "need_steno"}},
@@ -265,7 +346,8 @@ var outboundSchemas = map[string]jsonSchema{
 			"realization", "noninterrupting_preanim", "sfx_looping",
 			"screenshake", "additive",
 		},
-		pairFields: []string{"offset", "paired_offset"},
+		pairFields:      []string{"offset", "paired_offset"},
+		separatorFields: map[string]separatorField{"effect": {keys: []string{"name", "folder", "sound"}, sep: "|"}},
 	},
 	"VS_CAPS":  {fields: []string{"enabled", "ptt", "max_peers", "codec", "sample_rate", "frame_ms", "max_frame_bytes"}, booleanFields: []string{"enabled"}},
 	"VS_PEERS": {fields: []string{"uids"}},
@@ -352,6 +434,14 @@ func ParseJSON(raw string) (*Packet, error) {
 			body = append(body, schema.enumWire(name, jsonValueToString(v)))
 			continue
 		}
+		if sep, ok := schema.separatorFields[name]; ok {
+			body = append(body, decodeSeparatorField(v, sep.keys, sep.sep))
+			continue
+		}
+		if bf, ok := schema.bitFields[name]; ok {
+			body = append(body, decodeBitField(v, bf.bits))
+			continue
+		}
 		body = append(body, jsonValueToString(v))
 	}
 
@@ -431,6 +521,14 @@ func buildJSONObject(header string, args []string) map[string]any {
 		}
 		if n, ok := schema.enumName(name, val); ok {
 			obj[name] = n
+			continue
+		}
+		if sep, ok := schema.separatorFields[name]; ok {
+			obj[name] = encodeSeparatorField(val, sep.keys, sep.sep)
+			continue
+		}
+		if bf, ok := schema.bitFields[name]; ok {
+			obj[name] = encodeBitField(val, bf.bits)
 			continue
 		}
 		obj[name] = val
