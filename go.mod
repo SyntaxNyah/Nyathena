@@ -3,7 +3,7 @@ module github.com/MangosArentLiterature/Athena
 go 1.21
 
 require (
-	github.com/AO-Underground/aolib/go/v2 v2.4.3
+	github.com/AO-Underground/aolib/go/v2 v2.4.4
 	github.com/BurntSushi/toml v1.2.0
 	github.com/bwmarrin/discordgo v0.28.1
 	github.com/ecnepsnai/discord v1.2.1
