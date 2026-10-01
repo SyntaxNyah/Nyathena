@@ -90,7 +90,7 @@ type AdditionalChar struct {
     Name   string        `json:"name"`
     Emote  string        `json:"emote"`
     Offset packet.Offset `json:"offset"` // {x, y}
-    Flip   int           `json:"flip"`   // 0..3
+    Flip   packet.Flip   `json:"flip"`
 }
 ```
 
@@ -101,7 +101,7 @@ exactly what a client needs to draw it:
 - `name`   — character folder name
 - `emote`  — idle animation to play (looping `(a)<emote>`)
 - `offset` — screen position `{x, y}` (percent of viewport)
-- `flip`   — mirror flag (`0..3`)
+- `flip`   — mirror flag (`none`/`horizontal`/`vertical`/`horizontal_and_vertical`)
 
 The standard pair stays in `paired_charid` / `paired_name` / `paired_emote` /
 `paired_offset` / `paired_flip` and always holds the **first** partner, so

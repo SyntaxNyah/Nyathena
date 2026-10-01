@@ -20,11 +20,11 @@ import (
 
 // AdditionalChar is one on-screen partner beyond the standard pair.
 type AdditionalChar struct {
-	CharID int          `json:"charid"`
-	Name   string       `json:"name"`
-	Emote  string       `json:"emote"`
+	CharID int           `json:"charid"`
+	Name   string        `json:"name"`
+	Emote  string        `json:"emote"`
 	Offset packet.Offset `json:"offset"`
-	Flip   int          `json:"flip"`
+	Flip   packet.Flip   `json:"flip"`
 }
 
 // MSToServer is the client -> server MS (26 fields + Blips).

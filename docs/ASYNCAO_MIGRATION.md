@@ -25,7 +25,7 @@ Go subdirectory. Local clone you work against:
 C:\Users\arbok\Documents\GitHub\aolib\
 ├── spec\            JSON Schema (draft-07) — the single source of truth
 │   ├── packets\schemas\*.schema.json    55 packet schemas
-│   ├── types\*.schema.json               8 enum/type schemas
+│   ├── types\*.schema.json               15 enum/type schemas
 │   └── assets\                            shared schema fragments
 ├── aolib-go\        generated Go  (module github.com/AO-Underground/aolib/aolib-go, go 1.19)
 └── aolib-ts\        generated TypeScript (the published aolib-ts counterpart)

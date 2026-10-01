@@ -78,6 +78,14 @@ type jsonSchema struct {
 	// object {x,y} (joined to "x&y"), a string (passed through), or a
 	// scalar number (used as x with no y).
 	pairFields []string
+	// enumFields maps a field name to its wire-int -> enum-name table. The
+	// JSON form carries the name; the FantaCode wire keeps the integer.
+	// Decode does the reverse (name -> wire-int), tolerating a raw integer
+	// from legacy clients.
+	enumFields map[string]map[string]string
+	// tailEnum maps wire-int -> enum-name for a scalar string tail
+	// (CharsCheck.taken).
+	tailEnum map[string]string
 }
 
 // fieldSkip is the placeholder used in `fields` to mean "this wire slot is a
@@ -111,6 +119,48 @@ func (s jsonSchema) isPair(name string) bool {
 	return false
 }
 
+// enumName returns the JSON enum name for a field's wire value, reporting
+// whether the field has an enum table that maps it.
+func (s jsonSchema) enumName(name, val string) (string, bool) {
+	if m, ok := s.enumFields[name]; ok {
+		if n, ok := m[val]; ok {
+			return n, true
+		}
+	}
+	return "", false
+}
+
+// enumWire reverse-maps a JSON enum name back to its wire integer. Values
+// that don't map (already a wire int, or unknown) pass through unchanged.
+func (s jsonSchema) enumWire(name, jsonVal string) string {
+	if m, ok := s.enumFields[name]; ok {
+		for wire, n := range m {
+			if n == jsonVal {
+				return wire
+			}
+		}
+	}
+	return jsonVal
+}
+
+// tailEnumName maps a scalar tail item's wire value to its enum name.
+func (s jsonSchema) tailEnumName(val string) string {
+	if n, ok := s.tailEnum[val]; ok {
+		return n
+	}
+	return val
+}
+
+// tailEnumWire reverse-maps a scalar tail item's enum name to its wire value.
+func (s jsonSchema) tailEnumWire(name string) string {
+	for wire, n := range s.tailEnum {
+		if n == name {
+			return wire
+		}
+	}
+	return name
+}
+
 // inboundSchemas describes the client→server packet wire shape.
 //
 // Coverage matches the Packet Reference doc plus the Athena voice-chat
@@ -132,7 +182,7 @@ var inboundSchemas = map[string]jsonSchema{
 		"additive", "effect", "blips",
 	}, pairFields: []string{"offset"}},
 	"MC":       {fields: []string{"name", "char_id", "showname", "effects"}},
-	"HP":       {fields: []string{"bar", "value"}},
+	"HP":       {fields: []string{"bar", "value"}, enumFields: map[string]map[string]string{"bar": {"1": "defense", "2": "prosecution"}}},
 	"RT":       {fields: []string{"animation", "variant"}},
 	"CT":       {fields: []string{"name", "message"}},
 	"PE":       {fields: []string{"name", "description", "image"}},
@@ -166,28 +216,28 @@ var outboundSchemas = map[string]jsonSchema{
 	"CHECK":      {},
 	"BN":         {fields: []string{"background", "position"}},
 	"ARUP":       {fields: []string{"update_type"}, tailKey: "update_data"},
-	"CharsCheck": {tailKey: "taken"},
+	"CharsCheck": {tailKey: "taken", tailEnum: map[string]string{"0": "free", "-1": "taken"}},
 	"CT":         {fields: []string{"name", "message", "is_from_server"}, booleanFields: []string{"is_from_server"}},
-	"PR":         {fields: []string{"id", "type"}},
-	"PU":         {fields: []string{"id", "type", "data"}},
+	"PR":         {fields: []string{"id", "type"}, enumFields: map[string]map[string]string{"type": {"0": "add", "1": "remove"}}},
+	"PU":         {fields: []string{"id", "type", "data"}, enumFields: map[string]map[string]string{"type": {"0": "ooc_name", "1": "char_name", "2": "showname", "3": "area_id"}}},
 	"PV":         {fields: []string{"player_id", fieldSkip, "char_id"}},
 	"MC":         {fields: []string{"name", "char_id", "showname", "looping", "channel", "effects"}},
 	"KK":         {fields: []string{"reason"}},
 	"KB":         {fields: []string{"reason"}},
 	"BD":         {fields: []string{"reason"}},
 	"BB":         {fields: []string{"message"}},
-	"AUTH":       {fields: []string{"auth_state"}},
-	"JD":         {fields: []string{"state"}},
+	"AUTH":       {fields: []string{"auth_state"}, enumFields: map[string]map[string]string{"auth_state": {"-1": "logout", "0": "failed", "1": "success"}}},
+	"JD":         {fields: []string{"state"}, enumFields: map[string]map[string]string{"state": {"-1": "by_position", "0": "hidden", "1": "shown"}}},
 	"LE":         {tailKey: "evidence", tailItemKeys: []string{"name", "description", "image"}},
 	"MA":         {fields: []string{"id", "duration", "reason"}},
 	"SP":         {fields: []string{"side"}},
 	"SD":         {fields: []string{"sides"}, splitOnStar: true},
 	"ST":         {fields: []string{"subtheme_name", "should_reload"}},
-	"TI":         {fields: []string{"timer_id", "command", "time"}},
+	"TI":         {fields: []string{"timer_id", "command", "time"}, enumFields: map[string]map[string]string{"command": {"0": "start", "1": "pause", "2": "show", "3": "hide"}}},
 	"FA":         {tailKey: "areas", tailItemKeys: []string{"name"}},
 	"FM":         {tailKey: "music_list", tailItemKeys: []string{"name"}},
 	"CASEA":      {fields: []string{"case_title", "need_def", "need_pro", "need_judge", "need_jury", "need_steno"}},
-	"HP":         {fields: []string{"bar", "value"}},
+	"HP":         {fields: []string{"bar", "value"}, enumFields: map[string]map[string]string{"bar": {"1": "defense", "2": "prosecution"}}},
 	"RT":         {fields: []string{"animation", "variant"}},
 	"ZZ":         {fields: []string{"reason"}},
 	// Field order matches MSToClient.Args (the positional wire body). The
@@ -298,6 +348,10 @@ func ParseJSON(raw string) (*Packet, error) {
 			body = append(body, decodePairField(v))
 			continue
 		}
+		if _, isEnum := schema.enumFields[name]; isEnum {
+			body = append(body, schema.enumWire(name, jsonValueToString(v)))
+			continue
+		}
 		body = append(body, jsonValueToString(v))
 	}
 
@@ -309,7 +363,7 @@ func ParseJSON(raw string) (*Packet, error) {
 					if len(schema.tailItemKeys) > 0 {
 						body = append(body, decodeTailObject(item, schema.tailItemKeys))
 					} else {
-						body = append(body, jsonValueToString(item))
+						body = append(body, schema.tailEnumWire(jsonValueToString(item)))
 					}
 				}
 			}
@@ -375,6 +429,10 @@ func buildJSONObject(header string, args []string) map[string]any {
 			}
 			continue
 		}
+		if n, ok := schema.enumName(name, val); ok {
+			obj[name] = n
+			continue
+		}
 		obj[name] = val
 	}
 
@@ -392,7 +450,9 @@ func buildJSONObject(header string, args []string) map[string]any {
 			obj[schema.tailKey] = arr
 		} else {
 			arr := make([]string, len(tail))
-			copy(arr, tail)
+			for i, v := range tail {
+				arr[i] = schema.tailEnumName(v)
+			}
 			obj[schema.tailKey] = arr
 		}
 	}

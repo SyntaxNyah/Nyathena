@@ -295,10 +295,10 @@ func parseOffset(s string) packet.Offset {
 	return packet.Offset{X: x, Y: y}
 }
 
-// parsePairFlip converts a flip string ("0".."3") into an int.
-func parsePairFlip(s string) int {
+// parsePairFlip converts a flip string ("0".."3") into the Flip enum.
+func parsePairFlip(s string) packet.Flip {
 	n, _ := strconv.Atoi(s)
-	return n
+	return packet.FlipFromWire[n]
 }
 
 // dissolvePairGroupOnDisconnect tears down any group a disconnecting client
