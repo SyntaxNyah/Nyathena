@@ -19,12 +19,12 @@ re-implementation of packet shapes.
 ## 1. The canonical library (source of truth)
 
 Authoritative repo: `https://github.com/AO-Underground/aolib` — `aolib-go/` is its
-Go submodule. Local clone you work against:
+Go subdirectory. Local clone you work against:
 
 ```
 C:\Users\arbok\Documents\GitHub\aolib\
 ├── spec\            JSON Schema (draft-07) — the single source of truth
-│   ├── packets\schemas\*.schema.json    65 packet schemas
+│   ├── packets\schemas\*.schema.json    55 packet schemas
 │   ├── types\*.schema.json               8 enum/type schemas
 │   └── assets\                            shared schema fragments
 ├── aolib-go\        generated Go  (module github.com/AO-Underground/aolib/aolib-go, go 1.19)
@@ -325,9 +325,8 @@ connect-and-chat smoke test against Nyathena.
   prezoom, auth_packet); keep `internal/protocol/features.go` or port it.
 - **Module path.** The authoritative import is
   `github.com/AO-Underground/aolib/aolib-go` (the `aolib-go/` subdirectory of the
-  `AO-Underground/aolib` supermodule). The checked-out `aolib-go/go.mod` still
-  declares `module github.com/SyntaxNyah/aolib-go` — correct it (or use a
-  `replace` directive) before importing.
+  `AO-Underground/aolib` supermodule). `aolib-go/go.mod` already declares this
+  path (fixed at v2.3.0), so import it directly — no `replace` directive needed.
 - **`SessionConfig.Send` is a raw write hook**, not a per-packet method — wire it
   to the WebSocket `Write` once, not per packet.
 

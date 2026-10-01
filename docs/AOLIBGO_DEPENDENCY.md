@@ -1,6 +1,6 @@
 # Nyathena → aolib-go dependency migration
 
-**Status:** Deferred (planned, not started). This is the roadmap for replacing
+**Status:** Planned (not started; the module path is unblocked at v2.3.0). This is the roadmap for replacing
 Nyathena's local `internal/packet` fork with the canonical
 `github.com/AO-Underground/aolib/aolib-go` module as a real `go.mod` dependency.
 
@@ -23,15 +23,15 @@ The goal is to depend on the canonical library and register Nyathena's
 extensions through its extension points (`RegisterCodec` / `SendCustom` /
 `OnCustom`), so Nyathena, AsyncAO, and LemmyAO converge on one codebase.
 
-## Blocker: module path
+## Module path (resolved)
 
-`aolib-go/go.mod` still declares `module github.com/SyntaxNyah/aolib-go`, **not**
-`github.com/AO-Underground/aolib/aolib-go`. Fix that one line before Nyathena can
-`require` the authoritative path.
+`aolib-go/go.mod` already declares `module github.com/AO-Underground/aolib/aolib-go`
+(fixed at v2.3.0), so Nyathena can `require` the authoritative path directly — no
+`replace` needed for the module path.
 
 ## Plan
 
-1. **Fix the module path** in `aolib-go/go.mod` → `github.com/AO-Underground/aolib/aolib-go`.
+1. ~~**Fix the module path**~~ — already `github.com/AO-Underground/aolib/aolib-go` (v2.3.0).
 2. Add `require github.com/AO-Underground/aolib/aolib-go` + a `replace`
    directive (→ local clone) to Nyathena's `go.mod`.
 3. Replace `internal/packet` imports with `aolib` (package rename across
