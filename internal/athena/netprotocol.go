@@ -749,7 +749,7 @@ func pktIC(client *Client, p *packet.Packet) {
 	// value at parse time (see ParseMSToServer), so only the integer range
 	// needs validating here.
 	switch {
-	case ms.DeskModifier < packet.DeskModifierHidden || ms.DeskModifier > packet.DeskModifierShowDuringPreanimThenCenter:
+	case ms.DeskModifier == "":
 		logger.LogWarningf("dropped MS from IPID:%v UID:%v — DeskModifier out of range [0,5]; value=%v", client.Ipid(), client.Uid(), ms.DeskModifier)
 		return
 	case !hasForcedIniswap && !strings.EqualFold(getCharacters()[client.CharID()], ms.Character) && !client.Area().IniswapAllowed(): // character name (skip check when forced iniswap)
