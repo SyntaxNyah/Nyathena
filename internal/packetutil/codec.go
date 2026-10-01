@@ -54,7 +54,7 @@ func Decode(raw []byte, mode aolib.WireMode) (any, error) {
 		return aolib.Decode(raw, mode)
 	}
 
-	header, err := jsonHeader(raw)
+	header, err := aolib.ReadHeader(raw)
 	if err != nil {
 		return nil, err
 	}
@@ -78,7 +78,7 @@ func DecodeToBody(raw []byte, mode aolib.WireMode) (string, []string, error) {
 		return pkt.Header, pkt.Body, nil
 	}
 
-	header, err := jsonHeader(raw)
+	header, err := aolib.ReadHeader(raw)
 	if err != nil {
 		return "", nil, err
 	}
@@ -148,19 +148,53 @@ func ensureHeader(raw []byte, header string) ([]byte, error) {
 	return json.Marshal(obj)
 }
 
-func jsonHeader(raw []byte) (string, error) {
-	var obj map[string]json.RawMessage
-	if err := json.Unmarshal(raw, &obj); err != nil {
-		return "", err
+// escapeWireArgs escapes positional args for Fanta framing so aolib's decoder
+// can split on '#' without splitting the args' content. '&' is the sub-field
+// separator for LE/SC, so it is preserved there — mirroring the encoderNoAnd
+// Nyathena's own Fanta path uses for those two headers.
+func escapeWireArgs(header string, args []string) []string {
+	escapeAmp := header != "LE" && header != "SC"
+	out := make([]string, len(args))
+	for i, a := range args {
+		a = strings.ReplaceAll(a, "#", "<num>")
+		if escapeAmp {
+			a = strings.ReplaceAll(a, "&", "<and>")
+		}
+		a = strings.ReplaceAll(a, "%", "<percent>")
+		a = strings.ReplaceAll(a, "$", "<dollar>")
+		out[i] = a
 	}
-	for _, k := range []string{"$header", "header"} {
-		if v, ok := obj[k]; ok {
-			var h string
-			if err := json.Unmarshal(v, &h); err != nil {
-				return "", err
-			}
-			return h, nil
+	return out
+}
+
+// BuildJSONFromArgs encodes a type-erased (header, positional-args) packet to
+// its JSON wire form. Custom headers route through their codec; canonical
+// headers are decoded through aolib's public directional decoders (the single
+// source of truth for the positional→typed mapping) and re-encoded as JSON.
+// Unknown headers emit the bare envelope.
+func BuildJSONFromArgs(header string, args []string) ([]byte, error) {
+	if c, ok := customCodecs[header]; ok {
+		p, err := c.DecodeFanta(args)
+		if err != nil {
+			return nil, err
+		}
+		return encodeCustom(header, p, c, aolib.WireJSON)
+	}
+
+	frame := frameFanta(header, escapeWireArgs(header, args))
+	for _, decode := range []func([]byte, aolib.WireMode) (any, error){aolib.DecodeToClient, aolib.DecodeToServer} {
+		p, err := decode(frame, aolib.WireFanta)
+		if err != nil {
+			continue
+		}
+		if o, ok := p.(aolib.Outgoing); ok {
+			return aolib.Encode(o, aolib.WireJSON)
 		}
 	}
-	return "", fmt.Errorf("packetutil: JSON packet missing \"$header\"")
+
+	// Unknown/empty packet: emit the bare envelope.
+	obj := map[string]json.RawMessage{}
+	h, _ := json.Marshal(header)
+	obj["$header"] = h
+	return json.Marshal(obj)
 }

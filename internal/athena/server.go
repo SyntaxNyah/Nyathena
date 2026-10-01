@@ -31,12 +31,12 @@ import (
 	"sync/atomic"
 	"time"
 
+	aolib "github.com/AO-Underground/aolib/go/v2"
 	"github.com/MangosArentLiterature/Athena/internal/area"
 	"github.com/MangosArentLiterature/Athena/internal/db"
 	discordbot "github.com/MangosArentLiterature/Athena/internal/discord/bot"
 	"github.com/MangosArentLiterature/Athena/internal/logger"
 	"github.com/MangosArentLiterature/Athena/internal/ms"
-	aolib "github.com/AO-Underground/aolib/go/v2"
 	"github.com/MangosArentLiterature/Athena/internal/permissions"
 	"github.com/MangosArentLiterature/Athena/internal/playercount"
 	"github.com/MangosArentLiterature/Athena/internal/settings"
@@ -1141,7 +1141,7 @@ func broadcastPlayerJoin(client *Client) {
 func broadcastIPIDToMods(uid int, ipid string) {
 	clients.ForEach(func(c *Client) {
 		if c.Uid() != -1 && permissions.HasPermission(c.Perms(), permissions.PermissionField["BAN_INFO"]) {
-			c.Send(&aolib.PU{ID: uid, Type: aolib.PlayerDataType("4"), Data: ipid})
+			c.SendPacket("PU", strconv.Itoa(uid), "4", ipid)
 		}
 	})
 }
@@ -1160,7 +1160,7 @@ func sendModIPIDsToClient(newClient *Client) {
 		if c.Uid() == -1 || c == newClient || c.Hidden() {
 			return
 		}
-		newClient.Send(&aolib.PU{ID: c.Uid(), Type: aolib.PlayerDataType("4"), Data: c.Ipid()})
+		newClient.SendPacket("PU", strconv.Itoa(c.Uid()), "4", c.Ipid())
 	})
 }
 
