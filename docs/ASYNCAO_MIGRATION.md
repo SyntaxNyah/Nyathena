@@ -125,7 +125,7 @@ Dispatch runs off one registry — `c2sDecoders`/`s2cDecoders` (Fanta) and
 > `packets_gen.go`, `registry_gen.go`, `enums_gen.go`, `types_gen.go` — it does
 > **not** emit `session_client.go`/`session_server.go`, which are stale. So the client-side `ServerSession` has **no** typed `Send*` for
 > `askchaa`, `CH`, `CT`, `DE`, `EE`, `PE`, `RC`, `RD`, `RM` (and `ClientSession`
-> lacks `On*` for `askchaa`, `CH`, `RC`, `RD`, `RM`). Those headers are
+> lacks `On*` for `askchaa`, `CH`, `MA`, `RC`, `RD`, `RM`). Those headers are
 > still in `c2sDecoders` (so they *decode*), but their typed `Send*` methods are
 > missing. The proper fix is extending `cmd/aolib-gen` to emit the typed surface
 > (a library change) — do **not** call `aolib.Encode` directly, which bypasses
