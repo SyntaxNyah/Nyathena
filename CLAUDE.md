@@ -816,7 +816,7 @@ So the fan-out never came close to saturating a core at real raid rates, and the
 
 Two things it was *not*, both already fixed earlier and confirmed still correct here: `SendPacket` is asynchronous (it buffers and pushes to `sendCh`, dropping on overflow rather than blocking a broadcaster on one slow consumer), and `ClientList.ForEach` releases its read lock after snapshotting, before any send. Neither a stuck socket nor lock contention was involved.
 
-`broadcastToAreaOnce` (`internal/athena/broadcast_prebuilt.go`) serializes the packet **once per wire format** and hands every recipient the same immutable buffer via `Client.sendPrebuilt`. Safe because `runWriter` only reads the slice (`conn.Write(buf)`, and `string(buf)` for the network log) and never mutates it, so one buffer can back any number of queued sends. It keeps `SendPacket`'s contract exactly: non-blocking, and a full queue drops rather than blocking or disconnecting. JSON-mode clients get their own single `BuildJSON` blob, and the MS broadcast schema is validated once per packet rather than once per recipient, since the bytes are identical.
+`broadcastToAreaOnce` (`internal/athena/broadcast_prebuilt.go`) serializes the packet **once per wire format** and hands every recipient the same immutable buffer via `Client.sendPrebuilt`. Safe because `runWriter` only reads the slice (`conn.Write(buf)`, and `string(buf)` for the network log) and never mutates it, so one buffer can back any number of queued sends. It keeps `SendPacket`'s contract exactly: non-blocking, and a full queue drops rather than blocking or disconnecting. JSON-mode clients get their own single `packetutil.Encode` blob, since the bytes are identical.
 
 Applied to all five `CharsCheck` broadcasts and deliberately nowhere else: ARUP (126 bytes) and PU (15 bytes) are three orders of magnitude smaller per packet, so rebuilding those per recipient costs little and the indirection would not pay for itself. Pinned by `broadcast_prebuilt_test.go`, which asserts the emitted bytes are identical to what the per-recipient path produced, that all recipients genuinely share one backing array, that area scoping still holds, and that a client which is not reading gets its packet dropped instead of stalling the fan-out.
 
@@ -1204,12 +1204,15 @@ Both the `/play <url>` command and a client-sent **MC** packet carrying a raw `h
 
 The outgoing `MC` packet's numeric fields (`looping`/`channel`/`effects`) always default to `"0"` at the single serialization point (`packet.MCToClient.Args`). This fixes the regression where `/play` and `/randomsong` emitted an empty effects field (`…##%`), which AO2 clients fail to parse as a number and drop silently.
 
-### MS JSON-Schema Validation
-JSON-mode connections have their **MS** (in-character) packets validated against draft-07 JSON schemas vendored in the top-level `schemas/` folder (from [OmniTroid/aolib-schemas](https://github.com/OmniTroid/aolib-schemas)):
-- **Inbound** MS is validated against `MSRequest.schema.json` in `packet.ParseJSON`; an invalid packet is rejected and dropped (logged).
-- **Outbound** MS is validated against `MSBroadcast.schema.json` in `Client.SendPacket`; a packet that fails the schema is dropped (logged) before reaching a JSON-mode client.
+### MS JSON Encoding (typed, aolib-go)
 
-To satisfy the schemas, the JSON-mode MS encoder emits proper types (numbers, booleans, and `{x,y}` offset objects) rather than strings. Schemas are embedded via `//go:embed` in `athena.go` and compiled once at startup (`packet.CompileMSSchemas`). FantaCode (classic desktop AO2) traffic is never validated and is unaffected; if the schemas fail to load, validation is silently disabled. Library: `github.com/santhosh-tekuri/jsonschema/v5`.
+JSON-mode **MS** (in-character) packets are encoded/decoded by aolib-go's typed
+`MSToClient`/`MSToServer`, which carry enum names, JSON numbers, booleans and
+`{x,y}` offset objects (never strings). Nyathena's own string-shaped MS types are
+bridged to that typed form by `msCodec()` (`internal/athena/ms_codec.go`), which
+also injects the JSON-only `additional_chars` multi-pair list. Every packet is
+validated against its aolib-go schema on `Encode`/`Decode`; a failure is dropped
+and logged. FantaCode (classic desktop AO2) traffic is unaffected.
 
 ### `/punishments` Inspection & `/clients` Multiclient Listing
 - `/punishments [uid]` — lists active punishments with remaining durations, custom data, reasons, and (for mod viewers) issuer tiers. Covers the out-of-slice effects too: lag (torment list), mute, jail. No permission needed for self-inspection; the `<uid>` form requires `MUTE`. Implemented in `internal/athena/commands_qol.go`.

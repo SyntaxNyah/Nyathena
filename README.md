@@ -2,7 +2,7 @@
 
 # Nyathena
 
-**Nyathena** is a fork of [Athena](https://github.com/MangosArentLiterature/Athena) a lightweight AO2 (Attorney Online 2) server written in Go. It is maintained by [SyntaxNyah](https://github.com/syntaxnyah) with huge credits to [OmniTroid](https://github.com/OmniTroid) fur supporting this project with many bug fixes, improvements and code cleanup. Huge shoutouts to them for the support.  Full credit for the original server, its design, and everything it's built on goes to [MangosArentLiterature](https://github.com/MangosArentLiterature).
+**Nyathena** is a fork of [Athena](https://github.com/MangosArentLiterature/Athena) a lightweight AO2 (Attorney Online 2) server written in Go. It is maintained by [SyntaxNyah](https://github.com/syntaxnyah) with huge credits to [OmniTroid](https://github.com/OmniTroid) for supporting this project with many bug fixes, improvements and code cleanup — and for creating the [aolib-go](https://github.com/AO-Underground/aolib/tree/main/go) library and the JSON wire protocol it implements (co-authored with SyntaxNyah), which Nyathena now uses for all packet encoding. Huge shoutouts to them for the support.  Full credit for the original server, its design, and everything it's built on goes to [MangosArentLiterature](https://github.com/MangosArentLiterature).
 
 This started as a personal server project and kind of spiralled. One punishment command becoming ten, a casino system, tag system, account system, a bunch of mini games and the whole time it kept being *fun* to add things, which is not always how software development goes. That's entirely down to how well Athena is built. Adding a new feature rarely meant slow build times or having to debug for hours in the codebase. It usually just meant writing the thing.
 
@@ -331,4 +331,4 @@ Genuine thanks and full credit to MangosArentLiterature for building something t
 
 ---
 
-**Nyathena** fork and most additions by [SyntaxNyah](https://github.com/syntaxnyah) with support, extra additions, bug fixes and cleanup from [OmniTroid](https://github.com/OmniTroid).
+**Nyathena** fork and most additions by [SyntaxNyah](https://github.com/syntaxnyah) with support, extra additions, bug fixes and cleanup from [OmniTroid](https://github.com/OmniTroid). The [aolib-go](https://github.com/AO-Underground/aolib/tree/main/go) library and the JSON wire protocol it implements were created by [OmniTroid](https://github.com/OmniTroid), co-authored with [SyntaxNyah](https://github.com/syntaxnyah).

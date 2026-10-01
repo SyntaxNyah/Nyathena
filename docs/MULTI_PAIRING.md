@@ -14,7 +14,7 @@ The AO wire protocol has one canonical source of truth: the
 JSON Schema (draft-07) in `spec/`, generated Go in `go/`
 (module `github.com/AO-Underground/aolib/go/v2`), generated TypeScript in
 `ts/`. Bindings are generated from the schemas by `go/cmd/aolib-gen`;
-Nyathena consumes the generated Go as `internal/packet`.
+Nyathena consumes the generated Go as `github.com/AO-Underground/aolib/go/v2`.
 
 The canonical `MS` (`spec/packets/schemas/MSToClient.schema.json`) is **strict**
 (`"additionalProperties": false`) and models the standard 30-field message only —
@@ -25,18 +25,20 @@ canonical MS the same way Nyathena layers its other server extensions (blips,
 custom shout name, `paired_charid` `^order` suffix — see `internal/athena/ic.go`).
 It is **not a new packet, not a change to the canonical schema, and not a
 FantaCode change**: it is one extra JSON field, `additional_chars`, carried by
-Nyathena's `MSToClient` through the `JSONOutgoing` hook.
+Nyathena's `MSToClient` through the `msCodec()` JSON bridge.
 
-How that hook works: `internal/packet` defines `JSONOutgoing` (an `Outgoing`
-whose `JSONExtra() map[string]any` supplies JSON-only fields). `BuildJSONPacket`
-(`internal/packet/jsoncodec.go`) merges `JSONExtra()` into the JSON object, so
-the extension reaches JSON clients only and never touches the FantaCode `Args()`.
+How that hook works: `internal/athena/ms_codec.go` registers MS as a both-wire
+`RegisterCodec` codec. Its `EncodeJSON` converts Nyathena's string-shaped
+`MSToClient` to aolib's typed `MSToClient` and then injects `AdditionalChars` as
+the JSON-only `additional_chars` field, so the extension reaches JSON clients
+only and never touches the FantaCode `Args()`.
 
 `additional_chars` is distinct from Nyathena's **non-canonical** headers (`TT` /
 `SETCASE` / `CASEA`): those are registered as full both-wire codecs via the
-canonical aolib-go `RegisterCodec` extension point (`internal/packet/custom.go`
+canonical aolib-go `RegisterCodec` extension point (`internal/packetutil/codec.go`
 + `internal/athena/codecs.go`). `additional_chars` extends a *canonical* header
-(`MS`), so it stays a JSON-only `JSONExtra` on `MSToClient`.
+(`MS`), so it stays a JSON-only `AdditionalChars` on `MSToClient` (emitted by
+`msCodec()`).
 
 ---
 
@@ -82,7 +84,7 @@ advertising `multi_pair`.
 
 `additional_chars` is **not** in the canonical schema — it is a field on
 Nyathena's `MSToClient` (`internal/athena/ic.go`), carried as JSON-only extra
-data via `JSONExtra()`. Its element shape:
+data via `AdditionalChars` (emitted by `msCodec()`). Its element shape:
 
 ```go
 type AdditionalChar struct {
@@ -108,8 +110,8 @@ The standard pair stays in `paired_charid` / `paired_name` / `paired_emote` /
 FantaCode/legacy clients still render a correct 2-person scene.
 `additional_chars` carries the **rest** (2nd..Nth partner).
 
-`additional_chars` is **optional** (omitted when empty — `JSONExtra()` returns
-`nil` for no partners). The canonical schema stays `"additionalProperties":
+`additional_chars` is **optional** (omitted when empty — `msCodec()` emits
+nothing when there are no partners). The canonical schema stays `"additionalProperties":
 false`; the extension is merged by the server *after* the canonical object is
 built, so strict validators are unaffected as long as the field is only sent to
 clients that advertised `multi_pair`.
@@ -193,19 +195,18 @@ The two hard guarantees that make this "no bugs for old clients":
 
 | file | role |
 |---|---|
-| `internal/athena/ic.go` | `MSToClient` (30 fields + `blips` + `AdditionalChars []AdditionalChar`) with `JSONExtra()`; `MSToServer` (26 fields + blips); `ParseMSToServer` |
-| `internal/packet/outgoing.go` | `Outgoing` + `JSONOutgoing` interfaces (the extension hook) |
-| `internal/packet/jsoncodec.go` | `BuildJSONPacket` merges `JSONExtra()` into the JSON object |
-| `internal/packet/custom.go` | `Codec` + `RegisterCodec` (both-wire custom-packet extension point) |
+| `internal/athena/ic.go` | `MSToClient` (30 fields + `blips` + `AdditionalChars []AdditionalChar`); `MSToServer` (26 fields + blips); `ParseMSToServer` |
+| `internal/athena/ms_codec.go` | `msCodec()` — both-wire MS codec; `EncodeJSON` bridges to aolib's typed `MSToClient` and injects `additional_chars` |
+| `internal/packetutil/codec.go` | `Codec` + `RegisterCodec` dispatch (the custom-packet extension point) |
 | `internal/athena/codecs.go` | `ttCodec` / `setcaseCodec` / `caseaCodec` — registers `TT`/`SETCASE`/`CASEA` both-wire |
-| `internal/athena/client.go` | JSON-mode send path (`BuildJSONPacket`) + `supportsMultiPair()` gate |
+| `internal/athena/client.go` | JSON-mode send path (`packetutil.Encode` → `msCodec`) + `supportsMultiPair()` gate |
 | `internal/athena/netprotocol.go` | `multi_pair` in server `FL`; `pktFL` reads client→server `FL` |
 | `internal/athena/pairgroup.go` | `PairGroup` model + `applyPairGroupInjection` + commands |
 | `internal/athena/commands_registry.go` | registers `/pair` `/triple` `/quad` `/quint` `/accept` `/deny` `/pair-requests` `/unpair` `/forcepair` `/forceunpair` `/lfp` `/pairlist` |
 
 `MSToClient.Args()` (the classic positional form) **stays at 30 fields** — that
-is the FantaCode contract. `AdditionalChars` is carried only in `JSONExtra()`,
-which `BuildJSONPacket` merges into the JSON object, so it never reaches
+is the FantaCode contract. `AdditionalChars` is carried only by `msCodec()`'s
+`EncodeJSON`, which injects it into the JSON object, so it never reaches
 FantaCode. `applyPairGroupInjection` fills `paired_*` from the first partner and
 appends the rest to `AdditionalChars`.
 
