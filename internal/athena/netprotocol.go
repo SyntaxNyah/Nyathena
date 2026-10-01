@@ -28,10 +28,10 @@ import (
 	"time"
 	"unicode/utf8"
 
+	aolib "github.com/AO-Underground/aolib/go/v2"
 	"github.com/MangosArentLiterature/Athena/internal/area"
 	"github.com/MangosArentLiterature/Athena/internal/db"
 	"github.com/MangosArentLiterature/Athena/internal/logger"
-	aolib "github.com/AO-Underground/aolib/go/v2"
 	"github.com/MangosArentLiterature/Athena/internal/packetutil"
 	"github.com/MangosArentLiterature/Athena/internal/permissions"
 	"github.com/MangosArentLiterature/Athena/internal/sliceutil"
@@ -200,9 +200,9 @@ func pktResCount(client *Client, _ *aolib.Packet) {
 	}
 	client.joining = true // This simply exists to prevent skipping the askchaa#% packet and bypassing the player count check.
 	client.Send(&aolib.SI{
-		CharCount:     len(getCharacters()),
-		EviCount: len(areas[0].Evidence()),
-		MusCount:    len(getMusicList()),
+		CharCount: len(getCharacters()),
+		EviCount:  len(areas[0].Evidence()),
+		MusCount:  len(getMusicList()),
 	})
 }
 
@@ -1618,8 +1618,11 @@ func pktOOC(client *Client, p *aolib.Packet) {
 		return
 	}
 	// Torment: ghost or delay the OOC message without the client noticing.
+	// Pass the RAW display name — handleTormentedOOC builds a typed CTToClient,
+	// whose Args() applies Fanta escaping; pre-escaping here would double-escape
+	// JSON-mode clients.
 	if isIPIDTormented(client.Ipid()) {
-		handleTormentedOOC(client, encode(displayUsername), msg)
+		handleTormentedOOC(client, displayUsername, msg)
 		return
 	}
 	// Stealthmute: echo the message back to only the sender so they never

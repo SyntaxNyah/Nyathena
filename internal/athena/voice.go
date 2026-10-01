@@ -49,9 +49,9 @@ import (
 	"fmt"
 	"sync"
 
+	aolib "github.com/AO-Underground/aolib/go/v2"
 	"github.com/MangosArentLiterature/Athena/internal/area"
 	"github.com/MangosArentLiterature/Athena/internal/logger"
-	aolib "github.com/AO-Underground/aolib/go/v2"
 )
 
 // Protocol-fixed audio parameters.  Clients must use these exact values; the
@@ -214,39 +214,20 @@ func leaveVoiceForClient(client *Client) {
 	broadcastToAreaVoice(a, client.Uid(), &VS_LEAVEToClient{UID: client.Uid()})
 }
 
-// writeToAreaVoice sends a packet to every client in a's voice room, optionally
-// skipping the sender.
-func writeToAreaVoice(a *area.Area, skipUID int, header string, contents ...string) {
-	peers := currentVoicePeers(a)
-	if len(peers) == 0 {
-		return
-	}
-	for _, uid := range peers {
-		if uid == skipUID {
-			continue
-		}
-		c := clients.GetClientByUID(uid)
-		if c != nil {
-			c.SendPacket(header, contents...)
-		}
-	}
-}
-
 // broadcastToAreaVoice fans a typed packet to every peer in a's voice room,
-// optionally skipping the sender. Args() is invoked exactly once.
+// optionally skipping the sender.
 func broadcastToAreaVoice(a *area.Area, skipUID int, p aolib.Outgoing) {
 	peers := currentVoicePeers(a)
 	if len(peers) == 0 {
 		return
 	}
-	header, args := p.Header(), p.Args()
 	for _, uid := range peers {
 		if uid == skipUID {
 			continue
 		}
 		c := clients.GetClientByUID(uid)
 		if c != nil {
-			c.SendPacket(header, args...)
+			c.Send(p)
 		}
 	}
 }

@@ -896,43 +896,6 @@ func RequestRestart() {
 	RestartRequest <- struct{}{}
 }
 
-// writeToAll sends a message to all connected clients.
-func writeToAll(header string, contents ...string) {
-	clients.ForEach(func(client *Client) {
-		if client.Uid() != -1 {
-			client.SendPacket(header, contents...)
-		}
-	})
-}
-
-// writeToArea sends a message to all clients in a given area.
-func writeToArea(area *area.Area, header string, contents ...string) {
-	clients.ForEach(func(client *Client) {
-		if client.Area() == area {
-			client.SendPacket(header, contents...)
-		}
-	})
-}
-
-// writeToAreaFrom sends a message to all clients in a given area, skipping
-// any recipient that has permanently ignored the sender's IPID.
-// If senderIsMod is true the ignore list is bypassed so moderator messages
-// always reach every client in the area.
-func writeToAreaFrom(senderIPID string, senderIsMod bool, area *area.Area, header string, contents ...string) {
-	clients.ForEach(func(client *Client) {
-		if client.Area() == area && (senderIsMod || !client.IgnoresIPID(senderIPID)) {
-			client.SendPacket(header, contents...)
-		}
-	})
-}
-
-// writeToAllClients writes a packet to all connected clients
-func writeToAllClients(header string, contents ...string) {
-	clients.ForEach(func(client *Client) {
-		client.SendPacket(header, contents...)
-	})
-}
-
 // broadcastToAll fans a typed packet to every UID-registered client.
 // Args() is invoked exactly once and the resulting slice is reused for
 // every recipient.
@@ -1273,11 +1236,13 @@ func sendAreaServerMessage(area *area.Area, message string) {
 // sendAreaGamblingMessage sends a gambling-result OOC message to all clients
 // in an area who have not opted out of gambling broadcasts via /gamble hide.
 func sendAreaGamblingMessage(a *area.Area, message string) {
-	out := &aolib.CTToClient{Name: encodedServerName, Message: encode(message), IsFromServer: true}
-	header, args := out.Header(), out.Args()
+	// Raw name/message: aolib's CTToClient.Args() applies Fanta escaping for the
+	// wire and its JSON form carries the unescaped values, so pre-escaping here
+	// (encode(...)) would double-escape JSON-mode clients.
+	out := &aolib.CTToClient{Name: decode(encodedServerName), Message: message, IsFromServer: true}
 	clients.ForEach(func(client *Client) {
 		if client.Area() == a && !client.GambleHide() {
-			client.SendPacket(header, args...)
+			client.Send(out)
 		}
 	})
 }

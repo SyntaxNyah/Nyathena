@@ -1141,8 +1141,9 @@ func (client *Client) SendPacketSync(header string, contents ...string) {
 // Send enqueues a typed Outgoing packet for asynchronous delivery. The
 // packet's Args() is invoked exactly once per Send call. This is the
 // canonical send path — SendPacket(header, args...) is now a low-level
-// escape hatch reserved for the FantaCrypt "decryptor" relic and the
-// hot-path MS broadcast helper.
+// escape hatch reserved for the mod-only PU type-4 IPID feed (aolib's
+// PlayerDataType enum only models 0-3) and the SendPacketSync kick/ban
+// rejection path.
 func (client *Client) Send(p aolib.Outgoing) {
 	if client.jsonMode.Load() {
 		b, err := packetutil.Encode(p, aolib.WireJSON)
