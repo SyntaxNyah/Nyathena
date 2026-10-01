@@ -63,7 +63,7 @@ import (
 
 	"github.com/MangosArentLiterature/Athena/internal/db"
 	"github.com/MangosArentLiterature/Athena/internal/logger"
-	"github.com/MangosArentLiterature/Athena/internal/packet"
+	aolib "github.com/AO-Underground/aolib/go/v2"
 	"github.com/MangosArentLiterature/Athena/internal/permissions"
 	"github.com/xhit/go-str2duration/v2"
 )
@@ -897,7 +897,7 @@ func hasRepeatedWord(s string) bool {
 
 // isGlobalCommand reports whether an OOC line is a global broadcast. Global
 // reaches every area at once, which is why a brand-new connection using it is
-// worth a nudge -- it is the highest-reach thing a raider can do per packet.
+// worth a nudge -- it is the highest-reach thing a raider can do per aolib.
 func isGlobalCommand(s string) bool {
 	t := strings.TrimSpace(strings.ToLower(s))
 	return strings.HasPrefix(t, "/g ") || strings.HasPrefix(t, "/global ")
@@ -975,14 +975,14 @@ func raidGuardEnforce(client *Client, rs *raidState, want Verdict, trigger strin
 	case VerdictSilence:
 		raidGuardSilence(client)
 	case VerdictKick:
-		client.SendSync(&packet.KK{Reason: "Disconnected by the raid guard. If you are a real player caught by " +
+		client.SendSync(&aolib.KK{Reason: "Disconnected by the raid guard. If you are a real player caught by " +
 			"this, reconnect and say so in OOC -- staff have been alerted and can clear it."})
 		client.markClosed()
 	case VerdictBan:
 		if dur, ok := raidGuardBanDuration(); ok {
 			autobanFlooderFor(client.Ipid(), "raid guard ("+reason+")", dur)
 		}
-		client.SendSync(&packet.KK{Reason: "Banned by the raid guard."})
+		client.SendSync(&aolib.KK{Reason: "Banned by the raid guard."})
 		client.markClosed()
 	}
 
@@ -1114,7 +1114,7 @@ func (c *Client) SetRaidAlertsDisabled(off bool) {
 // is appended here rather than by each caller so no alert can ever go out
 // without telling its reader how to turn it off.
 func sendRaidGuardAlert(msg string) {
-	out := &packet.CTToClient{Name: "[RAIDGUARD]", Message: encode(msg + "\n" + raidAlertHint), IsFromServer: true}
+	out := &aolib.CTToClient{Name: "[RAIDGUARD]", Message: encode(msg + "\n" + raidAlertHint), IsFromServer: true}
 	clients.ForEach(func(c *Client) {
 		if !permissions.HasPermission(c.Perms(), permissions.PermissionField["MOD_CHAT"]) {
 			return

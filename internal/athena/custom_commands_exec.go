@@ -30,7 +30,7 @@ import (
 	"github.com/MangosArentLiterature/Athena/internal/area"
 	"github.com/MangosArentLiterature/Athena/internal/db"
 	"github.com/MangosArentLiterature/Athena/internal/logger"
-	"github.com/MangosArentLiterature/Athena/internal/packet"
+	aolib "github.com/AO-Underground/aolib/go/v2"
 	"github.com/MangosArentLiterature/Athena/internal/permissions"
 	"github.com/xhit/go-str2duration/v2"
 )
@@ -665,7 +665,7 @@ func applyEffectLive(caller *Client, e Effect) {
 			if err != nil {
 				continue
 			}
-			c.SendSync(&packet.KK{Reason: e.Reason})
+			c.SendSync(&aolib.KK{Reason: e.Reason})
 			c.conn.Close()
 		}
 
@@ -684,7 +684,7 @@ func applyEffectLive(caller *Client, e Effect) {
 			if _, err := db.AddBan(c.Ipid(), c.Hdid(), banTime, until, e.Reason, caller.StoredModName()); err != nil {
 				logger.LogErrorf("custom command: ban: %v", err)
 			}
-			c.SendSync(&packet.KB{Reason: e.Reason})
+			c.SendSync(&aolib.KB{Reason: e.Reason})
 			c.conn.Close()
 		}
 

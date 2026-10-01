@@ -25,7 +25,7 @@ import (
 	"time"
 
 	"github.com/MangosArentLiterature/Athena/internal/logger"
-	"github.com/MangosArentLiterature/Athena/internal/packet"
+	aolib "github.com/AO-Underground/aolib/go/v2"
 	"github.com/MangosArentLiterature/Athena/internal/permissions"
 )
 
@@ -91,7 +91,7 @@ func alertPunishmentIssued(issuer *Client, punishmentLabel, targetReport string,
 	logger.WriteAudit(fmt.Sprintf("PUNISH: %s (UID %d, IPID %s) applied '%s' to %d client(s) [%s] in %s%s",
 		name, issuer.Uid(), issuer.Ipid(), punishmentLabel, targetCount, targets, areaName, extra.String()))
 
-	out := &packet.CTToClient{Name: "[AUDIT]", Message: encode(msg), IsFromServer: true}
+	out := &aolib.CTToClient{Name: "[AUDIT]", Message: encode(msg), IsFromServer: true}
 	issuerUID := issuer.Uid()
 	clients.ForEach(func(c *Client) {
 		if !permissions.IsAdmin(c.Perms()) || c.Uid() == issuerUID {

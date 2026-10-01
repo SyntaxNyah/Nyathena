@@ -25,7 +25,7 @@ import (
 
 	"github.com/MangosArentLiterature/Athena/internal/db"
 	"github.com/MangosArentLiterature/Athena/internal/logger"
-	"github.com/MangosArentLiterature/Athena/internal/packet"
+	aolib "github.com/AO-Underground/aolib/go/v2"
 	"github.com/MangosArentLiterature/Athena/internal/permissions"
 	"github.com/MangosArentLiterature/Athena/internal/settings"
 	"github.com/MangosArentLiterature/Athena/internal/webhook"
@@ -450,7 +450,7 @@ func cvoteAccept(client *Client, args []string) {
 			client.SendServerMessage(fmt.Sprintf(
 				"Player (UID %d) is no longer connected.", targetUID))
 		} else {
-			target.SendSync(&packet.KK{Reason: communityReason})
+			target.SendSync(&aolib.KK{Reason: communityReason})
 			target.conn.Close()
 			sendPlayerArup()
 			if err := webhook.PostKick(target.CurrentCharacter(), target.Showname(), target.OOCName(),
@@ -513,7 +513,7 @@ func cvoteAccept(client *Client, args []string) {
 				client.SendServerMessage("Failed to record ban in the database.")
 				break
 			}
-			target.SendSync(&packet.KB{Reason: fmt.Sprintf("%s\nUntil: %s\nID: %d",
+			target.SendSync(&aolib.KB{Reason: fmt.Sprintf("%s\nUntil: %s\nID: %d",
 				communityReason, untilS, id)})
 			target.conn.Close()
 			forgetIP(target.Ipid())

@@ -45,7 +45,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/MangosArentLiterature/Athena/internal/packet"
+	aolib "github.com/AO-Underground/aolib/go/v2"
 	"github.com/MangosArentLiterature/Athena/internal/permissions"
 )
 
@@ -581,7 +581,7 @@ func mafiaSubWhisper(client *Client, args []string) {
 	// leaves the sender believing it went through (shadow semantics).  Not
 	// raid-guard scored, matching /pm's own precedent: a whisper is not a
 	// broadcast and there's no correlation data to calibrate against.
-	echo := &packet.CTToClient{
+	echo := &aolib.CTToClient{
 		Name:         encodedServerName,
 		Message:      encode(fmt.Sprintf("🎭 [Mafia/Private] 💬 [Whisper from %v]: %v", sender.Name(), message)),
 		IsFromServer: true,

@@ -31,7 +31,7 @@ import (
 
 	"github.com/MangosArentLiterature/Athena/internal/db"
 	"github.com/MangosArentLiterature/Athena/internal/logger"
-	"github.com/MangosArentLiterature/Athena/internal/packet"
+	aolib "github.com/AO-Underground/aolib/go/v2"
 	"github.com/MangosArentLiterature/Athena/internal/settings"
 )
 
@@ -569,7 +569,7 @@ func autoModCheckTiered(client *Client, msg, source string) (WordListMatch, auto
 
 	switch autoModAction {
 	case autoModActionKick:
-		client.SendSync(&packet.KK{Reason: "Kicked for prohibited language."})
+		client.SendSync(&aolib.KK{Reason: "Kicked for prohibited language."})
 		client.conn.Close()
 		alertCensorTrip(client, source, matched, msg, "They were kicked.")
 		logger.LogInfof("automod: kicked %v (uid %d) — matched %s", client.Ipid(), client.Uid(), matched)
@@ -602,7 +602,7 @@ func autoModCheckTiered(client *Client, msg, source string) (WordListMatch, auto
 			return m, autoModPass, false
 		}
 		forgetIP(client.Ipid())
-		client.SendSync(&packet.KB{Reason: fmt.Sprintf("Banned for prohibited language.\nUntil: ∞\nID: %d", id)})
+		client.SendSync(&aolib.KB{Reason: fmt.Sprintf("Banned for prohibited language.\nUntil: ∞\nID: %d", id)})
 		client.conn.Close()
 		alertCensorTrip(client, source, matched, msg, "They were permanently banned.")
 		logger.LogInfof("automod: permanently banned %v (uid %d) — matched %s", client.Ipid(), client.Uid(), matched)
@@ -740,7 +740,7 @@ func handleTormentedOOC(client *Client, name, msg string) {
 		displayName = string(runes)
 	}
 
-	out := &packet.CTToClient{Name: displayName, Message: msg, IsFromServer: false}
+	out := &aolib.CTToClient{Name: displayName, Message: msg, IsFromServer: false}
 	// Echo to sender immediately.
 	client.Send(out)
 

@@ -26,7 +26,7 @@ import (
 	"time"
 
 	"github.com/MangosArentLiterature/Athena/internal/area"
-	"github.com/MangosArentLiterature/Athena/internal/packet"
+	aolib "github.com/AO-Underground/aolib/go/v2"
 	"github.com/MangosArentLiterature/Athena/internal/permissions"
 	"github.com/MangosArentLiterature/Athena/internal/settings"
 )
@@ -47,7 +47,7 @@ func TestHandlerPanicIsRecoveredAndClosesOnlyThatConnection(t *testing.T) {
 
 	const testHeader = "ZZ_PANIC_TEST"
 	orig, hadOrig := PacketMap[testHeader]
-	PacketMap[testHeader] = pktMapValue{Args: 0, MustJoin: false, Func: func(*Client, *packet.Packet) {
+	PacketMap[testHeader] = pktMapValue{Args: 0, MustJoin: false, Func: func(*Client, *aolib.Packet) {
 		panic("deliberate test panic")
 	}}
 	t.Cleanup(func() {

@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"github.com/MangosArentLiterature/Athena/internal/area"
-	"github.com/MangosArentLiterature/Athena/internal/packet"
+	aolib "github.com/AO-Underground/aolib/go/v2"
 )
 
 // realCharCount is the character-list size on the server the hang capture came
@@ -35,8 +35,8 @@ func benchClients(n int) (*ClientList, *area.Area) {
 	return cl, a
 }
 
-func charsCheck(a *area.Area) *packet.CharsCheck {
-	return &packet.CharsCheck{Taken: packet.StrsToInts(a.Taken())}
+func charsCheck(a *area.Area) *aolib.CharsCheck {
+	return &aolib.CharsCheck{Taken: charAvailabilities(a.Taken())}
 }
 
 // The bytes each recipient receives must be byte-identical to what the

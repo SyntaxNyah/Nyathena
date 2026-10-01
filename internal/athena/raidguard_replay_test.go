@@ -46,7 +46,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/MangosArentLiterature/Athena/internal/packet"
+	"github.com/MangosArentLiterature/Athena/internal/packetutil"
 	"github.com/MangosArentLiterature/Athena/internal/settings"
 )
 
@@ -275,7 +275,7 @@ func applyEvent(ir *ipidReplay, ev recvEvent) {
 			IsIC:          true,
 			Text:          ms.Message,
 			Showname:      ms.Showname,
-			Objection:     packet.ShoutModifierToWire[ms.ShoutModifier],
+			Objection:     packetutil.ShoutModifierToWire[ms.ShoutModifier],
 			SinceConnect:  ev.ts.Sub(ir.connectedAt),
 			SinceCharPick: ir.sinceCharPick(ev.ts),
 			Now:           ev.ts,

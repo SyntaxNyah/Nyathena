@@ -38,7 +38,7 @@ import (
 
 	"github.com/MangosArentLiterature/Athena/internal/area"
 	"github.com/MangosArentLiterature/Athena/internal/logger"
-	"github.com/MangosArentLiterature/Athena/internal/packet"
+	aolib "github.com/AO-Underground/aolib/go/v2"
 	"github.com/MangosArentLiterature/Athena/internal/sliceutil"
 )
 
@@ -248,7 +248,7 @@ func republishAreaNames() {
 	joined := strings.Join(names, "#")
 	setAreaNames(joined)
 	setSMPacket(buildSMPacket(joined, getMusicList()))
-	broadcastToAll(&packet.FA{Areas: names})
+	broadcastToAll(&aolib.FA{Areas: names})
 }
 
 // resetAreaName restores a's configured name and republishes, reporting whether

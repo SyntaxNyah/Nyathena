@@ -3,29 +3,29 @@ package athena
 import (
 	"encoding/json"
 
-	"github.com/MangosArentLiterature/Athena/internal/packet"
+	aolib "github.com/AO-Underground/aolib/go/v2"
 )
 
 // Both-wire codecs for Nyathena's nonstandard packets (TT / SETCASE / CASEA).
-// They are registered in register.go via packet.RegisterCodec, matching the
+// They are registered in register.go via aolib.RegisterCodec, matching the
 // canonical aolib-go extension point: a codec owns its header in BOTH FantaCode
-// and JSON, so these packets round-trip through packet.Encode/Decode in either
+// and JSON, so these packets round-trip through aolib.Encode/Decode in either
 // wire mode (the generated registry only covers canonical headers).
 
 // ttCodec encodes/decodes TT (testimony title overlay).
-func ttCodec() packet.Codec {
-	return packet.Codec{
+func ttCodec() aolib.Codec {
+	return aolib.Codec{
 		EncodeFanta: func(p any) ([]string, error) {
 			t := p.(*TTPacket)
-			return []string{packet.EscapeFanta(t.Type), packet.EscapeFanta(t.Title)}, nil
+			return []string{aolib.EscapeFanta(t.Type), aolib.EscapeFanta(t.Title)}, nil
 		},
 		DecodeFanta: func(args []string) (any, error) {
 			t := &TTPacket{}
 			if len(args) > 0 {
-				t.Type = packet.UnescapeFanta(args[0])
+				t.Type = aolib.UnescapeFanta(args[0])
 			}
 			if len(args) > 1 {
-				t.Title = packet.UnescapeFanta(args[1])
+				t.Title = aolib.UnescapeFanta(args[1])
 			}
 			return t, nil
 		},
@@ -48,8 +48,8 @@ func ttCodec() packet.Codec {
 }
 
 // setcaseCodec encodes/decodes SETCASE (case-role subscription prefs).
-func setcaseCodec() packet.Codec {
-	return packet.Codec{
+func setcaseCodec() aolib.Codec {
+	return aolib.Codec{
 		EncodeFanta: func(p any) ([]string, error) {
 			s := p.(*SETCASE)
 			return []string{s.Caselist, s.CM, s.Def, s.Pro, s.Judge, s.Jury, s.Steno}, nil
@@ -95,13 +95,30 @@ func setcaseCodec() packet.Codec {
 	}
 }
 
+// flCodec encodes/decodes FL (feature list) as a both-wire codec, reusing
+// aolib's FL shape (Features []string) so s2c and c2s share one codec.
+func flCodec() aolib.Codec {
+	return aolib.Codec{
+		EncodeFanta: func(p any) ([]string, error) { return p.(*aolib.FL).Features, nil },
+		DecodeFanta: func(args []string) (any, error) { return &aolib.FL{Features: args}, nil },
+		EncodeJSON:  func(p any) (string, error) { b, err := json.Marshal(p); return string(b), err },
+		DecodeJSON: func(raw string) (any, error) {
+			var v aolib.FL
+			if err := json.Unmarshal([]byte(raw), &v); err != nil {
+				return nil, err
+			}
+			return &v, nil
+		},
+	}
+}
+
 // caseaCodec encodes/decodes CASEA (case announcement).
-func caseaCodec() packet.Codec {
-	return packet.Codec{
+func caseaCodec() aolib.Codec {
+	return aolib.Codec{
 		EncodeFanta: func(p any) ([]string, error) {
 			c := p.(*CASEA)
 			return []string{
-				packet.EscapeFanta(c.CaseTitle),
+				aolib.EscapeFanta(c.CaseTitle),
 				c.NeedDef, c.NeedPro, c.NeedJudge, c.NeedJury, c.NeedSteno,
 			}, nil
 		},
@@ -113,7 +130,7 @@ func caseaCodec() packet.Codec {
 				}
 				return ""
 			}
-			c.CaseTitle = packet.UnescapeFanta(get(0))
+			c.CaseTitle = aolib.UnescapeFanta(get(0))
 			c.NeedDef, c.NeedPro, c.NeedJudge, c.NeedJury, c.NeedSteno =
 				get(1), get(2), get(3), get(4), get(5)
 			return c, nil

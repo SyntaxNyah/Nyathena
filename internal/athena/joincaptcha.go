@@ -11,7 +11,7 @@ import (
 	"github.com/MangosArentLiterature/Athena/internal/area"
 	"github.com/MangosArentLiterature/Athena/internal/db"
 	"github.com/MangosArentLiterature/Athena/internal/logger"
-	"github.com/MangosArentLiterature/Athena/internal/packet"
+	aolib "github.com/AO-Underground/aolib/go/v2"
 	"github.com/MangosArentLiterature/Athena/internal/permissions"
 )
 
@@ -317,7 +317,7 @@ func (client *Client) sendCaptchaPopup(c joinChallenge) {
 	if config != nil && !config.JoinCaptchaPopup {
 		return
 	}
-	client.Send(&packet.BB{Message: encode(fmt.Sprintf(
+	client.Send(&aolib.BB{Message: encode(fmt.Sprintf(
 		"%s\n\n%s\n\n%s\n\nType it in the OOC chat box (the one at the top), not in character.",
 		captchaBanner, c.Prompt, c.Hint))})
 }
@@ -334,7 +334,7 @@ func (client *Client) failJoinCaptcha(why string) {
 		client.awaitingCaptcha.Store(false)
 		logger.LogInfof("Client (IPID:%v UID:%v) kicked by the join captcha (%v)", client.Ipid(), client.Uid(), why)
 		alertJoinCaptchaStaff(client, "was kicked", why)
-		client.SendSync(&packet.KK{Reason: "You didn't complete the verification question posted in OOC. " +
+		client.SendSync(&aolib.KK{Reason: "You didn't complete the verification question posted in OOC. " +
 			"Reconnect and answer it with /verify <answer> to chat -- sorry for the hassle, it keeps the raids out."})
 		client.markClosed()
 		return
@@ -453,7 +453,7 @@ func joinCaptchaCommandAllowed(command string) bool {
 
 // deliverRestricted routes a restricted client's packet away from the room.
 // Nobody outside the restricted set ever receives it.
-func deliverRestricted(sender *Client, a *area.Area, p packet.Outgoing) {
+func deliverRestricted(sender *Client, a *area.Area, p aolib.Outgoing) {
 	clients.ForEach(func(c *Client) {
 		if c == sender || (c.Area() == a && c.captchaRestricted.Load()) {
 			c.Send(p)

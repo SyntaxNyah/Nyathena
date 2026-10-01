@@ -17,7 +17,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>. */
 package athena
 
 import (
-	"github.com/MangosArentLiterature/Athena/internal/packet"
+	aolib "github.com/AO-Underground/aolib/go/v2"
 )
 
 // pktOOC dispatches a slash command and returns long before it reaches the
@@ -44,7 +44,7 @@ import (
 // property shadow-sending exists for.
 //
 // Returns false when the caller must return without broadcasting.
-func oocCommandAllowed(client *Client, text, source string, echo *packet.CTToClient) bool {
+func oocCommandAllowed(client *Client, text, source string, echo *aolib.CTToClient) bool {
 	// 1. Content. A nuke-tier hit is destroyed without even an echo and bans the
 	//    IPID; everything else follows the configured automod_action, with watch
 	//    tier passing through untouched.
@@ -120,7 +120,7 @@ func oocCommandAllowed(client *Client, text, source string, echo *packet.CTToCli
 // Two outcomes are checked. A silence sets captchaRestricted (raidGuardSilence);
 // a kick or ban closes the connection (markClosed), and the offending message
 // must not be delivered to everyone else on the way out.
-func oocGuardVerdictSuppresses(client *Client, text string, echo *packet.CTToClient) bool {
+func oocGuardVerdictSuppresses(client *Client, text string, echo *aolib.CTToClient) bool {
 	if client == nil {
 		return false
 	}

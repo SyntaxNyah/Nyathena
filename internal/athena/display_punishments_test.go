@@ -19,7 +19,7 @@ package athena
 import (
 	"testing"
 
-	"github.com/MangosArentLiterature/Athena/internal/packet"
+	aolib "github.com/AO-Underground/aolib/go/v2"
 )
 
 // applyHideDisplay pushes the speaker's own sprite off-screen via Offset.
@@ -67,13 +67,13 @@ func TestApplyForceDisplaySprite_OverwritesAndClearsPair(t *testing.T) {
 		Character:   "Phoenix Wright",
 		CharID:      "0",
 		Emote:       "normal",
-		Side:        packet.SideDef,
-		Flip:        packet.FlipNone,
+		Side:        aolib.SideDef,
+		Flip:        aolib.FlipNone,
 		PairedCharID: "0",
 		PairedName:   "somebody",
 		PairedEmote:  "smile",
 		PairedOffset: "0&0",
-		PairedFlip:   packet.FlipNone,
+		PairedFlip:   aolib.FlipNone,
 	}
 	applyForceDisplaySprite(ms, target)
 
@@ -86,16 +86,16 @@ func TestApplyForceDisplaySprite_OverwritesAndClearsPair(t *testing.T) {
 	if ms.Emote != "smug" {
 		t.Errorf("Emote = %q, want smug (from target PairInfo)", ms.Emote)
 	}
-	if ms.Side != packet.SidePro {
+	if ms.Side != aolib.SidePro {
 		t.Errorf("Side = %q, want pro (from target Pos)", ms.Side)
 	}
-	if ms.Flip != packet.FlipHorizontal {
+	if ms.Flip != aolib.FlipHorizontal {
 		t.Errorf("Flip = %v, want 1", ms.Flip)
 	}
 	if ms.PairedCharID != "-1" {
 		t.Errorf("PairedCharID = %q, want -1 (pair must be cleared, no \"^\" suffix)", ms.PairedCharID)
 	}
-	if ms.PairedName != "" || ms.PairedEmote != "" || ms.PairedOffset != "" || ms.PairedFlip != packet.FlipNone {
+	if ms.PairedName != "" || ms.PairedEmote != "" || ms.PairedOffset != "" || ms.PairedFlip != aolib.FlipNone {
 		t.Errorf("expected all Other* fields cleared, got name=%q emote=%q offset=%q flip=%v",
 			ms.PairedName, ms.PairedEmote, ms.PairedOffset, ms.PairedFlip)
 	}

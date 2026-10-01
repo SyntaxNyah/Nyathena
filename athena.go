@@ -17,7 +17,6 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>. */
 package main
 
 import (
-	"embed"
 	"flag"
 	"os"
 	"os/signal"
@@ -27,37 +26,15 @@ import (
 	"github.com/MangosArentLiterature/Athena/internal/athena"
 	"github.com/MangosArentLiterature/Athena/internal/db"
 	"github.com/MangosArentLiterature/Athena/internal/logger"
-	"github.com/MangosArentLiterature/Athena/internal/packet"
 	"github.com/MangosArentLiterature/Athena/internal/settings"
 	"github.com/MangosArentLiterature/Athena/internal/sliceutil"
 )
-
-// schemaFS embeds the AO2 packet JSON schemas so MS validation works from the
-// compiled binary regardless of the working directory.
-//
-//go:embed schemas/MSRequest.schema.json schemas/MSBroadcast.schema.json
-var schemaFS embed.FS
 
 var (
 	configFlag = flag.String("c", "config", "path to config directory")
 	cliFlag    = flag.Bool("nocli", false, "disables listening for commands on stdin")
 	tuiFlag    = flag.Bool("tui", false, "enables a read-only terminal dashboard; implies -nocli and suppresses stdout logging while active")
 )
-
-// loadMSSchemas compiles the embedded MS request/broadcast schemas and installs
-// them as the active validators. A failure is non-fatal: validation simply
-// stays disabled (the server runs exactly as before the schemas existed).
-func loadMSSchemas() error {
-	req, err := schemaFS.ReadFile("schemas/MSRequest.schema.json")
-	if err != nil {
-		return err
-	}
-	bcast, err := schemaFS.ReadFile("schemas/MSBroadcast.schema.json")
-	if err != nil {
-		return err
-	}
-	return packet.CompileMSSchemas(req, bcast)
-}
 
 func main() {
 	flag.Parse()
@@ -89,12 +66,6 @@ func main() {
 	logger.LogStdOut = sliceutil.ContainsString(config.LogMethods, "stdout")
 	logger.LogFile = sliceutil.ContainsString(config.LogMethods, "log_file")
 	db.DBPath = settings.ConfigPath + "/athena.db"
-
-	if err := loadMSSchemas(); err != nil {
-		logger.LogWarningf("MS JSON-schema validation disabled: %v", err)
-	} else {
-		logger.LogInfo("Loaded MS JSON schemas (request/broadcast validation enabled).")
-	}
 
 	err = athena.InitServer(config)
 	if err != nil {

@@ -11,7 +11,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/MangosArentLiterature/Athena/internal/area"
-	"github.com/MangosArentLiterature/Athena/internal/packet"
+	aolib "github.com/AO-Underground/aolib/go/v2"
 )
 
 // TestWave2PunishmentTypeRoundTrip checks that every wave-2 punishment name
@@ -268,7 +268,7 @@ func TestRecentICMessagesWindow(t *testing.T) {
 }
 
 // TestApplyProtocolPunishments verifies each protocol punishment writes only
-// validator-legal values into the MS packet.
+// validator-legal values into the MS aolib.
 func TestApplyProtocolPunishments(t *testing.T) {
 	mk := func(pType PunishmentType, data string) []PunishmentState {
 		return []PunishmentState{{punishmentType: pType, customData: data}}
@@ -281,38 +281,38 @@ func TestApplyProtocolPunishments(t *testing.T) {
 	}
 
 	for i := 0; i < 30; i++ {
-		ms = &MSToClient{Flip: packet.FlipNone}
+		ms = &MSToClient{Flip: aolib.FlipNone}
 		applyProtocolPunishments(ms, mk(PunishmentRandomflip, ""))
-		if ms.Flip != packet.FlipNone && ms.Flip != packet.FlipHorizontal {
+		if ms.Flip != aolib.FlipNone && ms.Flip != aolib.FlipHorizontal {
 			t.Fatalf("randomflip wrote illegal Flip %v", ms.Flip)
 		}
 	}
 
-	ms = &MSToClient{TextColor: packet.TextColorWhite}
+	ms = &MSToClient{TextColor: aolib.TextColorWhite}
 	applyProtocolPunishments(ms, mk(PunishmentForceColor, "9"))
-	if ms.TextColor != packet.TextColorRainbow {
+	if ms.TextColor != aolib.TextColorRainbow {
 		t.Errorf("forcecolor: TextColor = %v, want 9", ms.TextColor)
 	}
-	ms = &MSToClient{TextColor: packet.TextColorWhite}
+	ms = &MSToClient{TextColor: aolib.TextColorWhite}
 	applyProtocolPunishments(ms, mk(PunishmentForceColor, "57")) // out of range: ignored
-	if ms.TextColor != packet.TextColorWhite {
+	if ms.TextColor != aolib.TextColorWhite {
 		t.Errorf("forcecolor out-of-range: TextColor = %v, want 0", ms.TextColor)
 	}
 
-	ms = &MSToClient{EmoteModifier: packet.EmoteModifierPreanim, Preanim: "slam"}
+	ms = &MSToClient{EmoteModifier: aolib.EmoteModifierPreanim, Preanim: "slam"}
 	applyProtocolPunishments(ms, mk(PunishmentNoPreanim, ""))
-	if ms.EmoteModifier != packet.EmoteModifierNoPreanim || ms.Preanim != "-" {
+	if ms.EmoteModifier != aolib.EmoteModifierNoPreanim || ms.Preanim != "-" {
 		t.Errorf("nopreanim: EmoteModifier=%v Preanim=%q", ms.EmoteModifier, ms.Preanim)
 	}
 
-	ms = &MSToClient{EmoteModifier: packet.EmoteModifierNoPreanim, Preanim: "slam"}
+	ms = &MSToClient{EmoteModifier: aolib.EmoteModifierNoPreanim, Preanim: "slam"}
 	applyProtocolPunishments(ms, mk(PunishmentForcePreanim, ""))
-	if ms.EmoteModifier != packet.EmoteModifierPreanim {
+	if ms.EmoteModifier != aolib.EmoteModifierPreanim {
 		t.Errorf("forcepreanim: EmoteModifier = %v, want 1", ms.EmoteModifier)
 	}
-	ms = &MSToClient{EmoteModifier: packet.EmoteModifierNoPreanim, Preanim: "-"}
+	ms = &MSToClient{EmoteModifier: aolib.EmoteModifierNoPreanim, Preanim: "-"}
 	applyProtocolPunishments(ms, mk(PunishmentForcePreanim, ""))
-	if ms.EmoteModifier != packet.EmoteModifierNoPreanim {
+	if ms.EmoteModifier != aolib.EmoteModifierNoPreanim {
 		t.Errorf("forcepreanim without a named preanim should not promote, got %v", ms.EmoteModifier)
 	}
 

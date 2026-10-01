@@ -94,7 +94,7 @@ func TestMusicEncodingRoundtrip(t *testing.T) {
 
 // TestMusicSpecialCharsInSMPacket verifies that a music name with special
 // characters does not introduce extra '#' fields or early '%' terminators in
-// the SM packet.
+// the SM aolib.
 func TestMusicSpecialCharsInSMPacket(t *testing.T) {
 	musicList := []string{"Songs", "[T&T] Trial.opus", "100% Pure.opus", "normal.opus"}
 	pkt := buildSMPacket("Lobby", musicList)

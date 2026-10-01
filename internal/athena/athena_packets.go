@@ -2,7 +2,7 @@ package athena
 
 // Athena-only packets that have no canonical aolib-meta schema. They live here,
 // on the server side, and are registered into the library registry via
-// packet.RegisterDecoder / packet.RegisterServerDecoder (see register.go).
+// aolib.RegisterDecoder / aolib.RegisterServerDecoder (see register.go).
 
 import "fmt"
 
@@ -51,7 +51,7 @@ func ParseSETCASE(body []string) (*SETCASE, error) {
 	}, nil
 }
 
-// CASEA is the case-announcement packet.
+// CASEA is the case-announcement aolib.
 // Wire: CASEA#{case_title}#{need_def}#{need_pro}#{need_judge}#{need_jury}#{need_steno}#%.
 type CASEA struct {
 	CaseTitle string

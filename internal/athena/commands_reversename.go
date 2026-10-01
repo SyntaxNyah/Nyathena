@@ -16,7 +16,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/MangosArentLiterature/Athena/internal/packet"
+	aolib "github.com/AO-Underground/aolib/go/v2"
 )
 
 // ReverseShowname flips the rune order of the client's effective showname and
@@ -101,7 +101,7 @@ func cmdReverseName(client *Client, args []string, _ string) {
 		if !changed {
 			continue
 		}
-		broadcastToAll(&packet.PU{ID: c.Uid(), Type: 2, Data: reversed})
+		broadcastToAll(&aolib.PU{ID: c.Uid(), Type: aolib.PlayerDataTypeShowname, Data: reversed})
 		c.SendServerMessage("A moderator has reversed your showname.")
 		count++
 		if report.Len() > 0 {
@@ -133,7 +133,7 @@ func cmdUnreverseName(client *Client, args []string, _ string) {
 		if !changed {
 			continue
 		}
-		broadcastToAll(&packet.PU{ID: c.Uid(), Type: 2, Data: restored})
+		broadcastToAll(&aolib.PU{ID: c.Uid(), Type: aolib.PlayerDataTypeShowname, Data: restored})
 		c.SendServerMessage("A moderator has restored your showname.")
 		count++
 		if report.Len() > 0 {

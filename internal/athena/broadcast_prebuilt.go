@@ -19,7 +19,8 @@ package athena
 import (
 	"github.com/MangosArentLiterature/Athena/internal/area"
 	"github.com/MangosArentLiterature/Athena/internal/logger"
-	"github.com/MangosArentLiterature/Athena/internal/packet"
+	aolib "github.com/AO-Underground/aolib/go/v2"
+	"github.com/MangosArentLiterature/Athena/internal/packetutil"
 )
 
 // A broadcast sends the SAME bytes to every recipient, but SendPacket
@@ -75,48 +76,41 @@ func (client *Client) sendPrebuilt(buf []byte) {
 // prebuiltPacket lazily serializes one outgoing packet into each wire format,
 // at most once per format per broadcast, and hands out the shared buffer.
 type prebuiltPacket struct {
-	header string
-	args   []string
+	p      aolib.Outgoing
 	fanta  []byte
 	jsonb  []byte
-	jsonNo bool // BuildJSON returned nil; do not retry per client
+	jsonNo bool // JSON encode failed; do not retry per client
 }
 
-func newPrebuilt(p packet.Outgoing) *prebuiltPacket {
-	return &prebuiltPacket{header: p.Header(), args: p.Args()}
+func newPrebuilt(p aolib.Outgoing) *prebuiltPacket {
+	return &prebuiltPacket{p: p}
 }
 
 // forClient returns the wire bytes for one recipient's encoding mode.
 func (pb *prebuiltPacket) forClient(client *Client) []byte {
 	if client.jsonMode.Load() {
 		if pb.jsonb == nil && !pb.jsonNo {
-			pb.jsonb = packet.BuildJSON(pb.header, pb.args)
-			if pb.jsonb == nil {
+			b, err := packetutil.Encode(pb.p, aolib.WireJSON)
+			if err != nil {
+				logger.LogWarningf("dropped outbound %v - JSON encode failed: %v", pb.p.Header(), err)
 				pb.jsonNo = true
+			} else {
+				pb.jsonb = b
 			}
 		}
 		if pb.jsonb == nil {
 			return nil
 		}
-		// The MS broadcast schema is enforced per packet, not per recipient --
-		// the bytes are identical, so one verdict covers everyone.
-		if pb.header == "MS" {
-			if err := packet.ValidateMSBroadcast(pb.jsonb); err != nil {
-				logger.LogWarningf("dropped outbound %v — MSBroadcast schema validation failed: %v", pb.header, err)
-				pb.jsonb, pb.jsonNo = nil, true
-				return nil
-			}
-		}
 		return pb.jsonb
 	}
 	if pb.fanta == nil {
-		esc := escapeOutgoing(pb.header, pb.args)
-		n := len(pb.header) + 2
+		esc := escapeOutgoing(pb.p.Header(), pb.p.Args())
+		n := len(pb.p.Header()) + 2
 		for _, c := range esc {
 			n += 1 + len(c)
 		}
 		buf := make([]byte, 0, n)
-		buf = append(buf, pb.header...)
+		buf = append(buf, pb.p.Header()...)
 		for _, c := range esc {
 			buf = append(buf, '#')
 			buf = append(buf, c...)
@@ -130,7 +124,7 @@ func (pb *prebuiltPacket) forClient(client *Client) []byte {
 // identical for every recipient, serializing it once rather than per client.
 // Use it for large fixed payloads (CharsCheck); for a handful of short fields
 // the saving is not worth the extra indirection.
-func broadcastToAreaOnce(a *area.Area, p packet.Outgoing) {
+func broadcastToAreaOnce(a *area.Area, p aolib.Outgoing) {
 	pb := newPrebuilt(p)
 	clients.ForEach(func(client *Client) {
 		if client.Area() == a {

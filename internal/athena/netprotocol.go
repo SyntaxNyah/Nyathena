@@ -31,7 +31,8 @@ import (
 	"github.com/MangosArentLiterature/Athena/internal/area"
 	"github.com/MangosArentLiterature/Athena/internal/db"
 	"github.com/MangosArentLiterature/Athena/internal/logger"
-	"github.com/MangosArentLiterature/Athena/internal/packet"
+	aolib "github.com/AO-Underground/aolib/go/v2"
+	"github.com/MangosArentLiterature/Athena/internal/packetutil"
 	"github.com/MangosArentLiterature/Athena/internal/permissions"
 	"github.com/MangosArentLiterature/Athena/internal/sliceutil"
 	"github.com/MangosArentLiterature/Athena/internal/webhook"
@@ -114,7 +115,7 @@ const casinoWelcomeMsg = "🎰 Welcome! This server runs the Nyathena Casino —
 type pktMapValue struct {
 	Args     int
 	MustJoin bool
-	Func     func(client *Client, p *packet.Packet)
+	Func     func(client *Client, p *aolib.Packet)
 }
 
 var PacketMap = map[string]pktMapValue{
@@ -148,8 +149,8 @@ var PacketMap = map[string]pktMapValue{
 }
 
 // Handles HI#%
-func pktHdid(client *Client, p *packet.Packet) {
-	hi, err := packet.ParseHI(p.Body)
+func pktHdid(client *Client, p *aolib.Packet) {
+	hi, err := aolib.ParseHI(p.Body)
 	if err != nil || strings.TrimSpace(hi.HDID) == "" || client.Uid() != -1 || client.Hdid() != "" {
 		return
 	}
@@ -164,11 +165,11 @@ func pktHdid(client *Client, p *packet.Packet) {
 		return
 	}
 
-	client.Send(&packet.IDToClient{PlayerID: 0, Software: "Nyathena", Version: encode(version)})
+	client.Send(&aolib.IDToClient{PlayerID: 0, Software: "Nyathena", Version: encode(version)})
 }
 
 // Handles ID#%
-func pktId(client *Client, p *packet.Packet) {
+func pktId(client *Client, p *aolib.Packet) {
 	if client.Uid() != -1 {
 		return
 	}
@@ -180,12 +181,12 @@ func pktId(client *Client, p *packet.Packet) {
 	if len(p.Body) > 1 {
 		client.SetVersion(p.Body[1])
 	}
-	client.Send(&packet.PN{
+	client.Send(&aolib.PN{
 		PlayerCount:       players.GetPlayerCount(),
 		MaxPlayers:        config.MaxPlayers,
 		ServerDescription: encode(GetServerDesc()),
 	})
-	client.Send(&packet.FL{Features: []string{
+	client.Send(&aolib.FL{Features: []string{
 		"noencryption", "yellowtext", "prezoom", "flipping", "customobjections",
 		"fastloading", "deskmod", "evidence", "cccc_ic_support", "arup", "casing_alerts",
 		"modcall_reason", "looping_sfx", "additive", "effects", "y_offset",
@@ -193,7 +194,7 @@ func pktId(client *Client, p *packet.Packet) {
 	}})
 
 	if config.AssetURL != "" {
-		client.Send(&packet.ASS{AssetUrl: config.AssetURL})
+		client.Send(&aolib.ASS{AssetUrl: config.AssetURL})
 	}
 	sendVoiceCaps(client)
 }
@@ -202,19 +203,19 @@ func pktId(client *Client, p *packet.Packet) {
 // own FL — the same packet the server sends server→client — listing the
 // features it supports (e.g. "multi_pair"). This makes capability negotiation
 // symmetric and needs no new packet type.
-func pktFL(client *Client, p *packet.Packet) {
+func pktFL(client *Client, p *aolib.Packet) {
 	client.SetFeatures(p.Body)
 }
 
 // Handles askchaa#%
-func pktResCount(client *Client, _ *packet.Packet) {
+func pktResCount(client *Client, _ *aolib.Packet) {
 	raidGuardOnAskchaa(client)
 	if client.Uid() != -1 || client.Hdid() == "" {
 		return
 	}
 	if players.GetPlayerCount() >= config.MaxPlayers {
 		logger.LogInfo("Player limit reached")
-		client.SendSync(&packet.BD{Reason: "This server is currently full."})
+		client.SendSync(&aolib.BD{Reason: "This server is currently full."})
 		client.conn.Close()
 		return
 	}
@@ -228,13 +229,13 @@ func pktResCount(client *Client, _ *packet.Packet) {
 		ipFirstSeenTracker.mu.Unlock()
 		if !known {
 			logger.LogInfof("Connection from %v rejected (player capacity lockdown, threshold %v)", client.Ipid(), threshold)
-			client.SendSync(&packet.BD{Reason: "This server is not currently accepting new connections."})
+			client.SendSync(&aolib.BD{Reason: "This server is not currently accepting new connections."})
 			client.conn.Close()
 			return
 		}
 	}
 	client.joining = true // This simply exists to prevent skipping the askchaa#% packet and bypassing the player count check.
-	client.Send(&packet.SI{
+	client.Send(&aolib.SI{
 		CharCount:     len(getCharacters()),
 		EviCount: len(areas[0].Evidence()),
 		MusCount:    len(getMusicList()),
@@ -242,13 +243,13 @@ func pktResCount(client *Client, _ *packet.Packet) {
 }
 
 // Handles RC#%
-func pktReqChar(client *Client, _ *packet.Packet) {
+func pktReqChar(client *Client, _ *aolib.Packet) {
 	raidGuardOnHandshakeStep(client)
-	client.Send(&packet.SC{CharData: getCharacters()})
+	client.Send(&aolib.SC{CharData: scCharDataItems(getCharacters())})
 }
 
 // Handles RM#%
-func pktReqAM(client *Client, _ *packet.Packet) {
+func pktReqAM(client *Client, _ *aolib.Packet) {
 	raidGuardOnHandshakeStep(client)
 	// smPacket is a pre-built FantaCode blob (avoids a strings.Join per
 	// connection in the common case). JSON-mode clients can't read it, so
@@ -265,7 +266,7 @@ func pktReqAM(client *Client, _ *packet.Packet) {
 		for _, m := range getMusicList() {
 			items = append(items, encode(m))
 		}
-		client.Send(&packet.SM{MusicList: items})
+		client.Send(&aolib.SM{MusicList: smMusicListItems(items)})
 		return
 	}
 	// Enqueued, never written inline. This used to call client.write, which
@@ -277,7 +278,7 @@ func pktReqAM(client *Client, _ *packet.Packet) {
 }
 
 // Handles RD#%
-func pktReqDone(client *Client, _ *packet.Packet) {
+func pktReqDone(client *Client, _ *aolib.Packet) {
 	raidGuardOnHandshakeStep(client)
 	if client.Uid() != -1 || !client.joining || client.Hdid() == "" {
 		return
@@ -291,13 +292,13 @@ func pktReqDone(client *Client, _ *packet.Packet) {
 		updatePlayers <- players.GetPlayerCount()
 	}
 	client.JoinArea(areas[0])
-	client.Send(&packet.DONE{})
+	client.Send(&aolib.DONE{})
 	// Send BN after DONE so WebAO's viewport is fully initialized before the
 	// background and desk-overlay images are loaded.  Akashi follows the same
 	// ordering: HP / FA → DONE → BN.  Sending BN before DONE caused desk
 	// images to load against an unrendered viewport, leaving desks invisible
 	// on WebAO even when deskmod indicated they should be shown.
-	client.Send(&packet.BN{Background: areas[0].Background()})
+	client.Send(&aolib.BN{Background: areas[0].Background()})
 	// Re-emit VS_CAPS at the end of the join handshake.  pktId already sends
 	// it once during the early ID phase, but some clients (notably webAO,
 	// which builds its voice subsystem after SI/SC/SM/DONE) ignore packets
@@ -309,7 +310,7 @@ func pktReqDone(client *Client, _ *packet.Packet) {
 	sendStatusArup()
 	sendLockArup()
 	// Notify the client of their actual UID so the player list widget filters correctly.
-	client.Send(&packet.IDToClient{PlayerID: client.Uid(), Software: "Nyathena", Version: encode(version)})
+	client.Send(&aolib.IDToClient{PlayerID: client.Uid(), Software: "Nyathena", Version: encode(version)})
 	sendPlayerListToClient(client)
 	broadcastPlayerJoin(client)
 	sendModIPIDsToClient(client) // no-op unless this connection is already BAN_INFO-permissioned at join
@@ -373,13 +374,13 @@ func getRandomFreeChar(client *Client) int {
 }
 
 // Handles CC#%
-func pktChangeChar(client *Client, p *packet.Packet) {
+func pktChangeChar(client *Client, p *aolib.Packet) {
 	// Check rate limit first
 	if client.CheckRateLimit() {
 		client.KickForRateLimit()
 		return
 	}
-	cc, err := packet.ParseCC(p.Body)
+	cc, err := aolib.ParseCC(p.Body)
 	if err != nil {
 		return
 	}
@@ -407,7 +408,7 @@ func pktChangeChar(client *Client, p *packet.Packet) {
 }
 
 // Handles MS#%
-func pktIC(client *Client, p *packet.Packet) {
+func pktIC(client *Client, p *aolib.Packet) {
 	// Welcome to the MS packet validation hell.
 
 	// Check rate limit first
@@ -459,7 +460,7 @@ func pktIC(client *Client, p *packet.Packet) {
 	hasForcedIniswap := false
 
 	// If a moderator has forced a showname for this client, override whatever
-	// name the client sent in the packet.
+	// name the client sent in the aolib.
 	if forced := client.ForcedShowname(); forced != "" {
 		ownShowname = forced
 		ms.Showname = forced
@@ -477,7 +478,7 @@ func pktIC(client *Client, p *packet.Packet) {
 	}
 
 	if pos := client.Pos(); pos != "" {
-		ms.Side = packet.Side(pos)
+		ms.Side = aolib.Side(pos)
 	} else {
 		client.SetPos(string(ms.Side))
 	}
@@ -593,7 +594,7 @@ func pktIC(client *Client, p *packet.Packet) {
 			ms.SfxDelay = "0"
 			sfxCurseActive = true
 			// Track external URLs so that an MC fallback packet can be sent after
-			// the IC packet. Desktop AO2 clients play HTTP URLs via their media
+			// the IC aolib. Desktop AO2 clients play HTTP URLs via their media
 			// stack (Qt/etc.) when delivered through MC, which is how /play works.
 			// The SfxName URL above covers URL-aware clients; MC covers standard ones.
 			sfx := p.customData
@@ -677,13 +678,13 @@ func pktIC(client *Client, p *packet.Packet) {
 	}
 	if flip := client.CheckAndToggleDanceFlip(); flip != "" {
 		n, _ := strconv.Atoi(flip)
-		ms.Flip = packet.FlipFromWire[n]
+		ms.Flip = packetutil.FlipFromWire[n]
 	}
 	// EmoteModifier 4 crashes old clients, remap to PREANIM_ZOOM; only {0,1,2,5,6} are valid (matches Akashi).
-	emote_mod := packet.EmoteModifierToWire[ms.EmoteModifier]
+	emote_mod := packetutil.EmoteModifierToWire[ms.EmoteModifier]
 	if emote_mod == 4 {
 		emote_mod = 6
-		ms.EmoteModifier = packet.EmoteModifierObjectionZoom
+		ms.EmoteModifier = aolib.EmoteModifierObjectionZoom
 	}
 	if emote_mod != 0 && emote_mod != 1 && emote_mod != 2 && emote_mod != 5 && emote_mod != 6 {
 		logger.LogWarningf("dropped MS from IPID:%v UID:%v — EmoteModifier not in {0,1,2,5,6}; value=%d", client.Ipid(), client.Uid(), emote_mod)
@@ -699,7 +700,7 @@ func pktIC(client *Client, p *packet.Packet) {
 		logger.LogWarningf("dropped MS from IPID:%v UID:%v — Evidence not an integer; value=%q", client.Ipid(), client.Uid(), ms.Evidence)
 		return
 	}
-	text := packet.TextColorToWire[ms.TextColor]
+	text := packetutil.TextColorToWire[ms.TextColor]
 
 	if ms.NoninterruptingPreanim == "" {
 		ms.NoninterruptingPreanim = "0"
@@ -718,11 +719,11 @@ func pktIC(client *Client, p *packet.Packet) {
 		switch emote_mod {
 		case 1, 2:
 			emote_mod = 0
-			ms.EmoteModifier = packet.EmoteModifierNoPreanim
+			ms.EmoteModifier = aolib.EmoteModifierNoPreanim
 			ms.NoninterruptingPreanim = "1"
 		case 6:
 			emote_mod = 5
-			ms.EmoteModifier = packet.EmoteModifierZoom
+			ms.EmoteModifier = aolib.EmoteModifierZoom
 			ms.NoninterruptingPreanim = "1"
 		}
 	}
@@ -733,8 +734,8 @@ func pktIC(client *Client, p *packet.Packet) {
 	// SfxName is set. This runs after the NoInterrupt block above to avoid
 	// being overwritten. We promote the modifier to 1 and clear the preanim
 	// name to "-" so no visual preanim animation plays — only the SFX fires.
-	if sfxCurseActive && (ms.EmoteModifier == packet.EmoteModifierNoPreanim || ms.EmoteModifier == packet.EmoteModifierZoom) {
-		ms.EmoteModifier = packet.EmoteModifierPreanim
+	if sfxCurseActive && (ms.EmoteModifier == aolib.EmoteModifierNoPreanim || ms.EmoteModifier == aolib.EmoteModifierZoom) {
+		ms.EmoteModifier = aolib.EmoteModifierPreanim
 		ms.Preanim = "-"
 	}
 
@@ -778,7 +779,7 @@ func pktIC(client *Client, p *packet.Packet) {
 	case evi < 0 || evi > len(client.Area().Evidence()):
 		logger.LogWarningf("dropped MS from IPID:%v UID:%v — Evidence id out of range; value=%d max=%d", client.Ipid(), client.Uid(), evi, len(client.Area().Evidence()))
 		return
-	case ms.Flip != packet.FlipNone && ms.Flip != packet.FlipHorizontal:
+	case ms.Flip != aolib.FlipNone && ms.Flip != aolib.FlipHorizontal:
 		logger.LogWarningf("dropped MS from IPID:%v UID:%v — Flip not 0/1; value=%v", client.Ipid(), client.Uid(), ms.Flip)
 		return
 	case ms.Realization != "0" && ms.Realization != "1":
@@ -912,7 +913,7 @@ func pktIC(client *Client, p *packet.Packet) {
 			client.SetPairWantedID(partner.CharID())
 			partner.SetPairWantedID(client.CharID())
 			if pos := partner.Pos(); pos != "" {
-				ms.Side = packet.Side(pos)
+				ms.Side = aolib.Side(pos)
 				client.SetPos(pos)
 			}
 		}
@@ -960,7 +961,7 @@ func pktIC(client *Client, p *packet.Packet) {
 				ms.PairedEmote = pairinfo.emote
 				ms.PairedOffset = pairinfo.offset
 				otherFlip, _ := strconv.Atoi(pairinfo.flip)
-				ms.PairedFlip = packet.FlipFromWire[otherFlip]
+				ms.PairedFlip = packetutil.FlipFromWire[otherFlip]
 				pairing = true
 			}
 		})
@@ -1015,8 +1016,8 @@ func pktIC(client *Client, p *packet.Packet) {
 			}
 			if client.Area().CurrentTstIndex() == 0 {
 				ms.Message = "~~\n-- " + ms.Message + " --"
-				ms.TextColor = packet.TextColorOrange
-				broadcastToArea(client.Area(), &packet.RTToClient{Animation: "testimony1"})
+				ms.TextColor = aolib.TextColorOrange
+				broadcastToArea(client.Area(), &aolib.RTToClient{Animation: aolib.RTAnimationWitnessTestimony})
 			}
 			client.Area().TstAppend(ms.ServerString())
 			client.Area().TstAdvance()
@@ -1066,16 +1067,16 @@ func pktIC(client *Client, p *packet.Packet) {
 	// Use the client's own values (saved before any moderator-forced showname or
 	// iniswap override above) for state updates, so a forced substitute is never
 	// written back as the client's own stored state.
-	client.SetPairInfo(ownCharName, ownEmote, strconv.Itoa(packet.FlipToWire[ownFlip]), ownOffset)
+	client.SetPairInfo(ownCharName, ownEmote, strconv.Itoa(packetutil.FlipToWire[ownFlip]), ownOffset)
 	client.SetLastMsg(ms.Message)
-	client.SetLastTextColor(strconv.Itoa(packet.TextColorToWire[ownTextColor]))
+	client.SetLastTextColor(strconv.Itoa(packetutil.TextColorToWire[ownTextColor]))
 	newShowname := ownShowname
 	if strings.TrimSpace(ownShowname) == "" {
 		newShowname = getCharacters()[client.CharID()]
 	}
 	// Only broadcast a PU showname update when the showname actually changed.
 	if client.UpdateShowname(newShowname) {
-		broadcastToAll(&packet.PU{ID: client.Uid(), Type: 2, Data: decode(newShowname)})
+		broadcastToAll(&aolib.PU{ID: client.Uid(), Type: aolib.PlayerDataTypeShowname, Data: decode(newShowname)})
 	}
 	client.Area().SetLastSpeaker(client.CharID())
 
@@ -1154,7 +1155,7 @@ func pktIC(client *Client, p *packet.Packet) {
 		if res.SwapBG && len(getBackgrounds()) > 0 {
 			bg := getBackgrounds()[rand.Intn(len(getBackgrounds()))]
 			client.Area().SetBackground(bg)
-			broadcastToArea(client.Area(), &packet.BN{Background: bg})
+			broadcastToArea(client.Area(), &aolib.BN{Background: bg})
 		}
 	}
 
@@ -1165,7 +1166,7 @@ func pktIC(client *Client, p *packet.Packet) {
 	maybeApplyForceDisplay(client, ms)
 
 	// Encode the structured packet back into wire format exactly once and
-	// hand it to the broadcaster. MSToClient implements packet.Outgoing, so
+	// hand it to the broadcaster. MSToClient implements aolib.Outgoing, so
 	// Args() is invoked once inside broadcastToAreaFrom.
 	//
 	// Two delivery punishments intercept here:
@@ -1218,9 +1219,9 @@ func pktIC(client *Client, p *packet.Packet) {
 	// play the URL through their media stack (the same mechanism /play uses),
 	// so the cursed sound actually plays for everyone in the area.
 	if sfxCurseExternalURL != "" && !silenced {
-		broadcastToArea(client.Area(), &packet.MCToClient{
+		broadcastToArea(client.Area(), &aolib.MCToClient{
 			Name: sfxCurseExternalURL, CharID: client.CharID(),
-			Showname: client.Showname(), Looping: false, Channel: 0, Effects: 0,
+			Showname: client.Showname(), Looping: false, Channel: aolib.MusicChannelMusic, Effects: aolib.MusicEffects{},
 		})
 	}
 	// Record the original (pre-punishment) decoded message in the area's icwarp
@@ -1268,7 +1269,7 @@ func reverseRunes(s string) string {
 }
 
 // Handles MC#%
-func pktAM(client *Client, p *packet.Packet) {
+func pktAM(client *Client, p *aolib.Packet) {
 	// For reasons beyond mortal understanding, this packet serves two purposes: music changes, and area changes.
 
 	// Check rate limit first
@@ -1277,7 +1278,7 @@ func pktAM(client *Client, p *packet.Packet) {
 		return
 	}
 
-	mc, err := packet.ParseMCToServer(p.Body)
+	mc, err := aolib.ParseMCToServer(p.Body)
 	if err != nil {
 		return
 	}
@@ -1336,17 +1337,14 @@ func pktAM(client *Client, p *packet.Packet) {
 		if mc.Showname != "" {
 			name = mc.Showname
 		}
-		effects := 0
-		if mc.Effects != 0 {
-			effects = mc.Effects
-		}
+		effects := mc.Effects
 		// Re-broadcast the URL byte-for-byte as it arrived (mc.Name, still in
 		// AO2 wire form) so the server never mangles it — recipients decode it
 		// back to the exact URL the sender chose.
 		addToBuffer(client, "MUSIC", fmt.Sprintf("Changed music to %v.", decodedSong), false)
-		playAreaMusic(client.Area(), &packet.MCToClient{
+		playAreaMusic(client.Area(), &aolib.MCToClient{
 			Name: mc.Name, CharID: mc.CharID, Showname: name,
-			Looping: true, Channel: 0, Effects: effects,
+			Looping: true, Channel: aolib.MusicChannelMusic, Effects: effects,
 		})
 		return
 	}
@@ -1357,7 +1355,7 @@ func pktAM(client *Client, p *packet.Packet) {
 		}
 		song := mc.Name
 		name := client.Showname()
-		effects := 0
+		effects := mc.Effects
 		if !strings.ContainsRune(decodedSong, '.') { // Chosen song is a category, and should stop the music.
 			song = "~stop.mp3"
 			addToBuffer(client, "MUSIC", "Stopped the music.", false)
@@ -1367,14 +1365,11 @@ func pktAM(client *Client, p *packet.Packet) {
 		if mc.Showname != "" {
 			name = mc.Showname
 		}
-		if mc.Effects != 0 {
-			effects = mc.Effects
-		}
 		// Track the current song so /getmusic can re-fetch it for clients
 		// whose audio dropped or who joined mid-track.
-		playAreaMusic(client.Area(), &packet.MCToClient{
+		playAreaMusic(client.Area(), &aolib.MCToClient{
 			Name: song, CharID: mc.CharID, Showname: name,
-			Looping: true, Channel: 0, Effects: effects,
+			Looping: true, Channel: aolib.MusicChannelMusic, Effects: effects,
 		})
 	} else if strings.Contains(getAreaNames(), decodedSong) {
 		if decodedSong == client.Area().Name() {
@@ -1407,32 +1402,32 @@ func pktAM(client *Client, p *packet.Packet) {
 }
 
 // Handles HP#%
-func pktHP(client *Client, p *packet.Packet) {
+func pktHP(client *Client, p *aolib.Packet) {
 	if client.CharID() == -1 || !client.CanJud() {
 		client.SendServerMessage("You are not allowed to change the penalty bar in this area.")
 		return
 	}
-	hp, err := packet.ParseHPToServer(p.Body)
+	hp, err := aolib.ParseHPToServer(p.Body)
 	if err != nil {
 		return
 	}
-	if !client.Area().SetHP(hp.Bar, hp.Value) {
+	if !client.Area().SetHP(packetutil.PenaltyBarToWire[hp.Bar], hp.Value) {
 		return
 	}
-	broadcastToArea(client.Area(), &packet.HPToClient{Bar: hp.Bar, Value: hp.Value})
+	broadcastToArea(client.Area(), &aolib.HPToClient{Bar: hp.Bar, Value: hp.Value})
 
 	var side string
 	switch hp.Bar {
-	case 1:
+	case aolib.PenaltyBarDefense:
 		side = "Defense"
-	case 2:
+	case aolib.PenaltyBarProsecution:
 		side = "Prosecution"
 	}
 	addToBuffer(client, "JUD", fmt.Sprintf("Set %v HP to %v.", side, hp.Value), false)
 }
 
 // Handles RT#%
-func pktWTCE(client *Client, p *packet.Packet) {
+func pktWTCE(client *Client, p *aolib.Packet) {
 	if !client.Area().JudgeAllowed() {
 		client.SendServerMessage("The judge buttons are disabled in this area.")
 		return
@@ -1441,16 +1436,16 @@ func pktWTCE(client *Client, p *packet.Packet) {
 		client.SendServerMessage("You are not allowed to play WT/CE in this area.")
 		return
 	}
-	rt, err := packet.ParseRTToServer(p.Body)
+	rt, err := aolib.ParseRTToServer(p.Body)
 	if err != nil {
 		return
 	}
-	broadcastToArea(client.Area(), &packet.RTToClient{Animation: rt.Animation, JudgeID: rt.JudgeID})
+	broadcastToArea(client.Area(), &aolib.RTToClient{Animation: rt.Animation})
 	addToBuffer(client, "JUD", "Played WT/CE animation.", false)
 }
 
 // Handles TT#%
-func pktTT(client *Client, p *packet.Packet) {
+func pktTT(client *Client, p *aolib.Packet) {
 	if client.CharID() == -1 || !client.CanJud() {
 		client.SendServerMessage("You are not allowed to set testimony titles in this area.")
 		return
@@ -1464,7 +1459,7 @@ func pktTT(client *Client, p *packet.Packet) {
 }
 
 // Handles CT#%
-func pktOOC(client *Client, p *packet.Packet) {
+func pktOOC(client *Client, p *aolib.Packet) {
 	// Check rate limit first
 	if client.CheckRateLimit() {
 		client.KickForRateLimit()
@@ -1483,7 +1478,7 @@ func pktOOC(client *Client, p *packet.Packet) {
 		return
 	}
 
-	ct, err := packet.ParseCTToServer(p.Body)
+	ct, err := aolib.ParseCTToServer(p.Body)
 	if err != nil {
 		return
 	}
@@ -1564,7 +1559,7 @@ func pktOOC(client *Client, p *packet.Packet) {
 		if tag := formatTagDisplay(db.GetActiveTag(client.Ipid())); tag != "" {
 			display = tag + " " + display
 		}
-		client.Send(&packet.CTToClient{Name: encode(display), Message: ct.Message, IsFromServer: false})
+		client.Send(&aolib.CTToClient{Name: encode(display), Message: ct.Message, IsFromServer: false})
 		addToBuffer(client, "OOC", "\""+ct.Message+"\" (censored username)", false)
 		if kick {
 			client.KickForCensorTrip()
@@ -1623,7 +1618,7 @@ func pktOOC(client *Client, p *packet.Packet) {
 	// Only broadcast the OOC name update once all checks pass, to prevent amplification attacks
 	// where bots flood CT packets causing mass PU broadcasts to all connected clients.
 	if client.Uid() != -1 {
-		broadcastToAll(&packet.PU{ID: client.Uid(), Type: 0, Data: username})
+		broadcastToAll(&aolib.PU{ID: client.Uid(), Type: aolib.PlayerDataTypeOocName, Data: username})
 	}
 	msg := ct.Message
 	// Reject duplicate OOC: if the last message sent in this area is identical, drop silently.
@@ -1651,7 +1646,7 @@ func pktOOC(client *Client, p *packet.Packet) {
 		}
 		return
 	case autoModShadow:
-		client.Send(&packet.CTToClient{Name: encode(displayUsername), Message: msg, IsFromServer: false})
+		client.Send(&aolib.CTToClient{Name: encode(displayUsername), Message: msg, IsFromServer: false})
 		addToBuffer(client, "OOC", "\""+msg+"\" (censored)", false)
 		if kick {
 			client.KickForCensorTrip()
@@ -1667,14 +1662,14 @@ func pktOOC(client *Client, p *packet.Packet) {
 	// notice the room can't hear them. The buffer entry is marked so mods
 	// reviewing logs can tell the message was suppressed.
 	if client.HasActivePunishment(PunishmentStealthMute) {
-		client.Send(&packet.CTToClient{Name: encode(displayUsername), Message: msg, IsFromServer: false})
+		client.Send(&aolib.CTToClient{Name: encode(displayUsername), Message: msg, IsFromServer: false})
 		addToBuffer(client, "OOC", "\""+msg+"\" (stealthmuted)", false)
 		return
 	}
 	// Captcha restriction: same routing the IC path uses.
 	if activeCaptchaRestricted.Load() > 0 && client.captchaRestricted.Load() {
 		deliverRestricted(client, client.Area(),
-			&packet.CTToClient{Name: encode(displayUsername), Message: msg, IsFromServer: false})
+			&aolib.CTToClient{Name: encode(displayUsername), Message: msg, IsFromServer: false})
 		addToBuffer(client, "OOC", "\""+msg+"\" (captcha-muted)", false)
 		return
 	}
@@ -1686,69 +1681,69 @@ func pktOOC(client *Client, p *packet.Packet) {
 	raidGuardOnOOC(client, ct.Name, decode(msg))
 
 	broadcastOOCToArea(client.Ipid(), senderBypassesIgnore(client.Perms()), client.Area(),
-		&packet.CTToClient{Name: encode(displayUsername), Message: msg, IsFromServer: false})
+		&aolib.CTToClient{Name: encode(displayUsername), Message: msg, IsFromServer: false})
 	addToBuffer(client, "OOC", "\""+msg+"\"", false)
 }
 
 // Handles PE#%
-func pktAddEvi(client *Client, p *packet.Packet) {
+func pktAddEvi(client *Client, p *aolib.Packet) {
 	if !client.CanAlterEvidence() {
 		client.SendServerMessage("You are not allowed to alter evidence in this area.")
 		return
 	}
-	pe, err := packet.ParsePE(p.Body)
+	pe, err := aolib.ParsePE(p.Body)
 	if err != nil {
 		return
 	}
 	client.Area().AddEvidence(pe.Name + "&" + pe.Description + "&" + pe.Image)
-	broadcastToArea(client.Area(), &packet.LE{Evidence: client.Area().Evidence()})
+	broadcastToArea(client.Area(), &aolib.LE{Evidence: leEvidenceItems(client.Area().Evidence())})
 	addToBuffer(client, "EVI", fmt.Sprintf("Added evidence: %v | %v", pe.Name, pe.Description), false)
 }
 
 // Handles DE#%
-func pktRemoveEvi(client *Client, p *packet.Packet) {
+func pktRemoveEvi(client *Client, p *aolib.Packet) {
 	if !client.CanAlterEvidence() {
 		client.SendServerMessage("You are not allowed to alter evidence in this area.")
 		return
 	}
-	de, err := packet.ParseDE(p.Body)
+	de, err := aolib.ParseDE(p.Body)
 	if err != nil {
 		return
 	}
 	client.Area().RemoveEvidence(de.ID)
-	broadcastToArea(client.Area(), &packet.LE{Evidence: client.Area().Evidence()})
+	broadcastToArea(client.Area(), &aolib.LE{Evidence: leEvidenceItems(client.Area().Evidence())})
 	addToBuffer(client, "EVI", fmt.Sprintf("Removed evidence %v.", de.ID), false)
 }
 
 // Handles EE#%
-func pktEditEvi(client *Client, p *packet.Packet) {
+func pktEditEvi(client *Client, p *aolib.Packet) {
 	if !client.CanAlterEvidence() {
 		client.SendServerMessage("You are not allowed to alter evidence in this area.")
 		return
 	}
-	ee, err := packet.ParseEE(p.Body)
+	ee, err := aolib.ParseEE(p.Body)
 	if err != nil {
 		return
 	}
 	client.Area().EditEvidence(ee.ID, ee.Name+"&"+ee.Description+"&"+ee.Image)
-	broadcastToArea(client.Area(), &packet.LE{Evidence: client.Area().Evidence()})
+	broadcastToArea(client.Area(), &aolib.LE{Evidence: leEvidenceItems(client.Area().Evidence())})
 	addToBuffer(client, "EVI", fmt.Sprintf("Updated evidence %v to %v | %v", ee.ID, ee.Name, ee.Description), false)
 }
 
 // Handles CH#%
 // Handles PW#% — area password (not used; server uses invite lists)
-func pktPW(_ *Client, _ *packet.Packet) {}
+func pktPW(_ *Client, _ *aolib.Packet) {}
 
-func pktPing(client *Client, _ *packet.Packet) {
+func pktPing(client *Client, _ *aolib.Packet) {
 	if checkIPPingRateLimit(client.Ipid()) {
 		return
 	}
 	client.lastPingNano.Store(time.Now().UnixNano())
-	client.Send(&packet.CHECK{})
+	client.Send(&aolib.CHECK{})
 }
 
 // Handles ZZ#%
-func pktModcall(client *Client, p *packet.Packet) {
+func pktModcall(client *Client, p *aolib.Packet) {
 	if limited, remaining := checkNewIPIDModcallCooldown(client.Ipid()); limited {
 		unit := "seconds"
 		if remaining == 1 {
@@ -1766,14 +1761,14 @@ func pktModcall(client *Client, p *packet.Packet) {
 		return
 	}
 	setIPModcallTime(client.Ipid())
-	zz, _ := packet.ParseZZToServer(p.Body)
+	zz, _ := aolib.ParseZZToServer(p.Body)
 	addToBuffer(client, "MOD", fmt.Sprintf("Called moderator for reason: %v", zz.Reason), false)
 	if client.Area().LogSilenced() {
 		return
 	}
 	modcallMsg := fmt.Sprintf("MODCALL\n----------\nArea: %v\nUser: [%v] %v\nShowname: %v\nOOC Name: %v\nIPID: %v\nReason: %v",
 		client.Area().Name(), client.Uid(), client.CurrentCharacter(), client.EffectiveShowname(), client.OOCName(), client.Ipid(), zz.Reason)
-	out := &packet.ZZToClient{Reason: modcallMsg}
+	out := &aolib.ZZToClient{Reason: modcallMsg}
 	clients.ForEach(func(c *Client) {
 		if c.Authenticated() && permissions.IsModerator(c.Perms()) {
 			c.Send(out)
@@ -1789,7 +1784,7 @@ func pktModcall(client *Client, p *packet.Packet) {
 }
 
 // Handles SETCASE#%
-func pktSetCase(client *Client, p *packet.Packet) {
+func pktSetCase(client *Client, p *aolib.Packet) {
 	sc, err := ParseSETCASE(p.Body)
 	if err != nil {
 		return
@@ -1806,7 +1801,7 @@ func pktSetCase(client *Client, p *packet.Packet) {
 }
 
 // Handles CASEA#%
-func pktCaseAnn(client *Client, p *packet.Packet) {
+func pktCaseAnn(client *Client, p *aolib.Packet) {
 	// Let future generations know I spent far too long trying to make this work.
 	// Partially because of my own stupidity, and partially because this is the worst packet in AO2.
 
@@ -1864,7 +1859,7 @@ func pktCaseAnn(client *Client, p *packet.Packet) {
 // Sent by the AO2 client when a moderator clicks the Ban or Kick button in the
 // player-list UI. duration == 0 means kick; -1 means permanent ban; any positive
 // value is a timed ban in minutes.
-func pktMA(client *Client, p *packet.Packet) {
+func pktMA(client *Client, p *aolib.Packet) {
 	if !client.Authenticated() {
 		client.SendServerMessage("You are not logged in.")
 		return
@@ -1910,7 +1905,7 @@ func pktMA(client *Client, p *packet.Packet) {
 
 	if isKick {
 		for _, c := range targets {
-			c.SendSync(&packet.KK{Reason: reason})
+			c.SendSync(&aolib.KK{Reason: reason})
 			c.conn.Close()
 			if err := webhook.PostKick(c.CurrentCharacter(), c.Showname(), c.OOCName(), c.Ipid(), reason, client.DisplayModName(), c.Uid()); err != nil {
 				logger.LogErrorf("while posting kick webhook: %v", err)
@@ -1949,12 +1944,12 @@ func pktMA(client *Client, p *packet.Packet) {
 	forgetIP(targetIPID)
 	for _, c := range targets {
 		if id, ok := banIDByHdid[c.Hdid()]; ok {
-			c.SendSync(&packet.KB{Reason: fmt.Sprintf("%v\nUntil: %v\nID: %v", reason, untilS, id)})
+			c.SendSync(&aolib.KB{Reason: fmt.Sprintf("%v\nUntil: %v\nID: %v", reason, untilS, id)})
 			if err := webhook.PostBan(c.CurrentCharacter(), c.Showname(), c.OOCName(), targetIPID, c.Uid(), id, durationStr, reason, client.DisplayModName()); err != nil {
 				logger.LogErrorf("while posting ban webhook: %v", err)
 			}
 		} else {
-			c.SendSync(&packet.KB{Reason: fmt.Sprintf("%v\nUntil: %v", reason, untilS)})
+			c.SendSync(&aolib.KB{Reason: fmt.Sprintf("%v\nUntil: %v", reason, untilS)})
 		}
 		c.conn.Close()
 	}

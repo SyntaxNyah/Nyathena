@@ -49,7 +49,7 @@ import (
 
 	"github.com/MangosArentLiterature/Athena/internal/db"
 	"github.com/MangosArentLiterature/Athena/internal/logger"
-	"github.com/MangosArentLiterature/Athena/internal/packet"
+	aolib "github.com/AO-Underground/aolib/go/v2"
 	"github.com/xhit/go-str2duration/v2"
 )
 
@@ -158,7 +158,7 @@ func applyAutoModNuke(client *Client, m WordListMatch, source string) bool {
 	}
 
 	forgetIP(client.Ipid())
-	client.SendSync(&packet.KB{Reason: fmt.Sprintf("Banned for prohibited language.\nUntil: %s\nID: %d", untilText, id)})
+	client.SendSync(&aolib.KB{Reason: fmt.Sprintf("Banned for prohibited language.\nUntil: %s\nID: %d", untilText, id)})
 	client.conn.Close()
 
 	alertCensorTrip(client, source, m.Entry.Raw, "",

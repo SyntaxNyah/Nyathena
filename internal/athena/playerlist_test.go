@@ -127,7 +127,7 @@ func TestAreaIndexMapConsistency(t *testing.T) {
 
 // TestPlayerlistCurrentCharacterSpectator verifies that a client with no
 // character selected reports "Spectator" as their character — the value that
-// would be included in a PU CHARACTER packet.
+// would be included in a PU CHARACTER aolib.
 func TestPlayerlistCurrentCharacterSpectator(t *testing.T) {
 	origChars := getCharacters()
 	defer func() { setCharacters(origChars) }()

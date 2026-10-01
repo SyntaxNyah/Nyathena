@@ -21,7 +21,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/MangosArentLiterature/Athena/internal/packet"
+	aolib "github.com/AO-Underground/aolib/go/v2"
 )
 
 // userAlertHelp is the guide shown when /useralert is run bare. The \n escapes
@@ -72,7 +72,7 @@ func cmdUserAlert(client *Client, args []string, usage string) {
 	}
 
 	if args[0] == "global" {
-		broadcastToAll(&packet.BB{Message: encode(msg)})
+		broadcastToAll(&aolib.BB{Message: encode(msg)})
 		client.SendServerMessage(fmt.Sprintf("📢 Popup alert sent to every connected player:\n> %v", msg))
 		addToBuffer(client, "CMD", fmt.Sprintf("Sent global popup alert: %v", msg), true)
 		return
@@ -88,7 +88,7 @@ func cmdUserAlert(client *Client, args []string, usage string) {
 		client.SendServerMessage(fmt.Sprintf("No connected player has UID %d.", uid))
 		return
 	}
-	target.Send(&packet.BB{Message: encode(msg)})
+	target.Send(&aolib.BB{Message: encode(msg)})
 	client.SendServerMessage(fmt.Sprintf("Popup alert sent to %v [UID %d]:\n> %v", target.OOCName(), uid, msg))
 	addToBuffer(client, "CMD", fmt.Sprintf("Sent popup alert to UID %d: %v", uid, msg), true)
 }

@@ -1,10 +1,10 @@
 package athena
 
-// Nyathena's in-character ("MS") packet. Canonical aolib-meta models the
+// Nyathena's in-character ("MS") aolib. Canonical aolib-meta models the
 // standard MS (int char_id/sfx_delay/evidence_id, bool flags, Offset objects),
 // but Nyathena keeps the historical string-shaped MS and only migrates the
 // enum slots to the library's string enums. The wire helpers and enum wire
-// maps are the exported primitives from internal/packet.
+// maps are the exported primitives from internal/aolib.
 //
 // Nyathena-only extensions that aolib-meta does not define:
 //   - Blips (2.10.2+, field 30)
@@ -15,7 +15,8 @@ package athena
 import (
 	"strings"
 
-	"github.com/MangosArentLiterature/Athena/internal/packet"
+	aolib "github.com/AO-Underground/aolib/go/v2"
+	"github.com/MangosArentLiterature/Athena/internal/packetutil"
 )
 
 // AdditionalChar is one on-screen partner beyond the standard pair.
@@ -23,28 +24,28 @@ type AdditionalChar struct {
 	CharID int           `json:"charid"`
 	Name   string        `json:"name"`
 	Emote  string        `json:"emote"`
-	Offset packet.Offset `json:"offset"`
-	Flip   packet.Flip   `json:"flip"`
+	Offset aolib.Offset `json:"offset"`
+	Flip   aolib.Flip   `json:"flip"`
 }
 
 // MSToServer is the client -> server MS (26 fields + Blips).
 type MSToServer struct {
-	DeskModifier           packet.DeskModifier
+	DeskModifier           aolib.DeskModifier
 	Preanim                string
 	Character              string
 	Emote                  string
 	Message                string
-	Side                   packet.Side
+	Side                   aolib.Side
 	SfxName                string
-	EmoteModifier          packet.EmoteModifier
+	EmoteModifier          aolib.EmoteModifier
 	CharID                 string
 	SfxDelay               string
-	ShoutModifier          packet.ShoutModifier
+	ShoutModifier          aolib.ShoutModifier
 	ShoutName              string
 	Evidence               string
-	Flip                   packet.Flip
+	Flip                   aolib.Flip
 	Realization            string
-	TextColor              packet.TextColor
+	TextColor              aolib.TextColor
 	Showname               string
 	PairedCharID           string
 	Offset                 string
@@ -61,29 +62,29 @@ type MSToServer struct {
 
 // MSToClient is the server -> client MS (30 fields + Blips + additional_chars).
 type MSToClient struct {
-	DeskModifier           packet.DeskModifier
+	DeskModifier           aolib.DeskModifier
 	Preanim                string
 	Character              string
 	Emote                  string
 	Message                string
-	Side                   packet.Side
+	Side                   aolib.Side
 	SfxName                string
-	EmoteModifier          packet.EmoteModifier
+	EmoteModifier          aolib.EmoteModifier
 	CharID                 string
 	SfxDelay               string
-	ShoutModifier          packet.ShoutModifier
+	ShoutModifier          aolib.ShoutModifier
 	ShoutName              string
 	Evidence               string
-	Flip                   packet.Flip
+	Flip                   aolib.Flip
 	Realization            string
-	TextColor              packet.TextColor
+	TextColor              aolib.TextColor
 	Showname               string
 	PairedCharID           string
 	PairedName             string
 	PairedEmote            string
 	Offset                 string
 	PairedOffset           string
-	PairedFlip             packet.Flip
+	PairedFlip             aolib.Flip
 	NoninterruptingPreanim string
 	SfxLooping             string
 	Screenshake            string
@@ -108,33 +109,33 @@ func (ms *MSToClient) Header() string { return "MS" }
 // value (the IC handler and the raid guard) want the wire integer. The error
 // is always nil and exists so the historical two-value call sites keep their
 // shape.
-func (ms *MSToServer) Shout() (int, error) { return packet.ShoutModifierToWire[ms.ShoutModifier], nil }
+func (ms *MSToServer) Shout() (int, error) { return packetutil.ShoutModifierToWire[ms.ShoutModifier], nil }
 
 // Shout returns the numeric wire value of the shout/objection modifier.
-func (ms *MSToClient) Shout() (int, error) { return packet.ShoutModifierToWire[ms.ShoutModifier], nil }
+func (ms *MSToClient) Shout() (int, error) { return packetutil.ShoutModifierToWire[ms.ShoutModifier], nil }
 
 // parseDeskModifier parses the desk_modifier wire token, mapping the legacy
 // "chat" alias to the shown value.
-func parseDeskModifier(s string) packet.DeskModifier {
+func parseDeskModifier(s string) aolib.DeskModifier {
 	if s == "chat" {
-		return packet.DeskModifierShown
+		return aolib.DeskModifierShown
 	}
-	return packet.DeskModifierFromWire[packet.AtoiOrZero(s)]
+	return packetutil.DeskModifierFromWire[packetutil.AtoiOrZero(s)]
 }
 
 // parseShout splits a shout_modifier wire token ("4&name") into the typed enum
 // and the optional custom name.
-func parseShout(raw string) (packet.ShoutModifier, string) {
+func parseShout(raw string) (aolib.ShoutModifier, string) {
 	if n, name, ok := strings.Cut(raw, "&"); ok {
-		return packet.ShoutModifierFromWire[packet.AtoiOrZero(n)], name
+		return packetutil.ShoutModifierFromWire[packetutil.AtoiOrZero(n)], name
 	}
-	return packet.ShoutModifierFromWire[packet.AtoiOrZero(raw)], ""
+	return packetutil.ShoutModifierFromWire[packetutil.AtoiOrZero(raw)], ""
 }
 
 // shoutWire encodes a shout modifier, appending "&name" for custom shouts.
-func shoutWire(m packet.ShoutModifier, name string) string {
-	s := packet.Itoa(packet.ShoutModifierToWire[m])
-	if m == packet.ShoutModifierCustom && name != "" {
+func shoutWire(m aolib.ShoutModifier, name string) string {
+	s := packetutil.Itoa(packetutil.ShoutModifierToWire[m])
+	if m == aolib.ShoutModifierCustom && name != "" {
 		s += "&" + name
 	}
 	return s
@@ -144,22 +145,22 @@ func shoutWire(m packet.ShoutModifier, name string) string {
 // string enums; every other slot is the raw wire string).
 func ParseMSToServer(body []string) *MSToServer {
 	ms := &MSToServer{}
-	get := func(i int) string { return packet.GetStr(body, i) }
+	get := func(i int) string { return packetutil.GetStr(body, i) }
 	ms.DeskModifier = parseDeskModifier(get(0))
 	ms.Preanim = get(1)
 	ms.Character = get(2)
 	ms.Emote = get(3)
 	ms.Message = get(4)
-	ms.Side = packet.Side(get(5))
+	ms.Side = aolib.Side(get(5))
 	ms.SfxName = get(6)
-	ms.EmoteModifier = packet.EmoteModifierFromWire[packet.AtoiOrZero(get(7))]
+	ms.EmoteModifier = packetutil.EmoteModifierFromWire[packetutil.AtoiOrZero(get(7))]
 	ms.CharID = get(8)
 	ms.SfxDelay = get(9)
 	ms.ShoutModifier, ms.ShoutName = parseShout(get(10))
 	ms.Evidence = get(11)
-	ms.Flip = packet.FlipFromWire[packet.AtoiOrZero(get(12))]
+	ms.Flip = packetutil.FlipFromWire[packetutil.AtoiOrZero(get(12))]
 	ms.Realization = get(13)
-	ms.TextColor = packet.TextColorFromWire[packet.AtoiOrZero(get(14))]
+	ms.TextColor = packetutil.TextColorFromWire[packetutil.AtoiOrZero(get(14))]
 	ms.Showname = get(15)
 	ms.PairedCharID = get(16)
 	ms.Offset = get(17)
@@ -178,29 +179,29 @@ func ParseMSToServer(body []string) *MSToServer {
 // ParseMSToClient decodes the server -> client MS body.
 func ParseMSToClient(body []string) *MSToClient {
 	ms := &MSToClient{}
-	get := func(i int) string { return packet.GetStr(body, i) }
+	get := func(i int) string { return packetutil.GetStr(body, i) }
 	ms.DeskModifier = parseDeskModifier(get(0))
 	ms.Preanim = get(1)
 	ms.Character = get(2)
 	ms.Emote = get(3)
 	ms.Message = get(4)
-	ms.Side = packet.Side(get(5))
+	ms.Side = aolib.Side(get(5))
 	ms.SfxName = get(6)
-	ms.EmoteModifier = packet.EmoteModifierFromWire[packet.AtoiOrZero(get(7))]
+	ms.EmoteModifier = packetutil.EmoteModifierFromWire[packetutil.AtoiOrZero(get(7))]
 	ms.CharID = get(8)
 	ms.SfxDelay = get(9)
 	ms.ShoutModifier, ms.ShoutName = parseShout(get(10))
 	ms.Evidence = get(11)
-	ms.Flip = packet.FlipFromWire[packet.AtoiOrZero(get(12))]
+	ms.Flip = packetutil.FlipFromWire[packetutil.AtoiOrZero(get(12))]
 	ms.Realization = get(13)
-	ms.TextColor = packet.TextColorFromWire[packet.AtoiOrZero(get(14))]
+	ms.TextColor = packetutil.TextColorFromWire[packetutil.AtoiOrZero(get(14))]
 	ms.Showname = get(15)
 	ms.PairedCharID = get(16)
 	ms.PairedName = get(17)
 	ms.PairedEmote = get(18)
 	ms.Offset = get(19)
 	ms.PairedOffset = get(20)
-	ms.PairedFlip = packet.FlipFromWire[packet.AtoiOrZero(get(21))]
+	ms.PairedFlip = packetutil.FlipFromWire[packetutil.AtoiOrZero(get(21))]
 	ms.NoninterruptingPreanim = get(22)
 	ms.SfxLooping = get(23)
 	ms.Screenshake = get(24)
@@ -258,21 +259,21 @@ func (ms *MSToServer) ToClient() *MSToClient {
 // Args returns the client -> server MS body (26 fields + optional Blips).
 func (ms *MSToServer) Args() []string {
 	args := []string{
-		packet.Itoa(packet.DeskModifierToWire[ms.DeskModifier]),
+		packetutil.Itoa(packetutil.DeskModifierToWire[ms.DeskModifier]),
 		ms.Preanim,
 		ms.Character,
 		ms.Emote,
 		ms.Message,
 		string(ms.Side),
 		ms.SfxName,
-		packet.Itoa(packet.EmoteModifierToWire[ms.EmoteModifier]),
+		packetutil.Itoa(packetutil.EmoteModifierToWire[ms.EmoteModifier]),
 		ms.CharID,
 		ms.SfxDelay,
 		shoutWire(ms.ShoutModifier, ms.ShoutName),
 		ms.Evidence,
-		packet.Itoa(packet.FlipToWire[ms.Flip]),
+		packetutil.Itoa(packetutil.FlipToWire[ms.Flip]),
 		ms.Realization,
-		packet.Itoa(packet.TextColorToWire[ms.TextColor]),
+		packetutil.Itoa(packetutil.TextColorToWire[ms.TextColor]),
 		ms.Showname,
 		ms.PairedCharID,
 		ms.Offset,
@@ -294,28 +295,28 @@ func (ms *MSToServer) Args() []string {
 // Args returns the server -> client MS body (30 fields + optional Blips).
 func (ms *MSToClient) Args() []string {
 	args := []string{
-		packet.Itoa(packet.DeskModifierToWire[ms.DeskModifier]),
+		packetutil.Itoa(packetutil.DeskModifierToWire[ms.DeskModifier]),
 		ms.Preanim,
 		ms.Character,
 		ms.Emote,
 		ms.Message,
 		string(ms.Side),
 		ms.SfxName,
-		packet.Itoa(packet.EmoteModifierToWire[ms.EmoteModifier]),
+		packetutil.Itoa(packetutil.EmoteModifierToWire[ms.EmoteModifier]),
 		ms.CharID,
 		ms.SfxDelay,
 		shoutWire(ms.ShoutModifier, ms.ShoutName),
 		ms.Evidence,
-		packet.Itoa(packet.FlipToWire[ms.Flip]),
+		packetutil.Itoa(packetutil.FlipToWire[ms.Flip]),
 		ms.Realization,
-		packet.Itoa(packet.TextColorToWire[ms.TextColor]),
+		packetutil.Itoa(packetutil.TextColorToWire[ms.TextColor]),
 		ms.Showname,
 		ms.PairedCharID,
 		ms.PairedName,
 		ms.PairedEmote,
 		ms.Offset,
 		ms.PairedOffset,
-		packet.Itoa(packet.FlipToWire[ms.PairedFlip]),
+		packetutil.Itoa(packetutil.FlipToWire[ms.PairedFlip]),
 		ms.NoninterruptingPreanim,
 		ms.SfxLooping,
 		ms.Screenshake,

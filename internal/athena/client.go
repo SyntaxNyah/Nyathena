@@ -35,7 +35,8 @@ import (
 	"github.com/MangosArentLiterature/Athena/internal/area"
 	"github.com/MangosArentLiterature/Athena/internal/db"
 	"github.com/MangosArentLiterature/Athena/internal/logger"
-	"github.com/MangosArentLiterature/Athena/internal/packet"
+	aolib "github.com/AO-Underground/aolib/go/v2"
+	"github.com/MangosArentLiterature/Athena/internal/packetutil"
 	"github.com/MangosArentLiterature/Athena/internal/permissions"
 	"github.com/MangosArentLiterature/Athena/internal/webhook"
 )
@@ -778,7 +779,7 @@ func (client *Client) HandleClient() {
 	}
 
 	if config.MCLimit != 0 && clients.CountByIPID(client.Ipid()) >= config.MCLimit {
-		client.SendSync(&packet.BD{Reason: "Too many connections from your IP. Please disconnect your other clients. If you have no other clients open, wait 1-2 minutes and try again."})
+		client.SendSync(&aolib.BD{Reason: "Too many connections from your IP. Please disconnect your other clients. If you have no other clients open, wait 1-2 minutes and try again."})
 		client.conn.Close()
 		return
 	}
@@ -796,7 +797,7 @@ func (client *Client) HandleClient() {
 	// JSON-aware clients respond with a '{'-prefixed packet and we switch this
 	// client to JSON encoding for the rest of the session; older clients
 	// ignore the value and stay in classic FantaCode.
-	client.Send(&packet.Decryptor{Value: "JSON"})
+	client.Send(&aolib.Decryptor{Value: "JSON"})
 
 	// Reading both wire formats off the same connection means we can't use a
 	// pure json.Decoder loop (which would eat FantaCode bytes thinking they
@@ -908,19 +909,16 @@ func (client *Client) HandleClient() {
 			return
 		}
 
-		var pkt *packet.Packet
+		var pkt *aolib.Packet
 		if rawPacket[0] == '{' {
-			pkt, err = packet.ParseJSON(rawPacket)
-			if err == nil {
-				// A registered codec owns this header: decode the JSON to its
-				// typed value and re-encode to the positional body the handlers
-				// parse (so TT/SETCASE/CASEA/VS_* work over JSON too).
-				if body, ok := packet.CodecJSONToBody(pkt.Header, rawPacket); ok {
-					pkt.Body = body
-				}
+			header, body, derr := packetutil.DecodeToBody([]byte(rawPacket), aolib.WireJSON)
+			if derr != nil {
+				err = derr
+			} else {
+				pkt = &aolib.Packet{Header: header, Body: body}
 			}
 		} else {
-			pkt, err = packet.NewPacket(rawPacket)
+			pkt, err = aolib.NewPacket(rawPacket)
 		}
 		if err != nil {
 			logger.LogWarningf("dropped packet from IPID:%v UID:%v — parse error: %v; raw=%q", client.Ipid(), client.Uid(), err, rawPacket)
@@ -946,7 +944,7 @@ func (client *Client) HandleClient() {
 
 // closeForOversizedPacket logs and closes the connection when a single
 // packet-read attempt exceeded maxPacketBytes without producing a complete
-// packet. Distinguished from an ordinary disconnect (plain EOF) so staff can
+// aolib. Distinguished from an ordinary disconnect (plain EOF) so staff can
 // tell the two apart in the logs.
 func (client *Client) closeForOversizedPacket() {
 	logger.LogWarningf("closing connection IPID:%v UID:%v — packet exceeded %d bytes without completing", client.Ipid(), client.Uid(), maxPacketBytes)
@@ -954,7 +952,7 @@ func (client *Client) closeForOversizedPacket() {
 }
 
 // skipNetWhitespace discards ASCII whitespace bytes at the head of br so the
-// caller can peek the first meaningful byte of the next packet. Returns the
+// caller can peek the first meaningful byte of the next aolib. Returns the
 // underlying read error (typically io.EOF) on disconnect.
 func skipNetWhitespace(br *bufio.Reader) error {
 	for {
@@ -1040,19 +1038,11 @@ func (client *Client) SendPacket(header string, contents ...string) {
 
 	var buf []byte
 	if client.jsonMode.Load() {
-		buf = packet.BuildJSON(header, contents)
-		if buf == nil {
+		b, jerr := packetutil.BuildJSONFromArgs(header, contents)
+		if jerr != nil {
 			return
 		}
-		// Enforce the MS broadcast schema on the JSON-mode wire form. A
-		// server-side violation is dropped (not sent) and logged so the bug
-		// surfaces rather than reaching a client as malformed type nonsense.
-		if header == "MS" {
-			if err := packet.ValidateMSBroadcast(buf); err != nil {
-				logger.LogWarningf("dropped outbound MS to IPID:%v UID:%v — MSBroadcast schema validation failed: %v; json=%s", client.Ipid(), client.Uid(), err, buf)
-				return
-			}
-		}
+		buf = b
 	} else {
 		contents = escapeOutgoing(header, contents)
 		// Pre-size the FantaCode buffer in a single allocation:
@@ -1073,7 +1063,7 @@ func (client *Client) SendPacket(header string, contents ...string) {
 	select {
 	case client.sendCh <- buf:
 	default:
-		// Queue full — drop the packet. Most AO2 packets are non-critical;
+		// Queue full — drop the aolib. Most AO2 packets are non-critical;
 		// losing one is far better than disconnecting the player. A truly
 		// stuck consumer's writer will eventually be torn down via the
 		// existing ping timeout / rate limiter paths, surfacing here as
@@ -1094,23 +1084,12 @@ func (client *Client) SendPacketSync(header string, contents ...string) {
 	b := packetBufPool.Get().(*bytes.Buffer)
 	b.Reset()
 	if client.jsonMode.Load() {
-		// JSON path: BuildJSON allocates a fresh []byte already; copy it into
-		// the pooled buffer so the same SetWriteDeadline / Write code path is
-		// reused. The extra copy is negligible because Sync is only used on
-		// rare rejection paths (lockdown / ban / MC limit), not the hot loop.
-		jb := packet.BuildJSON(header, contents)
-		if jb == nil {
-			packetBufPool.Put(b)
-			return
-		}
-		if header == "MS" {
-			if err := packet.ValidateMSBroadcast(jb); err != nil {
-				logger.LogWarningf("dropped outbound MS to IPID:%v UID:%v — MSBroadcast schema validation failed: %v; json=%s", client.Ipid(), client.Uid(), err, jb)
-				packetBufPool.Put(b)
-				return
-			}
-		}
-		b.Write(jb)
+	jb, jerr := packetutil.BuildJSONFromArgs(header, contents)
+	if jerr != nil {
+	packetBufPool.Put(b)
+	return
+	}
+	b.Write(jb)
 	} else {
 		contents = escapeOutgoing(header, contents)
 		b.WriteString(header)
@@ -1161,25 +1140,15 @@ func (client *Client) SendPacketSync(header string, contents ...string) {
 // canonical send path — SendPacket(header, args...) is now a low-level
 // escape hatch reserved for the FantaCrypt "decryptor" relic and the
 // hot-path MS broadcast helper.
-func (client *Client) Send(p packet.Outgoing) {
+func (client *Client) Send(p aolib.Outgoing) {
 	if client.jsonMode.Load() {
-		var buf []byte
-		if _, extra := p.(packet.JSONOutgoing); extra && client.supportsMultiPair() {
-			buf = packet.BuildJSONPacket(p) // merges JSONExtra (e.g. MS additional_chars)
-		} else {
-			buf = packet.EncodeJSON(p)
-		}
-		if buf == nil {
-			return
-		}
-		if p.Header() == "MS" {
-			if err := packet.ValidateMSBroadcast(buf); err != nil {
-				logger.LogWarningf("dropped outbound MS to IPID:%v UID:%v — MSBroadcast schema validation failed: %v", client.Ipid(), client.Uid(), err)
-				return
-			}
-		}
-		client.sendBytes(buf)
-		return
+	b, err := packetutil.Encode(p, aolib.WireJSON)
+	if err != nil {
+	logger.LogWarningf("dropped outbound %v - JSON encode failed: %v", p.Header(), err)
+	return
+	}
+	client.sendBytes(b)
+	return
 	}
 	client.SendPacket(p.Header(), p.Args()...)
 }
@@ -1204,7 +1173,7 @@ func (client *Client) sendBytes(buf []byte) {
 
 // SendSync writes a typed Outgoing packet directly to the socket,
 // bypassing the outbound queue. See SendPacketSync for when to use this.
-func (client *Client) SendSync(p packet.Outgoing) {
+func (client *Client) SendSync(p aolib.Outgoing) {
 	client.SendPacketSync(p.Header(), p.Args()...)
 }
 
@@ -1329,7 +1298,7 @@ func (client *Client) clientCleanup() {
 		if !client.Hidden() {
 			client.Area().RemoveVisiblePlayer()
 		}
-		broadcastToAll(&packet.PR{ID: client.Uid(), Type: 1})
+		broadcastToAll(&aolib.PR{ID: client.Uid(), Type: aolib.PlayerListUpdateRemove})
 		sendPlayerArup()
 	}
 	handleCasinoDisconnect(client)
@@ -1358,7 +1327,7 @@ func (client *Client) clientCleanup() {
 
 // SendServerMessage sends a server OOC message to the client.
 func (client *Client) SendServerMessage(message string) {
-	client.Send(&packet.CTToClient{Name: encodedServerName, Message: encode(message), IsFromServer: true})
+	client.Send(&aolib.CTToClient{Name: encodedServerName, Message: encode(message), IsFromServer: true})
 }
 
 // SendMotd sends the MOTD to the client as a single OOC message. Embedded
@@ -1848,7 +1817,7 @@ func (client *Client) RemoveAuth() {
 	client.authenticated, client.perms, client.mod_name = false, 0, ""
 	client.mu.Unlock()
 	client.SendServerMessage("Logged out as moderator.")
-	client.Send(&packet.AUTH{AuthState: -1})
+	client.Send(&aolib.AUTH{AuthState: aolib.AuthStateLogout})
 }
 
 // RemoveAccountAuth logs a client out of a player account (no moderator badge change needed).
@@ -1948,7 +1917,7 @@ func (client *Client) CheckBanned(by db.BanLookup) bool {
 		} else {
 			duration = time.Unix(baninfo.Duration, 0).UTC().Format("02 Jan 2006 15:04 MST")
 		}
-		client.SendSync(&packet.BD{Reason: fmt.Sprintf("%v\nUntil: %v\nID: %v", baninfo.Reason, duration, baninfo.Id)})
+		client.SendSync(&aolib.BD{Reason: fmt.Sprintf("%v\nUntil: %v\nID: %v", baninfo.Reason, duration, baninfo.Id)})
 		client.conn.Close()
 		return true
 	}
@@ -1963,15 +1932,15 @@ func (client *Client) JoinArea(area *area.Area) {
 		area.AddVisiblePlayer()
 	}
 	def, pro := area.HP()
-	client.Send(&packet.LE{Evidence: areas[0].Evidence()})
-	client.Send(&packet.CharsCheck{Taken: packet.StrsToInts(area.Taken())})
-	client.Send(&packet.HPToClient{Bar: 1, Value: def})
-	client.Send(&packet.HPToClient{Bar: 2, Value: pro})
+	client.Send(&aolib.LE{Evidence: leEvidenceItems(areas[0].Evidence())})
+	client.Send(&aolib.CharsCheck{Taken: charAvailabilities(area.Taken())})
+	client.Send(&aolib.HPToClient{Bar: aolib.PenaltyBarDefense, Value: def})
+	client.Send(&aolib.HPToClient{Bar: aolib.PenaltyBarProsecution, Value: pro})
 	if desc := area.Description(); desc != "" {
 		client.SendServerMessage("📍 " + desc)
 	}
 	if motd := area.Motd(); motd != "" {
-		client.Send(&packet.BB{Message: encode(motd)})
+		client.Send(&aolib.BB{Message: encode(motd)})
 	}
 	// Sync the joining client to the area's music state.
 	//
@@ -1991,7 +1960,7 @@ func (client *Client) JoinArea(area *area.Area) {
 	if song == "" {
 		song = "~stop.mp3"
 	}
-	client.Send(&packet.MCToClient{Name: song, CharID: client.CharID(), Showname: "Server", Looping: true, Channel: 0, Effects: 0})
+	client.Send(&aolib.MCToClient{Name: song, CharID: client.CharID(), Showname: "Server", Looping: true, Channel: aolib.MusicChannelMusic, Effects: aolib.MusicEffects{}})
 	sendPlayerArup()
 }
 
@@ -2068,18 +2037,18 @@ func (client *Client) ChangeArea(a *area.Area) bool {
 		}
 	}
 	client.JoinArea(a)
-	broadcastToAll(&packet.PU{ID: client.Uid(), Type: 3, Data: strconv.Itoa(getAreaIndex(a))})
+	broadcastToAll(&aolib.PU{ID: client.Uid(), Type: aolib.PlayerDataTypeAreaID, Data: strconv.Itoa(getAreaIndex(a))})
 	if client.CharID() == -1 {
 		// Send DONE before BN so WebAO's character-select viewport is
 		// initialized before the bench-overlay image loads fire.  This
 		// mirrors pktReqDone's ordering and matches Akashi's behaviour.
-		client.Send(&packet.DONE{})
+		client.Send(&aolib.DONE{})
 	} else {
-		broadcastToAreaOnce(a, &packet.CharsCheck{Taken: packet.StrsToInts(a.Taken())})
+		broadcastToAreaOnce(a, &aolib.CharsCheck{Taken: charAvailabilities(a.Taken())})
 	}
 	// BN always last — after any DONE — so desk-overlay images never load
 	// against an unrendered viewport on WebAO (same fix as initial join).
-	client.Send(&packet.BN{Background: a.Background()})
+	client.Send(&aolib.BN{Background: a.Background()})
 	addToBuffer(client, "AREA", "Joined area.", false)
 	return true
 }
@@ -2276,11 +2245,11 @@ func (client *Client) ChangeCharacter(id int) {
 		// Do not reset showname here; it is set from IC messages so the
 		// player's display name (e.g. "Adachi") persists across character
 		// changes.
-		client.Send(&packet.PV{PlayerID: 0, CharID: id})
-		broadcastToAreaOnce(client.Area(), &packet.CharsCheck{Taken: packet.StrsToInts(client.Area().Taken())})
+		client.Send(&aolib.PV{PlayerID: 0, CharID: id})
+		broadcastToAreaOnce(client.Area(), &aolib.CharsCheck{Taken: charAvailabilities(client.Area().Taken())})
 		if client.Uid() != -1 {
-			broadcastToAll(&packet.PU{ID: client.Uid(), Type: 1, Data: client.CurrentCharacter()})
-			broadcastToAll(&packet.PU{ID: client.Uid(), Type: 2, Data: decode(client.Showname())})
+			broadcastToAll(&aolib.PU{ID: client.Uid(), Type: aolib.PlayerDataTypeCharName, Data: client.CurrentCharacter()})
+			broadcastToAll(&aolib.PU{ID: client.Uid(), Type: aolib.PlayerDataTypeShowname, Data: decode(client.Showname())})
 		}
 	}
 }
@@ -2547,16 +2516,16 @@ func (client *Client) forceChangeArea(a *area.Area) {
 		}
 	}
 	client.JoinArea(a)
-	broadcastToAll(&packet.PU{ID: client.Uid(), Type: 3, Data: strconv.Itoa(getAreaIndex(a))})
+	broadcastToAll(&aolib.PU{ID: client.Uid(), Type: aolib.PlayerDataTypeAreaID, Data: strconv.Itoa(getAreaIndex(a))})
 	if client.CharID() == -1 {
 		// Send DONE before BN for the same reason as ChangeArea: WebAO
 		// must initialize the viewport before desk-overlay images load.
-		client.Send(&packet.DONE{})
+		client.Send(&aolib.DONE{})
 	} else {
-		broadcastToAreaOnce(a, &packet.CharsCheck{Taken: packet.StrsToInts(a.Taken())})
+		broadcastToAreaOnce(a, &aolib.CharsCheck{Taken: charAvailabilities(a.Taken())})
 	}
 	// BN always after any DONE so desk overlays load correctly on WebAO.
-	client.Send(&packet.BN{Background: a.Background()})
+	client.Send(&aolib.BN{Background: a.Background()})
 	addToBuffer(client, "AREA", "Joined area.", false)
 }
 

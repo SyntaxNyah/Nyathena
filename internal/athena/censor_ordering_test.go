@@ -93,7 +93,7 @@ func TestContentGatePrecedesEveryLeakInPktIC(t *testing.T) {
 	// Everything the gate must precede, and why it matters if it does not.
 	mustFollow := []landmark{
 		{"the PU showname broadcast (a slur worn as a showname would reach every client uncensored)",
-			"packet.PU{ID: client.Uid(), Type: 2"},
+			"aolib.PU{ID: client.Uid(), Type: 2"},
 		{"the torment branch (a censored message could escape via the delayed rebroadcast)",
 			"handleTormentedIC(client, ms)"},
 		{"the quickdraw hook (a censored line could win the minigame)",

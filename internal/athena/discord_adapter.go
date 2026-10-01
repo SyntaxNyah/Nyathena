@@ -29,7 +29,7 @@ import (
 	"github.com/MangosArentLiterature/Athena/internal/db"
 	"github.com/MangosArentLiterature/Athena/internal/discord/bot"
 	"github.com/MangosArentLiterature/Athena/internal/logger"
-	"github.com/MangosArentLiterature/Athena/internal/packet"
+	aolib "github.com/AO-Underground/aolib/go/v2"
 	"github.com/MangosArentLiterature/Athena/internal/permissions"
 )
 
@@ -427,14 +427,14 @@ func (a *ServerAdapter) SendUserAlert(uid int, message string) error {
 	if err != nil {
 		return fmt.Errorf("player not found: UID %d", uid)
 	}
-	c.Send(&packet.BB{Message: encode(message)})
+	c.Send(&aolib.BB{Message: encode(message)})
 	return nil
 }
 
 // SendGlobalAlert sends a BB popup to every connected player. This is the
 // Discord bridge for the in-game /useralert global <message> command.
 func (a *ServerAdapter) SendGlobalAlert(message string) error {
-	broadcastToAll(&packet.BB{Message: encode(message)})
+	broadcastToAll(&aolib.BB{Message: encode(message)})
 	return nil
 }
 
@@ -513,7 +513,7 @@ func (a *ServerAdapter) SetFirewall(on bool) error {
 		firewallActive.Store(true)
 		clients.ForEach(func(c *Client) {
 			if c.Uid() != -1 && permissions.HasPermission(c.Perms(), permissions.PermissionField["BAN"]) {
-				c.Send(&packet.CTToClient{Name: "OOC", Message: "🔥 VPN firewall enabled by a Discord moderator.", IsFromServer: true})
+				c.Send(&aolib.CTToClient{Name: "OOC", Message: "🔥 VPN firewall enabled by a Discord moderator.", IsFromServer: true})
 			}
 		})
 		return nil
@@ -521,7 +521,7 @@ func (a *ServerAdapter) SetFirewall(on bool) error {
 	firewallActive.Store(false)
 	clients.ForEach(func(c *Client) {
 		if c.Uid() != -1 && permissions.HasPermission(c.Perms(), permissions.PermissionField["BAN"]) {
-			c.Send(&packet.CTToClient{Name: "OOC", Message: "🔓 VPN firewall disabled by a Discord moderator.", IsFromServer: true})
+			c.Send(&aolib.CTToClient{Name: "OOC", Message: "🔓 VPN firewall disabled by a Discord moderator.", IsFromServer: true})
 		}
 	})
 	return nil
@@ -536,7 +536,7 @@ func (a *ServerAdapter) SetLockdown(on bool) error {
 	}
 	clients.ForEach(func(c *Client) {
 		if c.Uid() != -1 && permissions.IsModerator(c.Perms()) {
-			c.Send(&packet.CTToClient{Name: "OOC", Message: msg, IsFromServer: true})
+			c.Send(&aolib.CTToClient{Name: "OOC", Message: msg, IsFromServer: true})
 		}
 	})
 	if on {

@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"github.com/MangosArentLiterature/Athena/internal/area"
-	"github.com/MangosArentLiterature/Athena/internal/packet"
+	aolib "github.com/AO-Underground/aolib/go/v2"
 	"github.com/MangosArentLiterature/Athena/internal/settings"
 )
 
@@ -136,8 +136,8 @@ func TestPktVSJoinBroadcastsAndSendsPeerList(t *testing.T) {
 	clients.AddClient(bob)
 	clients.RegisterUID(bob)
 
-	pktVSJoin(alice, &packet.Packet{Header: "VS_JOIN"})
-	pktVSJoin(bob, &packet.Packet{Header: "VS_JOIN"})
+	pktVSJoin(alice, &aolib.Packet{Header: "VS_JOIN"})
+	pktVSJoin(bob, &aolib.Packet{Header: "VS_JOIN"})
 
 	// Alice joined first — she gets an empty VS_PEERS and should then receive
 	// bob's VS_JOIN broadcast. An empty peer list has no uid slots, so the
@@ -180,7 +180,7 @@ func TestPktVSJoinRejectsWhenVoiceDisabled(t *testing.T) {
 	clients.AddClient(alice)
 	clients.RegisterUID(alice)
 
-	pktVSJoin(alice, &packet.Packet{Header: "VS_JOIN"})
+	pktVSJoin(alice, &aolib.Packet{Header: "VS_JOIN"})
 	if inVoiceRoom(a, 1) {
 		t.Fatal("alice was added to voice room even though voice is disabled")
 	}
@@ -208,9 +208,9 @@ func TestPktVSJoinRejectsAtMaxPeers(t *testing.T) {
 		clients.RegisterUID(c)
 	}
 
-	pktVSJoin(c1, &packet.Packet{Header: "VS_JOIN"})
-	pktVSJoin(c2, &packet.Packet{Header: "VS_JOIN"})
-	pktVSJoin(c3, &packet.Packet{Header: "VS_JOIN"})
+	pktVSJoin(c1, &aolib.Packet{Header: "VS_JOIN"})
+	pktVSJoin(c2, &aolib.Packet{Header: "VS_JOIN"})
+	pktVSJoin(c3, &aolib.Packet{Header: "VS_JOIN"})
 
 	if inVoiceRoom(a, 3) {
 		t.Fatal("third peer was admitted past the configured max")
@@ -242,15 +242,15 @@ func TestPktVSFrameBroadcastsToOtherPeersOnly(t *testing.T) {
 		clients.RegisterUID(c)
 	}
 
-	pktVSJoin(alice, &packet.Packet{Header: "VS_JOIN"})
-	pktVSJoin(bob, &packet.Packet{Header: "VS_JOIN"})
-	pktVSJoin(carol, &packet.Packet{Header: "VS_JOIN"})
+	pktVSJoin(alice, &aolib.Packet{Header: "VS_JOIN"})
+	pktVSJoin(bob, &aolib.Packet{Header: "VS_JOIN"})
+	pktVSJoin(carol, &aolib.Packet{Header: "VS_JOIN"})
 
 	aliceConn.buf.Reset()
 	bobConn.buf.Reset()
 	carolConn.buf.Reset()
 
-	pktVSFrame(alice, &packet.Packet{Header: "VS_FRAME", Body: []string{"OPUSPAYLOAD"}})
+	pktVSFrame(alice, &aolib.Packet{Header: "VS_FRAME", Body: []string{"OPUSPAYLOAD"}})
 
 	if !strings.Contains(bobConn.String(), "VS_AUDIO#1#OPUSPAYLOAD#%") {
 		t.Errorf("bob did not receive relayed audio, got: %q", bobConn.String())
@@ -285,11 +285,11 @@ func TestPktVSFrameIgnoresCrossAreaTarget(t *testing.T) {
 		clients.RegisterUID(c)
 	}
 
-	pktVSJoin(alice, &packet.Packet{Header: "VS_JOIN"})
-	pktVSJoin(bob, &packet.Packet{Header: "VS_JOIN"})
+	pktVSJoin(alice, &aolib.Packet{Header: "VS_JOIN"})
+	pktVSJoin(bob, &aolib.Packet{Header: "VS_JOIN"})
 
 	bobConn.buf.Reset()
-	pktVSFrame(alice, &packet.Packet{Header: "VS_FRAME", Body: []string{"OPUSPAYLOAD"}})
+	pktVSFrame(alice, &aolib.Packet{Header: "VS_FRAME", Body: []string{"OPUSPAYLOAD"}})
 
 	if strings.Contains(bobConn.String(), "VS_AUDIO") {
 		t.Errorf("bob in another area should not receive audio, got: %q", bobConn.String())
@@ -318,12 +318,12 @@ func TestPktVSFrameDropsOversized(t *testing.T) {
 		clients.RegisterUID(c)
 	}
 
-	pktVSJoin(alice, &packet.Packet{Header: "VS_JOIN"})
-	pktVSJoin(bob, &packet.Packet{Header: "VS_JOIN"})
+	pktVSJoin(alice, &aolib.Packet{Header: "VS_JOIN"})
+	pktVSJoin(bob, &aolib.Packet{Header: "VS_JOIN"})
 	bobConn.buf.Reset()
 
 	// 32 bytes — twice the 16-byte cap.
-	pktVSFrame(alice, &packet.Packet{Header: "VS_FRAME", Body: []string{strings.Repeat("A", 32)}})
+	pktVSFrame(alice, &aolib.Packet{Header: "VS_FRAME", Body: []string{strings.Repeat("A", 32)}})
 
 	if strings.Contains(bobConn.String(), "VS_AUDIO") {
 		t.Errorf("bob received an oversized frame that should have been dropped, got: %q", bobConn.String())
@@ -351,8 +351,8 @@ func TestLeaveVoiceForClientBroadcastsLeave(t *testing.T) {
 		clients.RegisterUID(c)
 	}
 
-	pktVSJoin(alice, &packet.Packet{Header: "VS_JOIN"})
-	pktVSJoin(bob, &packet.Packet{Header: "VS_JOIN"})
+	pktVSJoin(alice, &aolib.Packet{Header: "VS_JOIN"})
+	pktVSJoin(bob, &aolib.Packet{Header: "VS_JOIN"})
 	bobConn.buf.Reset()
 
 	leaveVoiceForClient(alice)

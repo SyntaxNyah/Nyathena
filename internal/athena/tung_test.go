@@ -5,7 +5,7 @@ import (
 	"testing"
 
 	"github.com/MangosArentLiterature/Athena/internal/area"
-	"github.com/MangosArentLiterature/Athena/internal/packet"
+	aolib "github.com/AO-Underground/aolib/go/v2"
 	"github.com/MangosArentLiterature/Athena/internal/settings"
 )
 
@@ -95,7 +95,7 @@ func TestTungLocksCharacterChange(t *testing.T) {
 
 	// Attempt character change via pktChangeChar — should be blocked.
 	// Build a minimal packet with Body[1] = "2" (Maya Fey index).
-	p := &packet.Packet{Body: []string{"CC", "2"}}
+	p := &aolib.Packet{Body: []string{"CC", "2"}}
 	pktChangeChar(target, p)
 
 	if target.CharID() != 0 {

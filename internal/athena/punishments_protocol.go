@@ -34,7 +34,8 @@ import (
 
 	"github.com/MangosArentLiterature/Athena/internal/db"
 	"github.com/MangosArentLiterature/Athena/internal/logger"
-	"github.com/MangosArentLiterature/Athena/internal/packet"
+	aolib "github.com/AO-Underground/aolib/go/v2"
+	"github.com/MangosArentLiterature/Athena/internal/packetutil"
 	"github.com/MangosArentLiterature/Athena/internal/permissions"
 	str2duration "github.com/xhit/go-str2duration/v2"
 )
@@ -61,20 +62,20 @@ func applyProtocolPunishments(ms *MSToClient, punishments []PunishmentState) {
 			ms.Screenshake = "1"
 		case PunishmentRandomflip:
 			if rand.Intn(2) == 0 {
-				ms.Flip = packet.FlipHorizontal
+				ms.Flip = aolib.FlipHorizontal
 			} else {
-				ms.Flip = packet.FlipNone
+				ms.Flip = aolib.FlipNone
 			}
 		case PunishmentForceColor:
 			if c, err := strconv.Atoi(p.customData); err == nil && c >= 0 && c <= 9 {
-				ms.TextColor = packet.TextColorFromWire[c]
+				ms.TextColor = packetutil.TextColorFromWire[c]
 			}
 		case PunishmentNoPreanim:
 			switch ms.EmoteModifier {
-			case packet.EmoteModifierPreanim, packet.EmoteModifierPreanimAndObjection:
-				ms.EmoteModifier = packet.EmoteModifierNoPreanim
-			case packet.EmoteModifierObjectionZoom:
-				ms.EmoteModifier = packet.EmoteModifierZoom
+			case aolib.EmoteModifierPreanim, aolib.EmoteModifierPreanimAndObjection:
+				ms.EmoteModifier = aolib.EmoteModifierNoPreanim
+			case aolib.EmoteModifierObjectionZoom:
+				ms.EmoteModifier = aolib.EmoteModifierZoom
 			}
 			ms.Preanim = "-"
 		case PunishmentForcePreanim:
@@ -82,10 +83,10 @@ func applyProtocolPunishments(ms *MSToClient, punishments []PunishmentState) {
 			// never point the viewport at an animation that doesn't exist.
 			if ms.Preanim != "" && ms.Preanim != "-" {
 				switch ms.EmoteModifier {
-				case packet.EmoteModifierNoPreanim:
-					ms.EmoteModifier = packet.EmoteModifierPreanim
-				case packet.EmoteModifierZoom:
-					ms.EmoteModifier = packet.EmoteModifierObjectionZoom
+				case aolib.EmoteModifierNoPreanim:
+					ms.EmoteModifier = aolib.EmoteModifierPreanim
+				case aolib.EmoteModifierZoom:
+					ms.EmoteModifier = aolib.EmoteModifierObjectionZoom
 				}
 			}
 		}

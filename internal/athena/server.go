@@ -36,7 +36,7 @@ import (
 	discordbot "github.com/MangosArentLiterature/Athena/internal/discord/bot"
 	"github.com/MangosArentLiterature/Athena/internal/logger"
 	"github.com/MangosArentLiterature/Athena/internal/ms"
-	"github.com/MangosArentLiterature/Athena/internal/packet"
+	aolib "github.com/AO-Underground/aolib/go/v2"
 	"github.com/MangosArentLiterature/Athena/internal/permissions"
 	"github.com/MangosArentLiterature/Athena/internal/playercount"
 	"github.com/MangosArentLiterature/Athena/internal/settings"
@@ -65,7 +65,7 @@ var connPool chan struct{}
 
 // Precomputed rate-limit window durations.  These are derived from config at
 // startup and never change; reading a time.Duration is cheaper than multiplying
-// an int (or float64) by time.Second on every single incoming packet.
+// an int (or float64) by time.Second on every single incoming aolib.
 var (
 	rateLimitWindowDur       time.Duration
 	oocRateLimitWindowDur    time.Duration
@@ -524,7 +524,7 @@ func NewServer(conf *settings.Config) (*Server, error) {
 	config = s.config
 	encodedServerName = encode(s.config.Name) // cache once; config.Name never changes at runtime
 	// Precompute rate-limit windows once so the hot packet-check paths only
-	// perform a load instead of a multiply on every incoming packet.
+	// perform a load instead of a multiply on every incoming aolib.
 	rateLimitWindowDur = time.Duration(config.RateLimitWindow) * time.Second
 	oocRateLimitWindowDur = time.Duration(config.OOCRateLimitWindow) * time.Second
 	rawPktRateLimitWindowDur = time.Duration(float64(time.Second) * config.RawPacketRateLimitWindow)
@@ -674,7 +674,7 @@ func (s *Server) ListenTCP() {
 		if checkGlobalNewIPRateLimit(ipid) {
 			if lockdownReject := serverLockdownRejection(ipid); lockdownReject {
 				logger.LogInfof("Connection from new IP %v rejected (server lockdown active)", ipid)
-				NewClient(conn, ipid).SendSync(&packet.BD{Reason: lockdownRejectionMessage(lockdownJoinMsg, ipid)})
+				NewClient(conn, ipid).SendSync(&aolib.BD{Reason: lockdownRejectionMessage(lockdownJoinMsg, ipid)})
 			} else {
 				logger.LogInfof("Connection from new IP %v rejected (global new IP rate limit exceeded)", ipid)
 			}
@@ -848,7 +848,7 @@ func HandleWS(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 			client := NewClient(websocket.NetConn(r.Context(), c, websocket.MessageText), ipid)
-			client.SendSync(&packet.BD{Reason: lockdownRejectionMessage(lockdownJoinMsg, ipid)})
+			client.SendSync(&aolib.BD{Reason: lockdownRejectionMessage(lockdownJoinMsg, ipid)})
 			client.conn.Close()
 		} else {
 			logger.LogInfof("Connection from new IP %v rejected (global new IP rate limit exceeded)", ipid)
@@ -936,7 +936,7 @@ func writeToAllClients(header string, contents ...string) {
 // broadcastToAll fans a typed packet to every UID-registered client.
 // Args() is invoked exactly once and the resulting slice is reused for
 // every recipient.
-func broadcastToAll(p packet.Outgoing) {
+func broadcastToAll(p aolib.Outgoing) {
 	// Name-carrying PU packets are filtered here rather than at each of the
 	// dozen call sites that emit them -- see pu_name_filter.go for why the
 	// point of exposure is the only place a name filter cannot be bypassed by
@@ -953,7 +953,7 @@ func broadcastToAll(p packet.Outgoing) {
 }
 
 // broadcastToArea fans a typed packet to every client in the given area.
-func broadcastToArea(area *area.Area, p packet.Outgoing) {
+func broadcastToArea(area *area.Area, p aolib.Outgoing) {
 	clients.ForEach(func(client *Client) {
 		if client.Area() == area {
 			client.Send(p)
@@ -963,7 +963,7 @@ func broadcastToArea(area *area.Area, p packet.Outgoing) {
 
 // broadcastToAreaFrom fans a typed packet to an area, honoring per-recipient
 // ignore lists unless the sender is a moderator.
-func broadcastToAreaFrom(senderIPID string, senderIsMod bool, area *area.Area, p packet.Outgoing) {
+func broadcastToAreaFrom(senderIPID string, senderIsMod bool, area *area.Area, p aolib.Outgoing) {
 	clients.ForEach(func(client *Client) {
 		if client.Area() == area && (senderIsMod || !client.IgnoresIPID(senderIPID)) {
 			client.Send(p)
@@ -978,7 +978,7 @@ func broadcastToAreaFrom(senderIPID string, senderIsMod bool, area *area.Area, p
 // broadcasts go through broadcastToAreaFrom/broadcastToArea directly so this
 // toggle can never hide something a player was specifically sent or
 // something staff need seen.
-func broadcastOOCToArea(senderIPID string, senderIsMod bool, area *area.Area, p packet.Outgoing) {
+func broadcastOOCToArea(senderIPID string, senderIsMod bool, area *area.Area, p aolib.Outgoing) {
 	clients.ForEach(func(client *Client) {
 		if client.Area() == area && (senderIsMod || !client.IgnoresIPID(senderIPID)) && !client.OOCHidden() {
 			client.Send(p)
@@ -991,7 +991,7 @@ func broadcastOOCToArea(senderIPID string, senderIsMod bool, area *area.Area, p 
 // global. Used only for /global -- moderator broadcasts (/mod -g,
 // /modchat) and system announcements go through broadcastToAll directly so
 // they are never hidden by this toggle.
-func broadcastOOCToAll(p packet.Outgoing) {
+func broadcastOOCToAll(p aolib.Outgoing) {
 	if !puAllowed(p) {
 		return
 	}
@@ -1004,7 +1004,7 @@ func broadcastOOCToAll(p packet.Outgoing) {
 
 // broadcastToAllClients fans a typed packet to every connected client,
 // including those that haven't yet been assigned a UID.
-func broadcastToAllClients(p packet.Outgoing) {
+func broadcastToAllClients(p aolib.Outgoing) {
 	if !puAllowed(p) {
 		return
 	}
@@ -1099,19 +1099,19 @@ func sendPlayerListToClient(newClient *Client) {
 			return
 		}
 		uid := c.Uid()
-		newClient.Send(&packet.PR{ID: uid, Type: 0})
+		newClient.Send(&aolib.PR{ID: uid, Type: aolib.PlayerListUpdateAdd})
 		// Filtered like any other name broadcast. This is the path that made
 		// the filter necessary: a name set before a word was added to the list
 		// is otherwise re-sent, in full, to every person who joins from then
 		// on, long after the input-time check stopped running.
-		if n := (&packet.PU{ID: uid, Type: 0, Data: c.OOCName()}); c.OOCName() != "" && puAllowed(n) {
+		if n := (&aolib.PU{ID: uid, Type: aolib.PlayerDataTypeOocName, Data: c.OOCName()}); c.OOCName() != "" && puAllowed(n) {
 			newClient.Send(n)
 		}
-		newClient.Send(&packet.PU{ID: uid, Type: 1, Data: c.CurrentCharacter()})
-		if n := (&packet.PU{ID: uid, Type: 2, Data: decode(c.Showname())}); puAllowed(n) {
+		newClient.Send(&aolib.PU{ID: uid, Type: aolib.PlayerDataTypeCharName, Data: c.CurrentCharacter()})
+		if n := (&aolib.PU{ID: uid, Type: aolib.PlayerDataTypeShowname, Data: decode(c.Showname())}); puAllowed(n) {
 			newClient.Send(n)
 		}
-		newClient.Send(&packet.PU{ID: uid, Type: 3, Data: strconv.Itoa(getAreaIndex(c.Area()))})
+		newClient.Send(&aolib.PU{ID: uid, Type: aolib.PlayerDataTypeAreaID, Data: strconv.Itoa(getAreaIndex(c.Area()))})
 	})
 }
 
@@ -1122,13 +1122,13 @@ func broadcastPlayerJoin(client *Client) {
 		return
 	}
 	uid := client.Uid()
-	broadcastToAll(&packet.PR{ID: uid, Type: 0})
+	broadcastToAll(&aolib.PR{ID: uid, Type: aolib.PlayerListUpdateAdd})
 	if client.OOCName() != "" {
-		broadcastToAll(&packet.PU{ID: uid, Type: 0, Data: client.OOCName()})
+		broadcastToAll(&aolib.PU{ID: uid, Type: aolib.PlayerDataTypeOocName, Data: client.OOCName()})
 	}
-	broadcastToAll(&packet.PU{ID: uid, Type: 1, Data: client.CurrentCharacter()})
-	broadcastToAll(&packet.PU{ID: uid, Type: 2, Data: decode(client.Showname())})
-	broadcastToAll(&packet.PU{ID: uid, Type: 3, Data: strconv.Itoa(getAreaIndex(client.Area()))})
+	broadcastToAll(&aolib.PU{ID: uid, Type: aolib.PlayerDataTypeCharName, Data: client.CurrentCharacter()})
+	broadcastToAll(&aolib.PU{ID: uid, Type: aolib.PlayerDataTypeShowname, Data: decode(client.Showname())})
+	broadcastToAll(&aolib.PU{ID: uid, Type: aolib.PlayerDataTypeAreaID, Data: strconv.Itoa(getAreaIndex(client.Area()))})
 }
 
 // broadcastIPIDToMods sends a player's IPID (PU type 4) to every currently
@@ -1141,7 +1141,7 @@ func broadcastPlayerJoin(client *Client) {
 func broadcastIPIDToMods(uid int, ipid string) {
 	clients.ForEach(func(c *Client) {
 		if c.Uid() != -1 && permissions.HasPermission(c.Perms(), permissions.PermissionField["BAN_INFO"]) {
-			c.Send(&packet.PU{ID: uid, Type: 4, Data: ipid})
+			c.Send(&aolib.PU{ID: uid, Type: aolib.PlayerDataType("4"), Data: ipid})
 		}
 	})
 }
@@ -1160,7 +1160,7 @@ func sendModIPIDsToClient(newClient *Client) {
 		if c.Uid() == -1 || c == newClient || c.Hidden() {
 			return
 		}
-		newClient.Send(&packet.PU{ID: c.Uid(), Type: 4, Data: c.Ipid()})
+		newClient.Send(&aolib.PU{ID: c.Uid(), Type: aolib.PlayerDataType("4"), Data: c.Ipid()})
 	})
 }
 
@@ -1171,7 +1171,7 @@ func sendPlayerArup() {
 	for _, a := range areas {
 		plCounts = append(plCounts, strconv.Itoa(a.VisiblePlayerCount()))
 	}
-	broadcastToAll(&packet.ARUP{UpdateType: packet.AreaUpdateTypePlayerCount, UpdateData: plCounts})
+	broadcastToAll(&aolib.ARUP{UpdateType: aolib.AreaUpdateTypePlayerCount, UpdateData: plCounts})
 }
 
 // sendCMArup sends a CM ARUP to all connected clients.
@@ -1193,7 +1193,7 @@ func sendCMArup() {
 		}
 		returnL = append(returnL, strings.Join(cms, ", "))
 	}
-	broadcastToAll(&packet.ARUP{UpdateType: packet.AreaUpdateTypeCaseManager, UpdateData: returnL})
+	broadcastToAll(&aolib.ARUP{UpdateType: aolib.AreaUpdateTypeCaseManager, UpdateData: returnL})
 }
 
 // sendStatusArup sends a status ARUP to all connected clients.
@@ -1202,7 +1202,7 @@ func sendStatusArup() {
 	for _, a := range areas {
 		statuses = append(statuses, a.Status().String())
 	}
-	broadcastToAll(&packet.ARUP{UpdateType: packet.AreaUpdateTypeStatus, UpdateData: statuses})
+	broadcastToAll(&aolib.ARUP{UpdateType: aolib.AreaUpdateTypeStatus, UpdateData: statuses})
 }
 
 // areaLockDisplay returns the lock state to advertise for an area in the lock
@@ -1239,7 +1239,7 @@ func sendLockArup() {
 	for _, a := range areas {
 		locks = append(locks, areaLockDisplay(a).String())
 	}
-	broadcastToAll(&packet.ARUP{UpdateType: packet.AreaUpdateTypeLocked, UpdateData: locks})
+	broadcastToAll(&aolib.ARUP{UpdateType: aolib.AreaUpdateTypeLocked, UpdateData: locks})
 }
 
 // getRole returns the role with the corresponding name, or an error if the role does not exist.
@@ -1267,13 +1267,13 @@ func getClientsByIpid(ipid string) []*Client {
 
 // sendAreaServerMessage sends a server OOC message to all clients in an area.
 func sendAreaServerMessage(area *area.Area, message string) {
-	broadcastToArea(area, &packet.CTToClient{Name: encodedServerName, Message: encode(message), IsFromServer: true})
+	broadcastToArea(area, &aolib.CTToClient{Name: encodedServerName, Message: encode(message), IsFromServer: true})
 }
 
 // sendAreaGamblingMessage sends a gambling-result OOC message to all clients
 // in an area who have not opted out of gambling broadcasts via /gamble hide.
 func sendAreaGamblingMessage(a *area.Area, message string) {
-	out := &packet.CTToClient{Name: encodedServerName, Message: encode(message), IsFromServer: true}
+	out := &aolib.CTToClient{Name: encodedServerName, Message: encode(message), IsFromServer: true}
 	header, args := out.Header(), out.Args()
 	clients.ForEach(func(client *Client) {
 		if client.Area() == a && !client.GambleHide() {
@@ -1284,7 +1284,7 @@ func sendAreaGamblingMessage(a *area.Area, message string) {
 
 // sendGlobalServerMessage broadcasts a server OOC message to every joined client.
 func sendGlobalServerMessage(message string) {
-	broadcastToAll(&packet.CTToClient{Name: encodedServerName, Message: encode(message), IsFromServer: true})
+	broadcastToAll(&aolib.CTToClient{Name: encodedServerName, Message: encode(message), IsFromServer: true})
 }
 
 // getRealIP extracts the real client IP address from an HTTP request.
@@ -2142,7 +2142,7 @@ func purgeLockdownFloodClients() {
 			if !lockdownShouldSilence(c) {
 				return
 			}
-			c.SendSync(&packet.KK{Reason: lockdownRejectionMessage(baseReason, c.Ipid())})
+			c.SendSync(&aolib.KK{Reason: lockdownRejectionMessage(baseReason, c.Ipid())})
 			c.conn.Close()
 			forgetIP(c.Ipid())
 			atomic.AddInt32(&kicked, 1)
@@ -2159,7 +2159,7 @@ func purgeLockdownFloodClients() {
 	logger.LogInfof("%s", msg)
 	clients.ForEach(func(c *Client) {
 		if c.Uid() != -1 && permissions.IsModerator(c.Perms()) {
-			c.Send(&packet.CTToClient{Name: "OOC", Message: msg, IsFromServer: true})
+			c.Send(&aolib.CTToClient{Name: "OOC", Message: msg, IsFromServer: true})
 		}
 	})
 }

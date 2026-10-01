@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"github.com/MangosArentLiterature/Athena/internal/area"
-	"github.com/MangosArentLiterature/Athena/internal/packet"
+	aolib "github.com/AO-Underground/aolib/go/v2"
 )
 
 // resetVoiceStutterState clears the package-level /voicestutter held-frame
@@ -256,12 +256,12 @@ func TestPktVSFrameVoiceMutePunishmentSuppressesRelay(t *testing.T) {
 		clients.AddClient(c)
 		clients.RegisterUID(c)
 	}
-	pktVSJoin(alice, &packet.Packet{Header: "VS_JOIN"})
-	pktVSJoin(bob, &packet.Packet{Header: "VS_JOIN"})
+	pktVSJoin(alice, &aolib.Packet{Header: "VS_JOIN"})
+	pktVSJoin(bob, &aolib.Packet{Header: "VS_JOIN"})
 
 	// Baseline: an unpunished frame reaches bob.
 	bobConn.buf.Reset()
-	pktVSFrame(alice, &packet.Packet{Header: "VS_FRAME", Body: []string{"CLEAN"}})
+	pktVSFrame(alice, &aolib.Packet{Header: "VS_FRAME", Body: []string{"CLEAN"}})
 	if !strings.Contains(bobConn.String(), "VS_AUDIO#1#CLEAN#%") {
 		t.Fatalf("baseline frame did not reach bob, got: %q", bobConn.String())
 	}
@@ -270,7 +270,7 @@ func TestPktVSFrameVoiceMutePunishmentSuppressesRelay(t *testing.T) {
 	alice.AddPunishmentBy(PunishmentVoiceMute, 0, "test", IssuerMod)
 	bobConn.buf.Reset()
 	for i := 0; i < 20; i++ {
-		pktVSFrame(alice, &packet.Packet{Header: "VS_FRAME", Body: []string{"MUTED"}})
+		pktVSFrame(alice, &aolib.Packet{Header: "VS_FRAME", Body: []string{"MUTED"}})
 	}
 	if strings.Contains(bobConn.String(), "VS_AUDIO") {
 		t.Errorf("/voicemute did not suppress relay, bob got: %q", bobConn.String())
@@ -279,7 +279,7 @@ func TestPktVSFrameVoiceMutePunishmentSuppressesRelay(t *testing.T) {
 	// Lifting the punishment restores the relay.
 	alice.RemovePunishment(PunishmentVoiceMute)
 	bobConn.buf.Reset()
-	pktVSFrame(alice, &packet.Packet{Header: "VS_FRAME", Body: []string{"AGAIN"}})
+	pktVSFrame(alice, &aolib.Packet{Header: "VS_FRAME", Body: []string{"AGAIN"}})
 	if !strings.Contains(bobConn.String(), "VS_AUDIO#1#AGAIN#%") {
 		t.Errorf("relay not restored after the punishment was lifted, bob got: %q", bobConn.String())
 	}

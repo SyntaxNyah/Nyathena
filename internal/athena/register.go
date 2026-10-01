@@ -6,29 +6,34 @@ package athena
 // the bidirectional FL — is wired up here instead of being baked into the
 // library.
 
-import "github.com/MangosArentLiterature/Athena/internal/packet"
+import (
+	"github.com/MangosArentLiterature/Athena/internal/packetutil"
+)
 
 func init() {
-	packet.RegisterDecoder("MS", func(b []string) (any, error) { return ParseMSToServer(b), nil })
-	packet.RegisterServerDecoder("MS", func(b []string) (any, error) { return ParseMSToClient(b), nil })
 	// FL is bidirectional in Nyathena: the client advertises its own feature
 	// list for the multi-pair handshake. Canonical aolib-meta marks it s2c only.
-	packet.RegisterDecoder("FL", func(b []string) (any, error) { return packet.ParseFL(b) })
+	packetutil.RegisterCodec("FL", flCodec())
+
+	// MS is Nyathena's custom in-character packet (string-typed wire fields,
+	// custom-shout name, blips, and the JSON-only additional_chars). It carries
+	// its own both-wire codec so its JSON form matches the canonical meta shape.
+	packetutil.RegisterCodec("MS", msCodec())
 
 	// Nonstandard headers (TT / SETCASE / CASEA) are registered as full
 	// both-wire codecs — the canonical aolib-go RegisterCodec extension point —
-	// so they carry a FantaCode AND a JSON form through packet.Encode/Decode.
-	packet.RegisterCodec("TT", ttCodec())
-	packet.RegisterCodec("SETCASE", setcaseCodec())
-	packet.RegisterCodec("CASEA", caseaCodec())
+	// so they carry a FantaCode AND a JSON form through aolib.Encode/Decode.
+	packetutil.RegisterCodec("TT", ttCodec())
+	packetutil.RegisterCodec("SETCASE", setcaseCodec())
+	packetutil.RegisterCodec("CASEA", caseaCodec())
 
 	// Voice chat (VS_*) — removed from the canonical spec (aa8d0fb); registered
 	// here as Nyathena server extensions, both-wire like TT/SETCASE/CASEA.
-	packet.RegisterCodec("VS_CAPS", vsCapsCodec())
-	packet.RegisterCodec("VS_AUDIO", vsAudioCodec())
-	packet.RegisterCodec("VS_FRAME", vsFrameCodec())
-	packet.RegisterCodec("VS_PEERS", vsPeersCodec())
-	packet.RegisterCodec("VS_JOIN", vsJoinCodec())
-	packet.RegisterCodec("VS_LEAVE", vsLeaveCodec())
-	packet.RegisterCodec("VS_SPEAK", vsSpeakCodec())
+	packetutil.RegisterCodec("VS_CAPS", vsCapsCodec())
+	packetutil.RegisterCodec("VS_AUDIO", vsAudioCodec())
+	packetutil.RegisterCodec("VS_FRAME", vsFrameCodec())
+	packetutil.RegisterCodec("VS_PEERS", vsPeersCodec())
+	packetutil.RegisterCodec("VS_JOIN", vsJoinCodec())
+	packetutil.RegisterCodec("VS_LEAVE", vsLeaveCodec())
+	packetutil.RegisterCodec("VS_SPEAK", vsSpeakCodec())
 }

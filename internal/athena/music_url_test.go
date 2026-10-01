@@ -21,7 +21,7 @@ import (
 	"testing"
 
 	"github.com/MangosArentLiterature/Athena/internal/area"
-	"github.com/MangosArentLiterature/Athena/internal/packet"
+	aolib "github.com/AO-Underground/aolib/go/v2"
 	"github.com/MangosArentLiterature/Athena/internal/settings"
 )
 
@@ -89,7 +89,7 @@ func TestMCURLWhitelistedBroadcastsVerbatim(t *testing.T) {
 	client, conn := newMusicTestClient(t)
 
 	const url = "https://host.com/stuff.mp3"
-	pktAM(client, &packet.Packet{Header: "MC", Body: []string{url, "0"}})
+	pktAM(client, &aolib.Packet{Header: "MC", Body: []string{url, "0"}})
 
 	out := conn.String()
 	wantMC := "MC#" + url + "#0#"
@@ -114,7 +114,7 @@ func TestMCURLUnwhitelistedRejected(t *testing.T) {
 	client, conn := newMusicTestClient(t)
 
 	const url = "https://evil.com/stuff.mp3"
-	pktAM(client, &packet.Packet{Header: "MC", Body: []string{url, "0"}})
+	pktAM(client, &aolib.Packet{Header: "MC", Body: []string{url, "0"}})
 
 	out := conn.String()
 	if !strings.Contains(out, "Illegal origin") {
@@ -157,7 +157,7 @@ func TestJoinAreaSyncsCurrentMusic(t *testing.T) {
 
 // TestJoinAreaNoCurrentMusicSendsStop verifies that joining an area where
 // nothing is playing (never played a track, or the music was stopped) sends an
-// explicit ~stop.mp3 MC packet. Without it, a client walking in from a room
+// explicit ~stop.mp3 MC aolib. Without it, a client walking in from a room
 // with music kept playing that old track forever — the server never told it to
 // stop, so it had no way to know it should.
 func TestJoinAreaNoCurrentMusicSendsStop(t *testing.T) {
@@ -192,7 +192,7 @@ func TestMCURLWithQueryStringNotMangled(t *testing.T) {
 
 	const originalURL = "https://host.com/stream?id=7&fmt=mp3"
 	wireName := encode(originalURL) // what a client actually puts on the wire
-	pktAM(client, &packet.Packet{Header: "MC", Body: []string{wireName, "0"}})
+	pktAM(client, &aolib.Packet{Header: "MC", Body: []string{wireName, "0"}})
 
 	out := conn.String()
 	if !strings.Contains(out, "MC#"+wireName+"#0#") {

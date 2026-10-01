@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"github.com/MangosArentLiterature/Athena/internal/area"
-	"github.com/MangosArentLiterature/Athena/internal/packet"
+	aolib "github.com/AO-Underground/aolib/go/v2"
 )
 
 // One connection that has stopped reading must not be able to stall every
@@ -89,7 +89,7 @@ func TestStuckWriterCannotStallBroadcasts(t *testing.T) {
 	// While that write is stuck, an ordinary broadcast must still complete.
 	done := make(chan struct{})
 	go func() {
-		broadcastToArea(a, &packet.CTToClient{Name: "server", Message: "hello", IsFromServer: true})
+		broadcastToArea(a, &aolib.CTToClient{Name: "server", Message: "hello", IsFromServer: true})
 		close(done)
 	}()
 
@@ -141,7 +141,7 @@ func TestStuckSyncSendCannotStallBroadcasts(t *testing.T) {
 
 	done := make(chan struct{})
 	go func() {
-		broadcastToArea(a, &packet.CTToClient{Name: "server", Message: "hello", IsFromServer: true})
+		broadcastToArea(a, &aolib.CTToClient{Name: "server", Message: "hello", IsFromServer: true})
 		close(done)
 	}()
 	select {

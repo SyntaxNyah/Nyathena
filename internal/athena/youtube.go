@@ -23,7 +23,7 @@ import (
 
 	"github.com/MangosArentLiterature/Athena/internal/area"
 	"github.com/MangosArentLiterature/Athena/internal/logger"
-	"github.com/MangosArentLiterature/Athena/internal/packet"
+	aolib "github.com/AO-Underground/aolib/go/v2"
 )
 
 var youtubeIDRegex = regexp.MustCompile(`^[A-Za-z0-9_-]{11}$`)
@@ -255,9 +255,9 @@ func downloadYouTubeAudio(ctx context.Context, rawURL, id, destDir string) error
 // song with them. ext is the on-disk extension (".opus" or ".mp3") of the
 // cached file the area will fetch.
 func broadcastYouTubeReady(targetArea *area.Area, id, ext string, charID int, showname string) {
-	playAreaMusic(targetArea, &packet.MCToClient{
+	playAreaMusic(targetArea, &aolib.MCToClient{
 		Name: youTubePlayURL(id, ext), CharID: charID, Showname: showname,
-		Looping: true, Channel: 0, Effects: 0,
+		Looping: true, Channel: aolib.MusicChannelMusic, Effects: aolib.MusicEffects{},
 	})
 }
 

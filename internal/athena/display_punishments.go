@@ -23,7 +23,8 @@ import (
 	"time"
 
 	"github.com/MangosArentLiterature/Athena/internal/area"
-	"github.com/MangosArentLiterature/Athena/internal/packet"
+	aolib "github.com/AO-Underground/aolib/go/v2"
+	"github.com/MangosArentLiterature/Athena/internal/packetutil"
 	"github.com/MangosArentLiterature/Athena/internal/permissions"
 )
 
@@ -179,10 +180,10 @@ func applyForceDisplaySprite(ms *MSToClient, target *Client) {
 	ms.Emote = emote
 	if info.flip == "0" || info.flip == "1" {
 		flipN, _ := strconv.Atoi(info.flip)
-		ms.Flip = packet.FlipFromWire[flipN]
+		ms.Flip = packetutil.FlipFromWire[flipN]
 	}
 	if pos := target.Pos(); pos != "" {
-		ms.Side = packet.Side(pos)
+		ms.Side = aolib.Side(pos)
 	}
 	if info.offset != "" {
 		ms.Offset = info.offset
@@ -194,7 +195,7 @@ func applyForceDisplaySprite(ms *MSToClient, target *Client) {
 	ms.PairedName = ""
 	ms.PairedEmote = ""
 	ms.PairedOffset = ""
-	ms.PairedFlip = packet.FlipNone
+	ms.PairedFlip = aolib.FlipNone
 }
 
 // cmdHideDisplay (/hidedisplay) hides the target's own sprite from the IC

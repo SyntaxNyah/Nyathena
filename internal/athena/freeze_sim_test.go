@@ -10,7 +10,7 @@ import (
 	"time"
 
 	"github.com/MangosArentLiterature/Athena/internal/area"
-	"github.com/MangosArentLiterature/Athena/internal/packet"
+	aolib "github.com/AO-Underground/aolib/go/v2"
 )
 
 // Reproducing the freeze, rather than asserting it from a microbenchmark.
@@ -105,12 +105,12 @@ func simPopulation(t *testing.T, n int) (*ClientList, *area.Area, func()) {
 // broadcasts are included because they are part of the real per-change cost.
 func oneCharacterChange(a *area.Area, buildOnce bool) {
 	if buildOnce {
-		broadcastToAreaOnce(a, &packet.CharsCheck{Taken: packet.StrsToInts(a.Taken())})
+		broadcastToAreaOnce(a, &aolib.CharsCheck{Taken: charAvailabilities(a.Taken())})
 	} else {
-		broadcastToArea(a, &packet.CharsCheck{Taken: packet.StrsToInts(a.Taken())})
+		broadcastToArea(a, &aolib.CharsCheck{Taken: charAvailabilities(a.Taken())})
 	}
-	broadcastToAll(&packet.PU{ID: 1, Type: 1, Data: "Phoenix"})
-	broadcastToAll(&packet.PU{ID: 1, Type: 2, Data: "Phoenix"})
+	broadcastToAll(&aolib.PU{ID: 1, Type: aolib.PlayerDataTypeCharName, Data: "Phoenix"})
+	broadcastToAll(&aolib.PU{ID: 1, Type: aolib.PlayerDataTypeShowname, Data: "Phoenix"})
 }
 
 func TestFreezeReproducesFromRealRaidTimeline(t *testing.T) {

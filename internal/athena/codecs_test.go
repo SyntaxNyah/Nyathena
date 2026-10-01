@@ -3,21 +3,22 @@ package athena
 import (
 	"testing"
 
-	"github.com/MangosArentLiterature/Athena/internal/packet"
+	aolib "github.com/AO-Underground/aolib/go/v2"
+	"github.com/MangosArentLiterature/Athena/internal/packetutil"
 )
 
 // The nonstandard packets register both-wire codecs in register.go's init();
-// these tests exercise that path through packet.Encode/Decode directly.
+// these tests exercise that path through aolib.Encode/Decode directly.
 
 func TestTTCodecFantaRoundTrip(t *testing.T) {
-	raw, err := packet.Encode(&TTPacket{Type: "0", Title: "Cross Examination"}, packet.WireFanta)
+	raw, err := packetutil.Encode(&TTPacket{Type: "0", Title: "Cross Examination"}, aolib.WireFanta)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if string(raw) != "TT#0#Cross Examination#%" {
 		t.Fatalf("fanta = %q", raw)
 	}
-	v, err := packet.Decode(raw, packet.WireFanta)
+	v, err := packetutil.Decode(raw, aolib.WireFanta)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -28,11 +29,11 @@ func TestTTCodecFantaRoundTrip(t *testing.T) {
 }
 
 func TestTTCodecFantaEscapes(t *testing.T) {
-	raw, _ := packet.Encode(&TTPacket{Type: "1", Title: "a#b"}, packet.WireFanta)
+	raw, _ := packetutil.Encode(&TTPacket{Type: "1", Title: "a#b"}, aolib.WireFanta)
 	if string(raw) != "TT#1#a<num>b#%" {
 		t.Fatalf("fanta escape = %q", raw)
 	}
-	v, err := packet.Decode(raw, packet.WireFanta)
+	v, err := packetutil.Decode(raw, aolib.WireFanta)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -42,11 +43,11 @@ func TestTTCodecFantaEscapes(t *testing.T) {
 }
 
 func TestTTCodecJSONRoundTrip(t *testing.T) {
-	raw, err := packet.Encode(&TTPacket{Type: "0", Title: "Cross Examination"}, packet.WireJSON)
+	raw, err := packetutil.Encode(&TTPacket{Type: "0", Title: "Cross Examination"}, aolib.WireJSON)
 	if err != nil {
 		t.Fatal(err)
 	}
-	v, err := packet.Decode(raw, packet.WireJSON)
+	v, err := packetutil.Decode(raw, aolib.WireJSON)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -57,7 +58,7 @@ func TestTTCodecJSONRoundTrip(t *testing.T) {
 }
 
 func TestSETCASEAndCASEAFantaDecode(t *testing.T) {
-	sc, err := packet.Decode([]byte("SETCASE##1#0#1#0#0#%"), packet.WireFanta)
+	sc, err := packetutil.Decode([]byte("SETCASE##1#0#1#0#0#%"), aolib.WireFanta)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -65,7 +66,7 @@ func TestSETCASEAndCASEAFantaDecode(t *testing.T) {
 		t.Fatalf("SETCASE decoded = %#v", s)
 	}
 
-	ca, err := packet.Decode([]byte("CASEA#case#1#1#0#0#0#%"), packet.WireFanta)
+	ca, err := packetutil.Decode([]byte("CASEA#case#1#1#0#0#0#%"), aolib.WireFanta)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -75,20 +76,15 @@ func TestSETCASEAndCASEAFantaDecode(t *testing.T) {
 }
 
 func TestCodecJSONHotPathHelpers(t *testing.T) {
-	// EncodeJSON (outbound) → CodecJSONToBody (inbound) round-trips a
-	// codec-registered packet through the named-field JSON form.
-	raw := packet.EncodeJSON(&TTPacket{Type: "0", Title: "Cross Examination"})
-	if raw == nil {
-		t.Fatal("EncodeJSON returned nil")
+	// packetutil.Encode (outbound) → packetutil.DecodeToBody (inbound)
+	// round-trips a codec-registered packet through the named-field JSON form.
+	raw, err := packetutil.Encode(&TTPacket{Type: "0", Title: "Cross Examination"}, aolib.WireJSON)
+	if err != nil || raw == nil {
+		t.Fatalf("Encode returned nil or error: %v", err)
 	}
-	body, ok := packet.CodecJSONToBody("TT", string(raw))
-	if !ok || len(body) != 2 || body[0] != "0" || body[1] != "Cross Examination" {
-		t.Fatalf("CodecJSONToBody = %v (ok=%v), raw=%s", body, ok, raw)
-	}
-
-	// A header with no codec is not owned by CodecJSONToBody.
-	if _, ok := packet.CodecJSONToBody("FL", `{"$header":"FL"}`); ok {
-		t.Fatal("CodecJSONToBody claimed a non-codec header")
+	header, body, err := packetutil.DecodeToBody(raw, aolib.WireJSON)
+	if err != nil || header != "TT" || len(body) != 2 || body[0] != "0" || body[1] != "Cross Examination" {
+		t.Fatalf("DecodeToBody = %v (header=%v, err=%v), raw=%s", body, header, err, raw)
 	}
 }
 

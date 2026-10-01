@@ -60,25 +60,20 @@ package athena
 
 import (
 	"github.com/MangosArentLiterature/Athena/internal/logger"
-	"github.com/MangosArentLiterature/Athena/internal/packet"
+	aolib "github.com/AO-Underground/aolib/go/v2"
 	"github.com/MangosArentLiterature/Athena/internal/permissions"
 )
 
 // PU packet types that carry a player-chosen name. Type 1 is the character
 // name (drawn from characters.txt, which the operator controls) and type 3 is
 // an area index, so neither is player-supplied text and neither is filtered.
-const (
-	puTypeOOCName  = 0
-	puTypeShowname = 2
-)
-
 // nameAllowedInPU reports whether a PU may be sent, and bans the name's owner
 // when the entry that matched is nuke-tier.
 //
 // Returns true for everything that is not a name-carrying PU, so the check is
 // two comparisons for the ARUP/character/area traffic that shares this path.
-func nameAllowedInPU(pu *packet.PU) bool {
-	if pu == nil || (pu.Type != puTypeOOCName && pu.Type != puTypeShowname) || pu.Data == "" {
+func nameAllowedInPU(pu *aolib.PU) bool {
+	if pu == nil || (pu.Type != aolib.PlayerDataTypeOocName && pu.Type != aolib.PlayerDataTypeShowname) || pu.Data == "" {
 		return true
 	}
 	entries := effectiveWordEntries()
@@ -91,7 +86,7 @@ func nameAllowedInPU(pu *packet.PU) bool {
 	}
 
 	field := "showname"
-	if pu.Type == puTypeOOCName {
+	if pu.Type == aolib.PlayerDataTypeOocName {
 		field = "OOC name"
 	}
 	logger.LogInfof("name filter: dropped a %s broadcast for uid %d — matched %s", field, pu.ID, m.Entry.String())
@@ -130,8 +125,8 @@ func banPUNameOwner(uid int, m WordListMatch, field string) {
 // connected client; it is not measurable against the serialization and socket
 // writes that follow it, and broadcastToArea -- the per-message IC path -- does
 // not go through here at all.
-func puAllowed(p packet.Outgoing) bool {
-	if pu, ok := p.(*packet.PU); ok {
+func puAllowed(p aolib.Outgoing) bool {
+	if pu, ok := p.(*aolib.PU); ok {
 		return nameAllowedInPU(pu)
 	}
 	return true

@@ -18,7 +18,7 @@ package athena
 import (
 	"testing"
 
-	"github.com/MangosArentLiterature/Athena/internal/packet"
+	aolib "github.com/AO-Underground/aolib/go/v2"
 )
 
 // withWordEntries installs a tiered word list for the duration of a test and
@@ -42,19 +42,19 @@ func TestPUNameFilterDropsMatchingNames(t *testing.T) {
 
 	for _, tc := range []struct {
 		name  string
-		pu    *packet.PU
+		pu    *aolib.PU
 		allow bool
 	}{
-		{"clean showname", &packet.PU{ID: 1, Type: puTypeShowname, Data: "Phoenix Wright"}, true},
-		{"clean OOC name", &packet.PU{ID: 1, Type: puTypeOOCName, Data: "someone"}, true},
-		{"dirty showname", &packet.PU{ID: 1, Type: puTypeShowname, Data: "a slurword here"}, false},
-		{"dirty OOC name", &packet.PU{ID: 1, Type: puTypeOOCName, Data: "slurword"}, false},
+		{"clean showname", &aolib.PU{ID: 1, Type: aolib.PlayerDataTypeShowname, Data: "Phoenix Wright"}, true},
+		{"clean OOC name", &aolib.PU{ID: 1, Type: aolib.PlayerDataTypeOocName, Data: "someone"}, true},
+		{"dirty showname", &aolib.PU{ID: 1, Type: aolib.PlayerDataTypeShowname, Data: "a slurword here"}, false},
+		{"dirty OOC name", &aolib.PU{ID: 1, Type: aolib.PlayerDataTypeOocName, Data: "slurword"}, false},
 		// Type 1 is the character name, drawn from characters.txt, and type 3 is
 		// an area index. Neither is player-supplied text, so neither is filtered
 		// -- a character legitimately named something awkward must not vanish.
-		{"character name is never filtered", &packet.PU{ID: 1, Type: 1, Data: "slurword"}, true},
-		{"area index is never filtered", &packet.PU{ID: 1, Type: 3, Data: "4"}, true},
-		{"empty name", &packet.PU{ID: 1, Type: puTypeShowname, Data: ""}, true},
+		{"character name is never filtered", &aolib.PU{ID: 1, Type: aolib.PlayerDataTypeCharName, Data: "slurword"}, true},
+		{"area index is never filtered", &aolib.PU{ID: 1, Type: aolib.PlayerDataTypeAreaID, Data: "4"}, true},
+		{"empty name", &aolib.PU{ID: 1, Type: aolib.PlayerDataTypeShowname, Data: ""}, true},
 	} {
 		if got := nameAllowedInPU(tc.pu); got != tc.allow {
 			t.Errorf("%s: nameAllowedInPU = %v, want %v", tc.name, got, tc.allow)
@@ -77,7 +77,7 @@ func TestPUNameFilterCatchesEvasion(t *testing.T) {
 		"SLURWORD",
 		"ｓｌｕｒｗｏｒｄ", // fullwidth
 	} {
-		if nameAllowedInPU(&packet.PU{ID: 1, Type: puTypeShowname, Data: name}) {
+		if nameAllowedInPU(&aolib.PU{ID: 1, Type: aolib.PlayerDataTypeShowname, Data: name}) {
 			t.Errorf("name %q was allowed through; the PU filter must normalize exactly like the message filter", name)
 		}
 	}
@@ -89,14 +89,14 @@ func TestPUNameFilterCatchesEvasion(t *testing.T) {
 	// does NOT match the single-r entry above; an operator who wants that form
 	// lists it. Asserted rather than left implicit, since it is the kind of gap
 	// worth knowing about when writing a list.
-	if !nameAllowedInPU(&packet.PU{ID: 1, Type: puTypeShowname, Data: "slurrrrword"}) {
+	if !nameAllowedInPU(&aolib.PU{ID: 1, Type: aolib.PlayerDataTypeShowname, Data: "slurrrrword"}) {
 		t.Error("stuffing collapsed all the way to a single letter; the 3+-to-2 rule has changed and " +
 			"entries like \"nigger\" would now shrink into common-word collisions")
 	}
 	withWordEntries(t, []WordEntry{
 		{Raw: "slurrword", Pattern: "slurrword", Severity: SeverityDefault, Mode: MatchSubstring},
 	})
-	if nameAllowedInPU(&packet.PU{ID: 1, Type: puTypeShowname, Data: "slurrrrrrword"}) {
+	if nameAllowedInPU(&aolib.PU{ID: 1, Type: aolib.PlayerDataTypeShowname, Data: "slurrrrrrword"}) {
 		t.Error("stuffing was not collapsed at all against a doubled-letter entry")
 	}
 }
@@ -108,9 +108,9 @@ func TestPUFilterPassesNonPUPackets(t *testing.T) {
 	withWordEntries(t, []WordEntry{
 		{Raw: "slurword", Pattern: "slurword", Severity: SeverityNuke, Mode: MatchSubstring},
 	})
-	for _, p := range []packet.Outgoing{
-		&packet.CTToClient{Name: "slurword", Message: "slurword", IsFromServer: true},
-		&packet.PR{ID: 1, Type: 0},
+	for _, p := range []aolib.Outgoing{
+		&aolib.CTToClient{Name: "slurword", Message: "slurword", IsFromServer: true},
+		&aolib.PR{ID: 1, Type: aolib.PlayerListUpdateAdd},
 	} {
 		if !puAllowed(p) {
 			t.Errorf("%T was blocked by the PU name filter; it must only ever act on PU", p)
@@ -123,7 +123,7 @@ func TestPUFilterPassesNonPUPackets(t *testing.T) {
 // list pays nothing for this path existing.
 func TestPUFilterInertWithNoWordList(t *testing.T) {
 	withWordEntries(t, nil)
-	if !nameAllowedInPU(&packet.PU{ID: 1, Type: puTypeShowname, Data: "anything at all"}) {
+	if !nameAllowedInPU(&aolib.PU{ID: 1, Type: aolib.PlayerDataTypeShowname, Data: "anything at all"}) {
 		t.Error("a name was blocked with an empty word list")
 	}
 }

@@ -22,7 +22,8 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/MangosArentLiterature/Athena/internal/packet"
+	aolib "github.com/AO-Underground/aolib/go/v2"
+	"github.com/MangosArentLiterature/Athena/internal/packetutil"
 )
 
 // PairGroup is a multi-pair group (3-5 characters). It starts pending and
@@ -267,7 +268,7 @@ func applyPairGroupInjection(client *Client, ms *MSToClient) {
 	ms.PairedEmote = info.emote
 	ms.PairedOffset = info.offset
 	otherFlip, _ := strconv.Atoi(info.flip)
-	ms.PairedFlip = packet.FlipFromWire[otherFlip]
+	ms.PairedFlip = packetutil.FlipFromWire[otherFlip]
 
 	for _, p := range others[1:] {
 		pi := p.PairInfo()
@@ -282,9 +283,9 @@ func applyPairGroupInjection(client *Client, ms *MSToClient) {
 }
 
 // parseOffset converts an "x" or "x&y" offset string into a Offset.
-func parseOffset(s string) packet.Offset {
+func parseOffset(s string) aolib.Offset {
 	if s == "" {
-		return packet.Offset{}
+		return aolib.Offset{}
 	}
 	parts := strings.SplitN(s, "&", 2)
 	x, _ := strconv.Atoi(parts[0])
@@ -292,13 +293,13 @@ func parseOffset(s string) packet.Offset {
 	if len(parts) > 1 {
 		y, _ = strconv.Atoi(parts[1])
 	}
-	return packet.Offset{X: x, Y: y}
+	return aolib.Offset{X: x, Y: y}
 }
 
 // parsePairFlip converts a flip string ("0".."3") into the Flip enum.
-func parsePairFlip(s string) packet.Flip {
+func parsePairFlip(s string) aolib.Flip {
 	n, _ := strconv.Atoi(s)
-	return packet.FlipFromWire[n]
+	return packetutil.FlipFromWire[n]
 }
 
 // dissolvePairGroupOnDisconnect tears down any group a disconnecting client

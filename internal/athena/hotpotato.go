@@ -23,7 +23,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/MangosArentLiterature/Athena/internal/packet"
+	aolib "github.com/AO-Underground/aolib/go/v2"
 )
 
 // ── Timing constants ─────────────────────────────────────────────────────────
@@ -404,7 +404,7 @@ func hotPotatoResolve(carrierUID int, participantUIDs []int) {
 		uids := make([]string, len(affected))
 		for i, c := range affected {
 			uids[i] = fmt.Sprintf("%d", c.Uid())
-			c.SendSync(&packet.KK{Reason: "Hot Potato: caught in the same area as a moderator carrying the Hot Potato!"})
+			c.SendSync(&aolib.KK{Reason: "Hot Potato: caught in the same area as a moderator carrying the Hot Potato!"})
 			c.conn.Close()
 		}
 		sendGlobalServerMessage(fmt.Sprintf(

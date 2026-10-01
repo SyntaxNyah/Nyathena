@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"github.com/MangosArentLiterature/Athena/internal/area"
-	"github.com/MangosArentLiterature/Athena/internal/packet"
+	aolib "github.com/AO-Underground/aolib/go/v2"
 )
 
 // resetVoiceModState clears every in-memory voice-moderation map so tests
@@ -49,7 +49,7 @@ func TestPktVSJoinRespectsAreaVoiceAllowed(t *testing.T) {
 	clients.AddClient(alice)
 	clients.RegisterUID(alice)
 
-	pktVSJoin(alice, &packet.Packet{Header: "VS_JOIN"})
+	pktVSJoin(alice, &aolib.Packet{Header: "VS_JOIN"})
 
 	if inVoiceRoom(a, 1) {
 		t.Fatal("alice joined voice despite area voice_allowed = false")
@@ -81,7 +81,7 @@ func TestPktVSJoinRejectsBannedIPID(t *testing.T) {
 
 	SetVoiceBan("alice-ip", 0, "testing")
 
-	pktVSJoin(alice, &packet.Packet{Header: "VS_JOIN"})
+	pktVSJoin(alice, &aolib.Packet{Header: "VS_JOIN"})
 
 	if inVoiceRoom(a, 1) {
 		t.Fatal("banned alice joined voice")
@@ -113,7 +113,7 @@ func TestPktVSJoinRespectsMute(t *testing.T) {
 
 	SetVoiceMute("bob-ip", 60*time.Second, "rudeness")
 
-	pktVSJoin(bob, &packet.Packet{Header: "VS_JOIN"})
+	pktVSJoin(bob, &aolib.Packet{Header: "VS_JOIN"})
 
 	if inVoiceRoom(a, 1) {
 		t.Fatal("muted bob joined voice")
@@ -146,11 +146,11 @@ func TestVoiceJoinRateLimitBlocksExcess(t *testing.T) {
 	clients.RegisterUID(c)
 
 	for i := 0; i < 2; i++ {
-		pktVSJoin(c, &packet.Packet{Header: "VS_JOIN"})
+		pktVSJoin(c, &aolib.Packet{Header: "VS_JOIN"})
 		leaveVoiceForClient(c) // leave so we can re-join up to the limit
 	}
 	conn.buf.Reset()
-	pktVSJoin(c, &packet.Packet{Header: "VS_JOIN"})
+	pktVSJoin(c, &aolib.Packet{Header: "VS_JOIN"})
 
 	if inVoiceRoom(a, 42) {
 		t.Fatal("third VS_JOIN admitted despite join_rate_limit = 2")
@@ -182,7 +182,7 @@ func TestKickVoiceByIPIDEjectsAllMatchingClients(t *testing.T) {
 	for _, c := range []*Client{c1, c2, c3} {
 		clients.AddClient(c)
 		clients.RegisterUID(c)
-		pktVSJoin(c, &packet.Packet{Header: "VS_JOIN"})
+		pktVSJoin(c, &aolib.Packet{Header: "VS_JOIN"})
 	}
 
 	got := kickVoiceByIPID("shared-ip")
@@ -218,7 +218,7 @@ func TestKickAllVoiceFromAreaEjectsEveryone(t *testing.T) {
 	for _, c := range []*Client{c1, c2} {
 		clients.AddClient(c)
 		clients.RegisterUID(c)
-		pktVSJoin(c, &packet.Packet{Header: "VS_JOIN"})
+		pktVSJoin(c, &aolib.Packet{Header: "VS_JOIN"})
 	}
 
 	kickAllVoiceFromArea(a)

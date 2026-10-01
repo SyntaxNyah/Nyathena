@@ -4,7 +4,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/MangosArentLiterature/Athena/internal/packet"
+	"github.com/MangosArentLiterature/Athena/internal/packetutil"
 	"github.com/MangosArentLiterature/Athena/internal/permissions"
 	"github.com/MangosArentLiterature/Athena/internal/settings"
 )
@@ -46,7 +46,7 @@ func withWiring(t *testing.T) {
 }
 
 func icPacket(showname, shout string) *MSToClient {
-	return &MSToClient{Showname: showname, Message: "placeholder", ShoutModifier: packet.ShoutModifierFromWire[packet.AtoiOrZero(shout)]}
+	return &MSToClient{Showname: showname, Message: "placeholder", ShoutModifier: packetutil.ShoutModifierFromWire[packetutil.AtoiOrZero(shout)]}
 }
 
 // TestWireFeatureGateOff is the property the whole hot path rests on: with the

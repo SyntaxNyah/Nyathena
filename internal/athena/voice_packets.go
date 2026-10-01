@@ -2,7 +2,7 @@ package athena
 
 // Voice-chat packets (VS_*). Removed from the canonical aolib spec (aa8d0fb);
 // Nyathena keeps them as a server extension, registered both-wire via
-// packet.RegisterCodec (see voice_codecs.go + register.go). Wire contract:
+// aolib.RegisterCodec (see voice_codecs.go + register.go). Wire contract:
 //
 //	S→C  VS_CAPS#<enabled>#<ptt_only>#<max_peers>#<codec>#<sample_rate>#<frame_ms>#<max_frame_bytes>#%
 //	S→C  VS_PEERS#<csv_uids>#%
@@ -12,7 +12,8 @@ package athena
 import (
 	"strings"
 
-	"github.com/MangosArentLiterature/Athena/internal/packet"
+	aolib "github.com/AO-Underground/aolib/go/v2"
+	"github.com/MangosArentLiterature/Athena/internal/packetutil"
 )
 
 // VS_CAPS is the server's voice capability advertisement (server→client).
@@ -30,13 +31,13 @@ func (p *VS_CAPS) Header() string { return "VS_CAPS" }
 
 func (p *VS_CAPS) Args() []string {
 	return []string{
-		packet.BoolToWire(p.Enabled),
-		packet.BoolToWire(p.PttOnly),
-		packet.Itoa(p.MaxPeers),
-		packet.EscapeFanta(p.Codec),
-		packet.Itoa(p.SampleRate),
-		packet.Itoa(p.FrameMs),
-		packet.Itoa(p.MaxFrameBytes),
+		packetutil.BoolToWire(p.Enabled),
+		packetutil.BoolToWire(p.PttOnly),
+		packetutil.Itoa(p.MaxPeers),
+		aolib.EscapeFanta(p.Codec),
+		packetutil.Itoa(p.SampleRate),
+		packetutil.Itoa(p.FrameMs),
+		packetutil.Itoa(p.MaxFrameBytes),
 	}
 }
 
@@ -48,13 +49,13 @@ func ParseVS_CAPS(body []string) (*VS_CAPS, error) {
 		}
 		return ""
 	}
-	p.Enabled = packet.WireToBool(get(0))
-	p.PttOnly = packet.WireToBool(get(1))
-	p.MaxPeers = packet.AtoiOrZero(get(2))
-	p.Codec = packet.UnescapeFanta(get(3))
-	p.SampleRate = packet.AtoiOrZero(get(4))
-	p.FrameMs = packet.AtoiOrZero(get(5))
-	p.MaxFrameBytes = packet.AtoiOrZero(get(6))
+	p.Enabled = packetutil.WireToBool(get(0))
+	p.PttOnly = packetutil.WireToBool(get(1))
+	p.MaxPeers = packetutil.AtoiOrZero(get(2))
+	p.Codec = aolib.UnescapeFanta(get(3))
+	p.SampleRate = packetutil.AtoiOrZero(get(4))
+	p.FrameMs = packetutil.AtoiOrZero(get(5))
+	p.MaxFrameBytes = packetutil.AtoiOrZero(get(6))
 	return p, nil
 }
 
@@ -67,7 +68,7 @@ type VS_AUDIO struct {
 func (p *VS_AUDIO) Header() string { return "VS_AUDIO" }
 
 func (p *VS_AUDIO) Args() []string {
-	return []string{packet.Itoa(p.FromUID), packet.EscapeFanta(p.Payload)}
+	return []string{packetutil.Itoa(p.FromUID), aolib.EscapeFanta(p.Payload)}
 }
 
 func ParseVS_AUDIO(body []string) (*VS_AUDIO, error) {
@@ -78,8 +79,8 @@ func ParseVS_AUDIO(body []string) (*VS_AUDIO, error) {
 		}
 		return ""
 	}
-	p.FromUID = packet.AtoiOrZero(get(0))
-	p.Payload = packet.UnescapeFanta(get(1))
+	p.FromUID = packetutil.AtoiOrZero(get(0))
+	p.Payload = aolib.UnescapeFanta(get(1))
 	return p, nil
 }
 
@@ -91,7 +92,7 @@ type VS_FRAME struct {
 func (p *VS_FRAME) Header() string { return "VS_FRAME" }
 
 func (p *VS_FRAME) Args() []string {
-	return []string{packet.EscapeFanta(p.Payload)}
+	return []string{aolib.EscapeFanta(p.Payload)}
 }
 
 func ParseVS_FRAME(body []string) (*VS_FRAME, error) {
@@ -102,7 +103,7 @@ func ParseVS_FRAME(body []string) (*VS_FRAME, error) {
 		}
 		return ""
 	}
-	p.Payload = packet.UnescapeFanta(get(0))
+	p.Payload = aolib.UnescapeFanta(get(0))
 	return p, nil
 }
 
@@ -114,7 +115,7 @@ type VS_JOINToClient struct {
 func (p *VS_JOINToClient) Header() string { return "VS_JOIN" }
 
 func (p *VS_JOINToClient) Args() []string {
-	return []string{packet.Itoa(p.UID)}
+	return []string{packetutil.Itoa(p.UID)}
 }
 
 func ParseVS_JOINToClient(body []string) (*VS_JOINToClient, error) {
@@ -125,7 +126,7 @@ func ParseVS_JOINToClient(body []string) (*VS_JOINToClient, error) {
 		}
 		return ""
 	}
-	p.UID = packet.AtoiOrZero(get(0))
+	p.UID = packetutil.AtoiOrZero(get(0))
 	return p, nil
 }
 
@@ -148,7 +149,7 @@ type VS_LEAVEToClient struct {
 func (p *VS_LEAVEToClient) Header() string { return "VS_LEAVE" }
 
 func (p *VS_LEAVEToClient) Args() []string {
-	return []string{packet.Itoa(p.UID)}
+	return []string{packetutil.Itoa(p.UID)}
 }
 
 func ParseVS_LEAVEToClient(body []string) (*VS_LEAVEToClient, error) {
@@ -159,7 +160,7 @@ func ParseVS_LEAVEToClient(body []string) (*VS_LEAVEToClient, error) {
 		}
 		return ""
 	}
-	p.UID = packet.AtoiOrZero(get(0))
+	p.UID = packetutil.AtoiOrZero(get(0))
 	return p, nil
 }
 
@@ -188,7 +189,7 @@ func (p *VS_PEERS) Args() []string {
 	}
 	parts := make([]string, len(p.Uids))
 	for i, u := range p.Uids {
-		parts[i] = packet.Itoa(u)
+		parts[i] = packetutil.Itoa(u)
 	}
 	return []string{strings.Join(parts, ",")}
 }
@@ -198,7 +199,7 @@ func ParseVS_PEERS(body []string) (*VS_PEERS, error) {
 	if len(body) > 0 && body[0] != "" {
 		for _, f := range strings.Split(body[0], ",") {
 			if f = strings.TrimSpace(f); f != "" {
-				p.Uids = append(p.Uids, packet.AtoiOrZero(f))
+				p.Uids = append(p.Uids, packetutil.AtoiOrZero(f))
 			}
 		}
 	}
@@ -215,7 +216,7 @@ type VS_SPEAKToClient struct {
 func (p *VS_SPEAKToClient) Header() string { return "VS_SPEAK" }
 
 func (p *VS_SPEAKToClient) Args() []string {
-	return []string{packet.Itoa(p.UID), packet.BoolToWire(p.On)}
+	return []string{packetutil.Itoa(p.UID), packetutil.BoolToWire(p.On)}
 }
 
 func ParseVS_SPEAKToClient(body []string) (*VS_SPEAKToClient, error) {
@@ -226,8 +227,8 @@ func ParseVS_SPEAKToClient(body []string) (*VS_SPEAKToClient, error) {
 		}
 		return ""
 	}
-	p.UID = packet.AtoiOrZero(get(0))
-	p.On = packet.WireToBool(get(1))
+	p.UID = packetutil.AtoiOrZero(get(0))
+	p.On = packetutil.WireToBool(get(1))
 	return p, nil
 }
 
@@ -239,7 +240,7 @@ type VS_SPEAKToServer struct {
 func (p *VS_SPEAKToServer) Header() string { return "VS_SPEAK" }
 
 func (p *VS_SPEAKToServer) Args() []string {
-	return []string{packet.BoolToWire(p.On)}
+	return []string{packetutil.BoolToWire(p.On)}
 }
 
 func ParseVS_SPEAKToServer(body []string) (*VS_SPEAKToServer, error) {
@@ -250,7 +251,7 @@ func ParseVS_SPEAKToServer(body []string) (*VS_SPEAKToServer, error) {
 		}
 		return ""
 	}
-	p.On = packet.WireToBool(get(0))
+	p.On = packetutil.WireToBool(get(0))
 	return p, nil
 }
 

@@ -18,7 +18,7 @@ package athena
 
 import (
 	"github.com/MangosArentLiterature/Athena/internal/area"
-	"github.com/MangosArentLiterature/Athena/internal/packet"
+	aolib "github.com/AO-Underground/aolib/go/v2"
 )
 
 // playAreaMusic broadcasts a music change to an area AND records it as the
@@ -35,7 +35,7 @@ import (
 //
 // One-shot sound effects (the /sfxcurse MC fallback, Looping "0") deliberately
 // do NOT go through here — they aren't the area's BGM and must not overwrite it.
-func playAreaMusic(a *area.Area, p *packet.MCToClient) {
+func playAreaMusic(a *area.Area, p *aolib.MCToClient) {
 	a.SetCurrentSong(p.Name)
 	broadcastToArea(a, p)
 }

@@ -31,7 +31,7 @@ import (
 	"github.com/MangosArentLiterature/Athena/internal/area"
 	"github.com/MangosArentLiterature/Athena/internal/db"
 	"github.com/MangosArentLiterature/Athena/internal/logger"
-	"github.com/MangosArentLiterature/Athena/internal/packet"
+	aolib "github.com/AO-Underground/aolib/go/v2"
 	"github.com/MangosArentLiterature/Athena/internal/permissions"
 	"github.com/MangosArentLiterature/Athena/internal/webhook"
 	"github.com/xhit/go-str2duration/v2"
@@ -156,12 +156,12 @@ func cmdBan(client *Client, args []string, usage string) {
 			forgetIP(ipid)
 			for _, c := range onlineClients {
 				if id, ok := banIDByHdid[c.Hdid()]; ok {
-					c.SendSync(&packet.KB{Reason: fmt.Sprintf("%v\nUntil: %v\nID: %v", reason, untilS, id)})
+					c.SendSync(&aolib.KB{Reason: fmt.Sprintf("%v\nUntil: %v\nID: %v", reason, untilS, id)})
 					if err := webhook.PostBan(c.CurrentCharacter(), c.Showname(), c.OOCName(), ipid, c.Uid(), id, *duration, reason, client.DisplayModName()); err != nil {
 						logger.LogErrorf("while posting ban webhook: %v", err)
 					}
 				} else {
-					c.SendSync(&packet.KB{Reason: fmt.Sprintf("%v\nUntil: %v", reason, untilS)})
+					c.SendSync(&aolib.KB{Reason: fmt.Sprintf("%v\nUntil: %v", reason, untilS)})
 				}
 				c.conn.Close()
 			}
@@ -202,7 +202,7 @@ func alertBannedAccountLinks(ipids map[string]struct{}) {
 		msg := fmt.Sprintf("[BAN] IPID %v is linked to registered account \"%v\".", ipid, username)
 		clients.ForEach(func(c *Client) {
 			if c.Uid() != -1 && permissions.IsModerator(c.Perms()) {
-				c.Send(&packet.CTToClient{Name: "OOC", Message: encode(msg), IsFromServer: true})
+				c.Send(&aolib.CTToClient{Name: "OOC", Message: encode(msg), IsFromServer: true})
 			}
 		})
 	}
@@ -347,7 +347,7 @@ func cmdGlobal(client *Client, args []string, _ string) {
 	// args arrive already decoded (pktOOC splits them off a decoded string), so
 	// this is plain text and must not be decoded again.
 	msg := strings.Join(args, " ")
-	out := &packet.CTToClient{
+	out := &aolib.CTToClient{
 		Name:         encode(fmt.Sprintf("[GLOBAL] [UID %d] %s%v", client.Uid(), tag, oocDisplayName(client))),
 		Message:      encode(msg),
 		IsFromServer: true,
@@ -409,7 +409,7 @@ func cmdKick(client *Client, args []string, usage string) {
 			reportBuilder.WriteString(", ")
 		}
 		reportBuilder.WriteString(c.Ipid())
-		c.SendSync(&packet.KK{Reason: reason})
+		c.SendSync(&aolib.KK{Reason: reason})
 		c.conn.Close()
 		count++
 		if err := webhook.PostKick(c.CurrentCharacter(), c.Showname(), c.OOCName(), c.Ipid(), reason, client.DisplayModName(), c.Uid()); err != nil {
@@ -486,7 +486,7 @@ func cmdLogin(client *Client, args []string, _ string) {
 			// AUTH#1 triggers the AO2 client's "Logged in as a moderator" popup.
 			// Only send it for actual moderators; player and DJ-only accounts get
 			// chat-based feedback instead so the client doesn't mislabel them.
-			client.Send(&packet.AUTH{AuthState: 1})
+			client.Send(&aolib.AUTH{AuthState: aolib.AuthStateSuccess})
 		} else {
 			client.SendServerMessage("Logged in to your account.")
 		}
@@ -495,7 +495,7 @@ func cmdLogin(client *Client, args []string, _ string) {
 		return
 	}
 	registerFailedLogin(client.Ipid())
-	client.Send(&packet.AUTH{AuthState: 0})
+	client.Send(&aolib.AUTH{AuthState: aolib.AuthStateFailed})
 	addToBuffer(client, "AUTH", fmt.Sprintf("Failed login as %v.", args[0]), true)
 }
 
@@ -550,9 +550,9 @@ func cmdMod(client *Client, args []string, usage string) {
 	}
 	msg := strings.Join(flags.Args(), " ")
 	if *global {
-		broadcastToAll(&packet.CTToClient{Name: encode(fmt.Sprintf("[MOD] [GLOBAL] %v", client.OOCName())), Message: encode(msg), IsFromServer: true})
+		broadcastToAll(&aolib.CTToClient{Name: encode(fmt.Sprintf("[MOD] [GLOBAL] %v", client.OOCName())), Message: encode(msg), IsFromServer: true})
 	} else {
-		broadcastToArea(client.Area(), &packet.CTToClient{Name: encode(fmt.Sprintf("[MOD] %v", client.OOCName())), Message: encode(msg), IsFromServer: true})
+		broadcastToArea(client.Area(), &aolib.CTToClient{Name: encode(fmt.Sprintf("[MOD] %v", client.OOCName())), Message: encode(msg), IsFromServer: true})
 	}
 	addToBuffer(client, "OOC", msg, false)
 }
@@ -570,7 +570,7 @@ func cmdModChat(client *Client, args []string, _ string) {
 			if senderIsShadow && !permissions.IsAdmin(c.Perms()) {
 				senderLabel = "Moderator"
 			}
-			c.Send(&packet.CTToClient{Name: encode(fmt.Sprintf("[MODCHAT] %v", senderLabel)), Message: encode(msg), IsFromServer: true})
+			c.Send(&aolib.CTToClient{Name: encode(fmt.Sprintf("[MODCHAT] %v", senderLabel)), Message: encode(msg), IsFromServer: true})
 		}
 	})
 }
@@ -876,19 +876,19 @@ func cmdPM(client *Client, args []string, _ string) {
 	// -- unlike a global it is not a broadcast, and there is no capture data to
 	// calibrate correlating private messages against.
 	if !oocCommandAllowed(client, msg, "private message",
-		&packet.CTToClient{Name: encode(fmt.Sprintf("[PM] [UID %d] %v", client.Uid(), oocDisplayName(client))),
+		&aolib.CTToClient{Name: encode(fmt.Sprintf("[PM] [UID %d] %v", client.Uid(), oocDisplayName(client))),
 			Message: encode(msg), IsFromServer: true}) {
 		return
 	}
 	toPM := getUidList(strings.Split(args[0], ","))
 	var recipientNames []string
 	for _, c := range toPM {
-		c.Send(&packet.CTToClient{Name: encode(fmt.Sprintf("[PM] [UID %d] %v", client.Uid(), oocDisplayName(client))), Message: encode(msg), IsFromServer: true})
+		c.Send(&aolib.CTToClient{Name: encode(fmt.Sprintf("[PM] [UID %d] %v", client.Uid(), oocDisplayName(client))), Message: encode(msg), IsFromServer: true})
 		recipientNames = append(recipientNames, fmt.Sprintf("[%d] %v", c.Uid(), oocDisplayName(c)))
 	}
 	// Echo the message back to the sender so they can see what they sent.
 	if len(recipientNames) > 0 {
-		client.Send(&packet.CTToClient{Name: encode(fmt.Sprintf("[PM → %v] %v", strings.Join(recipientNames, ", "), oocDisplayName(client))), Message: encode(msg), IsFromServer: true})
+		client.Send(&aolib.CTToClient{Name: encode(fmt.Sprintf("[PM → %v] %v", strings.Join(recipientNames, ", "), oocDisplayName(client))), Message: encode(msg), IsFromServer: true})
 	}
 }
 
@@ -1018,7 +1018,7 @@ func cmdRemoveRole(client *Client, args []string, _ string) {
 			wasMod := permissions.IsModerator(c.Perms())
 			c.SetPerms(permissions.PermissionField["NONE"])
 			if wasMod {
-				c.Send(&packet.AUTH{AuthState: -1})
+				c.Send(&aolib.AUTH{AuthState: aolib.AuthStateLogout})
 			}
 			c.SendServerMessage(
 				"Your staff role has been removed by an administrator. " +
@@ -1254,7 +1254,7 @@ func cmdForceName(client *Client, args []string, _ string) {
 	// MSToClient.Showname field without an extra encode step on every message.
 	target.SetForcedShowname(encode(name))
 	// PU and in-server messages use the decoded (display) form.
-	broadcastToAll(&packet.PU{ID: target.Uid(), Type: 2, Data: name})
+	broadcastToAll(&aolib.PU{ID: target.Uid(), Type: aolib.PlayerDataTypeShowname, Data: name})
 	target.SendServerMessage(fmt.Sprintf("A moderator has forced your showname to \"%s\".", name))
 	client.SendServerMessage(fmt.Sprintf("Forced UID %v's showname to \"%s\".", uid, name))
 	addToBuffer(client, "CMD", fmt.Sprintf("forced showname of UID %v to \"%s\"", uid, name), true)
@@ -1341,7 +1341,7 @@ func cmdNameShuffle(client *Client, _ []string, _ string) {
 			return
 		}
 		for i, uid := range uids {
-			c.Send(&packet.PU{ID: uid, Type: 2, Data: decodedNames[i]})
+			c.Send(&aolib.PU{ID: uid, Type: aolib.PlayerDataTypeShowname, Data: decodedNames[i]})
 		}
 	})
 
@@ -1384,7 +1384,7 @@ func cmdUnnameShuffle(client *Client, _ []string, _ string) {
 			return
 		}
 		for i, uid := range uids {
-			c.Send(&packet.PU{ID: uid, Type: 2, Data: restoredNames[i]})
+			c.Send(&aolib.PU{ID: uid, Type: aolib.PlayerDataTypeShowname, Data: restoredNames[i]})
 		}
 	})
 
@@ -1440,7 +1440,7 @@ func cmdTung(client *Client, args []string, usage string) {
 			uids = append(uids, c.Uid())
 			charNames = append(charNames, c.CurrentCharacter())
 			// Restore the client's emote panel to their real character.
-			c.Send(&packet.PV{PlayerID: 0, CharID: origID})
+			c.Send(&aolib.PV{PlayerID: 0, CharID: origID})
 		})
 		// Phase 2: broadcast all PU updates in a single pass over all clients,
 		// replacing the N separate writeToAll calls (each a full ForEach) with one.
@@ -1450,7 +1450,7 @@ func cmdTung(client *Client, args []string, usage string) {
 					return
 				}
 				for i, uid := range uids {
-					c.Send(&packet.PU{ID: uid, Type: 1, Data: charNames[i]})
+					c.Send(&aolib.PU{ID: uid, Type: aolib.PlayerDataTypeCharName, Data: charNames[i]})
 				}
 			})
 		}
@@ -1467,7 +1467,7 @@ func cmdTung(client *Client, args []string, usage string) {
 			// Switch the client's emote panel to the tung character so
 			// their buttons and animations update on their own screen too.
 			if tungID >= 0 {
-				c.Send(&packet.PV{PlayerID: 0, CharID: tungID})
+				c.Send(&aolib.PV{PlayerID: 0, CharID: tungID})
 			}
 		})
 		// Phase 2: broadcast all PU updates in a single pass over all clients.
@@ -1477,7 +1477,7 @@ func cmdTung(client *Client, args []string, usage string) {
 					return
 				}
 				for _, uid := range uids {
-					c.Send(&packet.PU{ID: uid, Type: 1, Data: tungForcedCharacterName})
+					c.Send(&aolib.PU{ID: uid, Type: aolib.PlayerDataTypeCharName, Data: tungForcedCharacterName})
 				}
 			})
 		}
@@ -1522,7 +1522,7 @@ func cmdAreaIniswap(client *Client, args []string, usage string) {
 			c.SetForcedIniswapChar("", "")
 			uids = append(uids, c.Uid())
 			charNames = append(charNames, c.CurrentCharacter())
-			c.Send(&packet.PV{PlayerID: 0, CharID: origID})
+			c.Send(&aolib.PV{PlayerID: 0, CharID: origID})
 		})
 		// Phase 2: broadcast all PU updates in a single pass instead of one
 		// writeToAll call per affected client (each a full ForEach).
@@ -1532,7 +1532,7 @@ func cmdAreaIniswap(client *Client, args []string, usage string) {
 					return
 				}
 				for i, uid := range uids {
-					c.Send(&packet.PU{ID: uid, Type: 1, Data: charNames[i]})
+					c.Send(&aolib.PU{ID: uid, Type: aolib.PlayerDataTypeCharName, Data: charNames[i]})
 				}
 			})
 		}
@@ -1564,7 +1564,7 @@ func cmdAreaIniswap(client *Client, args []string, usage string) {
 		}
 		c.SetForcedIniswapChar(charName, charIDStr)
 		uids = append(uids, c.Uid())
-		c.Send(&packet.PV{PlayerID: 0, CharID: charID})
+		c.Send(&aolib.PV{PlayerID: 0, CharID: charID})
 	})
 	// Phase 2: broadcast all PU updates in a single pass.
 	if len(uids) > 0 {
@@ -1573,7 +1573,7 @@ func cmdAreaIniswap(client *Client, args []string, usage string) {
 				return
 			}
 			for _, uid := range uids {
-				c.Send(&packet.PU{ID: uid, Type: 1, Data: charName})
+				c.Send(&aolib.PU{ID: uid, Type: aolib.PlayerDataTypeCharName, Data: charName})
 			}
 		})
 	}
@@ -1725,7 +1725,7 @@ func cmdLockdown(client *Client, args []string, usage string) {
 	if active {
 		clients.ForEach(func(c *Client) {
 			if c.Uid() != -1 && permissions.IsModerator(c.Perms()) {
-				c.Send(&packet.CTToClient{Name: "OOC", Message: "🔒 Server lockdown is now ACTIVE. New connections are restricted to known players.", IsFromServer: true})
+				c.Send(&aolib.CTToClient{Name: "OOC", Message: "🔒 Server lockdown is now ACTIVE. New connections are restricted to known players.", IsFromServer: true})
 			}
 		})
 		client.SendServerMessage("Lockdown enabled. New IPIDs will be rejected.")
@@ -1734,7 +1734,7 @@ func cmdLockdown(client *Client, args []string, usage string) {
 	} else {
 		clients.ForEach(func(c *Client) {
 			if c.Uid() != -1 && permissions.IsModerator(c.Perms()) {
-				c.Send(&packet.CTToClient{Name: "OOC", Message: "🔓 Server lockdown has been LIFTED. New connections are now allowed.", IsFromServer: true})
+				c.Send(&aolib.CTToClient{Name: "OOC", Message: "🔓 Server lockdown has been LIFTED. New connections are now allowed.", IsFromServer: true})
 			}
 		})
 		client.SendServerMessage("Lockdown disabled. New IPIDs are now allowed.")
@@ -1765,7 +1765,7 @@ func cmdFirewall(client *Client, args []string, usage string) {
 		firewallActive.Store(true)
 		clients.ForEach(func(c *Client) {
 			if c.Uid() != -1 && permissions.HasPermission(c.Perms(), permissions.PermissionField["BAN"]) {
-				c.Send(&packet.CTToClient{Name: "OOC", Message: "🔥 VPN firewall is now ACTIVE. New connections will be screened against IPHub.", IsFromServer: true})
+				c.Send(&aolib.CTToClient{Name: "OOC", Message: "🔥 VPN firewall is now ACTIVE. New connections will be screened against IPHub.", IsFromServer: true})
 			}
 		})
 		client.SendServerMessage("Firewall enabled. New IPs will be checked via IPHub.")
@@ -1774,7 +1774,7 @@ func cmdFirewall(client *Client, args []string, usage string) {
 		firewallActive.Store(false)
 		clients.ForEach(func(c *Client) {
 			if c.Uid() != -1 && permissions.HasPermission(c.Perms(), permissions.PermissionField["BAN"]) {
-				c.Send(&packet.CTToClient{Name: "OOC", Message: "🔓 VPN firewall has been DISABLED. New connections are no longer screened.", IsFromServer: true})
+				c.Send(&aolib.CTToClient{Name: "OOC", Message: "🔓 VPN firewall has been DISABLED. New connections are no longer screened.", IsFromServer: true})
 			}
 		})
 		client.SendServerMessage("Firewall disabled.")
@@ -1820,7 +1820,7 @@ func cmdBotBan(client *Client, _ []string, _ string) {
 			logger.LogErrorf("botban: failed to ban IPID %v: %v", c.Ipid(), err)
 			return
 		}
-		c.SendSync(&packet.KB{Reason: fmt.Sprintf("Botban: spectator with insufficient playtime.\nUntil: ∞\nID: %v", id)})
+		c.SendSync(&aolib.KB{Reason: fmt.Sprintf("Botban: spectator with insufficient playtime.\nUntil: ∞\nID: %v", id)})
 		c.conn.Close()
 		forgetIP(c.Ipid())
 		count++

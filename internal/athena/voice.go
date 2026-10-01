@@ -21,7 +21,7 @@ package athena
 // Every audio frame travels client → Athena → other clients in the same
 // area.  No peer-to-peer path exists, which means peers never learn each
 // other's IPs — only Athena sees them, and Athena already sees them anyway
-// for every other AO2 packet.  This replaces the previous WebRTC-signalling
+// for every other AO2 aolib.  This replaces the previous WebRTC-signalling
 // relay; TURN/STUN are not used and no ICE configuration is advertised.
 //
 // The server treats Opus frames as opaque base64 blobs and forwards them
@@ -51,7 +51,7 @@ import (
 
 	"github.com/MangosArentLiterature/Athena/internal/area"
 	"github.com/MangosArentLiterature/Athena/internal/logger"
-	"github.com/MangosArentLiterature/Athena/internal/packet"
+	aolib "github.com/AO-Underground/aolib/go/v2"
 )
 
 // Protocol-fixed audio parameters.  Clients must use these exact values; the
@@ -234,7 +234,7 @@ func writeToAreaVoice(a *area.Area, skipUID int, header string, contents ...stri
 
 // broadcastToAreaVoice fans a typed packet to every peer in a's voice room,
 // optionally skipping the sender. Args() is invoked exactly once.
-func broadcastToAreaVoice(a *area.Area, skipUID int, p packet.Outgoing) {
+func broadcastToAreaVoice(a *area.Area, skipUID int, p aolib.Outgoing) {
 	peers := currentVoicePeers(a)
 	if len(peers) == 0 {
 		return
@@ -255,7 +255,7 @@ func broadcastToAreaVoice(a *area.Area, skipUID int, p packet.Outgoing) {
 //
 // The uid argument is accepted for protocol symmetry with VS_LEAVE but is
 // always overridden with client.Uid() to prevent spoofing.
-func pktVSJoin(client *Client, _ *packet.Packet) {
+func pktVSJoin(client *Client, _ *aolib.Packet) {
 	if !voiceEnabled() {
 		client.SendServerMessage("Voice chat is disabled on this server.")
 		return
@@ -335,7 +335,7 @@ func pktVSJoin(client *Client, _ *packet.Packet) {
 }
 
 // Handles VS_LEAVE#%
-func pktVSLeave(client *Client, _ *packet.Packet) {
+func pktVSLeave(client *Client, _ *aolib.Packet) {
 	if client.Area() == nil {
 		return
 	}
@@ -354,7 +354,7 @@ func pktVSLeave(client *Client, _ *packet.Packet) {
 // the opaque blob, so the relay stays codec-agnostic.  Codec-level DSP (e.g.
 // pitch-shift) would still need an Opus decoder and CGO and remains out of
 // scope.
-func pktVSFrame(client *Client, p *packet.Packet) {
+func pktVSFrame(client *Client, p *aolib.Packet) {
 	if !voiceEnabled() {
 		return
 	}
@@ -390,7 +390,7 @@ func pktVSFrame(client *Client, p *packet.Packet) {
 }
 
 // Handles VS_SPEAK#<on_off>#%  (0 = stopped talking, 1 = started)
-func pktVSSpeak(client *Client, p *packet.Packet) {
+func pktVSSpeak(client *Client, p *aolib.Packet) {
 	if !voiceEnabled() {
 		return
 	}
