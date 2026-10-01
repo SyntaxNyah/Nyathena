@@ -796,7 +796,7 @@ func (client *Client) HandleClient() {
 	// JSON-aware clients respond with a '{'-prefixed packet and we switch this
 	// client to JSON encoding for the rest of the session; older clients
 	// ignore the value and stay in classic FantaCode.
-	client.Send(&packet.Decryptor{})
+	client.Send(&packet.Decryptor{Value: "JSON"})
 
 	// Reading both wire formats off the same connection means we can't use a
 	// pure json.Decoder loop (which would eat FantaCode bytes thinking they
