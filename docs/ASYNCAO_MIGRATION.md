@@ -120,11 +120,10 @@ Dispatch runs off one registry — `c2sDecoders`/`s2cDecoders` (Fanta) and
 `c2sJSON`/`s2cJSON` (JSON) in `registry_gen.go` — **no giant switch**.
 `Receive` never panics; every failure routes to exactly one `SessionConfig` hook.
 
-> **⚠ Known gap (the session surface is hand-written, not code-generated):** the
+> **⚠ Known gap (the session surface is stale):** the
 > typed `Send*`/`On*` surface is **not exhaustive**. `cmd/aolib-gen` emits only
 > `packets_gen.go`, `registry_gen.go`, `enums_gen.go`, `types_gen.go` — it does
-> **not** emit `session_client.go`/`session_server.go`, which are hand-written and
-> stale. So the client-side `ServerSession` has **no** typed `Send*` for
+> **not** emit `session_client.go`/`session_server.go`, which are stale. So the client-side `ServerSession` has **no** typed `Send*` for
 > `askchaa`, `CH`, `CT`, `DE`, `EE`, `PE`, `RC`, `RD`, `RM` (and `ClientSession`
 > lacks `On*` for `askchaa`, `CH`, `RC`, `RD`, `RM`). Those headers are
 > still in `c2sDecoders` (so they *decode*), but their typed `Send*` methods are
