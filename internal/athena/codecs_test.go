@@ -76,15 +76,18 @@ func TestSETCASEAndCASEAFantaDecode(t *testing.T) {
 }
 
 func TestCodecJSONHotPathHelpers(t *testing.T) {
-	// packetutil.Encode (outbound) → packetutil.DecodeToBody (inbound)
+	// packetutil.Encode (outbound) → packetutil.Decode (inbound)
 	// round-trips a codec-registered packet through the named-field JSON form.
 	raw, err := packetutil.Encode(&TTPacket{Type: "0", Title: "Cross Examination"}, aolib.WireJSON)
 	if err != nil || raw == nil {
 		t.Fatalf("Encode returned nil or error: %v", err)
 	}
-	header, body, err := packetutil.DecodeToBody(raw, aolib.WireJSON)
-	if err != nil || header != "TT" || len(body) != 2 || body[0] != "0" || body[1] != "Cross Examination" {
-		t.Fatalf("DecodeToBody = %v (header=%v, err=%v), raw=%s", body, header, err, raw)
+	p, err := packetutil.Decode(raw, aolib.WireJSON)
+	if err != nil {
+		t.Fatalf("Decode: %v", err)
+	}
+	tt, ok := p.(*TTPacket)
+	if !ok || tt.Type != "0" || tt.Title != "Cross Examination" {
+		t.Fatalf("Decode = %#v, raw=%s", p, raw)
 	}
 }
-

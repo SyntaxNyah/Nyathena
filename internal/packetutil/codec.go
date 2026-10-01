@@ -64,50 +64,6 @@ func Decode(raw []byte, mode aolib.WireMode) (any, error) {
 	return aolib.Decode(raw, mode)
 }
 
-// DecodeToBody parses a raw wire frame into its header and positional body.
-// This is Nyathena's positional dispatch entry point: FantaCode is positional
-// already, and JSON is decoded to its typed form and folded back to positional
-// args (so every existing Parse* handler keeps working). Custom headers route
-// through their codec.
-func DecodeToBody(raw []byte, mode aolib.WireMode) (string, []string, error) {
-	if mode == aolib.WireFanta {
-		pkt, err := aolib.NewPacket(strings.TrimSuffix(string(raw), "%"))
-		if err != nil {
-			return "", nil, err
-		}
-		return pkt.Header, pkt.Body, nil
-	}
-
-	header, err := aolib.ReadHeader(raw)
-	if err != nil {
-		return "", nil, err
-	}
-	if c, ok := customCodecs[header]; ok {
-		p, err := c.DecodeJSON(string(raw))
-		if err != nil {
-			return "", nil, err
-		}
-		args, err := c.EncodeFanta(p)
-		if err != nil {
-			return "", nil, err
-		}
-		return header, args, nil
-	}
-
-	p, err := aolib.Decode(raw, aolib.WireJSON)
-	if err != nil {
-		return "", nil, err
-	}
-	switch v := p.(type) {
-	case aolib.Outgoing:
-		return header, v.Args(), nil
-	case *aolib.Packet:
-		return v.Header, v.Body, nil
-	default:
-		return header, nil, nil
-	}
-}
-
 func encodeCustom(header string, p any, c aolib.Codec, mode aolib.WireMode) ([]byte, error) {
 	switch mode {
 	case aolib.WireFanta:

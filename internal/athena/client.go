@@ -32,10 +32,10 @@ import (
 	"sync/atomic"
 	"time"
 
+	aolib "github.com/AO-Underground/aolib/go/v2"
 	"github.com/MangosArentLiterature/Athena/internal/area"
 	"github.com/MangosArentLiterature/Athena/internal/db"
 	"github.com/MangosArentLiterature/Athena/internal/logger"
-	aolib "github.com/AO-Underground/aolib/go/v2"
 	"github.com/MangosArentLiterature/Athena/internal/packetutil"
 	"github.com/MangosArentLiterature/Athena/internal/permissions"
 	"github.com/MangosArentLiterature/Athena/internal/webhook"
@@ -359,11 +359,11 @@ const emergencyBypassWindow = 30 * time.Second
 type Client struct {
 	pair      ClientPairInfo
 	pairGroup *PairGroup
-	software  string        // client-advertised software from the ID handshake
-	version   string        // client-advertised version from the ID handshake
+	software  string          // client-advertised software from the ID handshake
+	version   string          // client-advertised version from the ID handshake
 	features  map[string]bool // client-advertised feature flags (client→server FL)
 	mu        sync.Mutex
-	conn net.Conn
+	conn      net.Conn
 	// writeMu serializes inline socket writes with each other. Deliberately
 	// separate from mu: nothing that blocks on I/O may hold the mutex ordinary
 	// field accessors use -- see Client.write.
@@ -547,6 +547,12 @@ type Client struct {
 	// Reads from the writer goroutine and the SendPacket fan-out are
 	// lock-free via atomic.Bool.
 	jsonMode atomic.Bool
+
+	// sess is the aolib session representing this remote client: it decodes
+	// inbound frames (Fanta/JSON auto-detected) and dispatches them to the
+	// typed On*/OnCustom handlers registered in registerInbound. Receive is
+	// called only from HandleClient's read loop.
+	sess *aolib.ClientSession
 }
 
 // sendQueueSize bounds the per-client outbound packet backlog. Sized to
@@ -563,7 +569,7 @@ const sendQueueSize = 8192
 // rejection packet (e.g. NewClient(...).SendPacketSync("BD",...) on lockdown)
 // never leaks a writer goroutine.
 func NewClient(conn net.Conn, ipid string) *Client {
-	return &Client{
+	client := &Client{
 		conn:               conn,
 		uid:                -1,
 		char:               -1,
@@ -578,6 +584,28 @@ func NewClient(conn net.Conn, ipid string) *Client {
 		sendCh:             make(chan []byte, sendQueueSize),
 		done:               make(chan struct{}),
 	}
+	// The aolib session decodes inbound frames and dispatches them to the typed
+	// On*/OnCustom handlers registered in registerInbound. It also owns the
+	// outbound Send callback (unused here — Client.Send keeps its own path).
+	client.sess = aolib.NewClient(aolib.SessionConfig{
+		Send:            func(wire []byte) { client.sendBytes(wire) },
+		OnUnknownHeader: func(header string, wire []byte) { client.handleUnknownHeader(header, wire) },
+		OnDecodeError: func(header string, err error, wire []byte) {
+			logger.LogWarningf("dropped %s packet from IPID:%v UID:%v — decode error: %v", header, client.Ipid(), client.Uid(), err)
+		},
+		OnMalformedFrame: func(err error, wire []byte) {
+			logger.LogWarningf("dropped malformed packet from IPID:%v UID:%v — %v", client.Ipid(), client.Uid(), err)
+		},
+		OnHandlerError: func(header string, err error, packet any) {
+			logger.LogErrorf("panic handling %q packet from IPID:%v UID:%v: %v\n%s",
+				header, client.Ipid(), client.Uid(), err, debug.Stack())
+			logger.WriteAudit(fmt.Sprintf("%v | PANIC | IPID:%v | UID:%v | header:%v | %v",
+				time.Now().UTC().Format("15:04:05"), client.Ipid(), client.Uid(), header, err))
+			client.markClosed()
+		},
+	})
+	client.registerInbound()
+	return client
 }
 
 // writeDeadlineNanos backs writeDeadline() below. An atomic, not a plain var:
@@ -909,36 +937,11 @@ func (client *Client) HandleClient() {
 			return
 		}
 
-		var pkt *aolib.Packet
-		if rawPacket[0] == '{' {
-			header, body, derr := packetutil.DecodeToBody([]byte(rawPacket), aolib.WireJSON)
-			if derr != nil {
-				err = derr
-			} else {
-				pkt = &aolib.Packet{Header: header, Body: body}
-			}
-		} else {
-			pkt, err = aolib.NewPacket(rawPacket)
-		}
-		if err != nil {
-			logger.LogWarningf("dropped packet from IPID:%v UID:%v — parse error: %v; raw=%q", client.Ipid(), client.Uid(), err, rawPacket)
-			continue
-		}
-		v, known := PacketMap[pkt.Header]
-		if !known || v.Func == nil {
-			logger.LogWarningf("dropped packet from IPID:%v UID:%v — unknown header %q; body=%v", client.Ipid(), client.Uid(), pkt.Header, pkt.Body)
-			continue
-		}
-		if len(pkt.Body) < v.Args {
-			logger.LogWarningf("dropped %s packet from IPID:%v UID:%v — %d body fields, need %d; body=%v", pkt.Header, client.Ipid(), client.Uid(), len(pkt.Body), v.Args, pkt.Body)
-			continue
-		}
-		if v.MustJoin && client.Uid() == -1 {
-			logger.LogWarningf("dropped %s packet from IPID:%v — client has not completed handshake (UID=-1)", pkt.Header, client.Ipid())
-			continue
-		}
-		lastHandledHeader = pkt.Header
-		v.Func(client, pkt)
+		// Decode + dispatch through aolib's typed session. The On*/OnCustom
+		// handlers (registerInbound) run the existing pktXxx handlers; decode
+		// errors and handler panics route to the session's hooks set in
+		// NewClient.
+		client.sess.Receive([]byte(rawPacket))
 	}
 }
 
@@ -1084,12 +1087,12 @@ func (client *Client) SendPacketSync(header string, contents ...string) {
 	b := packetBufPool.Get().(*bytes.Buffer)
 	b.Reset()
 	if client.jsonMode.Load() {
-	jb, jerr := packetutil.BuildJSONFromArgs(header, contents)
-	if jerr != nil {
-	packetBufPool.Put(b)
-	return
-	}
-	b.Write(jb)
+		jb, jerr := packetutil.BuildJSONFromArgs(header, contents)
+		if jerr != nil {
+			packetBufPool.Put(b)
+			return
+		}
+		b.Write(jb)
 	} else {
 		contents = escapeOutgoing(header, contents)
 		b.WriteString(header)
@@ -1142,13 +1145,13 @@ func (client *Client) SendPacketSync(header string, contents ...string) {
 // hot-path MS broadcast helper.
 func (client *Client) Send(p aolib.Outgoing) {
 	if client.jsonMode.Load() {
-	b, err := packetutil.Encode(p, aolib.WireJSON)
-	if err != nil {
-	logger.LogWarningf("dropped outbound %v - JSON encode failed: %v", p.Header(), err)
-	return
-	}
-	client.sendBytes(b)
-	return
+		b, err := packetutil.Encode(p, aolib.WireJSON)
+		if err != nil {
+			logger.LogWarningf("dropped outbound %v - JSON encode failed: %v", p.Header(), err)
+			return
+		}
+		client.sendBytes(b)
+		return
 	}
 	client.SendPacket(p.Header(), p.Args()...)
 }

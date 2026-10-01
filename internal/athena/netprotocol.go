@@ -112,42 +112,6 @@ const casinoWelcomeMsg = "🎰 Welcome! This server runs the Nyathena Casino —
 	"🔒 Passwords stored with bcrypt — never in plain text.\n" +
 	"🔇 Use /gamble hide to toggle gambling broadcast messages."
 
-type pktMapValue struct {
-	Args     int
-	MustJoin bool
-	Func     func(client *Client, p *aolib.Packet)
-}
-
-var PacketMap = map[string]pktMapValue{
-	"HI":       {1, false, pktHdid},
-	"ID":       {2, false, pktId},
-	"FL":       {0, false, pktFL},
-	"askchaa":  {0, false, pktResCount},
-	"RC":       {0, false, pktReqChar},
-	"RM":       {0, false, pktReqAM},
-	"RD":       {0, false, pktReqDone},
-	"CC":       {2, true, pktChangeChar},
-	"MS":       {15, true, pktIC},
-	"MC":       {2, true, pktAM},
-	"HP":       {2, true, pktHP},
-	"RT":       {1, true, pktWTCE},
-	"TT":       {2, true, pktTT},
-	"CT":       {2, true, pktOOC},
-	"PE":       {3, true, pktAddEvi},
-	"DE":       {1, true, pktRemoveEvi},
-	"EE":       {4, true, pktEditEvi},
-	"PW":       {0, true, pktPW},
-	"CH":       {0, false, pktPing},
-	"ZZ":       {0, true, pktModcall},
-	"MA":       {3, true, pktMA},
-	"SETCASE":  {7, true, pktSetCase},
-	"CASEA":    {6, true, pktCaseAnn},
-	"VS_JOIN":  {0, true, pktVSJoin},
-	"VS_LEAVE": {0, true, pktVSLeave},
-	"VS_FRAME": {1, true, pktVSFrame},
-	"VS_SPEAK": {1, true, pktVSSpeak},
-}
-
 // Handles HI#%
 func pktHdid(client *Client, p *aolib.Packet) {
 	hi, err := aolib.ParseHI(p.Body)
