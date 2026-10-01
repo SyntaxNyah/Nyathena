@@ -14,7 +14,8 @@ library in three ways:
 1. **Schema-based JSON codec** — `internal/packet/jsoncodec.go` +
    `jsonschema.go` (positional `jsonSchema` maps) vs aolib-go's struct-marshal
    JSON (`codec.go` `encodeJSON` / `jsonDecoderFor`).
-2. **String-shaped MS** — `internal/athena/ic.go` `MSToClient` (string fields)
+2. **String-shaped MS** — `internal/athena/ic.go` `MSToClient` (numeric/offset
+   fields kept as strings, e.g. string `char_id`, `"x&y"` offset)
    vs aolib-go's typed `MSToClient` (int/bool/`Offset` fields).
 3. **No session layer** — Nyathena uses `Client.Send` + `PacketMap` dispatch;
    aolib-go has `NewServer`/`NewClient` + typed `Send*`/`On*`.
