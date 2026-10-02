@@ -15,13 +15,19 @@ import (
 // aolib's generated MS types can't represent it. The codec bridges the two: the
 // FantaCode form uses Nyathena's Args()/Parse*, while the JSON form converts to
 // aolib's typed MSToClient/MSToServer so the wire is the canonical meta shape.
-func msCodec() aolib.Codec {
-	return aolib.Codec{
+func msCodec() packetutil.Codec {
+	return packetutil.Codec{
 		EncodeFanta: func(p any) ([]string, error) { return p.(*MSToClient).Args(), nil },
 		DecodeFanta: func(args []string) (any, error) { return ParseMSToServer(args), nil },
-		EncodeJSON:  func(p any) (string, error) { return encodeMSJSON(p.(*MSToClient)) },
-		DecodeJSON: func(raw string) (any, error) {
-			return aolib.Decode([]byte(raw), aolib.WireJSON)
+		EncodeJSON:  func(p any) ([]byte, error) { return encodeMSJSON(p.(*MSToClient)) },
+		DecodeJSON: func(raw []byte) (any, error) {
+			v, err := aolib.Decode(raw, aolib.WireJSON)
+			if err != nil {
+				return nil, err
+			}
+			// aolib.Decode yields aolib's typed MS; fold it back to Nyathena's
+			// MSToServer via the shared positional Args so the codec's T matches.
+			return ParseMSToServer(v.(aolib.Outgoing).Args()), nil
 		},
 	}
 }
@@ -30,7 +36,7 @@ func msCodec() aolib.Codec {
 // MSToClient and marshals it, then injects the JSON-only additional_chars list
 // when present. The custom-shout name and blips are FantaCode-only extensions
 // and are intentionally omitted from the JSON form.
-func encodeMSJSON(ms *MSToClient) (string, error) {
+func encodeMSJSON(ms *MSToClient) ([]byte, error) {
 	typed := aolib.MSToClient{
 		DeskModifier:           ms.DeskModifier,
 		Preanim:                ms.Preanim,
@@ -66,21 +72,21 @@ func encodeMSJSON(ms *MSToClient) (string, error) {
 
 	b, err := aolib.Encode(&typed, aolib.WireJSON)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 	if len(ms.AdditionalChars) > 0 {
 		var obj map[string]json.RawMessage
 		if err := json.Unmarshal(b, &obj); err != nil {
-			return "", err
+			return nil, err
 		}
 		ac, _ := json.Marshal(ms.AdditionalChars)
 		obj["additional_chars"] = ac
 		b, err = json.Marshal(obj)
 		if err != nil {
-			return "", err
+			return nil, err
 		}
 	}
-	return string(b), nil
+	return b, nil
 }
 
 // parseMSOffset converts Nyathena's "x&y" offset string into aolib's Offset.

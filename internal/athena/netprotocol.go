@@ -1751,24 +1751,16 @@ func pktModcall(client *Client, p *aolib.Packet) {
 }
 
 // Handles SETCASE#%
-func pktSetCase(client *Client, p *aolib.Packet) {
-	sc, err := ParseSETCASE(p.Body)
-	if err != nil {
-		return
-	}
+func pktSetCase(client *Client, p *aolib.SETCASE) {
 	// Existing behaviour: only def/pro/judge/jury feed SetRoleAlert; cm and
 	// steno are intentionally ignored. The role indices are 0..3 in that order.
-	for i, r := range [4]string{sc.Def, sc.Pro, sc.Judge, sc.Jury} {
-		b, err := strconv.ParseBool(r)
-		if err != nil {
-			return
-		}
+	for i, b := range [4]bool{p.WillDef, p.WillPro, p.WillJudge, p.WillJury} {
 		client.SetRoleAlert(i, b)
 	}
 }
 
 // Handles CASEA#%
-func pktCaseAnn(client *Client, p *aolib.Packet) {
+func pktCaseAnn(client *Client, p *aolib.CASEAToServer) {
 	// Let future generations know I spent far too long trying to make this work.
 	// Partially because of my own stupidity, and partially because this is the worst packet in AO2.
 
@@ -1776,34 +1768,21 @@ func pktCaseAnn(client *Client, p *aolib.Packet) {
 		client.SendServerMessage("You are not allowed to send case alerts in this area.")
 		return
 	}
-	ca, err := ParseCASEA(p.Body)
-	if err != nil {
-		return
-	}
 	// Build the announcement title; the needs fields are forwarded verbatim.
-	// The trailing "1" in the FantaCode form preserves the old-client extra-
-	// arg workaround. JSON-mode clients don't need that workaround and
-	// receive the typed-Outgoing form (which encodes the 6 documented
-	// CASEA fields via BuildJSON).
+	// aolib.CASEAToClient emits the trailing "1" legacy slot on both wires
+	// (the FantaCode 7th field and the JSON `_legacy` const), matching the
+	// old-client workaround.
 	title := fmt.Sprintf("CASE ANNOUNCEMENT: %v in %v needs players for %v",
-		client.CurrentCharacter(), client.Area().Name(), ca.CaseTitle)
-	needs := strings.Join(escapeOutgoing("CASEA", []string{ca.NeedDef, ca.NeedPro, ca.NeedJudge, ca.NeedJury, ca.NeedSteno}), "#")
-	fantaCodePacket := fmt.Sprintf("CASEA#%v#%v#1#%%", encode(title), needs)
-	typedPacket := &CASEA{
-		CaseTitle: title,
-		NeedDef:   ca.NeedDef, NeedPro: ca.NeedPro,
-		NeedJudge: ca.NeedJudge, NeedJury: ca.NeedJury, NeedSteno: ca.NeedSteno,
+		client.CurrentCharacter(), client.Area().Name(), p.Title)
+	out := &aolib.CASEAToClient{
+		Message:   title,
+		NeedDef:   p.NeedDef,
+		NeedPro:   p.NeedPro,
+		NeedJudge: p.NeedJudge,
+		NeedJury:  p.NeedJury,
+		NeedSteno: p.NeedSteno,
 	}
-
-	// Pre-parse the requested role flags once so we don't re-parse per recipient.
-	var alertRoles [4]bool
-	for i, r := range [4]string{ca.NeedDef, ca.NeedPro, ca.NeedJudge, ca.NeedJury} {
-		b, err := strconv.ParseBool(r)
-		if err != nil {
-			return
-		}
-		alertRoles[i] = b
-	}
+	alertRoles := [4]bool{p.NeedDef, p.NeedPro, p.NeedJudge, p.NeedJury}
 
 	clients.ForEach(func(c *Client) {
 		if c == client {
@@ -1811,11 +1790,7 @@ func pktCaseAnn(client *Client, p *aolib.Packet) {
 		}
 		for i := 0; i < 4; i++ {
 			if alertRoles[i] && c.AlertRole(i) {
-				if c.JSONMode() {
-					c.Send(typedPacket)
-				} else {
-					c.write(fantaCodePacket)
-				}
+				c.Send(out)
 				break
 			}
 		}

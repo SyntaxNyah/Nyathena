@@ -41,18 +41,29 @@ func (client *Client) registerInbound() {
 	s.OnCH(func(p *aolib.CH) { client.handle(false, pktPing, p) })
 	s.OnZZ(func(p *aolib.ZZToServer) { client.handle(true, pktModcall, p) })
 	s.OnMA(func(p *aolib.MA) { client.handle(true, pktMA, p) })
+	s.OnMS(func(p *aolib.MSToServer) { client.handle(true, pktIC, p) })
+	// SETCASE / CASEA are canonical since aolib 2.6.0 and consume their typed
+	// forms directly (the mustJoin gate is inlined).
+	s.OnSETCASE(func(p *aolib.SETCASE) {
+		if client.Uid() == -1 {
+			return
+		}
+		pktSetCase(client, p)
+	})
+	s.OnCASEA(func(p *aolib.CASEAToServer) {
+		if client.Uid() == -1 {
+			return
+		}
+		pktCaseAnn(client, p)
+	})
 
-	// Custom codec headers (both-wire, registered via RegisterCodec).
+	// Custom codec headers (both-wire, registered via RegisterPacket).
 	for _, h := range []struct {
 		header   string
 		mustJoin bool
 		fn       func(*Client, *aolib.Packet)
 	}{
-		{"FL", false, pktFL},
-		{"MS", true, pktIC},
 		{"TT", true, pktTT},
-		{"SETCASE", true, pktSetCase},
-		{"CASEA", true, pktCaseAnn},
 		{"VS_JOIN", true, pktVSJoin},
 		{"VS_LEAVE", true, pktVSLeave},
 		{"VS_FRAME", true, pktVSFrame},
@@ -67,18 +78,23 @@ func (client *Client) registerInbound() {
 	}
 }
 
-// handleUnknownHeader frames an unmodeled header (PW) positionally from the
-// Fanta wire so its handler still runs; other unknown headers are dropped.
+// handleUnknownHeader frames an unmodeled header positionally from the Fanta
+// wire so its handler still runs. FL (client→server feature advertisement) and
+// PW (password) are the two headers aolib's canonical registry doesn't model in
+// this direction; everything else is dropped.
 func (client *Client) handleUnknownHeader(header string, wire []byte) {
-	if header != "PW" {
-		return
-	}
 	pkt, err := aolib.NewPacket(strings.TrimSuffix(string(wire), "%"))
 	if err != nil {
 		return
 	}
-	if client.Uid() == -1 {
-		return
+	switch header {
+	case "PW":
+		if client.Uid() == -1 {
+			return
+		}
+		pktPW(client, pkt)
+	case "FL":
+		// aolib models FL as server→client only; the client's own FL arrives here.
+		pktFL(client, pkt)
 	}
-	pktPW(client, pkt)
 }

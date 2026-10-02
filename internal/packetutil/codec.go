@@ -8,15 +8,60 @@ import (
 	aolib "github.com/AO-Underground/aolib/go/v2"
 )
 
-// customCodecs holds the registered codecs for Nyathena's nonstandard headers.
-// aolib keeps its own registry private and only dispatches custom packets via
-// the session API, so Nyathena tracks them here for its own wire dispatch.
-var customCodecs = map[string]aolib.Codec{}
+// Codec is a both-wire codec for a custom header. It is packetutil's own
+// type-erased shape (aolib 2.6.0's typed RegisterPacket is wrapped below), kept
+// so the outbound encode path can dispatch any payload without a type switch.
+type Codec struct {
+	EncodeFanta func(p any) ([]string, error)
+	DecodeFanta func(args []string) (any, error)
+	EncodeJSON  func(p any) ([]byte, error)
+	DecodeJSON  func(raw []byte) (any, error)
+}
 
-// RegisterCodec registers a both-wire codec for a custom header, both with
-// aolib and in Nyathena's dispatch table.
-func RegisterCodec(header string, c aolib.Codec) {
-	aolib.RegisterCodec(header, c)
+// customCodecs holds the registered codecs for Nyathena's nonstandard headers.
+// aolib keeps its own registry private, so Nyathena tracks them here for its
+// own outbound wire dispatch.
+var customCodecs = map[string]Codec{}
+
+// Register installs a both-wire codec for a custom header in aolib (typed, for
+// the session's inbound decode + OnCustom dispatch) and in packetutil's table
+// (type-erased, for the outbound encode path). T is the inbound payload type the
+// codec's Decode* functions return; for bidirectional headers (MS, VS_JOIN/…) the
+// outbound direction uses a different payload, which packetutil's own Encode
+// handles, so the aolib-registered Encode closures are simply unused.
+func Register[T any](header string, c Codec) {
+	customCodecs[header] = c
+	aolib.RegisterPacket(header, aolib.PacketOptions[T]{
+		Fanta: &aolib.Fanta[T]{
+			Encode: func(t T) ([]string, error) { return c.EncodeFanta(t) },
+			Decode: func(args []string) (T, error) {
+				v, err := c.DecodeFanta(args)
+				if err != nil {
+					var zero T
+					return zero, err
+				}
+				return v.(T), nil
+			},
+		},
+		JSON: &aolib.JSONForm[T]{
+			Encode: func(t T) ([]byte, error) { return c.EncodeJSON(t) },
+			Decode: func(raw []byte) (T, error) {
+				v, err := c.DecodeJSON(raw)
+				if err != nil {
+					var zero T
+					return zero, err
+				}
+				return v.(T), nil
+			},
+		},
+	})
+}
+
+// RegisterLocal registers a codec in packetutil's outbound dispatch table only,
+// without aolib.RegisterPacket. Used for headers aolib already models canonically
+// (MS) but whose Nyathena outbound shape carries extra fields (blips,
+// additional_chars) the canonical type can't represent.
+func RegisterLocal(header string, c Codec) {
 	customCodecs[header] = c
 }
 
@@ -59,12 +104,12 @@ func Decode(raw []byte, mode aolib.WireMode) (any, error) {
 		return nil, err
 	}
 	if c, ok := customCodecs[header]; ok {
-		return c.DecodeJSON(string(raw))
+		return c.DecodeJSON(raw)
 	}
 	return aolib.Decode(raw, mode)
 }
 
-func encodeCustom(header string, p any, c aolib.Codec, mode aolib.WireMode) ([]byte, error) {
+func encodeCustom(header string, p any, c Codec, mode aolib.WireMode) ([]byte, error) {
 	switch mode {
 	case aolib.WireFanta:
 		args, err := c.EncodeFanta(p)
@@ -77,7 +122,7 @@ func encodeCustom(header string, p any, c aolib.Codec, mode aolib.WireMode) ([]b
 		if err != nil {
 			return nil, err
 		}
-		return ensureHeader([]byte(raw), header)
+		return ensureHeader(raw, header)
 	default:
 		return nil, fmt.Errorf("packetutil: unknown wire mode %d", mode)
 	}

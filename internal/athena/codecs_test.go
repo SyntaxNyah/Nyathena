@@ -62,7 +62,7 @@ func TestSETCASEAndCASEAFantaDecode(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if s := sc.(*SETCASE); s.CM != "1" || s.Def != "0" || s.Pro != "1" {
+	if s := sc.(*aolib.SETCASE); s.Cases != "" || !s.WillCm || s.WillDef || !s.WillPro {
 		t.Fatalf("SETCASE decoded = %#v", s)
 	}
 
@@ -70,7 +70,7 @@ func TestSETCASEAndCASEAFantaDecode(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if c := ca.(*CASEA); c.CaseTitle != "case" || c.NeedDef != "1" || c.NeedPro != "1" {
+	if c := ca.(*aolib.CASEAToServer); c.Title != "case" || !c.NeedDef || !c.NeedPro {
 		t.Fatalf("CASEA decoded = %#v", c)
 	}
 }
