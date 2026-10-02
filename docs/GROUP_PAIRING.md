@@ -76,3 +76,60 @@ partner for FantaCode/legacy clients.
 Groups are keyed by **player UID** (not char id), so members may switch
 characters without leaving. There is **no size limit**; a group dissolves only
 when fewer than two members remain.
+
+---
+
+## 5. Rendering contract — `additional_chars` is authoritative per message
+
+Both channels carry the **same ordered roster**, but for different purposes:
+
+| channel | when | who receives it | purpose |
+|---|---|---|---|
+| `GP` | on group change (formed / accept / leave / dissolve) | group members only | group lifecycle + roster state |
+| `additional_chars` | on **every** `MS` from a group member | everyone in the area | **the per-message render plane** |
+
+Clients must render the group from `additional_chars` (present only when a group
+member speaks), **not** from the `GP` roster. The roster is only for group
+management (accept / leave / status). Rendering from the roster causes two
+bugs:
+
+1. a new unpaired joiner never received `GP`, so they render nothing;
+2. a non-member speaks (their `MS` has no `additional_chars`), but a group
+   member's client still holds the roster, so the non-member is drawn as a fake
+   "4th partner".
+
+## 6. Offset semantics
+
+`offset` is `"x&y"`, in percent of the viewport. The FantaCode wire escapes `&`
+as `<and>`, so the **stored** value is `"x<and>y"`. `parseOffset` (in
+`pairgroup.go`) and `parseMSOffset` (in `ms_codec.go`) must both do
+`strings.ReplaceAll(s, "<and>", "&")` **before** splitting on `&` — otherwise a
+two-axis offset silently collapses to `{x:0, y:0}` and members pile up at the
+default position.
+
+## 7. `side` field
+
+Each `GP.members[i]` and `additional_chars[i]` carries `"side"` (the member's AO
+position, from `Client.Pos()`), so clients can place a member on their **own**
+bench instead of the speaker's. Example member with side:
+
+```json
+{ "uid": 100, "char_id": 0, "name": "Phoenix", "emote": "normal",
+  "side": "def", "offset": { "x": 0, "y": 0 }, "flip": "none", "order": 0 }
+```
+
+## 8. Gotchas / pitfalls
+
+- **Gating is JSON-mode, not FL.** `Client.supportsGroupPair()` returns
+  `client.jsonMode.Load()`; it does **not** consult the client's advertised
+  `grouppair` FL. `GP` / `additional_chars` therefore flow to any JSON peer.
+- **FL direction.** aolib models `FL` as server→client only (`x-receiver:
+  client`); there is no typed client→server `FL`. Clients advertise their own
+  support out-of-band (LemmyAO sends raw `FL#grouppair#%`; AsyncAO uses
+  `NewTypedPacket(&aolib.FL{...})` + `reply`).
+- **`<and>` unescape.** See §6 — forgetting it zeroes two-axis offsets.
+- **Order is front→back, speaker included.** `members[0]` is front-most. The
+  renderer draws the non-speaker members behind the speaker in roster order.
+- **Legacy `paired_*` still carries the first partner.** The canonical pair
+  fields are filled from the first accepted non-speaker member, so FantaCode /
+  legacy clients still render a correct 2-person scene.
