@@ -107,6 +107,7 @@ func (g *PairGroup) buildGP() *GP {
 			CharID: m.CharID(),
 			Name:   pi.name,
 			Emote:  pi.emote,
+			Side:   m.Pos(),
 			Offset: parseOffset(pi.offset),
 			Flip:   parsePairFlip(pi.flip),
 			Order:  i,
@@ -259,6 +260,7 @@ func applyPairGroupInjection(client *Client, ms *MSToClient) {
 			CharID: m.CharID(),
 			Name:   pi.name,
 			Emote:  pi.emote,
+			Side:   m.Pos(),
 			Offset: parseOffset(pi.offset),
 			Flip:   parsePairFlip(pi.flip),
 			Order:  i,
@@ -266,8 +268,11 @@ func applyPairGroupInjection(client *Client, ms *MSToClient) {
 	}
 }
 
-// parseOffset converts an "x" or "x&y" offset string into a Offset.
+// parseOffset converts an "x" or "x&y" offset string into a Offset. The wire
+// escapes "&" as "<and>", so unescape before splitting (the JSON-MS path does
+// the same in parseMSOffset).
 func parseOffset(s string) aolib.Offset {
+	s = strings.ReplaceAll(s, "<and>", "&")
 	if s == "" {
 		return aolib.Offset{}
 	}

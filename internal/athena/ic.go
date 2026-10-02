@@ -24,6 +24,7 @@ type AdditionalChar struct {
 	CharID int          `json:"charid"`
 	Name   string       `json:"name"`
 	Emote  string       `json:"emote"`
+	Side   string       `json:"side"`
 	Offset aolib.Offset `json:"offset"`
 	Flip   aolib.Flip   `json:"flip"`
 	Order  int          `json:"order"` // z-offset: 0 behind the speaker (default), 1 in front

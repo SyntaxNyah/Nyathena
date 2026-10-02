@@ -9,6 +9,24 @@ import (
 	"github.com/MangosArentLiterature/Athena/internal/packetutil"
 )
 
+// TestParseOffsetUnescapesAnd verifies that parseOffset unescapes the wire
+// "<and>" form of "&", so two-axis offsets survive the round trip.
+func TestParseOffsetUnescapesAnd(t *testing.T) {
+	cases := map[string]aolib.Offset{
+		"":            {},
+		"0":           {X: 0, Y: 0},
+		"50":          {X: 50, Y: 0},
+		"50&20":       {X: 50, Y: 20},
+		"50<and>20":   {X: 50, Y: 20},
+		"-50<and>-20": {X: -50, Y: -20},
+	}
+	for in, want := range cases {
+		if got := parseOffset(in); got != want {
+			t.Errorf("parseOffset(%q) = %+v, want %+v", in, got, want)
+		}
+	}
+}
+
 // TestGPEncodeJSON verifies that the JSON-only GP packet routes through its
 // custom codec and carries the $header, group_id and ordered members.
 func TestGPEncodeJSON(t *testing.T) {
