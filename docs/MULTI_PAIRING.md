@@ -93,6 +93,7 @@ type AdditionalChar struct {
     Emote  string        `json:"emote"`
     Offset packet.Offset `json:"offset"` // {x, y}
     Flip   packet.Flip   `json:"flip"`
+    Order  int           `json:"order"`  // z-offset: 0 behind the speaker (default), 1 in front
 }
 ```
 
@@ -104,6 +105,8 @@ exactly what a client needs to draw it:
 - `emote`  — idle animation to play (looping `(a)<emote>`)
 - `offset` — screen position `{x, y}` (percent of viewport)
 - `flip`   — mirror flag (`none`/`horizontal`/`vertical`/`horizontal_and_vertical`)
+- `order`  — z-offset relative to the speaker, same convention as the canonical
+  `paired_order` (`^` suffix): `0` behind (default), `1` in front
 
 The standard pair stays in `paired_charid` / `paired_name` / `paired_emote` /
 `paired_offset` / `paired_flip` and always holds the **first** partner, so
@@ -142,10 +145,11 @@ clients that advertised `multi_pair`.
 5. Each partner uses its **own** remembered restyle, keyed by the partner's
    `char_id` — not the speaker's style.
 
-> Open item: precise z-order among 3+ sprites. The JSON list carries no order
-> field — render order = speaker, then `additional_chars` in list order. (The
-> Fanta pair has a `^order` suffix on `paired_charid`, but the JSON extension
-> does not; see §10.)
+> Z-order among 3+ sprites: each `additional_chars` entry carries an `order`
+> z-offset (`0` behind the speaker, `1` in front), matching the canonical
+> `paired_order` (`^` suffix). Render the speaker, the pair, then each
+> `additional_chars` entry; sort by `order` ascending (speaker = 0, behind
+> first), with list order as the tie-break for equal `order` values.
 
 ---
 
@@ -259,7 +263,8 @@ get it from codegen. Two paths:
    `AO-Underground/aolib` `MSToClient` schema (and regenerate both bindings), or
    have each client add a local handler. This is the one decision that "pins
    forever" the extension's shape.
-2. **Multi-sprite z-order.** The JSON `additional_chars` list has no order field;
-   render order = list order. If clients need an explicit z-order for 3+ sprites,
-   add an `order` (or equivalent) field to `AdditionalChar` before it is promoted.
+2. **Multi-sprite z-order.** Each `additional_chars` entry now carries an `order`
+   z-offset (`0` behind the speaker, `1` in front, higher = more front),
+   matching the canonical `paired_order` (`^` suffix). List order is the
+   tie-break for equal `order` values.
 

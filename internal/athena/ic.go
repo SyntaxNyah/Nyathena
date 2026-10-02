@@ -21,11 +21,12 @@ import (
 
 // AdditionalChar is one on-screen partner beyond the standard pair.
 type AdditionalChar struct {
-	CharID int           `json:"charid"`
-	Name   string        `json:"name"`
-	Emote  string        `json:"emote"`
+	CharID int          `json:"charid"`
+	Name   string       `json:"name"`
+	Emote  string       `json:"emote"`
 	Offset aolib.Offset `json:"offset"`
 	Flip   aolib.Flip   `json:"flip"`
+	Order  int          `json:"order"` // z-offset: 0 behind the speaker (default), 1 in front
 }
 
 // MSToServer is the client -> server MS (26 fields + Blips).
@@ -109,10 +110,14 @@ func (ms *MSToClient) Header() string { return "MS" }
 // value (the IC handler and the raid guard) want the wire integer. The error
 // is always nil and exists so the historical two-value call sites keep their
 // shape.
-func (ms *MSToServer) Shout() (int, error) { return packetutil.ShoutModifierToWire[ms.ShoutModifier], nil }
+func (ms *MSToServer) Shout() (int, error) {
+	return packetutil.ShoutModifierToWire[ms.ShoutModifier], nil
+}
 
 // Shout returns the numeric wire value of the shout/objection modifier.
-func (ms *MSToClient) Shout() (int, error) { return packetutil.ShoutModifierToWire[ms.ShoutModifier], nil }
+func (ms *MSToClient) Shout() (int, error) {
+	return packetutil.ShoutModifierToWire[ms.ShoutModifier], nil
+}
 
 // parseDeskModifier parses the desk_modifier wire token, mapping the legacy
 // "chat" alias to the shown value.
