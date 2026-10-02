@@ -297,12 +297,11 @@ func removeGroupMemberOnDisconnect(client *Client) {
 }
 
 // supportsGroupPair reports whether this JSON client may receive the group-pair
-// extension (GP roster + additional_chars). Gated on JSON mode and the client's
-// own FL advertisement of "grouppair". Symmetric capability negotiation — no
-// hardcoded client list.
+// extension (GP roster + additional_chars). GP is JSON-only, so JSON mode alone
+// is sufficient: a client that never registers GP ignores the unknown header,
+// and additional_chars lands in Extras. No client FL handshake is required —
+// aolib models FL as server→client only, so there is no typed C2S FL for a
+// client to send.
 func (client *Client) supportsGroupPair() bool {
-	if !client.jsonMode.Load() {
-		return false
-	}
-	return client.SupportsFeature("grouppair")
+	return client.jsonMode.Load()
 }
