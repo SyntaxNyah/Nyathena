@@ -1,6 +1,6 @@
 module github.com/MangosArentLiterature/Athena
 
-go 1.21
+go 1.25.0
 
 require (
 	github.com/AO-Underground/aolib/go/v2 v2.6.0
@@ -8,8 +8,8 @@ require (
 	github.com/bwmarrin/discordgo v0.28.1
 	github.com/ecnepsnai/discord v1.2.1
 	github.com/xhit/go-str2duration/v2 v2.0.0
-	golang.org/x/crypto v0.0.0-20220722155217-630584e8d5aa
-	golang.org/x/text v0.21.0
+	golang.org/x/crypto v0.52.0
+	golang.org/x/text v0.37.0
 	modernc.org/sqlite v1.18.0
 	nhooyr.io/websocket v1.8.7
 )
@@ -22,10 +22,10 @@ require (
 	github.com/mattn/go-isatty v0.0.14 // indirect
 	github.com/remyoudompheng/bigfft v0.0.0-20200410134404-eec4a21b6bb0 // indirect
 	github.com/santhosh-tekuri/jsonschema/v6 v6.0.3 // indirect
-	golang.org/x/mod v0.17.0 // indirect
-	golang.org/x/sync v0.10.0 // indirect
-	golang.org/x/sys v0.20.0 // indirect
-	golang.org/x/tools v0.21.1-0.20240508182429-e35e4ccd0d2d // indirect
+	golang.org/x/mod v0.35.0 // indirect
+	golang.org/x/sync v0.20.0 // indirect
+	golang.org/x/sys v0.45.0 // indirect
+	golang.org/x/tools v0.44.0 // indirect
 	lukechampine.com/uint128 v1.2.0 // indirect
 	modernc.org/cc/v3 v3.36.1 // indirect
 	modernc.org/ccgo/v3 v3.16.8 // indirect
