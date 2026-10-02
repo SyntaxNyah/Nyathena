@@ -154,7 +154,7 @@ func pktId(client *Client, p *aolib.Packet) {
 		"noencryption", "yellowtext", "prezoom", "flipping", "customobjections",
 		"fastloading", "deskmod", "evidence", "cccc_ic_support", "arup", "casing_alerts",
 		"modcall_reason", "looping_sfx", "additive", "effects", "y_offset",
-		"expanded_desk_mods", "auth_packet", "multi_pair",
+		"expanded_desk_mods", "auth_packet", "grouppair",
 	}})
 
 	if config.AssetURL != "" {
@@ -165,7 +165,7 @@ func pktId(client *Client, p *aolib.Packet) {
 
 // Handles FL#... (client→server capability advertisement). The client sends its
 // own FL — the same packet the server sends server→client — listing the
-// features it supports (e.g. "multi_pair"). This makes capability negotiation
+// features it supports (e.g. "grouppair"). This makes capability negotiation
 // symmetric and needs no new packet type.
 func pktFL(client *Client, p *aolib.Packet) {
 	client.SetFeatures(p.Body)

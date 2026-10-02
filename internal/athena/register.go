@@ -23,6 +23,11 @@ func init() {
 	// FantaCode AND a JSON form through aolib.Encode/Decode.
 	packetutil.Register[*TTPacket]("TT", ttCodec())
 
+	// GP is the JSON-only group-pair roster announcement (server→client).
+	// Outbound-only: clients never send GP back, so RegisterLocal (rather than
+	// the both-wire Register) is the right registration.
+	packetutil.RegisterLocal("GP", gpCodec())
+
 	// Voice chat (VS_*) — removed from the canonical spec (aa8d0fb); registered
 	// here as Nyathena server extensions, both-wire like TT.
 	packetutil.Register[*VS_CAPS]("VS_CAPS", vsCapsCodec())

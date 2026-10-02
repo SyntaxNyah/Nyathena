@@ -17,7 +17,6 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>. */
 package athena
 
 import (
-	"fmt"
 	"strconv"
 	"strings"
 	"sync"
@@ -26,52 +25,16 @@ import (
 	"github.com/MangosArentLiterature/Athena/internal/packetutil"
 )
 
-// PairGroup is a multi-pair group (3-5 characters). It starts pending and
-// becomes active once every member has accepted. Members reference it via
-// Client.pairGroup; a nil pointer means "not in a group". members[0] is the
-// initiator and is pre-accepted.
+// PairGroup is a multi-pair group of any size (2+). It starts pending and grows
+// incrementally as each member accepts (1 accept → pair, 2 → triple, …).
+// Members reference it via Client.pairGroup; a nil pointer means "not in a
+// group". members[0] is the initiator and is pre-accepted. members order is the
+// render z-order (members[0] front-most).
 type PairGroup struct {
 	mu       sync.Mutex
 	members  []*Client
 	accepted map[int]bool // by UID
-}
-
-// groupName returns the human command/type name for a target group size.
-func groupName(size int) string {
-	switch size {
-	case 3:
-		return "triple"
-	case 4:
-		return "quad"
-	case 5:
-		return "quint"
-	default:
-		return "pair"
-	}
-}
-
-func (g *PairGroup) active() bool {
-	g.mu.Lock()
-	defer g.mu.Unlock()
-	for _, m := range g.members {
-		if !g.accepted[m.Uid()] {
-			return false
-		}
-	}
-	return true
-}
-
-// others returns the members other than the speaker, in group order.
-func (g *PairGroup) others(speaker *Client) []*Client {
-	g.mu.Lock()
-	defer g.mu.Unlock()
-	out := make([]*Client, 0, len(g.members)-1)
-	for _, m := range g.members {
-		if m != speaker {
-			out = append(out, m)
-		}
-	}
-	return out
+	groupID  string       // stable id carried in the GP roster packet
 }
 
 // roster returns a human-readable, comma-joined member name list.
@@ -119,6 +82,87 @@ func (g *PairGroup) dissolve(reason string) {
 	}
 }
 
+// acceptedMembers returns the accepted members in group (z-)order.
+func (g *PairGroup) acceptedMembers() []*Client {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	out := make([]*Client, 0, len(g.members))
+	for _, m := range g.members {
+		if g.accepted[m.Uid()] {
+			out = append(out, m)
+		}
+	}
+	return out
+}
+
+// buildGP snapshots the accepted roster as a GP packet (ordered, speaker
+// included) for the JSON-only group-pair extension.
+func (g *PairGroup) buildGP() *GP {
+	accepted := g.acceptedMembers()
+	members := make([]GPMember, 0, len(accepted))
+	for i, m := range accepted {
+		pi := m.PairInfo()
+		members = append(members, GPMember{
+			UID:    m.Uid(),
+			CharID: m.CharID(),
+			Name:   pi.name,
+			Emote:  pi.emote,
+			Offset: parseOffset(pi.offset),
+			Flip:   parsePairFlip(pi.flip),
+			Order:  i,
+		})
+	}
+	return &GP{GroupID: g.groupID, Members: members}
+}
+
+// remove gracefully removes one member from the group. If fewer than two
+// members remain the group dissolves; otherwise it persists and the remaining
+// members receive an updated roster.
+func (g *PairGroup) remove(member *Client, reason string) {
+	g.mu.Lock()
+	remaining := make([]*Client, 0, len(g.members)-1)
+	for _, m := range g.members {
+		if m != member {
+			remaining = append(remaining, m)
+		}
+	}
+	g.members = remaining
+	delete(g.accepted, member.Uid())
+	dissolve := len(remaining) < 2
+	members := append([]*Client(nil), remaining...)
+	g.mu.Unlock()
+
+	member.SetPairGroup(nil)
+	if reason != "" {
+		member.SendServerMessage(reason)
+	}
+
+	if dissolve {
+		for _, m := range members {
+			m.SetPairGroup(nil)
+			if reason != "" {
+				m.SendServerMessage("The pairing group was dissolved.")
+			}
+			if m.supportsGroupPair() {
+				m.Send(&GP{GroupID: g.groupID, Members: []GPMember{}})
+			}
+		}
+	} else {
+		for _, m := range members {
+			if reason != "" {
+				m.SendServerMessage(reason)
+			}
+		}
+		sendGroupState(g)
+	}
+
+	if member.supportsGroupPair() {
+		member.Send(&GP{GroupID: g.groupID, Members: []GPMember{}})
+	}
+}
+
+// accept marks a member as accepted. The group grows incrementally: each accept
+// adds one more renderable member (1 accept → pair, 2 → triple, …).
 func (g *PairGroup) accept(member *Client) {
 	g.mu.Lock()
 	if g.accepted[member.Uid()] {
@@ -127,99 +171,16 @@ func (g *PairGroup) accept(member *Client) {
 		return
 	}
 	g.accepted[member.Uid()] = true
-	done := true
-	for _, m := range g.members {
-		if !g.accepted[m.Uid()] {
-			done = false
-		}
-	}
 	members := append([]*Client(nil), g.members...)
-	status := g.statusLocked()
 	g.mu.Unlock()
 
-	if done {
-		roster := g.roster()
-		for _, m := range members {
-			m.SendServerMessage("Multi-pair formed! Members: " + roster + ".")
-		}
-		return
-	}
 	for _, m := range members {
-		m.SendServerMessage(oocDisplayName(member) + " accepted. Status: " + status)
+		m.SendServerMessage(oocDisplayName(member) + " accepted. Members: " + g.roster())
 	}
+	sendGroupState(g)
 }
 
-// cmdStartGroup implements /triple, /quad and /quint: the initiator invites
-// size-1 other players into a pending group.
-func cmdStartGroup(client *Client, args []string, size int) {
-	if client.CharID() < 0 {
-		client.SendServerMessage("You have not selected a character.")
-		return
-	}
-	if client.PairGroup() != nil {
-		client.SendServerMessage("You are already in a pairing group.")
-		return
-	}
-	if len(args) < size-1 {
-		client.SendServerMessage(fmt.Sprintf("Usage: /%s <uid> ... (%d players total).", groupName(size), size))
-		return
-	}
-
-	invitees := make([]*Client, 0, size-1)
-	for i := 0; i < size-1; i++ {
-		uid, err := strconv.Atoi(args[i])
-		if err != nil {
-			client.SendServerMessage("Invalid UID: " + args[i])
-			return
-		}
-		t, err := getClientByUid(uid)
-		if err != nil {
-			client.SendServerMessage(fmt.Sprintf("Client with UID %d does not exist.", uid))
-			return
-		}
-		if t == client {
-			client.SendServerMessage("You cannot pair with yourself.")
-			return
-		}
-		if t.Area() != client.Area() {
-			client.SendServerMessage("That player is not in your area.")
-			return
-		}
-		if t.CharID() < 0 {
-			client.SendServerMessage("That player has not selected a character.")
-			return
-		}
-		if t.PairGroup() != nil {
-			client.SendServerMessage(oocDisplayName(t) + " is already in a pairing group.")
-			return
-		}
-		for _, e := range invitees {
-			if e == t {
-				client.SendServerMessage("Duplicate player in request.")
-				return
-			}
-		}
-		invitees = append(invitees, t)
-	}
-
-	g := &PairGroup{
-		members:  append([]*Client{client}, invitees...),
-		accepted: map[int]bool{client.Uid(): true},
-	}
-	for _, m := range g.members {
-		m.SetPairGroup(g)
-	}
-
-	client.SendServerMessage(fmt.Sprintf("Sent a %d-way pairing request. Waiting for acceptance.", size))
-	for _, t := range invitees {
-		t.SendServerMessage(fmt.Sprintf("%v wants to form a %d-way pairing with you. Members: %s. Type /accept to accept or /deny to decline.", oocDisplayName(client), size, g.roster()))
-	}
-}
-
-func cmdTriple(client *Client, args []string, usage string) { cmdStartGroup(client, args, 3) }
-func cmdQuad(client *Client, args []string, usage string)   { cmdStartGroup(client, args, 4) }
-func cmdQuint(client *Client, args []string, usage string)  { cmdStartGroup(client, args, 5) }
-
+// cmdAccept handles /accept.
 func cmdAccept(client *Client, _ []string, _ string) {
 	g := client.PairGroup()
 	if g == nil {
@@ -229,15 +190,17 @@ func cmdAccept(client *Client, _ []string, _ string) {
 	g.accept(client)
 }
 
+// cmdDeny handles /deny.
 func cmdDeny(client *Client, _ []string, _ string) {
 	g := client.PairGroup()
 	if g == nil {
 		client.SendServerMessage("You have no pending pairing group request.")
 		return
 	}
-	g.dissolve(oocDisplayName(client) + " declined — the pairing group was dissolved.")
+	g.remove(client, oocDisplayName(client)+" declined — the pairing group has been updated.")
 }
 
+// cmdPairRequests handles /pair-requests.
 func cmdPairRequests(client *Client, _ []string, _ string) {
 	g := client.PairGroup()
 	if g == nil {
@@ -247,21 +210,40 @@ func cmdPairRequests(client *Client, _ []string, _ string) {
 	client.SendServerMessage("Pairing group status: " + g.status())
 }
 
-// applyPairGroupInjection fills the MS pair + multi-pair slots for a speaker in
-// an active group: the standard paired_* fields from the first partner (so
-// FantaCode/legacy clients render a pair) and the JSON-only additional_chars
-// list from the remaining partners.
+// applyPairGroupInjection fills the MS pair slots for a speaker in a group. The
+// standard paired_* fields carry the first accepted partner (FantaCode/legacy
+// clients), and the JSON-only additional_chars list carries the FULL accepted
+// roster in z-order — speaker included — so the ordering lives in one place.
 func applyPairGroupInjection(client *Client, ms *MSToClient) {
 	g := client.PairGroup()
-	if g == nil || !g.active() {
+	if g == nil {
 		return
 	}
-	others := g.others(client)
-	if len(others) == 0 {
+	accepted := g.acceptedMembers()
+	if len(accepted) < 2 {
+		return
+	}
+	// The speaker must be an accepted member for their message to render the
+	// group (a pending invitee has not joined yet).
+	speakerAccepted := false
+	for _, m := range accepted {
+		if m == client {
+			speakerAccepted = true
+			break
+		}
+	}
+	if !speakerAccepted {
 		return
 	}
 
-	first := others[0]
+	// First accepted partner other than the speaker fills the legacy pair slots.
+	var first *Client
+	for _, m := range accepted {
+		if m != client {
+			first = m
+			break
+		}
+	}
 	info := first.PairInfo()
 	ms.PairedCharID = first.CharIDStr()
 	ms.PairedName = info.name
@@ -270,14 +252,16 @@ func applyPairGroupInjection(client *Client, ms *MSToClient) {
 	otherFlip, _ := strconv.Atoi(info.flip)
 	ms.PairedFlip = packetutil.FlipFromWire[otherFlip]
 
-	for _, p := range others[1:] {
-		pi := p.PairInfo()
+	// JSON-only: the ordered roster (speaker included) is the z-order.
+	for i, m := range accepted {
+		pi := m.PairInfo()
 		ms.AdditionalChars = append(ms.AdditionalChars, AdditionalChar{
-			CharID: p.CharID(),
+			CharID: m.CharID(),
 			Name:   pi.name,
 			Emote:  pi.emote,
 			Offset: parseOffset(pi.offset),
 			Flip:   parsePairFlip(pi.flip),
+			Order:  i,
 		})
 	}
 }
@@ -302,23 +286,23 @@ func parsePairFlip(s string) aolib.Flip {
 	return packetutil.FlipFromWire[n]
 }
 
-// dissolvePairGroupOnDisconnect tears down any group a disconnecting client
-// belongs to. Called from clearPairLinksOnDisconnect while the leaver's UID is
+// removeGroupMemberOnDisconnect gracefully removes a disconnecting client from
+// their group (the group shrinks; it only dissolves when fewer than two members
+// remain). Called from clearPairLinksOnDisconnect while the leaver's UID is
 // still valid.
-func dissolvePairGroupOnDisconnect(client *Client) {
+func removeGroupMemberOnDisconnect(client *Client) {
 	if g := client.PairGroup(); g != nil {
-		g.dissolve(oocDisplayName(client) + " disconnected — the pairing group was dissolved.")
+		g.remove(client, oocDisplayName(client)+" disconnected — the pairing group has been updated.")
 	}
 }
 
-// supportsMultiPair reports whether this JSON client may receive the
-// additional_chars extension. Gated on the client's own FL advertisement: the
-// client sends its supported features (client→server FL), and the server
-// honors "multi_pair". Symmetric capability negotiation — no hardcoded client
-// list.
-func (client *Client) supportsMultiPair() bool {
+// supportsGroupPair reports whether this JSON client may receive the group-pair
+// extension (GP roster + additional_chars). Gated on JSON mode and the client's
+// own FL advertisement of "grouppair". Symmetric capability negotiation — no
+// hardcoded client list.
+func (client *Client) supportsGroupPair() bool {
 	if !client.jsonMode.Load() {
 		return false
 	}
-	return client.SupportsFeature("multi_pair")
+	return client.SupportsFeature("grouppair")
 }

@@ -27,8 +27,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/MangosArentLiterature/Athena/internal/area"
 	aolib "github.com/AO-Underground/aolib/go/v2"
+	"github.com/MangosArentLiterature/Athena/internal/area"
 	str2duration "github.com/xhit/go-str2duration/v2"
 )
 
@@ -181,7 +181,7 @@ func cmdForcePair(client *Client, args []string, _ string) {
 func cmdUnpair(client *Client, _ []string, _ string) {
 	// Leaving a multi-pair group dissolves the whole group (decided behavior).
 	if g := client.PairGroup(); g != nil {
-		g.dissolve(oocDisplayName(client) + " left — the pairing group was dissolved.")
+		g.remove(client, oocDisplayName(client)+" left — the pairing group has been updated.")
 		return
 	}
 
@@ -245,7 +245,7 @@ func clearPairLinksOnDisconnect(client *Client) {
 	// behind lets it auto-complete against a recycled UID/CharID later — the
 	// desync this cleanup exists to prevent. Disconnects are infrequent, so the
 	// O(n) walk is cheap.
-	dissolvePairGroupOnDisconnect(client)
+	removeGroupMemberOnDisconnect(client)
 	clientUID := client.Uid()
 	clientCharID := client.CharID()
 	leaverName := oocDisplayName(client)
