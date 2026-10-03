@@ -37,6 +37,7 @@ func msCodec() packetutil.Codec {
 // when present. The custom-shout name and blips are FantaCode-only extensions
 // and are intentionally omitted from the JSON form.
 func encodeMSJSON(ms *MSToClient) ([]byte, error) {
+	pid, pairOrder := splitPairedID(ms.PairedCharID)
 	typed := aolib.MSToClient{
 		DeskModifier:           ms.DeskModifier,
 		Preanim:                ms.Preanim,
@@ -54,7 +55,8 @@ func encodeMSJSON(ms *MSToClient) ([]byte, error) {
 		Realization:            packetutil.WireToBool(ms.Realization),
 		TextColor:              ms.TextColor,
 		Showname:               ms.Showname,
-		PairedCharID:           packetutil.AtoiOrZero(ms.PairedCharID),
+		PairedCharID:           pid,
+		PairedOrder:            pairOrder,
 		PairedName:             ms.PairedName,
 		PairedEmote:            ms.PairedEmote,
 		Offset:                 parseMSOffset(ms.Offset),
@@ -98,6 +100,19 @@ func parseMSOffset(s string) aolib.Offset {
 		o.Y = packetutil.AtoiOrZero(parts[1])
 	}
 	return o
+}
+
+// splitPairedID parses the classic "pid^order" pair suffix into its two parts.
+// The FantaCode wire packs pair order onto paired_charid as a "^"-joined suffix
+// (4^1 = partner 4, speaker behind); on the JSON wire the two are separate
+// fields (paired_charid + paired_order), so this bridges them.
+func splitPairedID(raw string) (pid, order int) {
+	pidStr, orderStr, hasOrder := strings.Cut(raw, "^")
+	pid = packetutil.AtoiOrZero(pidStr)
+	if hasOrder {
+		order = packetutil.AtoiOrZero(orderStr)
+	}
+	return pid, order
 }
 
 // parseMSEffect converts Nyathena's "name|folder|sound" effect string into
