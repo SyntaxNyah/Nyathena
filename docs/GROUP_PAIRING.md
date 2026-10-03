@@ -168,3 +168,8 @@ directions — `splitPairedID` parses the `^order` suffix for the JSON encode, a
 aolib's `Args()` re-packs it on decode — so a FantaCode speaker's `^order`
 reaches JSON clients and vice versa. This is distinct from `/pairorder` (§9),
 which reorders the unbounded group roster.
+
+Note: `paired_order` is live in aolib-go **v2.6.1** (which Nyathena imports) but
+not yet in aolib-ts — npm's latest `aolib-ts` is still **2.6.0** without
+`paired_order`. So the LemmyAO client defers the classic-order toggle until
+aolib-ts 2.6.1 is published.
