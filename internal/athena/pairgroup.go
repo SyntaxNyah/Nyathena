@@ -28,13 +28,15 @@ import (
 // PairGroup is a multi-pair group of any size (2+). It starts pending and grows
 // incrementally as each member accepts (1 accept → pair, 2 → triple, …).
 // Members reference it via Client.pairGroup; a nil pointer means "not in a
-// group". members[0] is the initiator and is pre-accepted. members order is the
-// render z-order (members[0] front-most).
+// group". members[0] is pre-accepted and front-most: for a consent group that
+// is the initiator, for a forced group it is simply the first target. members
+// order is the render z-order (members[0] front-most).
 type PairGroup struct {
 	mu       sync.Mutex
 	members  []*Client
 	accepted map[int]bool // by UID
 	groupID  string       // stable id carried in the GP roster packet
+	forced   bool         // true when created by /forcegrouppair (members had no say)
 }
 
 // roster returns a human-readable, comma-joined member name list.
@@ -68,16 +70,21 @@ func (g *PairGroup) statusLocked() string {
 	return strings.Join(parts, ", ")
 }
 
-// dissolve tears the group down, clearing every member's reference and
-// notifying them with reason (empty reason = silent).
+// dissolve tears the group down, clearing every member's reference, notifying
+// them with reason (empty reason = silent), and pushing an empty GP roster so
+// JSON clients drop their on-screen group state.
 func (g *PairGroup) dissolve(reason string) {
 	g.mu.Lock()
 	members := append([]*Client(nil), g.members...)
+	groupID := g.groupID
 	g.mu.Unlock()
 	for _, m := range members {
 		m.SetPairGroup(nil)
 		if reason != "" {
 			m.SendServerMessage(reason)
+		}
+		if m.supportsGroupPair() {
+			m.Send(&GP{GroupID: groupID, Members: []GPMember{}})
 		}
 	}
 }
@@ -93,6 +100,15 @@ func (g *PairGroup) acceptedMembers() []*Client {
 		}
 	}
 	return out
+}
+
+// IsForced reports whether this group was created by a moderator via
+// /forcegrouppair (members had no say), as opposed to a consent-based
+// /grouppair.
+func (g *PairGroup) IsForced() bool {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	return g.forced
 }
 
 // buildGP snapshots the accepted roster as a GP packet (ordered, speaker

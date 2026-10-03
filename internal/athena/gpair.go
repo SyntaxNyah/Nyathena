@@ -62,21 +62,28 @@ func sendGroupState(g *PairGroup) {
 	}
 }
 
-// startGroupPair implements /grouppair and /forcegrouppair: the initiator
-// invites any number of other players (player UIDs) into a group. force skips
-// the accept flow and marks everyone accepted immediately.
+// startGroupPair implements /grouppair and /forcegrouppair. For /grouppair the
+// initiator invites any number of other players and joins their own group;
+// force skips the accept flow and pairs ONLY the invitees (the issuing
+// moderator is not a member), marking everyone accepted immediately.
 func startGroupPair(client *Client, args []string, force bool) {
-	if client.CharID() < 0 {
-		client.SendServerMessage("You have not selected a character.")
-		return
-	}
-	if client.PairGroup() != nil {
-		client.SendServerMessage("You are already in a pairing group.")
-		return
-	}
 	if len(args) == 0 {
 		client.SendServerMessage("Usage: /grouppair <uid> [uid ...]")
 		return
+	}
+
+	// /grouppair joins the caller to the group, so they need a character and
+	// must not already be grouped. /forcegrouppair only groups the targets, so
+	// the moderator is exempt from both checks.
+	if !force {
+		if client.CharID() < 0 {
+			client.SendServerMessage("You have not selected a character.")
+			return
+		}
+		if client.PairGroup() != nil {
+			client.SendServerMessage("You are already in a pairing group.")
+			return
+		}
 	}
 
 	invitees := make([]*Client, 0, len(args))
@@ -116,21 +123,29 @@ func startGroupPair(client *Client, args []string, force bool) {
 		invitees = append(invitees, t)
 	}
 
+	// Force mode pairs only the invitees; consent mode adds the initiator first.
+	members := invitees
+	accepted := make(map[int]bool, len(members))
+	if force {
+		for _, m := range members {
+			accepted[m.Uid()] = true
+		}
+	} else {
+		members = append([]*Client{client}, invitees...)
+		accepted[client.Uid()] = true
+	}
+
 	g := &PairGroup{
-		members:  append([]*Client{client}, invitees...),
-		accepted: map[int]bool{client.Uid(): true},
+		members:  members,
+		accepted: accepted,
 		groupID:  strconv.Itoa(client.Uid()),
+		forced:   force,
 	}
 	for _, m := range g.members {
 		m.SetPairGroup(g)
 	}
 
 	if force {
-		g.mu.Lock()
-		for _, t := range invitees {
-			g.accepted[t.Uid()] = true
-		}
-		g.mu.Unlock()
 		client.SendServerMessage(fmt.Sprintf("Force-formed a %d-player pairing group.", len(g.members)))
 		for _, t := range invitees {
 			t.SendServerMessage(fmt.Sprintf("%v force-paired you into a group. Members: %s.", oocDisplayName(client), g.roster()))
@@ -153,6 +168,37 @@ func cmdGroupPair(client *Client, args []string, _ string) {
 // cmdForceGroupPair handles /forcegrouppair (mod-only).
 func cmdForceGroupPair(client *Client, args []string, _ string) {
 	startGroupPair(client, args, true)
+}
+
+// cmdUnforceGroupPair handles /unforcegrouppair (mod-only): it disbands every
+// force-paired group in the caller's area, undoing /forcegrouppair.
+func cmdUnforceGroupPair(client *Client, _ []string, _ string) {
+	area := client.Area()
+	seen := make(map[*PairGroup]struct{})
+	var groups []*PairGroup
+	clients.ForEach(func(c *Client) {
+		if c.Area() != area {
+			return
+		}
+		g := c.PairGroup()
+		if g == nil || !g.IsForced() {
+			return
+		}
+		if _, ok := seen[g]; ok {
+			return
+		}
+		seen[g] = struct{}{}
+		groups = append(groups, g)
+	})
+	if len(groups) == 0 {
+		client.SendServerMessage("There are no force-paired groups in this area.")
+		return
+	}
+	for _, g := range groups {
+		g.dissolve("A moderator disbanded your force-paired group.")
+	}
+	client.SendServerMessage(fmt.Sprintf("Disbanded %d force-paired group(s) in this area.", len(groups)))
+	addToBuffer(client, "CMD", fmt.Sprintf("Disbanded %d force-paired group(s).", len(groups)), false)
 }
 
 // cmdLeaveGroup handles /leavegroup: the caller gracefully leaves their group.
