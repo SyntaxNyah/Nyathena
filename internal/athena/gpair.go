@@ -210,3 +210,71 @@ func cmdLeaveGroup(client *Client, _ []string, _ string) {
 	}
 	g.remove(client, oocDisplayName(client)+" left — the pairing group has been updated.")
 }
+
+// cmdPairOrder handles /pairorder: reorder the caller's group roster
+// (front→back). With no arguments it toggles the caller's own front/back
+// position; with "<uid> <front|back|up|down>" it moves a specific member.
+func cmdPairOrder(client *Client, args []string, _ string) {
+	g := client.PairGroup()
+	if g == nil {
+		client.SendServerMessage("You are not in a pairing group.")
+		return
+	}
+
+	var member *Client
+	var op string
+	switch len(args) {
+	case 0:
+		member, op = client, "toggle"
+	case 2:
+		uid, err := strconv.Atoi(args[0])
+		if err != nil {
+			client.SendServerMessage("Invalid UID: " + args[0])
+			return
+		}
+		m, err := getClientByUid(uid)
+		if err != nil {
+			client.SendServerMessage(fmt.Sprintf("Client with UID %d does not exist.", uid))
+			return
+		}
+		member, op = m, args[1]
+	default:
+		client.SendServerMessage("Usage: /pairorder [<uid> <front|back|up|down>]")
+		return
+	}
+
+	if member.PairGroup() != g {
+		client.SendServerMessage("That player is not in your pairing group.")
+		return
+	}
+
+	if op == "toggle" {
+		if g.isFrontmost(member) {
+			op = "back"
+		} else {
+			op = "front"
+		}
+	}
+
+	if op != "front" && op != "back" && op != "up" && op != "down" {
+		client.SendServerMessage("Usage: /pairorder [<uid> <front|back|up|down>]")
+		return
+	}
+
+	if _, _, changed := g.reorder(member, op); !changed {
+		client.SendServerMessage("No change — that member is already in that position.")
+		return
+	}
+
+	sendGroupState(g)
+	switch op {
+	case "front":
+		client.SendServerMessage(oocDisplayName(member) + " moved to the front.")
+	case "back":
+		client.SendServerMessage(oocDisplayName(member) + " moved to the back.")
+	case "up":
+		client.SendServerMessage(oocDisplayName(member) + " moved one step toward the front.")
+	case "down":
+		client.SendServerMessage(oocDisplayName(member) + " moved one step toward the back.")
+	}
+}

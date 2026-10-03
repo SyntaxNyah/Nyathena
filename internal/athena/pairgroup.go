@@ -178,6 +178,63 @@ func (g *PairGroup) remove(member *Client, reason string) {
 	}
 }
 
+// reorder moves an accepted member within the roster (front→back ordering,
+// members[0] front-most). op is "front", "back", "up" (one step toward the
+// front) or "down" (one step toward the back). It returns the previous and new
+// indices within members and whether the order actually changed.
+func (g *PairGroup) reorder(member *Client, op string) (from, to int, changed bool) {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+
+	idx := -1
+	for i, m := range g.members {
+		if m == member {
+			idx = i
+			break
+		}
+	}
+	if idx < 0 || !g.accepted[member.Uid()] || len(g.members) < 2 {
+		return idx, idx, false
+	}
+
+	n := len(g.members)
+	newIdx := idx
+	switch op {
+	case "front":
+		newIdx = 0
+	case "back":
+		newIdx = n - 1
+	case "up":
+		if idx > 0 {
+			newIdx = idx - 1
+		}
+	case "down":
+		if idx < n-1 {
+			newIdx = idx + 1
+		}
+	}
+	if newIdx == idx {
+		return idx, idx, false
+	}
+
+	m := g.members[idx]
+	if newIdx < idx {
+		copy(g.members[newIdx+1:idx+1], g.members[newIdx:idx])
+	} else {
+		copy(g.members[idx:newIdx], g.members[idx+1:newIdx+1])
+	}
+	g.members[newIdx] = m
+
+	return idx, newIdx, true
+}
+
+// isFrontmost reports whether member is the front-most accepted member of the
+// group (the one rendered in front of all others).
+func (g *PairGroup) isFrontmost(member *Client) bool {
+	accepted := g.acceptedMembers()
+	return len(accepted) > 0 && accepted[0] == member
+}
+
 // accept marks a member as accepted. The group grows incrementally: each accept
 // adds one more renderable member (1 accept → pair, 2 → triple, …).
 func (g *PairGroup) accept(member *Client) {

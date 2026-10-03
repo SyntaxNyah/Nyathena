@@ -873,6 +873,14 @@ func initCommands() {
 			reqPerms: permissions.PermissionField["NONE"],
 			category: "general",
 		},
+		"pairorder": {
+			handler:  cmdPairOrder,
+			minArgs:  0,
+			usage:    "Usage: /pairorder [<uid> <front|back|up|down>]",
+			desc:     "Reorders your pairing group (front→back). With no args it toggles your own front/back position; with <uid> <front|back|up|down> it moves a specific member.",
+			reqPerms: permissions.PermissionField["NONE"],
+			category: "general",
+		},
 		"forcepair": {
 			handler:  cmdForcePair,
 			minArgs:  2,
