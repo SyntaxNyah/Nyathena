@@ -154,3 +154,17 @@ only the first partner via the `paired_*` fields; the full N-way order is a
 JSON-only concept (`additional_chars` / `GP`). The classic non-group pair order
 is unchanged: it rides the client-side `^0`/`^1` suffix on FantaCode, which
 `/pairorder` does not touch.
+
+---
+
+## 10. Classic pair order — `paired_order`
+
+The classic 2-person pair order is the aolib `MS.paired_order` field (integer
+`0` = speaker in front, `1` = speaker behind). It is **first-class in aolib**:
+on FantaCode it packs onto `paired_charid` as `<id>^1` (the `x-fanta-suffix-of`
+codec hint), and on JSON it is a separate `paired_order` field. Nyathena's JSON
+bridge (`encodeMSJSON` / `DecodeJSON` in `ms_codec.go`) preserves it in both
+directions — `splitPairedID` parses the `^order` suffix for the JSON encode, and
+aolib's `Args()` re-packs it on decode — so a FantaCode speaker's `^order`
+reaches JSON clients and vice versa. This is distinct from `/pairorder` (§9),
+which reorders the unbounded group roster.
