@@ -71,6 +71,7 @@ partner for FantaCode/legacy clients.
 | `/accept` | any | join a pending group (1 → pair, 2 → triple, …) |
 | `/deny` | any | decline (only you leave the group) |
 | `/leavegroup` | any | leave (group shrinks) |
+| `/pairorder [<uid> <front/back/up/down>]` | any | reorder the roster (front→back); no args toggles your own front/back |
 | disconnect | — | graceful auto-leave (group shrinks) |
 
 Groups are keyed by **player UID** (not char id), so members may switch
@@ -133,3 +134,23 @@ bench instead of the speaker's. Example member with side:
 - **Legacy `paired_*` still carries the first partner.** The canonical pair
   fields are filled from the first accepted non-speaker member, so FantaCode /
   legacy clients still render a correct 2-person scene.
+
+---
+
+## 9. Pair order — `/pairorder`
+
+The roster order (front→back, `members[0]` front-most) is user-reorderable:
+
+| form | effect |
+|---|---|
+| `/pairorder` | toggle the caller front↔back |
+| `/pairorder <uid> front\|back` | move that member to the front/back of the list |
+| `/pairorder <uid> up\|down` | move that member one step toward the front/back |
+
+Each successful reorder re-broadcasts `GP`, and the next `MS`'s
+`additional_chars` reflects the new order automatically (it derives from
+`acceptedMembers()` = `members` order). On FantaCode, group members still see
+only the first partner via the `paired_*` fields; the full N-way order is a
+JSON-only concept (`additional_chars` / `GP`). The classic non-group pair order
+is unchanged: it rides the client-side `^0`/`^1` suffix on FantaCode, which
+`/pairorder` does not touch.
