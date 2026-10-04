@@ -1496,9 +1496,19 @@ func TestIsVoicePacket(t *testing.T) {
 		{"CH#", false},
 		{"CC#0#0#0#", false},
 		{"ZZ#", false},
-		// Empty and JSON packets — not voice.
+		// Empty and malformed packets — not voice.
 		{"", false},
 		{`{"header":"VS_FRAME"}`, false},
+		{`not json`, false},
+		// JSON voice packets (client→server) — exempt, same as FantaCode.
+		{`{"$header":"VS_FRAME","payload":"b3BhcQ=="}`, true},
+		{`{"$header":"VS_JOIN"}`, true},
+		{`{"$header":"VS_LEAVE"}`, true},
+		{`{"$header":"VS_SPEAK","on":true}`, true},
+		// Reordered keys still resolve the $header.
+		{`{"payload":"b3BhcQ==","$header":"VS_FRAME"}`, true},
+		// JSON server→client voice headers — not exempt.
+		{`{"$header":"VS_AUDIO","from_uid":5,"payload":"b3BhcQ=="}`, false},
 	}
 	for _, c := range cases {
 		if got := isVoicePacket(c.raw); got != c.want {

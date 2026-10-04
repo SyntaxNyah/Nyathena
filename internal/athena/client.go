@@ -3493,16 +3493,30 @@ func (client *Client) CheckOOCRateLimit() bool {
 // (VS_CAPS, VS_PEERS, VS_AUDIO) are server→client only and are never sent by a
 // legitimate client, so they are deliberately NOT exempted.
 func isVoicePacket(raw string) bool {
-	if raw == "" || raw[0] == '{' {
-		// Empty packets are handled earlier in the read loop; JSON-encoded
-		// voice chat is not supported.
+	if raw == "" {
+		// Empty packets are handled earlier in the read loop.
 		return false
 	}
-	// The header is everything before the first '#' separator (see NewPacket).
-	if idx := strings.IndexByte(raw, '#'); idx >= 0 {
-		raw = raw[:idx]
+	header := raw
+	if raw[0] == '{' {
+		// JSON-encoded packets discriminate on the $header field. Decode just
+		// that field — clients may reorder keys, so a positional prefix check
+		// is unreliable, and JSON voice chat IS supported (the VS_* codecs
+		// register both-wire), so a JSON-mode client streaming VS_FRAME must be
+		// exempted exactly like its FantaCode counterpart.
+		var env struct {
+			Header string `json:"$header"`
+		}
+		if err := json.Unmarshal([]byte(raw), &env); err != nil {
+			return false
+		}
+		header = env.Header
+	} else if idx := strings.IndexByte(raw, '#'); idx >= 0 {
+		// FantaCode: the header is everything before the first '#' separator
+		// (see NewPacket).
+		header = raw[:idx]
 	}
-	switch raw {
+	switch header {
 	case "VS_JOIN", "VS_LEAVE", "VS_FRAME", "VS_SPEAK":
 		return true
 	}
