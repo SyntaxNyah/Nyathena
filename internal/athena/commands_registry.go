@@ -407,8 +407,16 @@ func initCommands() {
 		"kickarea": {
 			handler:  cmdAreaKick,
 			minArgs:  1,
-			usage:    "Usage: /kickarea <uid1>,<uid2>...",
-			desc:     "Kicks user(s) from the current area.",
+			usage:    "Usage: /kickarea <uid1>,<uid2>... [reason]\nExample: /kickarea 42,43 Being too loud",
+			desc:     "Kicks user(s) from the current area. An optional reason is announced to the area and popped up to the kicked player.",
+			reqPerms: permissions.PermissionField["CM"],
+			category: "area",
+		},
+		"areakick": {
+			handler:  cmdAreaKick,
+			minArgs:  1,
+			usage:    "Usage: /areakick <uid1>,<uid2>... [reason]   (alias of /kickarea)",
+			desc:     "Alias of /kickarea: kicks user(s) from the current area.",
 			reqPerms: permissions.PermissionField["CM"],
 			category: "area",
 		},

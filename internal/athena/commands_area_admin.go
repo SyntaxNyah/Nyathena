@@ -26,8 +26,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/MangosArentLiterature/Athena/internal/area"
 	aolib "github.com/AO-Underground/aolib/go/v2"
+	"github.com/MangosArentLiterature/Athena/internal/area"
 	"github.com/MangosArentLiterature/Athena/internal/permissions"
 	"github.com/MangosArentLiterature/Athena/internal/sliceutil"
 )
@@ -560,7 +560,7 @@ func cmdInvite(client *Client, args []string, _ string) {
 	addToBuffer(client, "CMD", fmt.Sprintf("Invited %v to the area.", report), false)
 }
 
-// Handles /kick
+// Handles /kickarea (and its /areakick alias)
 
 func cmdAreaKick(client *Client, args []string, _ string) {
 	if client.Area() == areas[0] {
@@ -569,6 +569,11 @@ func cmdAreaKick(client *Client, args []string, _ string) {
 	}
 	toKick := getUidList(strings.Split(args[0], ","))
 	originArea := client.Area()
+
+	// Optional reason. When provided it is announced to the area as an OOC (CT)
+	// line and popped up to each kicked player (BB), so a CM can explain the
+	// kick. With no reason the kick stays silent — just the default move.
+	reason := strings.Join(args[1:], " ")
 
 	var count int
 	var report string
@@ -587,7 +592,12 @@ func cmdAreaKick(client *Client, args []string, _ string) {
 		// the area unlocked) before they can return.
 		originArea.RemoveInvited(c.Uid())
 		c.ChangeArea(areas[0])
-		c.SendServerMessage("You were kicked from the area!")
+		if reason != "" {
+			c.Send(&aolib.BB{Message: encode(fmt.Sprintf("You were kicked from the area: %v", reason))})
+			sendAreaServerMessage(originArea, fmt.Sprintf("%v kicked %v from the area: %v", oocDisplayName(client), oocDisplayName(c), reason))
+		} else {
+			c.SendServerMessage("You were kicked from the area!")
+		}
 		count++
 		report += fmt.Sprintf("%v, ", c.Uid())
 	}
