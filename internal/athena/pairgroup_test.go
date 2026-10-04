@@ -1,7 +1,8 @@
 package athena
 
-// Nyathena fork addition: tests for /forcegrouppair (moderator excluded) and
-// /unforcegrouppair (disbands only mod-forced groups in the area).
+// Nyathena fork addition: tests for /forcegrouppair (moderator excluded unless
+// they list themselves), /grouppair self-pair rejection, and /unforcegrouppair
+// (disbands only mod-forced groups in the area).
 
 import (
 	"testing"
@@ -20,9 +21,10 @@ func newPairGroupTestClient(uid int, charID int, a *area.Area, name string) *Cli
 	}
 }
 
-// TestForceGroupPairExcludesModerator verifies /forcegrouppair groups only the
-// listed players; the issuing moderator stays ungrouped.
-func TestForceGroupPairExcludesModerator(t *testing.T) {
+// TestForceGroupPairExcludesModeratorWhenNotListed verifies /forcegrouppair
+// groups only the listed players; an issuing moderator who doesn't list their
+// own UID stays ungrouped.
+func TestForceGroupPairExcludesModeratorWhenNotListed(t *testing.T) {
 	newTestClients(t)
 	a := area.NewArea(area.AreaData{Name: "Courtroom"}, len(getCharacters()), 10, area.EviAny)
 
@@ -48,6 +50,51 @@ func TestForceGroupPairExcludesModerator(t *testing.T) {
 	}
 	if !p1.PairGroup().IsForced() {
 		t.Fatal("group was not marked forced")
+	}
+}
+
+// TestForceGroupPairIncludesModeratorWhenListed verifies a moderator can join
+// their own forced group by listing their own UID alongside the targets.
+func TestForceGroupPairIncludesModeratorWhenListed(t *testing.T) {
+	newTestClients(t)
+	a := area.NewArea(area.AreaData{Name: "Courtroom"}, len(getCharacters()), 10, area.EviAny)
+
+	mod := newPairGroupTestClient(99, 0, a, "Mod")
+	p1 := newPairGroupTestClient(1, 0, a, "A")
+
+	for _, c := range []*Client{mod, p1} {
+		clients.AddClient(c)
+		clients.RegisterUID(c)
+	}
+
+	cmdForceGroupPair(mod, []string{"99", "1"}, "")
+
+	if mod.PairGroup() == nil {
+		t.Fatal("moderator was not added when listing their own UID")
+	}
+	if p1.PairGroup() != mod.PairGroup() {
+		t.Fatal("moderator and target ended up in different groups")
+	}
+	if !mod.PairGroup().IsForced() {
+		t.Fatal("group was not marked forced")
+	}
+}
+
+// TestGroupPairRejectsSelfPairing verifies the consent /grouppair path still
+// refuses to pair a player with themselves.
+func TestGroupPairRejectsSelfPairing(t *testing.T) {
+	newTestClients(t)
+	a := area.NewArea(area.AreaData{Name: "Courtroom"}, len(getCharacters()), 10, area.EviAny)
+
+	initiator := newPairGroupTestClient(1, 0, a, "A")
+
+	clients.AddClient(initiator)
+	clients.RegisterUID(initiator)
+
+	cmdGroupPair(initiator, []string{"1"}, "")
+
+	if initiator.PairGroup() != nil {
+		t.Fatal("self-pairing /grouppair was not rejected")
 	}
 }
 

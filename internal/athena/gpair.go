@@ -64,8 +64,9 @@ func sendGroupState(g *PairGroup) {
 
 // startGroupPair implements /grouppair and /forcegrouppair. For /grouppair the
 // initiator invites any number of other players and joins their own group;
-// force skips the accept flow and pairs ONLY the invitees (the issuing
-// moderator is not a member), marking everyone accepted immediately.
+// force skips the accept flow and marks everyone accepted immediately. The
+// issuing moderator is not a member by default, but force mode lets them list
+// their own UID to join the group themselves.
 func startGroupPair(client *Client, args []string, force bool) {
 	if len(args) == 0 {
 		client.SendServerMessage("Usage: /grouppair <uid> [uid ...]")
@@ -73,8 +74,9 @@ func startGroupPair(client *Client, args []string, force bool) {
 	}
 
 	// /grouppair joins the caller to the group, so they need a character and
-	// must not already be grouped. /forcegrouppair only groups the targets, so
-	// the moderator is exempt from both checks.
+	// must not already be grouped. /forcegrouppair only groups the targets
+	// (unless the moderator lists themselves), so the moderator is exempt from
+	// these two checks up front.
 	if !force {
 		if client.CharID() < 0 {
 			client.SendServerMessage("You have not selected a character.")
@@ -99,20 +101,34 @@ func startGroupPair(client *Client, args []string, force bool) {
 			return
 		}
 		if t == client {
-			client.SendServerMessage("You cannot pair with yourself.")
-			return
-		}
-		if t.Area() != client.Area() {
-			client.SendServerMessage("That player is not in your area.")
-			return
-		}
-		if t.CharID() < 0 {
-			client.SendServerMessage("That player has not selected a character.")
-			return
-		}
-		if t.PairGroup() != nil {
-			client.SendServerMessage(oocDisplayName(t) + " is already in a pairing group.")
-			return
+			// /grouppair can't pair you with yourself; /forcegrouppair may,
+			// so a moderator can join their own forced group by listing their
+			// own UID.
+			if !force {
+				client.SendServerMessage("You cannot pair with yourself.")
+				return
+			}
+			if t.CharID() < 0 {
+				client.SendServerMessage("You have not selected a character.")
+				return
+			}
+			if t.PairGroup() != nil {
+				client.SendServerMessage("You are already in a pairing group.")
+				return
+			}
+		} else {
+			if t.Area() != client.Area() {
+				client.SendServerMessage("That player is not in your area.")
+				return
+			}
+			if t.CharID() < 0 {
+				client.SendServerMessage("That player has not selected a character.")
+				return
+			}
+			if t.PairGroup() != nil {
+				client.SendServerMessage(oocDisplayName(t) + " is already in a pairing group.")
+				return
+			}
 		}
 		for _, e := range invitees {
 			if e == t {
@@ -148,6 +164,9 @@ func startGroupPair(client *Client, args []string, force bool) {
 	if force {
 		client.SendServerMessage(fmt.Sprintf("Force-formed a %d-player pairing group.", len(g.members)))
 		for _, t := range invitees {
+			if t == client {
+				continue
+			}
 			t.SendServerMessage(fmt.Sprintf("%v force-paired you into a group. Members: %s.", oocDisplayName(client), g.roster()))
 		}
 		sendGroupState(g)

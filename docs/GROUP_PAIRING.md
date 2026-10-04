@@ -67,7 +67,7 @@ partner for FantaCode/legacy clients.
 | Command | Who | Behavior |
 |---|---|---|
 | `/grouppair <uid> [uid ...]` | any | initiator + UIDs form a group; each target must `/accept` |
-| `/forcegrouppair <uid> [uid ...]` | mod | same, no accept needed |
+| `/forcegrouppair <uid> [uid ...]` | mod | same, no accept needed; the moderator may list their own UID to join the group too |
 | `/accept` | any | join a pending group (1 → pair, 2 → triple, …) |
 | `/deny` | any | decline (only you leave the group) |
 | `/leavegroup` | any | leave (group shrinks) |
