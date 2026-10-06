@@ -516,7 +516,11 @@ func NewServer(conf *settings.Config) (*Server, error) {
 				advert.WSSPort = conf.WSSPort
 			}
 		}
-		go ms.Advertise(conf.MSAddr, advert, updatePlayers, advertDone)
+		addrs := conf.Addrs
+		if conf.Addr != "" {
+			addrs = []string{conf.Addr}
+		}
+		go ms.Advertise(addrs, advert, updatePlayers, advertDone)
 	}
 
 	// Propagate to package-level globals so that existing helper functions

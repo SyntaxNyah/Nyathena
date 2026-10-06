@@ -1336,8 +1336,10 @@ enable_network_logging = false
 # If you want to keep your server private, set this as false.
 advertise = false
 
-# The address of the master server. You shouldn't change this unless you know what you're doing.
-addr = "https://servers.aceattorneyonline.com/servers"
+# The master server(s) to advertise to. List each endpoint to advertise to
+# multiple server lists. You shouldn't change these unless you know what
+# you're doing.
+addrs = ["https://servers.aceattorneyonline.com/servers", "https://servers.umineko.online/servers"]
 
 [Discord]
 
