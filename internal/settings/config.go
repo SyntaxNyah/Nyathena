@@ -423,7 +423,7 @@ func DefaultConfig() *Config {
 		MSConfig{
 			Advertise: false,
 			Addr:      "",
-			Addrs:     []string{"https://servers.aceattorneyonline.com/servers", "https://servers.umineko.online/servers"},
+			Addrs:     []string{"https://servers.aceattorneyonline.com/servers", "https://servers.umineko.online/servers/"},
 		},
 		DiscordConfig{
 			BotToken:  "",
