@@ -70,8 +70,13 @@ func postServer(msUrl string, advert Advertisement) {
 
 	resp, err := http.Post(msUrl, "application/json", bytes.NewBuffer(data))
 	if err != nil {
-		logger.LogErrorf("Failed to post advertisement: %v", err)
+		logger.LogErrorf("Failed to post advertisement to %s: %v", msUrl, err)
 		return
 	}
-	resp.Body.Close()
+	defer resp.Body.Close()
+	if resp.StatusCode >= 300 {
+		logger.LogErrorf("Master server %s returned HTTP %d", msUrl, resp.StatusCode)
+		return
+	}
+	logger.LogInfof("Posted advertisement to %s (HTTP %d)", msUrl, resp.StatusCode)
 }
