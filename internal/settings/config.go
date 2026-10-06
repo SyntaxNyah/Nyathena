@@ -258,7 +258,7 @@ type LogConfig struct {
 
 type MSConfig struct {
 	Advertise bool     `toml:"advertise"`
-	Addr      string   `toml:"addr"`  // legacy single endpoint; overrides addrs when set
+	MSAddr    string   `toml:"addr"`  // legacy single endpoint; overrides addrs when set
 	Addrs     []string `toml:"addrs"` // one or more master server endpoints to advertise to
 }
 
@@ -422,7 +422,7 @@ func DefaultConfig() *Config {
 		},
 		MSConfig{
 			Advertise: false,
-			Addr:      "",
+			MSAddr:    "",
 			Addrs:     []string{"https://servers.aceattorneyonline.com/servers", "https://servers.umineko.online/servers"},
 		},
 		DiscordConfig{

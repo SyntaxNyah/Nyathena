@@ -517,8 +517,8 @@ func NewServer(conf *settings.Config) (*Server, error) {
 			}
 		}
 		addrs := conf.Addrs
-		if conf.Addr != "" {
-			addrs = []string{conf.Addr}
+		if conf.MSAddr != "" {
+			addrs = []string{conf.MSAddr}
 		}
 		go ms.Advertise(addrs, advert, updatePlayers, advertDone)
 	}
