@@ -582,8 +582,8 @@ func mafiaSubWhisper(client *Client, args []string) {
 	// raid-guard scored, matching /pm's own precedent: a whisper is not a
 	// broadcast and there's no correlation data to calibrate against.
 	echo := &aolib.CTToClient{
-		Name:         encodedServerName,
-		Message:      encode(fmt.Sprintf("🎭 [Mafia/Private] 💬 [Whisper from %v]: %v", sender.Name(), message)),
+		Name:         serverName,
+		Message:      fmt.Sprintf("🎭 [Mafia/Private] 💬 [Whisper from %v]: %v", sender.Name(), message),
 		IsFromServer: true,
 	}
 	if !oocCommandAllowed(client, message, "mafia whisper", echo) {

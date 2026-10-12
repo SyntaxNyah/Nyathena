@@ -2288,13 +2288,13 @@ func cmdICWarp(client *Client, args []string, usage string) {
 		switch strings.ToLower(args[1]) {
 		case "on":
 			client.Area().SetICWarpGlobal(true, client.Uid())
-			broadcastToArea(client.Area(), &aolib.CTToClient{Name: encode("Server"),
-				Message: encode("[Global IC Warp is now ON — everyone's messages will replay their own past messages!]"), IsFromServer: true})
+			broadcastToArea(client.Area(), &aolib.CTToClient{Name: "Server",
+				Message: "[Global IC Warp is now ON — everyone's messages will replay their own past messages!]", IsFromServer: true})
 			addToBuffer(client, "CMD", "Enabled global IC warp in area.", false)
 		case "off":
 			client.Area().SetICWarpGlobal(false, -1)
-			broadcastToArea(client.Area(), &aolib.CTToClient{Name: encode("Server"),
-				Message: encode("[Global IC Warp is now OFF.]"), IsFromServer: true})
+			broadcastToArea(client.Area(), &aolib.CTToClient{Name: "Server",
+				Message: "[Global IC Warp is now OFF.]", IsFromServer: true})
 			addToBuffer(client, "CMD", "Disabled global IC warp in area.", false)
 		default:
 			client.SendServerMessage("Invalid argument. Use: /icwarp global on|off")

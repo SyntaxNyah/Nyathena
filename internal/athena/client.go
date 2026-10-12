@@ -1331,7 +1331,7 @@ func (client *Client) clientCleanup() {
 
 // SendServerMessage sends a server OOC message to the client.
 func (client *Client) SendServerMessage(message string) {
-	client.Send(&aolib.CTToClient{Name: encodedServerName, Message: encode(message), IsFromServer: true})
+	client.Send(&aolib.CTToClient{Name: serverName, Message: message, IsFromServer: true})
 }
 
 // SendMotd sends the MOTD to the client as a single OOC message. Embedded
@@ -1944,7 +1944,7 @@ func (client *Client) JoinArea(area *area.Area) {
 		client.SendServerMessage("📍 " + desc)
 	}
 	if motd := area.Motd(); motd != "" {
-		client.Send(&aolib.BB{Message: encode(motd)})
+		client.Send(&aolib.BB{Message: motd})
 	}
 	// Sync the joining client to the area's music state.
 	//

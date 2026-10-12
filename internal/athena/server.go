@@ -53,10 +53,12 @@ const (
 	lockdownJoinMsg = "Server is in lockdown. Please try again later."
 )
 
-// encodedServerName is the AO2-encoded form of config.Name, pre-computed once
-// at startup so that every server message avoids a repeated strings.Replacer call.
-// Set in NewServer immediately after config is wired up; never modified afterwards.
-var encodedServerName string
+// serverName is the server's display name, cached once at startup. It is stored
+// raw (unescaped): aolib's CTToClient.Args() applies Fanta escaping on the wire
+// and its JSON form carries the raw value, so pre-escaping here would
+// double-escape JSON-mode clients. Set in NewServer immediately after config is
+// wired up; never modified afterwards.
+var serverName string
 
 // connPool is a semaphore channel that limits the number of concurrently active
 // connection goroutines when config.MaxConnectionGoroutines > 0.
@@ -526,7 +528,7 @@ func NewServer(conf *settings.Config) (*Server, error) {
 	// Propagate to package-level globals so that existing helper functions
 	// and command handlers continue to work without modification.
 	config = s.config
-	encodedServerName = encode(s.config.Name) // cache once; config.Name never changes at runtime
+	serverName = s.config.Name // cache once; config.Name never changes at runtime
 	// Precompute rate-limit windows once so the hot packet-check paths only
 	// perform a load instead of a multiply on every incoming aolib.
 	rateLimitWindowDur = time.Duration(config.RateLimitWindow) * time.Second
@@ -1234,16 +1236,13 @@ func getClientsByIpid(ipid string) []*Client {
 
 // sendAreaServerMessage sends a server OOC message to all clients in an area.
 func sendAreaServerMessage(area *area.Area, message string) {
-	broadcastToArea(area, &aolib.CTToClient{Name: encodedServerName, Message: encode(message), IsFromServer: true})
+	broadcastToArea(area, &aolib.CTToClient{Name: serverName, Message: message, IsFromServer: true})
 }
 
 // sendAreaGamblingMessage sends a gambling-result OOC message to all clients
 // in an area who have not opted out of gambling broadcasts via /gamble hide.
 func sendAreaGamblingMessage(a *area.Area, message string) {
-	// Raw name/message: aolib's CTToClient.Args() applies Fanta escaping for the
-	// wire and its JSON form carries the unescaped values, so pre-escaping here
-	// (encode(...)) would double-escape JSON-mode clients.
-	out := &aolib.CTToClient{Name: decode(encodedServerName), Message: message, IsFromServer: true}
+	out := &aolib.CTToClient{Name: serverName, Message: message, IsFromServer: true}
 	clients.ForEach(func(client *Client) {
 		if client.Area() == a && !client.GambleHide() {
 			client.Send(out)
@@ -1253,7 +1252,7 @@ func sendAreaGamblingMessage(a *area.Area, message string) {
 
 // sendGlobalServerMessage broadcasts a server OOC message to every joined client.
 func sendGlobalServerMessage(message string) {
-	broadcastToAll(&aolib.CTToClient{Name: encodedServerName, Message: encode(message), IsFromServer: true})
+	broadcastToAll(&aolib.CTToClient{Name: serverName, Message: message, IsFromServer: true})
 }
 
 // getRealIP extracts the real client IP address from an HTTP request.

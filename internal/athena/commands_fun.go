@@ -631,7 +631,7 @@ func cmdPoll(client *Client, args []string, usage string) {
 	// created, before any area state is touched, so a blocked poll never
 	// leaves a dangling "active poll" that nobody was ever shown.
 	checkText := question + "\n" + strings.Join(options, "\n")
-	echo := &aolib.CTToClient{Name: encodedServerName, Message: encode(pollMsg), IsFromServer: true}
+	echo := &aolib.CTToClient{Name: serverName, Message: pollMsg, IsFromServer: true}
 	if !oocCommandAllowed(client, checkText, "poll", echo) {
 		return
 	}
@@ -874,7 +874,7 @@ func cmd8Ball(client *Client, args []string, _ string) {
 	answer := pool[rand.Intn(len(pool))]
 	fullMsg := fmt.Sprintf("%v asked: %s\n🎱 The Magic 8-Ball says: %s",
 		oocDisplayName(client), question, answer)
-	echo := &aolib.CTToClient{Name: encodedServerName, Message: encode(fullMsg), IsFromServer: true}
+	echo := &aolib.CTToClient{Name: serverName, Message: fullMsg, IsFromServer: true}
 	// /8ball is reqPerms:NONE and broadcasts free player text area-wide, so it
 	// must pass the same content/punishment gate /global does -- see
 	// oocCommandAllowed. Gated on the player-supplied question only; the

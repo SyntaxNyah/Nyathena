@@ -67,7 +67,7 @@ func alertCensorTrip(offender *Client, source, matched, text, outcome string) {
 	}
 	msg := fmt.Sprintf("%s (UID %d, IPID %s) tripped the %s censor in %s — matched %q. %s\nText: %q\n%s",
 		oocDisplayName(offender), offender.Uid(), offender.Ipid(), source, areaName, matched, outcome, text, censorAlertHint)
-	out := &aolib.CTToClient{Name: "[CENSOR]", Message: encode(msg), IsFromServer: true}
+	out := &aolib.CTToClient{Name: "[CENSOR]", Message: msg, IsFromServer: true}
 	clients.ForEach(func(c *Client) {
 		if !permissions.HasPermission(c.Perms(), permissions.PermissionField["MOD_CHAT"]) {
 			return

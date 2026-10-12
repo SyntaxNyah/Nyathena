@@ -38,14 +38,18 @@ func msCodec() packetutil.Codec {
 // and are intentionally omitted from the JSON form.
 func encodeMSJSON(ms *MSToClient) ([]byte, error) {
 	pid, pairOrder := splitPairedID(ms.PairedCharID)
+	// MSToClient stores its text fields in AO2-encoded (raw-wire) form — the
+	// FantaCode Args() path emits them verbatim and escapeOutgoing re-escapes.
+	// The JSON wire carries raw values, so decode the text fields here to match
+	// how the inbound JSON codec re-encodes them (see msCodec.DecodeJSON).
 	typed := aolib.MSToClient{
 		DeskModifier:           ms.DeskModifier,
-		Preanim:                ms.Preanim,
-		Character:              ms.Character,
-		Emote:                  ms.Emote,
-		Message:                ms.Message,
+		Preanim:                decode(ms.Preanim),
+		Character:              decode(ms.Character),
+		Emote:                  decode(ms.Emote),
+		Message:                decode(ms.Message),
 		Side:                   ms.Side,
-		SfxName:                ms.SfxName,
+		SfxName:                decode(ms.SfxName),
 		EmoteModifier:          ms.EmoteModifier,
 		CharID:                 packetutil.AtoiOrZero(ms.CharID),
 		SfxDelay:               packetutil.AtoiOrZero(ms.SfxDelay),
@@ -54,11 +58,11 @@ func encodeMSJSON(ms *MSToClient) ([]byte, error) {
 		Flip:                   ms.Flip,
 		Realization:            packetutil.WireToBool(ms.Realization),
 		TextColor:              ms.TextColor,
-		Showname:               ms.Showname,
+		Showname:               decode(ms.Showname),
 		PairedCharID:           pid,
 		PairedOrder:            pairOrder,
-		PairedName:             ms.PairedName,
-		PairedEmote:            ms.PairedEmote,
+		PairedName:             decode(ms.PairedName),
+		PairedEmote:            decode(ms.PairedEmote),
 		Offset:                 parseMSOffset(ms.Offset),
 		PairedOffset:           parseMSOffset(ms.PairedOffset),
 		PairedFlip:             ms.PairedFlip,

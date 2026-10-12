@@ -41,7 +41,7 @@ import (
 //     it only changes whether new traffic gets scored.
 //
 // Explicitly NOT whitelisted (would require careful, invasive work):
-//   - Name        : baked into encodedServerName and every server-to-client CT
+//   - Name        : baked into serverName and every server-to-client CT
 //   - Port/Addr   : listener already bound
 //   - Areas/*     : would invalidate AreaData snapshots and pre-built SM packet
 //   - Rate limits : precomputed into time.Duration globals at startup

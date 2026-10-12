@@ -593,7 +593,7 @@ func cmdAreaKick(client *Client, args []string, _ string) {
 		originArea.RemoveInvited(c.Uid())
 		c.ChangeArea(areas[0])
 		if reason != "" {
-			c.Send(&aolib.BB{Message: encode(fmt.Sprintf("You were kicked from the area: %v", reason))})
+			c.Send(&aolib.BB{Message: fmt.Sprintf("You were kicked from the area: %v", reason)})
 			sendAreaServerMessage(originArea, fmt.Sprintf("%v kicked %v from the area: %v", oocDisplayName(client), oocDisplayName(c), reason))
 		} else {
 			c.SendServerMessage("You were kicked from the area!")

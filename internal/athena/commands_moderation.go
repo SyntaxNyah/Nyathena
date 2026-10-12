@@ -202,7 +202,7 @@ func alertBannedAccountLinks(ipids map[string]struct{}) {
 		msg := fmt.Sprintf("[BAN] IPID %v is linked to registered account \"%v\".", ipid, username)
 		clients.ForEach(func(c *Client) {
 			if c.Uid() != -1 && permissions.IsModerator(c.Perms()) {
-				c.Send(&aolib.CTToClient{Name: "OOC", Message: encode(msg), IsFromServer: true})
+				c.Send(&aolib.CTToClient{Name: "OOC", Message: msg, IsFromServer: true})
 			}
 		})
 	}
@@ -348,8 +348,8 @@ func cmdGlobal(client *Client, args []string, _ string) {
 	// this is plain text and must not be decoded again.
 	msg := strings.Join(args, " ")
 	out := &aolib.CTToClient{
-		Name:         encode(fmt.Sprintf("[GLOBAL] [UID %d] %s%v", client.Uid(), tag, oocDisplayName(client))),
-		Message:      encode(msg),
+		Name:         fmt.Sprintf("[GLOBAL] [UID %d] %s%v", client.Uid(), tag, oocDisplayName(client)),
+		Message:      msg,
 		IsFromServer: true,
 	}
 	// The command branch in pktOOC returns before the content gate, so without
@@ -550,9 +550,9 @@ func cmdMod(client *Client, args []string, usage string) {
 	}
 	msg := strings.Join(flags.Args(), " ")
 	if *global {
-		broadcastToAll(&aolib.CTToClient{Name: encode(fmt.Sprintf("[MOD] [GLOBAL] %v", client.OOCName())), Message: encode(msg), IsFromServer: true})
+		broadcastToAll(&aolib.CTToClient{Name: fmt.Sprintf("[MOD] [GLOBAL] %v", client.OOCName()), Message: msg, IsFromServer: true})
 	} else {
-		broadcastToArea(client.Area(), &aolib.CTToClient{Name: encode(fmt.Sprintf("[MOD] %v", client.OOCName())), Message: encode(msg), IsFromServer: true})
+		broadcastToArea(client.Area(), &aolib.CTToClient{Name: fmt.Sprintf("[MOD] %v", client.OOCName()), Message: msg, IsFromServer: true})
 	}
 	addToBuffer(client, "OOC", msg, false)
 }
@@ -570,7 +570,7 @@ func cmdModChat(client *Client, args []string, _ string) {
 			if senderIsShadow && !permissions.IsAdmin(c.Perms()) {
 				senderLabel = "Moderator"
 			}
-			c.Send(&aolib.CTToClient{Name: encode(fmt.Sprintf("[MODCHAT] %v", senderLabel)), Message: encode(msg), IsFromServer: true})
+			c.Send(&aolib.CTToClient{Name: fmt.Sprintf("[MODCHAT] %v", senderLabel), Message: msg, IsFromServer: true})
 		}
 	})
 }
@@ -876,19 +876,19 @@ func cmdPM(client *Client, args []string, _ string) {
 	// -- unlike a global it is not a broadcast, and there is no capture data to
 	// calibrate correlating private messages against.
 	if !oocCommandAllowed(client, msg, "private message",
-		&aolib.CTToClient{Name: encode(fmt.Sprintf("[PM] [UID %d] %v", client.Uid(), oocDisplayName(client))),
-			Message: encode(msg), IsFromServer: true}) {
+		&aolib.CTToClient{Name: fmt.Sprintf("[PM] [UID %d] %v", client.Uid(), oocDisplayName(client)),
+			Message: msg, IsFromServer: true}) {
 		return
 	}
 	toPM := getUidList(strings.Split(args[0], ","))
 	var recipientNames []string
 	for _, c := range toPM {
-		c.Send(&aolib.CTToClient{Name: encode(fmt.Sprintf("[PM] [UID %d] %v", client.Uid(), oocDisplayName(client))), Message: encode(msg), IsFromServer: true})
+		c.Send(&aolib.CTToClient{Name: fmt.Sprintf("[PM] [UID %d] %v", client.Uid(), oocDisplayName(client)), Message: msg, IsFromServer: true})
 		recipientNames = append(recipientNames, fmt.Sprintf("[%d] %v", c.Uid(), oocDisplayName(c)))
 	}
 	// Echo the message back to the sender so they can see what they sent.
 	if len(recipientNames) > 0 {
-		client.Send(&aolib.CTToClient{Name: encode(fmt.Sprintf("[PM → %v] %v", strings.Join(recipientNames, ", "), oocDisplayName(client))), Message: encode(msg), IsFromServer: true})
+		client.Send(&aolib.CTToClient{Name: fmt.Sprintf("[PM → %v] %v", strings.Join(recipientNames, ", "), oocDisplayName(client)), Message: msg, IsFromServer: true})
 	}
 }
 

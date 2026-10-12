@@ -129,7 +129,7 @@ func pktHdid(client *Client, p *aolib.Packet) {
 		return
 	}
 
-	client.Send(&aolib.IDToClient{PlayerID: 0, Software: "Nyathena", Version: encode(version)})
+	client.Send(&aolib.IDToClient{PlayerID: 0, Software: "Nyathena", Version: version})
 }
 
 // Handles ID#%
@@ -148,7 +148,7 @@ func pktId(client *Client, p *aolib.Packet) {
 	client.Send(&aolib.PN{
 		PlayerCount:       players.GetPlayerCount(),
 		MaxPlayers:        config.MaxPlayers,
-		ServerDescription: encode(GetServerDesc()),
+		ServerDescription: GetServerDesc(),
 	})
 	client.Send(&aolib.FL{Features: []string{
 		"noencryption", "yellowtext", "prezoom", "flipping", "customobjections",
@@ -218,17 +218,16 @@ func pktReqAM(client *Client, _ *aolib.Packet) {
 	// smPacket is a pre-built FantaCode blob (avoids a strings.Join per
 	// connection in the common case). JSON-mode clients can't read it, so
 	// fall back to the typed-Outgoing path, which goes through BuildJSON.
-	// Music names are AO2-escape-encoded here for symmetry with the
-	// FantaCode path (buildSMPacket) — every other outbound string the
-	// server emits is already encoded, and the encoded form round-trips
-	// fine through a JSON string field.
+	// Music names are passed raw here: aolib's SM.Args() applies Fanta
+	// escaping on the wire and its JSON form carries the raw values, so
+	// pre-escaping would double-escape JSON-mode clients.
 	if client.JSONMode() {
 		items := make([]string, 0, len(areas)+len(getMusicList()))
 		for _, a := range areas {
 			items = append(items, a.Name())
 		}
 		for _, m := range getMusicList() {
-			items = append(items, encode(m))
+			items = append(items, m)
 		}
 		client.Send(&aolib.SM{MusicList: smMusicListItems(items)})
 		return
@@ -274,7 +273,7 @@ func pktReqDone(client *Client, _ *aolib.Packet) {
 	sendStatusArup()
 	sendLockArup()
 	// Notify the client of their actual UID so the player list widget filters correctly.
-	client.Send(&aolib.IDToClient{PlayerID: client.Uid(), Software: "Nyathena", Version: encode(version)})
+	client.Send(&aolib.IDToClient{PlayerID: client.Uid(), Software: "Nyathena", Version: version})
 	sendPlayerListToClient(client)
 	broadcastPlayerJoin(client)
 	sendModIPIDsToClient(client) // no-op unless this connection is already BAN_INFO-permissioned at join
@@ -1523,7 +1522,7 @@ func pktOOC(client *Client, p *aolib.Packet) {
 		if tag := formatTagDisplay(db.GetActiveTag(client.Ipid())); tag != "" {
 			display = tag + " " + display
 		}
-		client.Send(&aolib.CTToClient{Name: encode(display), Message: ct.Message, IsFromServer: false})
+		client.Send(&aolib.CTToClient{Name: display, Message: ct.Message, IsFromServer: false})
 		addToBuffer(client, "OOC", "\""+ct.Message+"\" (censored username)", false)
 		if kick {
 			client.KickForCensorTrip()
@@ -1610,7 +1609,7 @@ func pktOOC(client *Client, p *aolib.Packet) {
 		}
 		return
 	case autoModShadow:
-		client.Send(&aolib.CTToClient{Name: encode(displayUsername), Message: msg, IsFromServer: false})
+		client.Send(&aolib.CTToClient{Name: displayUsername, Message: msg, IsFromServer: false})
 		addToBuffer(client, "OOC", "\""+msg+"\" (censored)", false)
 		if kick {
 			client.KickForCensorTrip()
@@ -1629,14 +1628,14 @@ func pktOOC(client *Client, p *aolib.Packet) {
 	// notice the room can't hear them. The buffer entry is marked so mods
 	// reviewing logs can tell the message was suppressed.
 	if client.HasActivePunishment(PunishmentStealthMute) {
-		client.Send(&aolib.CTToClient{Name: encode(displayUsername), Message: msg, IsFromServer: false})
+		client.Send(&aolib.CTToClient{Name: displayUsername, Message: msg, IsFromServer: false})
 		addToBuffer(client, "OOC", "\""+msg+"\" (stealthmuted)", false)
 		return
 	}
 	// Captcha restriction: same routing the IC path uses.
 	if activeCaptchaRestricted.Load() > 0 && client.captchaRestricted.Load() {
 		deliverRestricted(client, client.Area(),
-			&aolib.CTToClient{Name: encode(displayUsername), Message: msg, IsFromServer: false})
+			&aolib.CTToClient{Name: displayUsername, Message: msg, IsFromServer: false})
 		addToBuffer(client, "OOC", "\""+msg+"\" (captcha-muted)", false)
 		return
 	}
@@ -1648,7 +1647,7 @@ func pktOOC(client *Client, p *aolib.Packet) {
 	raidGuardOnOOC(client, ct.Name, decode(msg))
 
 	broadcastOOCToArea(client.Ipid(), senderBypassesIgnore(client.Perms()), client.Area(),
-		&aolib.CTToClient{Name: encode(displayUsername), Message: msg, IsFromServer: false})
+		&aolib.CTToClient{Name: displayUsername, Message: msg, IsFromServer: false})
 	addToBuffer(client, "OOC", "\""+msg+"\"", false)
 }
 
