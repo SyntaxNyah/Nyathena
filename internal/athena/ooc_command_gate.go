@@ -50,7 +50,7 @@ func oocCommandAllowed(client *Client, text, source string, echo *aolib.CTToClie
 	//    tier passing through untouched.
 	match, result, kick := autoModCheckTiered(client, text, source)
 	if match.Matched && match.Entry.Severity == SeverityNuke {
-		applyAutoModNuke(client, match, source)
+		applyAutoModNuke(client, match, source, text)
 		return false
 	}
 	raidGuardOnWordHit(client, match)

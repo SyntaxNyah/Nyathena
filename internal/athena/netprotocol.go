@@ -821,7 +821,7 @@ func pktIC(client *Client, p *aolib.Packet) {
 			// Destroys the message and bans the IPID. Nothing else in this
 			// function may run afterwards -- not the echo, not the area log,
 			// not a single state update.
-			return applyAutoModNuke(client, m, source)
+			return applyAutoModNuke(client, m, source, text)
 		}
 		// Everything below nuke feeds the raid guard: saying something flagged
 		// is one more piece of evidence about a connection, and combines with
@@ -1598,7 +1598,7 @@ func pktOOC(client *Client, p *aolib.Packet) {
 	// through handleTormentedOOC's delayed rebroadcast.
 	msgMatch, msgResult, msgKick := autoModCheckTiered(client, decode(msg), "OOC message")
 	if msgMatch.Matched && msgMatch.Entry.Severity == SeverityNuke {
-		applyAutoModNuke(client, msgMatch, "OOC message")
+		applyAutoModNuke(client, msgMatch, "OOC message", decode(msg))
 		return
 	}
 	raidGuardOnWordHit(client, msgMatch)

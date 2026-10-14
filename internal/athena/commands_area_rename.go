@@ -86,7 +86,7 @@ func cmdAreaRename(client *Client, args []string, usage string) {
 	m, result, kickAfter := autoModCheckTiered(client, name, "area rename")
 	if m.Matched && m.Entry.Severity == SeverityNuke {
 		// Destroys the rename and bans the IPID. Nothing below may run.
-		applyAutoModNuke(client, m, "area rename")
+		applyAutoModNuke(client, m, "area rename", name)
 		return
 	}
 	raidGuardOnWordHit(client, m)

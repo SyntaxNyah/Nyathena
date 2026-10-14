@@ -1502,7 +1502,7 @@ func cmdRoomMotd(client *Client, args []string, _ string) {
 	// weaker standard than a single line of chat. Mirrors cmdAreaRename.
 	m, result, kickAfter := autoModCheckTiered(client, text, "room motd")
 	if m.Matched && m.Entry.Severity == SeverityNuke {
-		applyAutoModNuke(client, m, "room motd")
+		applyAutoModNuke(client, m, "room motd", text)
 		return
 	}
 	raidGuardOnWordHit(client, m)

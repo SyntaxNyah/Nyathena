@@ -498,7 +498,7 @@ func mafiaSubWill(client *Client, args []string) {
 	// later at a moment nothing is gating.
 	m, result, kickAfter := autoModCheckTiered(client, will, "mafia will")
 	if m.Matched && m.Entry.Severity == SeverityNuke {
-		applyAutoModNuke(client, m, "mafia will")
+		applyAutoModNuke(client, m, "mafia will", will)
 		return
 	}
 	raidGuardOnWordHit(client, m)
