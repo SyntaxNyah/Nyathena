@@ -367,8 +367,16 @@ type Client struct {
 	// writeMu serializes inline socket writes with each other. Deliberately
 	// separate from mu: nothing that blocks on I/O may hold the mutex ordinary
 	// field accessors use -- see Client.write.
-	writeMu               sync.Mutex
-	joining               bool
+	writeMu sync.Mutex
+	joining bool
+	// isNewHDID is set once, during the HI handshake (pktHdid, from
+	// recordHDFirstSeen's return value), and only ever read afterwards
+	// (issueJoinPopup) -- so, like joining, it needs no lock: by the time
+	// anything reads it, the handshake goroutine that wrote it has already
+	// handed off via ordinary happens-before (the packet loop that calls
+	// issueJoinPopup is the same goroutine for TCP, and for WS the write
+	// happens before HandleClient's goroutine is created).
+	isNewHDID             bool
 	hdid                  string
 	uid                   int
 	area                  *area.Area
