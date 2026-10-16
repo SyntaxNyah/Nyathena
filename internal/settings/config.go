@@ -42,135 +42,144 @@ type Config struct {
 }
 
 type ServerConfig struct {
-	Addr                                 string   `toml:"addr"`
-	Port                                 int      `toml:"port"`
-	AdvertiseHostname                    string   `toml:"advertise_hostname"`
-	Name                                 string   `toml:"name"`
-	Desc                                 string   `toml:"description"`
-	MaxPlayers                           int      `toml:"max_players"`
-	MaxMsg                               int      `toml:"max_message_length"`
-	BanLen                               string   `toml:"default_ban_duration"`
-	EnableWS                             bool     `toml:"enable_webao"`
-	WSPort                               int      `toml:"webao_port"`
-	EnableWSS                            bool     `toml:"enable_webao_secure"`
-	WSSPort                              int      `toml:"webao_secure_port"`
-	TLSCertPath                          string   `toml:"tls_cert_path"`
-	TLSKeyPath                           string   `toml:"tls_key_path"`
-	ReverseProxyMode                     bool     `toml:"reverse_proxy_mode"`
-	ReverseProxyHTTPPort                 int      `toml:"reverse_proxy_http_port"`
-	ReverseProxyHTTPSPort                int      `toml:"reverse_proxy_https_port"`
-	MCLimit                              int      `toml:"multiclient_limit"`
-	AssetURL                             string   `toml:"asset_url"`
-	WebhookURL                           string   `toml:"webhook_url"`
-	WebhookPingRoleID                    string   `toml:"webhook_ping_role_id"`
-	PunishmentWebhookURL                 string   `toml:"punishment_webhook_url"`
-	MaxDice                              int      `toml:"max_dice"`
-	MaxSide                              int      `toml:"max_side"`
-	Motd                                 string   `toml:"motd"`
-	MaxStatement                         int      `toml:"max_testimony"`
-	RateLimit                            int      `toml:"message_rate_limit"`
-	RateLimitWindow                      int      `toml:"message_rate_limit_window"`
-	RateLimitKickAutoban                 bool     `toml:"rate_limit_kick_autoban"`
-	RateLimitKickAutobanThreshold        int      `toml:"rate_limit_kick_autoban_threshold"`
-	RateLimitKickAutobanWindow           int      `toml:"rate_limit_kick_autoban_window"`
-	RateLimitKickAutobanDuration         string   `toml:"rate_limit_kick_autoban_duration"`
-	RateLimitKickAutobanMinPlaytime      int      `toml:"rate_limit_kick_autoban_min_playtime"`
-	RateLimitKickAutobanLenientPlaytime  int      `toml:"rate_limit_kick_autoban_lenient_playtime"`
-	RateLimitKickAutobanLenientThreshold int      `toml:"rate_limit_kick_autoban_lenient_threshold"`
-	RaidGuardEnabled                     bool     `toml:"raid_guard_enabled"`
-	RaidGuardMaxAction                   string   `toml:"raid_guard_max_action"`
-	RaidGuardMinPlaytime                 int      `toml:"raid_guard_min_playtime"`
-	RaidGuardLenientPlaytime             int      `toml:"raid_guard_lenient_playtime"`
-	RaidGuardLenientScale                int      `toml:"raid_guard_lenient_scale"`
-	RaidGuardStrictPlaytime              int      `toml:"raid_guard_strict_playtime"`
-	RaidGuardStrictScale                 int      `toml:"raid_guard_strict_scale"`
-	RaidGuardUnderAttackScale            int      `toml:"raid_guard_under_attack_scale"`
-	RaidGuardBanDuration                 string   `toml:"raid_guard_ban_duration"`
-	RaidGuardScoreWatch                  int      `toml:"raid_guard_score_watch"`
-	RaidGuardScoreChallenge              int      `toml:"raid_guard_score_challenge"`
-	RaidGuardScoreSilence                int      `toml:"raid_guard_score_silence"`
-	RaidGuardScoreKick                   int      `toml:"raid_guard_score_kick"`
-	RaidGuardScoreBan                    int      `toml:"raid_guard_score_ban"`
-	RaidGuardObjectionMinMsgs            int      `toml:"raid_guard_objection_min_msgs"`
-	RaidGuardObjectionFraction           float64  `toml:"raid_guard_objection_fraction"`
-	RaidGuardFastCharPickMs              int      `toml:"raid_guard_fast_charpick_ms"`
-	RaidGuardFastSpeechMs                int      `toml:"raid_guard_fast_speech_ms"`
-	RaidGuardCharChurnMs                 int      `toml:"raid_guard_char_churn_ms"`
-	RaidGuardNameChurnMax                int      `toml:"raid_guard_name_churn_max"`
-	RaidGuardCorrWindow                  int      `toml:"raid_guard_corr_window"`
-	RaidGuardCorrIPIDs                   int      `toml:"raid_guard_corr_ipids"`
-	RaidGuardCorrIPIDsWeak               int      `toml:"raid_guard_corr_ipids_weak"`
-	RaidGuardCorrBreadth                 int      `toml:"raid_guard_corr_breadth"`
-	RaidGuardCorrMinLen                  int      `toml:"raid_guard_corr_min_len"`
-	RaidGuardCorrMaxEntries              int      `toml:"raid_guard_corr_max_entries"`
-	RaidGuardArrivalBurst                int      `toml:"raid_guard_arrival_burst"`
-	RaidGuardAutoLockdown                bool     `toml:"raid_guard_auto_lockdown"`
-	RaidGuardSlurSevereWeight            int      `toml:"raid_guard_slur_severe_weight"`
-	RaidGuardSlurFlaggedWeight           int      `toml:"raid_guard_slur_flagged_weight"`
-	ModcallCooldown                      int      `toml:"modcall_cooldown"`
-	ConnRateLimit                        int      `toml:"connection_rate_limit"`
-	ConnRateLimitWindow                  int      `toml:"connection_rate_limit_window"`
-	ConnFloodAutoban                     bool     `toml:"conn_flood_autoban"`
-	ConnFloodAutobanThreshold            int      `toml:"conn_flood_autoban_threshold"`
-	PacketFloodAutoban                   bool     `toml:"packet_flood_autoban"`
-	RawPacketRateLimit                   int      `toml:"raw_packet_rate_limit"`
-	RawPacketRateLimitWindow             float64  `toml:"raw_packet_rate_limit_window"`
-	OOCRateLimit                         int      `toml:"ooc_rate_limit"`
-	OOCRateLimitWindow                   int      `toml:"ooc_rate_limit_window"`
-	PingRateLimit                        int      `toml:"ping_rate_limit"`
-	PingRateLimitWindow                  int      `toml:"ping_rate_limit_window"`
-	NewIPIDOOCCooldown                   int      `toml:"new_ipid_ooc_cooldown"`
-	NewIPIDICCooldown                    int      `toml:"new_ipid_ic_cooldown"`
-	NewIPIDModcallCooldown               int      `toml:"new_ipid_modcall_cooldown"`
-	GlobalNewIPRateLimit                 int      `toml:"global_new_ip_rate_limit"`
-	GlobalNewIPRateLimitWindow           int      `toml:"global_new_ip_rate_limit_window"`
-	IPRetentionDays                      int      `toml:"ip_retention_days"`
-	WebAOAllowedOrigin                   string   `toml:"webao_allowed_origin"`
-	AutoModEnabled                       bool     `toml:"automod_enabled"`
-	AutoModWordlist                      string   `toml:"automod_wordlist"`
-	AutoModAction                        string   `toml:"automod_action"`
-	AutoModNukeBanDuration               string   `toml:"automod_nuke_ban_duration"`
-	RandomSongCooldown                   int      `toml:"random_song_cooldown"`
-	RandomSongCooldownDJ                 int      `toml:"random_song_cooldown_dj"`
-	RandomSongCooldownMod                int      `toml:"random_song_cooldown_mod"`
-	BotBanPlaytimeThreshold              int      `toml:"botban_playtime_threshold"`
-	IPHubAPIKey                          string   `toml:"iphub_api_key"`
-	EnableTranslator                     bool     `toml:"enable_translator_punishment"`
-	TranslatorAPIURL                     string   `toml:"translator_api_url"`
-	TranslatorAPIKey                     string   `toml:"translator_api_key"`
-	TranslateCooldown                    int      `toml:"translate_cooldown"`
-	EnableCasino                         bool     `toml:"enable_casino"`
+	Addr                                 string  `toml:"addr"`
+	Port                                 int     `toml:"port"`
+	AdvertiseHostname                    string  `toml:"advertise_hostname"`
+	Name                                 string  `toml:"name"`
+	Desc                                 string  `toml:"description"`
+	MaxPlayers                           int     `toml:"max_players"`
+	MaxMsg                               int     `toml:"max_message_length"`
+	BanLen                               string  `toml:"default_ban_duration"`
+	EnableWS                             bool    `toml:"enable_webao"`
+	WSPort                               int     `toml:"webao_port"`
+	EnableWSS                            bool    `toml:"enable_webao_secure"`
+	WSSPort                              int     `toml:"webao_secure_port"`
+	TLSCertPath                          string  `toml:"tls_cert_path"`
+	TLSKeyPath                           string  `toml:"tls_key_path"`
+	ReverseProxyMode                     bool    `toml:"reverse_proxy_mode"`
+	ReverseProxyHTTPPort                 int     `toml:"reverse_proxy_http_port"`
+	ReverseProxyHTTPSPort                int     `toml:"reverse_proxy_https_port"`
+	MCLimit                              int     `toml:"multiclient_limit"`
+	AssetURL                             string  `toml:"asset_url"`
+	WebhookURL                           string  `toml:"webhook_url"`
+	WebhookPingRoleID                    string  `toml:"webhook_ping_role_id"`
+	PunishmentWebhookURL                 string  `toml:"punishment_webhook_url"`
+	MaxDice                              int     `toml:"max_dice"`
+	MaxSide                              int     `toml:"max_side"`
+	Motd                                 string  `toml:"motd"`
+	MaxStatement                         int     `toml:"max_testimony"`
+	RateLimit                            int     `toml:"message_rate_limit"`
+	RateLimitWindow                      int     `toml:"message_rate_limit_window"`
+	RateLimitKickAutoban                 bool    `toml:"rate_limit_kick_autoban"`
+	RateLimitKickAutobanThreshold        int     `toml:"rate_limit_kick_autoban_threshold"`
+	RateLimitKickAutobanWindow           int     `toml:"rate_limit_kick_autoban_window"`
+	RateLimitKickAutobanDuration         string  `toml:"rate_limit_kick_autoban_duration"`
+	RateLimitKickAutobanMinPlaytime      int     `toml:"rate_limit_kick_autoban_min_playtime"`
+	RateLimitKickAutobanLenientPlaytime  int     `toml:"rate_limit_kick_autoban_lenient_playtime"`
+	RateLimitKickAutobanLenientThreshold int     `toml:"rate_limit_kick_autoban_lenient_threshold"`
+	RaidGuardEnabled                     bool    `toml:"raid_guard_enabled"`
+	RaidGuardMaxAction                   string  `toml:"raid_guard_max_action"`
+	RaidGuardMinPlaytime                 int     `toml:"raid_guard_min_playtime"`
+	RaidGuardLenientPlaytime             int     `toml:"raid_guard_lenient_playtime"`
+	RaidGuardLenientScale                int     `toml:"raid_guard_lenient_scale"`
+	RaidGuardStrictPlaytime              int     `toml:"raid_guard_strict_playtime"`
+	RaidGuardStrictScale                 int     `toml:"raid_guard_strict_scale"`
+	RaidGuardUnderAttackScale            int     `toml:"raid_guard_under_attack_scale"`
+	RaidGuardBanDuration                 string  `toml:"raid_guard_ban_duration"`
+	RaidGuardScoreWatch                  int     `toml:"raid_guard_score_watch"`
+	RaidGuardScoreChallenge              int     `toml:"raid_guard_score_challenge"`
+	RaidGuardScoreSilence                int     `toml:"raid_guard_score_silence"`
+	RaidGuardScoreKick                   int     `toml:"raid_guard_score_kick"`
+	RaidGuardScoreBan                    int     `toml:"raid_guard_score_ban"`
+	RaidGuardObjectionMinMsgs            int     `toml:"raid_guard_objection_min_msgs"`
+	RaidGuardObjectionFraction           float64 `toml:"raid_guard_objection_fraction"`
+	RaidGuardFastCharPickMs              int     `toml:"raid_guard_fast_charpick_ms"`
+	RaidGuardFastSpeechMs                int     `toml:"raid_guard_fast_speech_ms"`
+	RaidGuardCharChurnMs                 int     `toml:"raid_guard_char_churn_ms"`
+	RaidGuardNameChurnMax                int     `toml:"raid_guard_name_churn_max"`
+	RaidGuardCorrWindow                  int     `toml:"raid_guard_corr_window"`
+	RaidGuardCorrIPIDs                   int     `toml:"raid_guard_corr_ipids"`
+	RaidGuardCorrIPIDsWeak               int     `toml:"raid_guard_corr_ipids_weak"`
+	RaidGuardCorrBreadth                 int     `toml:"raid_guard_corr_breadth"`
+	RaidGuardCorrMinLen                  int     `toml:"raid_guard_corr_min_len"`
+	RaidGuardCorrMaxEntries              int     `toml:"raid_guard_corr_max_entries"`
+	RaidGuardArrivalBurst                int     `toml:"raid_guard_arrival_burst"`
+	RaidGuardAutoLockdown                bool    `toml:"raid_guard_auto_lockdown"`
+	RaidGuardSlurSevereWeight            int     `toml:"raid_guard_slur_severe_weight"`
+	RaidGuardSlurFlaggedWeight           int     `toml:"raid_guard_slur_flagged_weight"`
+	ModcallCooldown                      int     `toml:"modcall_cooldown"`
+	ConnRateLimit                        int     `toml:"connection_rate_limit"`
+	ConnRateLimitWindow                  int     `toml:"connection_rate_limit_window"`
+	ConnFloodAutoban                     bool    `toml:"conn_flood_autoban"`
+	ConnFloodAutobanThreshold            int     `toml:"conn_flood_autoban_threshold"`
+	PacketFloodAutoban                   bool    `toml:"packet_flood_autoban"`
+	RawPacketRateLimit                   int     `toml:"raw_packet_rate_limit"`
+	RawPacketRateLimitWindow             float64 `toml:"raw_packet_rate_limit_window"`
+	OOCRateLimit                         int     `toml:"ooc_rate_limit"`
+	OOCRateLimitWindow                   int     `toml:"ooc_rate_limit_window"`
+	PingRateLimit                        int     `toml:"ping_rate_limit"`
+	PingRateLimitWindow                  int     `toml:"ping_rate_limit_window"`
+	NewIPIDOOCCooldown                   int     `toml:"new_ipid_ooc_cooldown"`
+	NewIPIDICCooldown                    int     `toml:"new_ipid_ic_cooldown"`
+	NewIPIDModcallCooldown               int     `toml:"new_ipid_modcall_cooldown"`
+	GlobalNewIPRateLimit                 int     `toml:"global_new_ip_rate_limit"`
+	GlobalNewIPRateLimitWindow           int     `toml:"global_new_ip_rate_limit_window"`
+	IPRetentionDays                      int     `toml:"ip_retention_days"`
+	WebAOAllowedOrigin                   string  `toml:"webao_allowed_origin"`
+	AutoModEnabled                       bool    `toml:"automod_enabled"`
+	AutoModWordlist                      string  `toml:"automod_wordlist"`
+	AutoModAction                        string  `toml:"automod_action"`
+	AutoModNukeBanDuration               string  `toml:"automod_nuke_ban_duration"`
+	RandomSongCooldown                   int     `toml:"random_song_cooldown"`
+	RandomSongCooldownDJ                 int     `toml:"random_song_cooldown_dj"`
+	RandomSongCooldownMod                int     `toml:"random_song_cooldown_mod"`
+	BotBanPlaytimeThreshold              int     `toml:"botban_playtime_threshold"`
+	IPHubAPIKey                          string  `toml:"iphub_api_key"`
+	EnableTranslator                     bool    `toml:"enable_translator_punishment"`
+	TranslatorAPIURL                     string  `toml:"translator_api_url"`
+	TranslatorAPIKey                     string  `toml:"translator_api_key"`
+	TranslateCooldown                    int     `toml:"translate_cooldown"`
+	EnableCasino                         bool    `toml:"enable_casino"`
 	// EnableCustomCommands turns on the console-only custom command builder.
 	// Off by default: when false, no definition files are scanned at startup,
 	// the dispatch path never consults the custom-command registry, and the
 	// "customcmd" console menu refuses with a notice.
-	EnableCustomCommands                 bool     `toml:"enable_custom_commands"`
+	EnableCustomCommands bool `toml:"enable_custom_commands"`
 
-	EnableAccounts                       bool     `toml:"enable_accounts"`
-	RegisterCaptcha                      bool     `toml:"register_captcha"`
-	JoinCaptcha                          bool     `toml:"join_captcha"`
-	JoinCaptchaStrikes                   int      `toml:"join_captcha_strikes"`
-	JoinCaptchaTimeout                   int      `toml:"join_captcha_timeout"`
-	JoinCaptchaKinds                     []string `toml:"join_captcha_kinds"`
-	JoinCaptchaRemember                  bool     `toml:"join_captcha_remember"`
-	JoinCaptchaMinPlaytime               int      `toml:"join_captcha_min_playtime"`
-	JoinCaptchaAction                    string   `toml:"join_captcha_action"`
-	JoinCaptchaQuestions                 string   `toml:"join_captcha_questions"`
-	JoinCaptchaCustomOnly                bool     `toml:"join_captcha_custom_only"`
-	JoinCaptchaSecret                    string   `toml:"join_captcha_secret"`
-	JoinCaptchaRotate                    int      `toml:"join_captcha_rotate"`
-	CaptchaPlugin                        string   `toml:"captcha_plugin"`
-	CaptchaPluginTimeout                 int      `toml:"captcha_plugin_timeout"`
-	JoinCaptchaPopup                     bool     `toml:"join_captcha_popup"`
-	EnableCommunityVote                  bool     `toml:"enable_community_vote"`
-	VoteThreshold                        int      `toml:"vote_threshold"`
-	VoteDuration                         int      `toml:"vote_duration"`
-	VoteActions                          []string `toml:"vote_actions"`
-	VoteMuteDuration                     int      `toml:"vote_mute_duration"`
-	TypingRacePhrases                    []string `toml:"typing_race_phrases"`
-	EnableNewspaper                      bool     `toml:"enable_newspaper"`
-	NewspaperInterval                    string   `toml:"newspaper_interval"`
-	NewspaperSections                    []string `toml:"newspaper_sections"`
+	EnableAccounts         bool     `toml:"enable_accounts"`
+	RegisterCaptcha        bool     `toml:"register_captcha"`
+	JoinCaptcha            bool     `toml:"join_captcha"`
+	JoinCaptchaStrikes     int      `toml:"join_captcha_strikes"`
+	JoinCaptchaTimeout     int      `toml:"join_captcha_timeout"`
+	JoinCaptchaKinds       []string `toml:"join_captcha_kinds"`
+	JoinCaptchaRemember    bool     `toml:"join_captcha_remember"`
+	JoinCaptchaMinPlaytime int      `toml:"join_captcha_min_playtime"`
+	JoinCaptchaAction      string   `toml:"join_captcha_action"`
+	JoinCaptchaQuestions   string   `toml:"join_captcha_questions"`
+	JoinCaptchaCustomOnly  bool     `toml:"join_captcha_custom_only"`
+	JoinCaptchaSecret      string   `toml:"join_captcha_secret"`
+	JoinCaptchaRotate      int      `toml:"join_captcha_rotate"`
+	CaptchaPlugin          string   `toml:"captcha_plugin"`
+	CaptchaPluginTimeout   int      `toml:"captcha_plugin_timeout"`
+	JoinCaptchaPopup       bool     `toml:"join_captcha_popup"`
+	// JoinPopup and JoinPopupMessage are the join popup (see joinpopup.go):
+	// an operator-authored welcome message -- rules, a Discord invite, a
+	// website -- shown once to any HDID connecting to this server for the
+	// very first time ever. Independent of the join captcha above, though it
+	// reuses the same client-side AO2 BB dialog to make it unmissable.
+	// JoinPopupMessage supports multiple lines (a triple-quoted TOML string);
+	// a blank message disables the feature even if JoinPopup is true.
+	JoinPopup           bool     `toml:"join_popup"`
+	JoinPopupMessage    string   `toml:"join_popup_message"`
+	EnableCommunityVote bool     `toml:"enable_community_vote"`
+	VoteThreshold       int      `toml:"vote_threshold"`
+	VoteDuration        int      `toml:"vote_duration"`
+	VoteActions         []string `toml:"vote_actions"`
+	VoteMuteDuration    int      `toml:"vote_mute_duration"`
+	TypingRacePhrases   []string `toml:"typing_race_phrases"`
+	EnableNewspaper     bool     `toml:"enable_newspaper"`
+	NewspaperInterval   string   `toml:"newspaper_interval"`
+	NewspaperSections   []string `toml:"newspaper_sections"`
 	// YouTubePlayPrefix, when non-empty and starting with "http", turns on the
 	// /play <youtube-link> integration. The prefix is the URL stem that
 	// clients fetch the downloaded MP3 from (e.g. "https://cdn.example.com/yt/").
@@ -402,6 +411,8 @@ func DefaultConfig() *Config {
 			CaptchaPlugin:                        "",
 			CaptchaPluginTimeout:                 3000,
 			JoinCaptchaPopup:                     true,
+			JoinPopup:                            false,
+			JoinPopupMessage:                     "",
 			EnableCommunityVote:                  false,
 			VoteThreshold:                        3,
 			VoteDuration:                         120,

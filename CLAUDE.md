@@ -151,6 +151,8 @@ Copy `config_sample/` to `config/` before first run.
 | `join_captcha_custom_only` | `false` | Serve only the operator's questions, never the built-in ones |
 | `captcha_plugin` | `""` | Path to an external captcha plugin program (see `docs/CAPTCHA_PLUGIN.md`) |
 | `captcha_plugin_timeout` | `3000` | Milliseconds to wait for a plugin reply before falling back |
+| `join_popup` | `false` | Show a one-time welcome popup to any HDID connecting for the first time ever (see "Join Popup" below) |
+| `join_popup_message` | `""` | The welcome message (rules, links, etc.); blank disables the popup even if `join_popup` is true |
 
 ### config/config.toml — [Discord]
 
@@ -631,6 +633,17 @@ If a plugin is missing, down or slow, the built-in questions are used instead �
 **Staff commands** (`BAN`): `/joincaptcha status` (settings, who is awaiting an answer, who the captcha has acted on), `/joincaptcha verify <uid>` (release a false positive), `/joincaptcha reset <uid|ipid|all>` (clear stored verifications so they are challenged again; accepts a raw IPID so offline players can be reset).
 
 Implemented in `internal/athena/joincaptcha.go` (state, gating, commands), `joincaptcha_challenge.go` (the generators and the leak invariant), `joincaptcha_keyed.go` (the HMAC-derived source), `joincaptcha_custom.go` (operator questions), `joincaptcha_plugin.go` (the plugin bridge) and `internal/plugin` (the subprocess host).
+
+### Join Popup (First-Time Welcome Message)
+`join_popup = true` shows an operator-authored welcome message to any HDID connecting to the server for the very first time ever — via the same client-side AO2 `BB` dialog the join captcha above uses to make its question unmissable, here repurposed for a static message instead of a generated one. Unlike the captcha, this is not a gate: nothing is blocked, there are no strikes, and it never stands between a player and speaking. It exists so an operator can put rules, a Discord invite, or a website link in front of a brand-new player before anything else happens.
+
+"First time ever" is keyed on the hardware ID (`recordHDFirstSeen`) rather than the IP, so a returning player on a new IP is never shown it again, while a genuinely new machine is shown it once this server session. It is issued first in the join sequence, ahead of the casino/account welcome message and the MOTD, so it's the first thing a genuinely new connection sees.
+
+`join_popup_message` holds the text, written as a triple-quoted TOML string so it can span several lines. It is sent two ways, like the captcha's question: an OOC copy that stays in the log, and the same text as the `BB` popup. Links are plain text — AO2 has no clickable-link support — but a player can select and copy them. A blank message disables the popup even when `join_popup` is true, so leaving it unwritten is a silent no-op rather than an empty dialog. The message is operator-authored config content, not player input, so — like the MOTD — it is shown exactly as written, with no filtering.
+
+Independent of `join_captcha`: both read their own "genuinely new" signal, but neither depends on the other being enabled, so a new connection can see the welcome popup, the captcha challenge, both, or neither.
+
+Implemented in `internal/athena/joinpopup.go` (`joinPopupMessage`, `issueJoinPopup`), with the underlying "is this HDID new" signal in `recordHDFirstSeen` (`internal/athena/server.go`) and the one-shot flag it sets, `Client.isNewHDID`.
 
 ### Censored Showname Shadow-Send
 `config/censored_names.txt` lists shownames (or substrings of them, case-insensitive) that nobody is allowed to speak under — independent of `automod_enabled`/`banned_words.txt`. Matching goes through the same `normalizeForFilter` Unicode-bypass normalization as AutoMod. Every IC message a player sends while their showname matches an entry is:
