@@ -165,6 +165,18 @@ var (
 		times: make(map[string]time.Time),
 	}
 
+	// hdidFirstSeenTracker records the first time each HDID connected to this
+	// server session. Entries are never deleted so that returning HDIDs are
+	// never treated as "new" again by the join popup (joinpopup.go). Unlike the
+	// IPID tracker this is intentionally in-memory only: HDIDs aren't persisted
+	// in a KNOWN_HDIDS table, so the popup is shown per server session.
+	hdidFirstSeenTracker = struct {
+		mu    sync.Mutex
+		times map[string]time.Time // hdid -> first seen time
+	}{
+		times: make(map[string]time.Time),
+	}
+
 	// globalNewIPTracker records timestamps of new unique IPs connecting to the server.
 	// Used for the global new-connection rate limiter: if too many distinct new IPs arrive
 	// within the configured window, additional unknown IPs are rejected until the window clears.
@@ -1829,6 +1841,27 @@ func recordIPFirstSeen(ipid string) {
 	if raidGuardActive.Load() {
 		raidObserveArrival(time.Now())
 	}
+}
+
+// recordHDFirstSeen records the first time an HDID connects to this server
+// session and reports whether the HDID was genuinely new on this call -- true
+// the one time the entry is created, false on every call after that, including
+// every reconnect this session. The join popup (joinpopup.go) is the one caller
+// that reads the return value, keying the first-time welcome message on the
+// client's hardware ID rather than its IP so a player on a new IP isn't shown
+// the popup again.
+//
+// Unlike recordIPFirstSeen this does not feed the global new-IP rate limiter or
+// the raid-guard arrival signal: those are IP-keyed defences, and an HDID is a
+// per-machine identity, not a per-connection network event.
+func recordHDFirstSeen(hdid string) bool {
+	hdidFirstSeenTracker.mu.Lock()
+	defer hdidFirstSeenTracker.mu.Unlock()
+	if _, exists := hdidFirstSeenTracker.times[hdid]; exists {
+		return false
+	}
+	hdidFirstSeenTracker.times[hdid] = time.Now()
+	return true
 }
 
 // checkNewIPIDOOCCooldown checks whether a newly-seen IPID is still within the OOC chat cooldown.

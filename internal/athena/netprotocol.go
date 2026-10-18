@@ -125,6 +125,12 @@ func pktHdid(client *Client, p *aolib.Packet) {
 	client.SetHdid(base64.StdEncoding.EncodeToString(hash[:]))
 	client.SetHdid(client.Hdid()[:len(client.Hdid())-2]) // Removes the trailing padding.
 
+	// Join popup: record whether this HDID has ever connected before, and set
+	// the one-shot flag issueJoinPopup reads in pktReqDone. Doing it here --
+	// the first (and only) point a connection's HDID is known -- means the
+	// popup keys on the hardware ID, not the IP.
+	client.isNewHDID = recordHDFirstSeen(client.Hdid())
+
 	if client.CheckBanned(db.HDID) {
 		return
 	}
@@ -281,6 +287,11 @@ func pktReqDone(client *Client, _ *aolib.Packet) {
 	client.restorePunishments()
 	client.restoreRandomCharCurse()
 	client.restoreShownamePunishStain()
+
+	// Join popup: shown first, ahead of every other join-sequence message, to
+	// a connection whose HDID has never connected to this server before. It's
+	// a no-op for anyone else, so it costs nothing to check up front.
+	issueJoinPopup(client)
 
 	// Casino on-join setup: seed chip balance and prompt unregistered players.
 	// When the casino is off but the account system is enabled, the account
