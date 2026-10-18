@@ -1,42 +1,43 @@
 /* Athena - A server for Attorney Online 2 written in Go
-   Nyathena fork addition: /toggle global -- a self-service OOC-hide toggle. */
+   Nyathena fork addition: /toggle global -- a self-service /global-hide toggle. */
 
 package athena
 
 import "strings"
 
-// Self-service OOC-hide toggle (/toggle global). Some players find the
-// constant stream of area OOC chat and /global broadcasts distracting and
-// would rather just not see it. This mutes it for the toggling client only:
-// it never touches what anyone else sees, and it defaults back to visible
-// on every fresh connection. Direct messages (/pm) and staff/system
-// broadcasts (/mod -g, /modchat, /announce, moderation alerts) are
-// deliberately untouched -- see broadcastOOCToArea/broadcastOOCToAll in
-// server.go, the only two call sites that consult this flag.
+// Self-service /global-hide toggle (/toggle global). Some players find the
+// constant stream of server-wide /global (and /g) broadcasts distracting and
+// would rather just not see them. This mutes only those broadcasts for the
+// toggling client: local (area) OOC stays visible, and the toggle never
+// touches what anyone else sees. It defaults back to visible on every fresh
+// connection. Direct messages (/pm) and staff/system broadcasts (/mod -g,
+// /modchat, /announce, moderation alerts) are deliberately untouched -- see
+// broadcastOOCToAll in server.go, the only call site that consults this flag.
 
-// OOCHidden reports whether this client has muted regular OOC chat (area
-// OOC and /global) for their current session via /toggle global.
-func (client *Client) OOCHidden() bool {
-	return client.oocHidden.Load()
+// GlobalHidden reports whether this client has muted player-initiated
+// /global broadcasts for their current session via /toggle global.
+func (client *Client) GlobalHidden() bool {
+	return client.globalHidden.Load()
 }
 
-// SetOOCHidden mutes or unmutes regular OOC chat for this client's session.
-func (client *Client) SetOOCHidden(hidden bool) {
-	client.oocHidden.Store(hidden)
+// SetGlobalHidden mutes or unmutes player-initiated /global broadcasts for
+// this client's session.
+func (client *Client) SetGlobalHidden(hidden bool) {
+	client.globalHidden.Store(hidden)
 }
 
 // cmdToggle handles /toggle <global>. Currently the only supported setting
-// is "global", which flips OOC-hiding on/off for the caller; running it
-// again switches it back.
+// is "global", which flips /global-broadcast hiding on/off for the caller;
+// running it again switches it back.
 func cmdToggle(client *Client, args []string, usage string) {
 	switch strings.ToLower(strings.TrimSpace(args[0])) {
 	case "global":
-		if client.OOCHidden() {
-			client.SetOOCHidden(false)
-			client.SendServerMessage("🔊 OOC chat is now visible again.")
+		if client.GlobalHidden() {
+			client.SetGlobalHidden(false)
+			client.SendServerMessage("🔊 /global and /g broadcasts are now visible again.")
 		} else {
-			client.SetOOCHidden(true)
-			client.SendServerMessage("🔇 OOC chat is now hidden (area OOC and /global). Direct messages and staff announcements still get through. Run /toggle global again to show it.")
+			client.SetGlobalHidden(true)
+			client.SendServerMessage("🔇 /global and /g broadcasts are now hidden. Local OOC, direct messages and staff announcements still get through. Run /toggle global again to show them.")
 		}
 	default:
 		client.SendServerMessage("Invalid argument:\n" + usage)

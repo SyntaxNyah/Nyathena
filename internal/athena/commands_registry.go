@@ -3463,7 +3463,7 @@ func initCommands() {
 			handler:  cmdToggle,
 			minArgs:  1,
 			usage:    "Usage: /toggle global",
-			desc:     "Opt-in OOC-hide toggle: /toggle global stops area OOC chat and /global broadcasts from reaching YOU (run it again to bring them back). Direct messages and staff/system announcements still get through, and it never affects anyone else.",
+			desc:     "Opt-in hide toggle: /toggle global stops /global and /g broadcasts from reaching YOU (run it again to bring them back). Local OOC, direct messages and staff/system announcements still get through, and it never affects anyone else.",
 			reqPerms: permissions.PermissionField["NONE"],
 			category: "general",
 		},
