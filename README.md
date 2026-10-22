@@ -220,6 +220,7 @@ A console-only way to author new slash commands **at runtime** — no restart, n
 - **Doki Area Effect** — literature-club-themed chaos per area (`doki_area = true` in `areas.toml`)
 - **Persistent `/musicban`** — bans an IPID from playing music across sessions; bypassed in areas with fewer than 3 people. `/musicunban` and `/musicbans` round out the set
 - **Hot `/reload`** — atomic, race-free reload of `characters.txt` (append-only), `music.txt`, `cdns.txt`, `backgrounds.txt`, `parrot.txt`, `8ball.txt`, `banned_words.txt` and `config.toml` motd/desc without restarting; also bound to stdin `reload` and `SIGHUP`
+- **`/mods`** — every online moderator grouped by the area they are currently in, with UIDs, so players can tell at a glance whether staff is reachable and where. Public, but shadow mods and `/admin hide`'d admins stay hidden from non-admins exactly as in `/gas` (admins see them tagged `(shadow)`/`(hidden)`)
 - **Shadow Mod Visibility** — shadow mods are invisible in `/gas`/`/players` to non-admins
 - **`/charshuffle` / `/uncharshuffle`** — Sattolo-permutes everyone's character sprite; originals remembered
 - **`/reversename` / `/unreversename`** — flips showname rune order; stacks cleanly with `/forcename`

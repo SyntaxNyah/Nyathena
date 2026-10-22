@@ -17,7 +17,7 @@ For player-facing commands, see [`PLAYER_COMMANDS.md`](PLAYER_COMMANDS.md).
 | `MODIFY_AREA` | Override area settings | BG/music locks, force CMs |
 | `BAN_INFO` | View ban records | /getban, /listbans |
 | `ADMIN` | Server runtime configuration | /arealog, /reloadplaytime, /grantchips |
-| `SHADOW` | Stealth moderator | Hidden from /gas/players for non-admins |
+| `SHADOW` | Stealth moderator | Hidden from /gas/players/mods for non-admins |
 
 Permission bits are configured in `config/roles.toml`. Multiple bits are granted as a bitfield — see the role definitions for combinations.
 

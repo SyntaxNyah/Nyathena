@@ -704,12 +704,12 @@ The WT/CE judge buttons (Witness Testimony, Cross Examination and the verdict ga
 - moderators — `random_song_cooldown_mod` (default 0 s, unlimited)
 
 ### Shadow Mod Visibility
-Shadow moderators (`SHADOW` perm bit, no `ADMIN`) are completely hidden from `/gas`/`/players` for non-admin viewers — no "Mod:" line is shown at all. Only admins see them, labelled as `Mod: <name> (shadow)`. Previously the line still rendered as `Mod: Moderator`, which let other moderators infer staff status.
+Shadow moderators (`SHADOW` perm bit, no `ADMIN`) are completely hidden from `/gas`/`/players` for non-admin viewers — no "Mod:" line is shown at all. Only admins see them, labelled as `Mod: <name> (shadow)`. Previously the line still rendered as `Mod: Moderator`, which let other moderators infer staff status. `/mods` applies the same rule to its per-area moderator listing: shadow mods are omitted for non-admin viewers and tagged `(shadow)` for admins (`cmdMods`, `internal/athena/commands_mods.go`).
 
 **Shadow mods are `/ignore`-able.** Real moderators and admins can never be silenced with `/ignore` (the command refuses, and their IC/OOC messages bypass every recipient's ignore list). Shadow mods are deliberately exempt from that protection: an un-ignorable sender betrays staff status, so to anyone who ignores them a shadow mod must disappear exactly like a normal player. The single source of truth is `senderBypassesIgnore(perm)` (`internal/athena/client.go`) — `IsModerator(perm) && !IsShadow(perm)` — applied at the `/ignore` guard (`cmdIgnore`) and at all three ignore-list bypass sites (IC broadcast, OOC broadcast, and the buffered `/lifo` release). Pinned by `TestSenderBypassesIgnore`.
 
 ### Admin Role Hiding (`/admin hide`)
-`/admin hide` (`ADMIN`) lets an admin hide their `ADMIN` role from `/players`/`/gas` for non-admin viewers — their UID, showname, character and IPID are completely unaffected; only the `Mod: <name>` line is suppressed, exactly like a shadow mod is hidden from non-admin viewers. Unlike shadow-mod hiding, other **admins** still see the line, tagged `Mod: <name> (hidden)` so staff oversight is never lost.
+`/admin hide` (`ADMIN`) lets an admin hide their `ADMIN` role from `/players`/`/gas` for non-admin viewers — their UID, showname, character and IPID are completely unaffected; only the `Mod: <name>` line is suppressed, exactly like a shadow mod is hidden from non-admin viewers. Unlike shadow-mod hiding, other **admins** still see the line, tagged `Mod: <name> (hidden)` so staff oversight is never lost. `/mods` honours the same switch: a hidden admin is omitted from a non-admin's moderator listing and tagged `(hidden)` for admins.
 
 ```
 /admin hide      # ADMIN — hide your ADMIN role from other moderators

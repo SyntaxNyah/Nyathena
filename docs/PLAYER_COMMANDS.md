@@ -28,6 +28,7 @@ For moderator-only commands, see [`MOD_COMMANDS.md`](MOD_COMMANDS.md). For casin
 | `/ga` | List players in your current area |
 | `/gas` | List players in **all** areas (empty areas are hidden) |
 | `/players` | Same as /ga |
+| `/mods` | List online moderators and the area each one is in (shadow mods are hidden) |
 | `/find <name>` | Find which area a player is in |
 | `/pos [pos]` | Show or set your IC position (def, pro, wit, jud, hld, hlp) |
 | `/charselect` | Return to character select |

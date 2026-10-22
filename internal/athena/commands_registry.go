@@ -654,6 +654,14 @@ func initCommands() {
 			reqPerms: permissions.PermissionField["BAN_INFO"],
 			category: "moderation",
 		},
+		"mods": {
+			handler:  cmdMods,
+			minArgs:  0,
+			usage:    "Usage: /mods",
+			desc:     "Lists every online moderator and the area they are currently in.",
+			reqPerms: permissions.PermissionField["NONE"],
+			category: "general",
+		},
 		"mute": {
 			handler:  cmdMute,
 			minArgs:  1,
