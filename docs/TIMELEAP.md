@@ -3,8 +3,9 @@
 > Server: **Nyathena** (Athena fork)
 > Clients: **AsyncAO** (Go) and **LemmyAO** (TypeScript / aolib-ts)
 > Status: **groundwork landed** on the `timeleap` branch of all three repos.
-> POC scope: save/restore of a room snapshot. See §15 for what is deliberately
-> not done yet.
+> POC scope: save/restore of a room snapshot. See §12 for what is deliberately
+> not done yet. §13 specifies **D-Mail (`DM`)**, a sibling extension that is
+> **designed but not implemented**.
 
 **Companion documents**
 
@@ -371,7 +372,212 @@ constant.
   lacks the FL guard; consider fixing GP the same way once TL has proven the
   pattern (a separate, small PR).
 * `CHANGELOG`/release-notes entry, and a note in `NEW_FEATURES.md`.
-* Re-audit the FL path for other unknown C2S headers that may arrive as JSON.
+---
+
+## 13. D-Mail (`DM`) — sibling extension
+
+> **Status: specification only.** There is no `DM` codec, no `"dmail"` capability
+> and no `/dmail` command yet. This section exists so the design is reviewable
+> before it is built, and so the pieces it shares with TL (the divergence meter,
+> the snapshot bridge) are not invented twice.
+
+### 13.1 What D-Mail is
+
+In Steins;Gate a D-Mail is a text message pushed into the past through the
+PhoneWave. Changing the past shifts the **worldline**, and the worldline is
+identified by its **divergence number** (e.g. `1.048596`). Only a "Reading
+Steiner" holder remembers the worldline that was overwritten; everyone else
+experiences déjà vu.
+
+As a protocol feature, DM delivers a *message plus a worldline shift*, where TL
+delivers a *room state*. Same infrastructure, different payload:
+
+| | TL (implemented) | D-Mail (this section) |
+|---|---|---|
+| What travels | a room snapshot | a message + divergence pair |
+| Effect | restore state to a past point | deliver a message "from the past", shift the worldline |
+| Worldline change | optional (`divergence` is flavour) | **required** (`divergence_from` → `divergence_to`) |
+| Reader | TL-capable client re-stages | DM-capable client shows a popup + meter roll |
+| Memory | n/a | `reading_steiner` decides who sees the prior-worldline hint |
+| Scope | one area | one area (POC) |
+
+### 13.2 Header, capability, guards
+
+* Header `DM`, JSON-only, server→client, registered with
+  `packetutil.RegisterLocal("DM", dmCodec())` — the same call as `GP` and `TL`.
+* FL feature `"dmail"`, advertised beside `"grouppair"` and `"timeleap"`.
+* Guard, identical discipline to TL:
+
+```go
+func (client *Client) supportsDMail() bool {
+	return client.JSONMode() && client.SupportsFeature(dmFeature) // dmFeature = "dmail"
+}
+```
+
+One emission gate, one private-ack gate — no other place may decide to send `DM`.
+
+### 13.3 Packet schema
+
+```json
+{
+  "$header": "DM",
+  "id": "dm-0001",
+  "sender_uid": 100,
+  "sender_name": "Okabe",
+  "sent_at": 1700000000,
+  "target_time": 1699990000,
+  "target_area": "lab",
+  "subject": "Don't let Mayuri go out",
+  "body": "She dies at 18:00. Keep her inside.",
+  "divergence_from": "1.048596",
+  "divergence_to": "1.130205",
+  "reading_steiner": true,
+  "animation": "divergence_roll",
+  "snapshot_id": "wr-3",
+  "mode": "overlay"
+}
+```
+
+| Field | Type | Purpose |
+|---|---|---|
+| `id` | string | unique id, `dm-N`; also the `/dmail` handle |
+| `sender_uid` / `sender_name` | int / string | who sent it |
+| `sent_at` | int64 | real send time |
+| `target_time` | int64 | the past moment it claims to arrive at; **must be < `sent_at`** |
+| `target_area` | string | area name the message is scoped to |
+| `subject` / `body` | string | the message |
+| `divergence_from` / `divergence_to` | string | the worldline shift — the point of the packet |
+| `reading_steiner` | bool | whether recipients should be told they remember the prior worldline |
+| `animation` | `"divergence_roll"` \| `"popup_only"` \| `"none"` | client hint, never authority |
+| `snapshot_id` | string, optional | **bridge**: a TL snapshot in the same area to restore when the D-Mail lands |
+| `mode` | `"authoritative"` \| `"overlay"`, optional | how the bridge restores; defaults to the snapshot's mode |
+
+`snapshot_id`/`mode` are additions to the original design sketch. Without them a
+D-Mail can only *claim* the past changed; with them it can actually change it,
+using the TL machinery that already exists.
+
+### 13.4 Delivery modes
+
+**`broadcast`** — the popup goes to every DM-gated client in `target_area`.
+**`targeted`** — only the listed UIDs (max a handful; the POC uses one recipient).
+
+Both are gated per client, so a non-DM peer in the room sees nothing at all.
+
+### 13.5 Server pieces (file plan)
+
+| File | Change |
+|---|---|
+| `internal/athena/dm.go` | **new**: `DMPacket`, `dmCodec`, `supportsDMail`, the id store (TTL like TL), `sendDMail`, `cmdDMail`, `registerDMailCommand` |
+| `internal/athena/register.go` | `packetutil.RegisterLocal("DM", dmCodec())` after `TL` |
+| `internal/athena/netprotocol.go` | `"dmail"` in the FL literal |
+| `internal/athena/server.go` | `registerDMailCommand()` between `initCommands()` and `validateCommands()` |
+
+Commands (CM-gated — a D-Mail rewrites the room's worldline):
+
+```
+/dmail list
+/dmail send <subject> | <body> [broadcast|targeted] [<uid>]
+    -- divergence_to defaults to a configured next worldline, target_time to now
+/dmail send ... snapshot <wr-id>     -- also restore that snapshot when it lands
+```
+
+On send: validate `target_time < now`, resolve `target_area` (defaults to the
+issuer's), mint `dm-N`, then `sendDMail` to gated clients. If `snapshot_id` is
+set, look it up in the same area and drive the TL restore (`applyTimeLeapRoom`
+for `authoritative`, nothing for `overlay`) — the DM is the cause, the TL is the
+effect. Broadcast the popup **before** the restore so the client can animate the
+roll while the room changes under it.
+
+### 13.6 Divergence numbers
+
+The number is the packet's payload and its UI. In the source material it is a
+leading digit and six decimals, and the leading digit names the **attractor
+field**:
+
+| Range | Field |
+|---|---|
+| `0.000000`–`0.999999` | Alpha |
+| `1.000000`–`1.999999` | Beta |
+| `2.000000`–`2.999999` | Gamma |
+| `3.000000`–`3.999999` | Delta |
+| `4.000000`–`4.999999` | Epsilon |
+| `5.000000`–`5.999999` | Omega |
+| `1.048596` | Steins Gate (the "true" worldline) |
+
+For the POC the value is **authored**, not computed: the sender (or a server
+config default) supplies `divergence_to`. Deriving it from game state, and
+enforcing attractor-field transitions (no Alpha → Omega jumps), are both
+explicitly deferred — see §13.9.
+
+Server-side validation is therefore narrow: the string must parse as
+`d.dddddd`, and `divergence_from != divergence_to` (a D-Mail that changes nothing
+is a bug, not a shift).
+
+### 13.7 Reading Steiner
+
+`reading_steiner` is a **client rendering hint**, not a server permission:
+
+* the DM packet is identical for every recipient;
+* each client decides what to do with the flag, based on its own holder state
+  (a per-client preference, a role, or simply "always show the hint");
+* the server does not track who is a holder in the POC, and must not: the flag
+  describes the fiction, not access.
+
+Suggested client rendering (both clients): RS holder → meter roll plus a badge
+naming the prior worldline (`1.048596 → 1.130205`); non-holder → the same roll,
+no prior number, one line of flavour ("you feel like you have seen this before").
+
+### 13.8 The D-Mail ↔ TL bridge
+
+* **Message only** — `snapshot_id` absent. Popup + roll. Nothing server-side
+  changes; the worldline shifted only in the fiction.
+* **Message that changes the past** — `snapshot_id` present. The server restores
+  that snapshot (`mode` decides whether the room itself rolls back or only
+  DM/TL-capable clients do), then sends `DM`.
+
+Ordering matters: `DM` first, `TL` second. The popup and the roll are the
+*explanation*; the restore is the *effect*. Reversing them makes the room change
+before anyone is told why. On the client the two arrive as separate packets, so
+the TL restore must not wipe a popup that is already on screen — see each client
+doc.
+
+### 13.9 Deferred (POC non-goals)
+
+| Item | Decision |
+|---|---|
+| Global (cross-area) D-Mails | deferred — room-scoped |
+| Scheduled delivery (arrives later in real time) | deferred — immediate |
+| Inbox / history / replay UI | deferred — popup only |
+| Computing `divergence_to` from game state | deferred — authored |
+| Attractor-field enforcement | deferred — any `from`→`to` allowed |
+| Per-client Reading Steiner registry | deferred — client-side hint only |
+| Reply/threading between D-Mails | deferred — not modelled |
+
+### 13.10 Tests to write when DM is built
+
+1. `TestDMailRequiresBothGuards` — the four-case table, same shape as TL's.
+2. `TestDMailRejectsFutureTargetTime` — `target_time >= sent_at` is refused.
+3. `TestDMailRejectsBadDivergence` — non-numeric or `from == to` refused.
+4. `TestDMailBroadcastSkipsUngatedPeers` — three recipients, only the gated two
+   receive `DM`.
+5. `TestDMailBridgeRestoresSnapshot` — with `snapshot_id`, the room's background
+   changes and `TL` follows `DM` (assert ordering).
+6. `TestDMailFantaEncodeErrors` — the codec refuses FantaCode like TL's does.
+
+### 13.11 Where the visuals live
+
+Nyathena renders nothing. The meter and the popup are client features:
+
+* **LemmyAO** — `src/divergenceMeter.ts` already implements the roll
+  (`animateDivergence(target, ms)`), and `stateRestore.ts` already re-stages a TL
+  snapshot, so DM on the browser side is mostly a popup + a call into those.
+* **AsyncAO** — the meter does not exist yet; it is listed as P1 in that client's
+  doc. A DM popup also needs an overlay, which the client already has for
+  notices.
+
+Both client docs carry a D-Mail section with their own file plan.
+
+
 
 
 
