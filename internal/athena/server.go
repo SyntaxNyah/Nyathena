@@ -577,6 +577,7 @@ func NewServer(conf *settings.Config) (*Server, error) {
 	LogVoiceConfig()
 
 	initCommands()
+	registerTimeLeapCommand()
 	validateCommands()
 	// Load console-authored custom commands (opt-in via enable_custom_commands).
 	// Non-fatal: a malformed definition file is logged and the server continues

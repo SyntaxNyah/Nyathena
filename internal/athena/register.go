@@ -28,6 +28,11 @@ func init() {
 	// the both-wire Register) is the right registration.
 	packetutil.RegisterLocal("GP", gpCodec())
 
+	// TL is the JSON-only TimeLeap snapshot (server→client). Same story as GP:
+	// outbound-only, so it stays out of aolib's inbound registry. The clients
+	// (AsyncAO, LemmyAO) register the header themselves to DECODE it.
+	packetutil.RegisterLocal("TL", tlCodec())
+
 	// Voice chat (VS_*) — removed from the canonical spec (aa8d0fb); registered
 	// here as Nyathena server extensions, both-wire like TT.
 	packetutil.Register[*VS_CAPS]("VS_CAPS", vsCapsCodec())
