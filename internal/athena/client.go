@@ -1806,12 +1806,46 @@ func (client *Client) SetVersion(s string) {
 	client.version = s
 }
 
-// SetFeatures records the client's advertised feature flags (client→server FL).
+// SetFeatures records the client's advertised feature flags (client→server FL),
+// replacing whatever was there.
+//
+// Deprecated: capability advertisement is additive — a peer may send one FL
+// frame per feature, and replacing the set erases whichever frame arrived
+// first. Use AddFeatures. Kept for tests that want an exact starting set.
 func (client *Client) SetFeatures(features []string) {
 	client.mu.Lock()
 	defer client.mu.Unlock()
 	client.features = make(map[string]bool, len(features))
 	for _, f := range features {
+		if f = strings.TrimSpace(f); f != "" {
+			client.features[f] = true
+		}
+	}
+}
+
+// AddFeatures unions the advertised feature flags into the client's set.
+//
+// The union (rather than a replace) is required because peers advertise
+// incrementally: AsyncAO replies with one FL frame carrying every feature it
+// saw, LemmyAO sends one raw frame per feature, and a re-advert must never
+// erase a capability advertised earlier in the session. AO2's own
+// BASE_FEATURE_SET accumulates for the same reason.
+//
+// An empty frame is a no-op, so malformed or empty adverts can never clear the
+// set. A client also cannot retract a feature: the code behind a capability is
+// compiled in either way, so honouring a retraction would only break a peer that
+// re-advertises a smaller set by mistake.
+func (client *Client) AddFeatures(features ...string) {
+	client.mu.Lock()
+	defer client.mu.Unlock()
+	for _, f := range features {
+		f = strings.TrimSpace(f)
+		if f == "" {
+			continue
+		}
+		if client.features == nil {
+			client.features = make(map[string]bool, len(features))
+		}
 		client.features[f] = true
 	}
 }

@@ -174,7 +174,7 @@ func pktId(client *Client, p *aolib.Packet) {
 // features it supports (e.g. "grouppair"). This makes capability negotiation
 // symmetric and needs no new packet type.
 func pktFL(client *Client, p *aolib.Packet) {
-	client.SetFeatures(p.Body)
+	client.AddFeatures(p.Body...) // additive: see Client.AddFeatures
 }
 
 // Handles askchaa#%

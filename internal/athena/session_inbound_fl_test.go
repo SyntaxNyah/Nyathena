@@ -45,6 +45,45 @@ func TestFLAdvertMultipleFeatures(t *testing.T) {
 	}
 }
 
+// TestFLAdvertSurvivesSecondFrame verifies feature advertisement is additive.
+// AsyncAO packs every feature into one frame, but LemmyAO sends one frame per
+// feature, and a replace-on-advert would erase whichever arrived first.
+func TestFLAdvertSurvivesSecondFrame(t *testing.T) {
+	c := &Client{}
+	c.handleUnknownHeader("FL", []byte("FL#grouppair#"))
+	c.handleUnknownHeader("FL", []byte(`{"$header":"FL","features":["timeleap"]}`))
+
+	for _, f := range []string{"grouppair", "timeleap"} {
+		if !c.SupportsFeature(f) {
+			t.Fatalf("second FL advert erased %q", f)
+		}
+	}
+}
+
+// TestEmptyFLDoesNotClear verifies an empty advert is a no-op rather than a
+// retraction. "FL#" is the wire form after the read loop strips '%'.
+func TestEmptyFLDoesNotClear(t *testing.T) {
+	c := &Client{}
+	c.handleUnknownHeader("FL", []byte("FL#timeleap#"))
+	c.handleUnknownHeader("FL", []byte("FL#"))
+
+	if !c.SupportsFeature("timeleap") {
+		t.Fatal("empty FL advert cleared the feature set")
+	}
+}
+
+// TestFLMalformedJSONDoesNotClear verifies a JSON FL whose features field has
+// the wrong type cannot fall through to the positional path and clear the set.
+func TestFLMalformedJSONDoesNotClear(t *testing.T) {
+	c := &Client{}
+	c.handleUnknownHeader("FL", []byte("FL#timeleap#"))
+	c.handleUnknownHeader("FL", []byte(`{"$header":"FL","features":123}`))
+
+	if !c.SupportsFeature("timeleap") {
+		t.Fatal("malformed JSON FL advert cleared the feature set")
+	}
+}
+
 // TestFLJSONSkipsNonFLHeader verifies a JSON frame whose $header is not FL is
 // not mistaken for an advert.
 func TestFLJSONSkipsNonFLHeader(t *testing.T) {
@@ -55,3 +94,4 @@ func TestFLJSONSkipsNonFLHeader(t *testing.T) {
 		t.Fatal("non-FL JSON body was treated as an FL advert")
 	}
 }
+

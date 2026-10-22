@@ -110,7 +110,7 @@ func (client *Client) handleUnknownHeader(header string, wire []byte) {
 
 	case "FL":
 		if features, ok := jsonFLFeatures(wire); ok {
-			client.SetFeatures(features)
+			client.AddFeatures(features...)
 			return
 		}
 		pkt, err := aolib.NewPacket(strings.TrimSuffix(string(wire), "%"))
