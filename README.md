@@ -86,6 +86,24 @@ Economy: `/chips`, `/chips top`, `/chips give`, `/richest`. Earn passively via j
 
 Shop (`/shop`): 30 cosmetic tags (1,000–10,000,000 chips), job cooldown reduction passes, job reward bonus passes.
 
+### Pebble Mode (`pebble_mode = true`)
+
+A separate, no-stakes economy for servers that want activities without gambling.
+
+- **Pebbles** are stored per IPID in SQLite. They are never wagered, lost, traded or awarded for playtime.
+- **Earning:** `/daily` (+3, 20h), `/explore` (+2, 2h), `/cast` (+1, 1h), jobs, unscramble events, and random world events.
+- **Casual mini-games:** `/minigame slots`, `/minigame blackjack`, `/minigame crash` — high scores and streaks only. They award no Pebbles and use no chips.
+- **Duck pond:** `/pond feed` is free and awards nothing. The ducks may hand you a deterministic fortune-cookie quote.
+- **Quiet activities:** `/cloudwatch`, `/stargaze`, `/nap` and `/fortune` are pure flavour. No rewards, no RNG outcomes.
+- **Shop:** existing non-gambling tags are free for everyone with `/settag`. Only a couple of cheap Pebble tags are sold: `/shop activity`, `/shop community`.
+- **World events:** once per day at 1-in-5 odds, a Wrecked Ship spawns in a random public area with players. `/claimwreck` or `/claim ship` wins. Smaller ambient events (lost satchel, wandering merchant, meteor shower, picnic basket) also spawn. All loot is a bonus; nothing is risked.
+- **Alerts:** `/events off` hides global event alerts for you; `/events on` restores them.
+- **Staff:** `/pebbleset minigames|events true|false` per area, `/grantpebbles <uid> <amount>`.
+- **Coexistence:** `casino_enabled` / `enable_casino` are independent. If both are on, the legacy Casino keeps its chips and bets while `/minigame` remains a separate no-stakes surface.
+
+Pebble Mode is enabled in every area by default. Staff can disable mini-games or world events in a specific area with `/pebbleset`.
+
+
 ### Discord Bot Integration
 
 A full Discord bot with slash commands, mod-bridge embeds, area/player listings, and live security toggles — so moderators can respond to incidents without being logged into the AO server.

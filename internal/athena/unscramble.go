@@ -31,7 +31,7 @@ import (
 // ── Constants ────────────────────────────────────────────────────────────────
 
 const (
-	unscrambleReward      = 10               // chips awarded for a correct guess
+	unscrambleReward      = 10               // Pebbles (or chips in legacy casino mode) awarded for a correct guess
 	unscrambleMinInterval = 30 * time.Minute // minimum time between events
 	unscrambleMaxInterval = 3 * time.Hour    // maximum time between events (30 min-3 hr random window)
 	unscrambleTimeout     = 5 * time.Minute  // window to answer before the puzzle expires
@@ -139,7 +139,7 @@ func startUnscrambleLoop() {
 		delay := randomInterval(unscrambleMinInterval, unscrambleMaxInterval)
 		time.Sleep(delay)
 
-		if config == nil || !config.EnableCasino {
+		if config == nil || (!config.CasinoOn() && !config.PebbleOn()) {
 			continue
 		}
 		// Only start a new round when no round is currently active.
@@ -162,10 +162,10 @@ func startUnscrambleLoop() {
 		unscramble.mu.Unlock()
 
 		sendGlobalServerMessage(fmt.Sprintf(
-			"🔤 UNSCRAMBLE EVENT! Unscramble this word in IC chat to win %d chips!\n"+
+			"🔤 UNSCRAMBLE EVENT! Unscramble this word in IC chat to win %d %s!\n"+
 				"   Scrambled: %s\n"+
 				"   You have %d minutes. First correct answer wins!",
-			unscrambleReward, strings.ToUpper(shuffled), int(unscrambleTimeout.Minutes()),
+			unscrambleReward, pebbleCurrencyName(), strings.ToUpper(shuffled), int(unscrambleTimeout.Minutes()),
 		))
 		logger.LogInfof("Unscramble: new puzzle posted — scramble=%q answer=%q", shuffled, word)
 
@@ -217,10 +217,10 @@ func unscrambleOnIC(client *Client, msgText string) {
 	ipid := client.Ipid()
 	displayName := client.OOCName()
 
-	// Award chips.
-	newBal, chipErr := db.AddChips(ipid, unscrambleReward)
-	if chipErr != nil {
-		logger.LogErrorf("unscramble: AddChips failed for %v: %v", ipid, chipErr)
+	// Award the active activity currency (Pebbles in Pebble Mode).
+	newBal, currency, awardErr := awardActivityReward(ipid, unscrambleReward)
+	if awardErr != nil {
+		logger.LogErrorf("unscramble: reward failed for %v: %v", ipid, awardErr)
 	}
 
 	// Record win for leaderboard.
@@ -229,13 +229,13 @@ func unscrambleOnIC(client *Client, msgText string) {
 	}
 
 	sendGlobalServerMessage(fmt.Sprintf(
-		"🎉 UNSCRAMBLE SOLVED! %v typed \"%s\" in %.2fs — +%d chips awarded!",
-		displayName, answer, elapsed.Seconds(), unscrambleReward,
+		"🎉 UNSCRAMBLE SOLVED! %v typed \"%s\" in %.2fs — +%d %s awarded!",
+		displayName, answer, elapsed.Seconds(), unscrambleReward, currency,
 	))
-	if chipErr == nil {
+	if awardErr == nil {
 		client.SendServerMessage(fmt.Sprintf(
-			"🔤 Correct! You won the unscramble challenge. +%d chips | Balance: %d chips",
-			unscrambleReward, newBal,
+			"🔤 Correct! You won the unscramble challenge. +%d %s | Balance: %d %s",
+			unscrambleReward, currency, newBal, currency,
 		))
 	}
 	logger.LogInfof("Unscramble: solved by %v (ipid=%v) answer=%q", displayName, ipid, answer)
@@ -259,7 +259,7 @@ func cmdUnscramble(client *Client, args []string, _ string) {
 
 		msg := fmt.Sprintf("🔤 Your unscramble wins: %d", wins)
 		if active {
-			msg += fmt.Sprintf("\n   Active puzzle: %s — type the answer in IC chat to win %d chips!", strings.ToUpper(scrambled), unscrambleReward)
+			msg += fmt.Sprintf("\n   Active puzzle: %s — type the answer in IC chat to win %d %s!", strings.ToUpper(scrambled), unscrambleReward, pebbleCurrencyName())
 		} else {
 			msg += "\n   No active unscramble puzzle right now."
 		}

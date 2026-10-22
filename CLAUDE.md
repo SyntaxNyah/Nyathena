@@ -135,7 +135,11 @@ Copy `config_sample/` to `config/` before first run.
 | `raid_guard_slur_severe_weight` | `40` | Raid-guard points for a `severe`-tier word hit |
 | `raid_guard_slur_flagged_weight` | `20` | Raid-guard points for a `default`/`watch`-tier word hit |
 | `iphub_api_key` | `""` | IPHub API key for VPN/proxy detection |
-| `enable_casino` | `false` | Enable casino and player account system |
+| `enable_casino` | `false` | Legacy alias for `casino_enabled` |
+| `casino_enabled` | `false` | Enable the legacy Nyathena Chips casino |
+| `pebble_mode` | `false` | Enable Pebble Mode: no-stakes activities, mini-games, duck pond and world events |
+| `pebble_event_chance` | `5` | Daily Wrecked Ship chance is 1 in N |
+| `pebble_event_timeout_minutes` | `5` | Minutes before an unclaimed world event disappears |
 | `register_captcha` | `true` | Require captcha on `/register` |
 | `join_captcha` | `false` | Require a new IPID to answer a question before it can speak (see "Join Captcha" below) |
 | `join_captcha_strikes` | `3` | Failures (blocked messages *and* wrong answers, one shared budget) before the action fires |

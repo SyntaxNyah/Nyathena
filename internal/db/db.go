@@ -134,9 +134,17 @@ const defaultChipBalance = 500
 // inflation across all casino games.
 const MaxChipBalance = 10_000_000
 
+// MaxPebbleBalance is the hard upper limit on a Pebble balance. Pebbles are
+// cosmetic/activity currency; the cap only exists to keep arithmetic bounded.
+const MaxPebbleBalance = 1_000_000
+
+// tempTagIDPrefix marks a temporary event tag in PLAYER_ACTIVE_TAG. Such tags
+// are checked against PEBBLE_TEMP_TAGS and expire automatically.
+const tempTagIDPrefix = "tag_temp_"
+
 // Database version.
 // This should be incremented whenever changes are made to the DB that require existing databases to upgrade.
-const ver = 23
+const ver = 28
 
 // MaxFavourites is the maximum number of favourite characters a player can save.
 const MaxFavourites = 100
@@ -166,6 +174,21 @@ type PersistentPunishment struct {
 type ChipEntry struct {
 	Username string
 	Balance  int64
+}
+
+// PebbleEntry holds one row from the PEBBLES leaderboard query.
+type PebbleEntry struct {
+	Username string
+	IPID     string
+	Balance  int64
+}
+
+// PebbleScoreEntry holds one row from the PEBBLE_HIGH_SCORES query.
+type PebbleScoreEntry struct {
+	GAME     string
+	IPID     string
+	Username string
+	Score    int64
 }
 
 // PlaytimeEntry holds one row from the playtime leaderboard query.
@@ -211,7 +234,7 @@ func Open() error {
 	if err != nil {
 		return err
 	}
-	_, err = db.Exec("CREATE TABLE IF NOT EXISTS USERS(USERNAME TEXT PRIMARY KEY, PASSWORD TEXT, PERMISSIONS TEXT, IPID TEXT NOT NULL DEFAULT '', GAMBLE_HIDE INTEGER NOT NULL DEFAULT 0, ACTIVE_TAG TEXT NOT NULL DEFAULT '', USERNAME_RESETS INTEGER NOT NULL DEFAULT 0)")
+	_, err = db.Exec("CREATE TABLE IF NOT EXISTS USERS(USERNAME TEXT PRIMARY KEY, PASSWORD TEXT, PERMISSIONS TEXT, IPID TEXT NOT NULL DEFAULT '', GAMBLE_HIDE INTEGER NOT NULL DEFAULT 0, EVENT_ALERTS_HIDE INTEGER NOT NULL DEFAULT 0, ACTIVE_TAG TEXT NOT NULL DEFAULT '', USERNAME_RESETS INTEGER NOT NULL DEFAULT 0)")
 	if err != nil {
 		return err
 	}
@@ -247,6 +270,54 @@ func Open() error {
 		IPID    TEXT    PRIMARY KEY,
 		BALANCE INTEGER NOT NULL DEFAULT 100
 	)`)
+	if err != nil {
+		return err
+	}
+	_, err = db.Exec(`CREATE TABLE IF NOT EXISTS PEBBLES(
+		IPID    TEXT    PRIMARY KEY,
+		BALANCE INTEGER NOT NULL DEFAULT 0
+	)`)
+	if err != nil {
+		return err
+	}
+	_, err = db.Exec(`CREATE TABLE IF NOT EXISTS PEBBLE_HIGH_SCORES(
+		GAME        TEXT    NOT NULL,
+		IPID        TEXT    NOT NULL,
+		SCORE       INTEGER NOT NULL DEFAULT 0,
+		ACHIEVED_AT INTEGER NOT NULL DEFAULT 0,
+		PRIMARY KEY (GAME, IPID)
+	)`)
+	if err != nil {
+		return err
+	}
+	_, err = db.Exec(`CREATE TABLE IF NOT EXISTS PEBBLE_TEMP_TAGS(
+		IPID       TEXT    NOT NULL,
+		TAG_ID     TEXT    NOT NULL,
+		EXPIRES_AT INTEGER NOT NULL,
+		PRIMARY KEY (IPID, TAG_ID)
+	)`)
+	if err != nil {
+		return err
+	}
+	_, err = db.Exec(`CREATE TABLE IF NOT EXISTS PEBBLE_EVENT_LOG(
+		ID         INTEGER PRIMARY KEY AUTOINCREMENT,
+		EVENT      TEXT    NOT NULL,
+		IPID       TEXT    NOT NULL,
+		REWARD     TEXT    NOT NULL,
+		CLAIMED_AT INTEGER NOT NULL
+	)`)
+	if err != nil {
+		return err
+	}
+	_, err = db.Exec("CREATE INDEX IF NOT EXISTS idx_pebbles_balance ON PEBBLES(BALANCE DESC)")
+	if err != nil {
+		return err
+	}
+	_, err = db.Exec("CREATE INDEX IF NOT EXISTS idx_pebble_scores_game ON PEBBLE_HIGH_SCORES(GAME, SCORE DESC)")
+	if err != nil {
+		return err
+	}
+	_, err = db.Exec("CREATE INDEX IF NOT EXISTS idx_pebble_temp_expiry ON PEBBLE_TEMP_TAGS(EXPIRES_AT)")
 	if err != nil {
 		return err
 	}
@@ -819,6 +890,22 @@ func upgradeDB(v int) error {
 		if _, err := db.Exec("PRAGMA user_version = 27"); err != nil {
 			return err
 		}
+		fallthrough
+	case 27:
+		// EVENT_ALERTS_HIDE persists the per-account opt-out for global
+		// world-event announcements (the Wrecked Ship and friends). Fresh
+		// databases get the column from the CREATE TABLE in Open(); this
+		// migration is guarded because USERS may not exist yet.
+		var usersExists int
+		db.QueryRow("SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='USERS'").Scan(&usersExists) //nolint:errcheck
+		if usersExists > 0 {
+			if _, err := db.Exec("ALTER TABLE USERS ADD COLUMN EVENT_ALERTS_HIDE INTEGER NOT NULL DEFAULT 0"); err != nil {
+				return err
+			}
+		}
+		if _, err := db.Exec("PRAGMA user_version = 28"); err != nil {
+			return err
+		}
 	}
 	return nil
 }
@@ -1164,6 +1251,74 @@ func LinkIPIDToUser(username, ipid string) error {
 		// Invalidate cached values for both IPIDs so subsequent reads hit the DB.
 		chipCacheInvalidate(ipid)
 		chipCacheInvalidate(oldIPID)
+	}
+
+	// Migrate Pebble balances, high scores and unexpired temporary tags so a
+	// player who reconnects from a new IP keeps everything they earned.
+	var oldPebbles int64
+	switch err := db.QueryRow("SELECT COALESCE(BALANCE, 0) FROM PEBBLES WHERE IPID = ?", oldIPID).Scan(&oldPebbles); {
+	case err == sql.ErrNoRows:
+		oldPebbles = 0
+	case err != nil:
+		return err
+	}
+	if oldPebbles > 0 {
+		if _, err := db.Exec(`
+			INSERT INTO PEBBLES(IPID, BALANCE) VALUES(?, ?)
+			ON CONFLICT(IPID) DO UPDATE SET BALANCE = MIN(PEBBLES.BALANCE + excluded.BALANCE, ?)`,
+			ipid, oldPebbles, MaxPebbleBalance); err != nil {
+			return err
+		}
+		if _, err := db.Exec("UPDATE PEBBLES SET BALANCE = 0 WHERE IPID = ?", oldIPID); err != nil {
+			return err
+		}
+	}
+	// High scores: keep the best score per game across both IPIDs.
+	scoreRows, err := db.Query("SELECT GAME, SCORE FROM PEBBLE_HIGH_SCORES WHERE IPID = ?", oldIPID)
+	if err != nil {
+		return err
+	}
+	type scoreRow struct {
+		game  string
+		score int64
+	}
+	var oldScores []scoreRow
+	for scoreRows.Next() {
+		var r scoreRow
+		if err := scoreRows.Scan(&r.game, &r.score); err != nil {
+			scoreRows.Close()
+			return err
+		}
+		oldScores = append(oldScores, r)
+	}
+	scoreRows.Close()
+	for _, r := range oldScores {
+		if _, err := db.Exec(`
+			INSERT INTO PEBBLE_HIGH_SCORES(GAME, IPID, SCORE, ACHIEVED_AT) VALUES(?, ?, ?, ?)
+			ON CONFLICT(GAME, IPID) DO UPDATE SET
+				SCORE = MAX(PEBBLE_HIGH_SCORES.SCORE, excluded.SCORE),
+				ACHIEVED_AT = excluded.ACHIEVED_AT
+			WHERE excluded.SCORE > PEBBLE_HIGH_SCORES.SCORE`,
+			r.game, ipid, r.score, time.Now().UTC().Unix()); err != nil {
+			return err
+		}
+	}
+	if len(oldScores) > 0 {
+		if _, err := db.Exec("DELETE FROM PEBBLE_HIGH_SCORES WHERE IPID = ?", oldIPID); err != nil {
+			return err
+		}
+	}
+	// Temporary tags that have not expired follow the player.
+	if _, err := db.Exec(`
+		INSERT INTO PEBBLE_TEMP_TAGS(IPID, TAG_ID, EXPIRES_AT)
+		SELECT ?, TAG_ID, EXPIRES_AT FROM PEBBLE_TEMP_TAGS
+		WHERE IPID = ? AND EXPIRES_AT > ?
+		ON CONFLICT(IPID, TAG_ID) DO UPDATE SET EXPIRES_AT = MAX(PEBBLE_TEMP_TAGS.EXPIRES_AT, excluded.EXPIRES_AT)`,
+		ipid, oldIPID, time.Now().UTC().Unix()); err != nil {
+		return err
+	}
+	if _, err := db.Exec("DELETE FROM PEBBLE_TEMP_TAGS WHERE IPID = ?", oldIPID); err != nil {
+		return err
 	}
 
 	// Migrate the active cosmetic tag from the old IPID to the new IPID so the
@@ -2058,6 +2213,261 @@ func GetTopChipBalances(n int) ([]ChipEntry, error) {
 	return entries, rows.Err()
 }
 
+// ── Pebbles ───────────────────────────────────────────────────────────────────
+
+// EnsurePebbleBalance ensures an IPID exists in the PEBBLES table. New rows
+// start at zero: Pebbles are earned through activities, never seeded.
+func EnsurePebbleBalance(ipid string) error {
+	if db == nil {
+		return nil
+	}
+	_, err := db.Exec("INSERT OR IGNORE INTO PEBBLES(IPID, BALANCE) VALUES(?, 0)", ipid)
+	return err
+}
+
+// GetPebbleBalance returns the current Pebble balance for an IPID. Unknown
+// IPIDs return 0 without error.
+func GetPebbleBalance(ipid string) (int64, error) {
+	if db == nil {
+		return 0, nil
+	}
+	var balance int64
+	err := db.QueryRow("SELECT BALANCE FROM PEBBLES WHERE IPID = ?", ipid).Scan(&balance)
+	if err == sql.ErrNoRows {
+		return 0, nil
+	}
+	return balance, err
+}
+
+// AddPebbles adds amount to an IPID's Pebble balance and returns the new
+// balance. The row is created on demand. The result is capped at
+// MaxPebbleBalance.
+func AddPebbles(ipid string, amount int64) (int64, error) {
+	if db == nil {
+		return 0, nil
+	}
+	if amount <= 0 {
+		return 0, fmt.Errorf("amount must be positive")
+	}
+	var newBalance int64
+	err := db.QueryRow(`
+		INSERT INTO PEBBLES(IPID, BALANCE) VALUES(?, MIN(?, ?))
+		ON CONFLICT(IPID) DO UPDATE SET BALANCE = MIN(PEBBLES.BALANCE + excluded.BALANCE, ?)
+		RETURNING BALANCE`,
+		ipid, amount, MaxPebbleBalance, MaxPebbleBalance).Scan(&newBalance)
+	if err != nil {
+		return 0, err
+	}
+	return newBalance, nil
+}
+
+// SpendPebbles deducts amount from an IPID's Pebble balance. It returns the
+// current balance on insufficient funds without modifying the row.
+func SpendPebbles(ipid string, amount int64) (int64, error) {
+	if db == nil {
+		return 0, nil
+	}
+	if amount <= 0 {
+		return 0, fmt.Errorf("amount must be positive")
+	}
+	var newBalance int64
+	err := db.QueryRow(
+		"UPDATE PEBBLES SET BALANCE = BALANCE - ? WHERE IPID = ? AND BALANCE >= ? RETURNING BALANCE",
+		amount, ipid, amount).Scan(&newBalance)
+	if err == sql.ErrNoRows {
+		var cur int64
+		_ = db.QueryRow("SELECT BALANCE FROM PEBBLES WHERE IPID = ?", ipid).Scan(&cur)
+		return cur, fmt.Errorf("insufficient pebbles")
+	}
+	if err != nil {
+		return 0, err
+	}
+	return newBalance, nil
+}
+
+// GetPebbleBalancesByIPIDs returns a map of IPID → Pebble balance for all
+// given IPIDs in a single query. Missing rows are absent from the result.
+func GetPebbleBalancesByIPIDs(ipids []string) (map[string]int64, error) {
+	if db == nil || len(ipids) == 0 {
+		return map[string]int64{}, nil
+	}
+	placeholders := make([]string, len(ipids))
+	args := make([]any, len(ipids))
+	for i, id := range ipids {
+		placeholders[i] = "?"
+		args[i] = id
+	}
+	rows, err := db.Query(
+		"SELECT IPID, BALANCE FROM PEBBLES WHERE IPID IN ("+strings.Join(placeholders, ",")+")",
+		args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	m := make(map[string]int64, len(ipids))
+	for rows.Next() {
+		var ipid string
+		var bal int64
+		if err := rows.Scan(&ipid, &bal); err != nil {
+			return m, err
+		}
+		m[ipid] = bal
+	}
+	return m, rows.Err()
+}
+
+// GetTopPebbleBalances returns the top n Pebble holders. Linked account
+// usernames are resolved when available; anonymous IPIDs are still included
+// so active-but-unregistered players appear on the board.
+func GetTopPebbleBalances(n int) ([]PebbleEntry, error) {
+	if db == nil || n <= 0 {
+		return nil, nil
+	}
+	rows, err := db.Query(`
+		SELECT COALESCE(u.USERNAME, ''), p.IPID, p.BALANCE
+		FROM PEBBLES p
+		LEFT JOIN USERS u ON u.IPID = p.IPID
+		WHERE p.BALANCE > 0
+		ORDER BY p.BALANCE DESC LIMIT ?`, n)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	entries := make([]PebbleEntry, 0, n)
+	for rows.Next() {
+		var e PebbleEntry
+		if err := rows.Scan(&e.Username, &e.IPID, &e.Balance); err != nil {
+			return entries, err
+		}
+		entries = append(entries, e)
+	}
+	return entries, rows.Err()
+}
+
+// RecordPebbleHighScore records a score for game if it beats the player's
+// previous best. Returns whether it was a new personal best and the stored best.
+func RecordPebbleHighScore(game, ipid string, score int64) (bool, int64, error) {
+	if db == nil {
+		return false, 0, nil
+	}
+	now := time.Now().UTC().Unix()
+	res, err := db.Exec(`
+		INSERT INTO PEBBLE_HIGH_SCORES(GAME, IPID, SCORE, ACHIEVED_AT)
+		VALUES(?, ?, ?, ?)
+		ON CONFLICT(GAME, IPID) DO UPDATE SET
+			SCORE = excluded.SCORE,
+			ACHIEVED_AT = excluded.ACHIEVED_AT
+		WHERE excluded.SCORE > PEBBLE_HIGH_SCORES.SCORE`,
+		game, ipid, score, now)
+	if err != nil {
+		return false, 0, err
+	}
+	affected, _ := res.RowsAffected()
+	var best int64
+	if err := db.QueryRow(
+		"SELECT COALESCE(SCORE, 0) FROM PEBBLE_HIGH_SCORES WHERE GAME = ? AND IPID = ?",
+		game, ipid).Scan(&best); err != nil && err != sql.ErrNoRows {
+		return affected > 0, 0, err
+	}
+	return affected > 0, best, nil
+}
+
+// GetTopPebbleScores returns the top n scores for one game.
+func GetTopPebbleScores(game string, n int) ([]PebbleScoreEntry, error) {
+	if db == nil || n <= 0 {
+		return nil, nil
+	}
+	rows, err := db.Query(`
+		SELECT s.GAME, s.IPID, COALESCE(u.USERNAME, ''), s.SCORE
+		FROM PEBBLE_HIGH_SCORES s
+		LEFT JOIN USERS u ON u.IPID = s.IPID
+		WHERE s.GAME = ?
+		ORDER BY s.SCORE DESC LIMIT ?`, game, n)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	entries := make([]PebbleScoreEntry, 0, n)
+	for rows.Next() {
+		var e PebbleScoreEntry
+		if err := rows.Scan(&e.GAME, &e.IPID, &e.Username, &e.Score); err != nil {
+			return entries, err
+		}
+		entries = append(entries, e)
+	}
+	return entries, rows.Err()
+}
+
+// GrantTempTag grants a temporary cosmetic tag and makes it active. Expiry is
+// checked lazily by GetActiveTag.
+func GrantTempTag(ipid, tagID string, expiresAt time.Time) error {
+	if db == nil {
+		return nil
+	}
+	if tagID == "" || expiresAt.IsZero() {
+		return fmt.Errorf("invalid temporary tag")
+	}
+	tx, err := db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback() //nolint:errcheck
+	if _, err := tx.Exec(`
+		INSERT INTO PEBBLE_TEMP_TAGS(IPID, TAG_ID, EXPIRES_AT) VALUES(?, ?, ?)
+		ON CONFLICT(IPID, TAG_ID) DO UPDATE SET EXPIRES_AT = excluded.EXPIRES_AT`,
+		ipid, tagID, expiresAt.UTC().Unix()); err != nil {
+		return err
+	}
+	if _, err := tx.Exec(`
+		INSERT INTO PLAYER_ACTIVE_TAG(IPID, TAG_ID) VALUES(?, ?)
+		ON CONFLICT(IPID) DO UPDATE SET TAG_ID = excluded.TAG_ID`, ipid, tagID); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
+// GetTempTagExpiry returns the expiry time for a temporary tag.
+func GetTempTagExpiry(ipid, tagID string) (time.Time, bool, error) {
+	if db == nil {
+		return time.Time{}, false, nil
+	}
+	var exp int64
+	err := db.QueryRow(
+		"SELECT EXPIRES_AT FROM PEBBLE_TEMP_TAGS WHERE IPID = ? AND TAG_ID = ?",
+		ipid, tagID).Scan(&exp)
+	if err == sql.ErrNoRows {
+		return time.Time{}, false, nil
+	}
+	if err != nil {
+		return time.Time{}, false, err
+	}
+	return time.Unix(exp, 0).UTC(), true, nil
+}
+
+// PurgeExpiredTempTags removes expired temporary tag rows.
+func PurgeExpiredTempTags() (int64, error) {
+	if db == nil {
+		return 0, nil
+	}
+	res, err := db.Exec("DELETE FROM PEBBLE_TEMP_TAGS WHERE EXPIRES_AT <= ?", time.Now().UTC().Unix())
+	if err != nil {
+		return 0, err
+	}
+	n, _ := res.RowsAffected()
+	return n, nil
+}
+
+// LogPebbleEventClaim records a world-event reward for auditability.
+func LogPebbleEventClaim(event, ipid, reward string) error {
+	if db == nil {
+		return nil
+	}
+	_, err := db.Exec(
+		"INSERT INTO PEBBLE_EVENT_LOG(EVENT, IPID, REWARD, CLAIMED_AT) VALUES(?, ?, ?, ?)",
+		event, ipid, reward, time.Now().UTC().Unix())
+	return err
+}
+
 // GetTopPlaytimes returns the top n registered players by accumulated playtime, ordered
 // descending. Only players with a linked account are included; anonymous IPIDs are excluded.
 // The IPID is returned alongside each entry for live-session merging but is never displayed.
@@ -2167,52 +2577,52 @@ type UnscrambleEntry struct {
 
 // AddUnscrambleWin increments the win counter for the given IPID by 1.
 func AddUnscrambleWin(ipid string) error {
-if db == nil {
-return nil
-}
-_, err := db.Exec(`
+	if db == nil {
+		return nil
+	}
+	_, err := db.Exec(`
 INSERT INTO UNSCRAMBLE_WINS(IPID, WINS) VALUES(?, 1)
 ON CONFLICT(IPID) DO UPDATE SET WINS = WINS + 1`, ipid)
-return err
+	return err
 }
 
 // GetUnscrambleWins returns the total unscramble wins for the given IPID.
 func GetUnscrambleWins(ipid string) (int64, error) {
-if db == nil {
-return 0, nil
-}
-var wins int64
-err := db.QueryRow("SELECT WINS FROM UNSCRAMBLE_WINS WHERE IPID = ?", ipid).Scan(&wins)
-if err == sql.ErrNoRows {
-return 0, nil
-}
-return wins, err
+	if db == nil {
+		return 0, nil
+	}
+	var wins int64
+	err := db.QueryRow("SELECT WINS FROM UNSCRAMBLE_WINS WHERE IPID = ?", ipid).Scan(&wins)
+	if err == sql.ErrNoRows {
+		return 0, nil
+	}
+	return wins, err
 }
 
 // GetTopUnscrambleWins returns the top n players by unscramble wins.
 // Players without a linked account fall back to their IPID as the display name.
 func GetTopUnscrambleWins(n int) ([]UnscrambleEntry, error) {
-if db == nil {
-return nil, nil
-}
-rows, err := db.Query(`
+	if db == nil {
+		return nil, nil
+	}
+	rows, err := db.Query(`
 SELECT w.IPID, COALESCE(u.USERNAME, '') AS USERNAME, w.WINS
 FROM UNSCRAMBLE_WINS w
 LEFT JOIN USERS u ON u.IPID = w.IPID
 ORDER BY w.WINS DESC LIMIT ?`, n)
-if err != nil {
-return nil, err
-}
-defer rows.Close()
-entries := make([]UnscrambleEntry, 0, n)
-for rows.Next() {
-var e UnscrambleEntry
-if err := rows.Scan(&e.IPID, &e.Username, &e.Wins); err != nil {
-return entries, err
-}
-entries = append(entries, e)
-}
-return entries, rows.Err()
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	entries := make([]UnscrambleEntry, 0, n)
+	for rows.Next() {
+		var e UnscrambleEntry
+		if err := rows.Scan(&e.IPID, &e.Username, &e.Wins); err != nil {
+			return entries, err
+		}
+		entries = append(entries, e)
+	}
+	return entries, rows.Err()
 }
 
 // CheckAndSetJobCooldown checks whether the given job is on cooldown for the
@@ -2220,25 +2630,25 @@ return entries, rows.Err()
 // and the function returns (false, 0). If it is on cooldown, it returns
 // (true, secondsRemaining) without modifying the database.
 func CheckAndSetJobCooldown(ipid, job string, cooldownSeconds int64) (onCooldown bool, remaining int64, err error) {
-if db == nil {
-return false, 0, nil
-}
-now := time.Now().UTC().Unix()
-var lastAt int64
-qErr := db.QueryRow("SELECT LAST_AT FROM JOB_COOLDOWNS WHERE IPID = ? AND JOB = ?", ipid, job).Scan(&lastAt)
-if qErr != nil && qErr != sql.ErrNoRows {
-return false, 0, qErr
-}
-if qErr == nil {
-rem := cooldownSeconds - (now - lastAt)
-if rem > 0 {
-return true, rem, nil
-}
-}
-_, err = db.Exec(`
+	if db == nil {
+		return false, 0, nil
+	}
+	now := time.Now().UTC().Unix()
+	var lastAt int64
+	qErr := db.QueryRow("SELECT LAST_AT FROM JOB_COOLDOWNS WHERE IPID = ? AND JOB = ?", ipid, job).Scan(&lastAt)
+	if qErr != nil && qErr != sql.ErrNoRows {
+		return false, 0, qErr
+	}
+	if qErr == nil {
+		rem := cooldownSeconds - (now - lastAt)
+		if rem > 0 {
+			return true, rem, nil
+		}
+	}
+	_, err = db.Exec(`
 INSERT INTO JOB_COOLDOWNS(IPID, JOB, LAST_AT) VALUES(?, ?, ?)
 ON CONFLICT(IPID, JOB) DO UPDATE SET LAST_AT = excluded.LAST_AT`, ipid, job, now)
-return false, 0, err
+	return false, 0, err
 }
 
 // JobEarningsEntry holds one row from the job earnings leaderboard query.
@@ -2295,95 +2705,149 @@ ORDER BY j.TOTAL DESC LIMIT ?`, n)
 // purchase. Returns an error if the player has insufficient funds, or if they
 // already own the item.
 func PurchaseShopItem(ipid, itemID string, cost int64) error {
-if db == nil {
-return fmt.Errorf("database unavailable")
-}
-tx, err := db.Begin()
-if err != nil {
-return err
-}
-defer tx.Rollback() //nolint:errcheck
+	if db == nil {
+		return fmt.Errorf("database unavailable")
+	}
+	tx, err := db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback() //nolint:errcheck
 
-// Check current balance.
-var balance int64
-if err := tx.QueryRow("SELECT BALANCE FROM CHIPS WHERE IPID = ?", ipid).Scan(&balance); err != nil {
-return fmt.Errorf("could not read balance")
-}
-if balance < cost {
-return fmt.Errorf("insufficient chips (have %d, need %d)", balance, cost)
+	// Check current balance.
+	var balance int64
+	if err := tx.QueryRow("SELECT BALANCE FROM CHIPS WHERE IPID = ?", ipid).Scan(&balance); err != nil {
+		return fmt.Errorf("could not read balance")
+	}
+	if balance < cost {
+		return fmt.Errorf("insufficient chips (have %d, need %d)", balance, cost)
+	}
+
+	// Deduct cost.
+	if _, err := tx.Exec("UPDATE CHIPS SET BALANCE = BALANCE - ? WHERE IPID = ?", cost, ipid); err != nil {
+		return err
+	}
+
+	// Record purchase — IGNORE if already owned (caller should check HasShopItem first).
+	res, err := tx.Exec("INSERT OR IGNORE INTO SHOP_PURCHASES(IPID, ITEM_ID) VALUES(?, ?)", ipid, itemID)
+	if err != nil {
+		return err
+	}
+	affected, _ := res.RowsAffected()
+	if affected == 0 {
+		// Item was already owned — rollback so chips are not deducted.
+		_ = tx.Rollback()
+		return fmt.Errorf("already owned")
+	}
+
+	return tx.Commit()
 }
 
-// Deduct cost.
-if _, err := tx.Exec("UPDATE CHIPS SET BALANCE = BALANCE - ? WHERE IPID = ?", cost, ipid); err != nil {
-return err
-}
+// PurchasePebbleShopItem atomically deducts Pebble cost from ipid and records
+// the purchase. Returns an error if the player has insufficient Pebbles or
+// already owns the item.
+func PurchasePebbleShopItem(ipid, itemID string, cost int64) error {
+	if db == nil {
+		return fmt.Errorf("database unavailable")
+	}
+	tx, err := db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback() //nolint:errcheck
 
-// Record purchase — IGNORE if already owned (caller should check HasShopItem first).
-res, err := tx.Exec("INSERT OR IGNORE INTO SHOP_PURCHASES(IPID, ITEM_ID) VALUES(?, ?)", ipid, itemID)
-if err != nil {
-return err
-}
-affected, _ := res.RowsAffected()
-if affected == 0 {
-// Item was already owned — rollback so chips are not deducted.
-_ = tx.Rollback()
-return fmt.Errorf("already owned")
-}
-
-return tx.Commit()
+	if _, err := tx.Exec("INSERT OR IGNORE INTO PEBBLES(IPID, BALANCE) VALUES(?, 0)", ipid); err != nil {
+		return err
+	}
+	var balance int64
+	if err := tx.QueryRow("SELECT COALESCE(BALANCE, 0) FROM PEBBLES WHERE IPID = ?", ipid).Scan(&balance); err != nil {
+		return fmt.Errorf("could not read pebble balance")
+	}
+	if balance < cost {
+		return fmt.Errorf("insufficient pebbles (have %d, need %d)", balance, cost)
+	}
+	if _, err := tx.Exec("UPDATE PEBBLES SET BALANCE = BALANCE - ? WHERE IPID = ?", cost, ipid); err != nil {
+		return err
+	}
+	res, err := tx.Exec("INSERT OR IGNORE INTO SHOP_PURCHASES(IPID, ITEM_ID) VALUES(?, ?)", ipid, itemID)
+	if err != nil {
+		return err
+	}
+	affected, _ := res.RowsAffected()
+	if affected == 0 {
+		_ = tx.Rollback()
+		return fmt.Errorf("already owned")
+	}
+	return tx.Commit()
 }
 
 // HasShopItem returns true when ipid has purchased itemID.
 func HasShopItem(ipid, itemID string) bool {
-if db == nil {
-return false
-}
-var count int
-db.QueryRow("SELECT COUNT(*) FROM SHOP_PURCHASES WHERE IPID = ? AND ITEM_ID = ?", ipid, itemID).Scan(&count) //nolint:errcheck
-return count > 0
+	if db == nil {
+		return false
+	}
+	var count int
+	db.QueryRow("SELECT COUNT(*) FROM SHOP_PURCHASES WHERE IPID = ? AND ITEM_ID = ?", ipid, itemID).Scan(&count) //nolint:errcheck
+	return count > 0
 }
 
 // GetPlayerShopItems returns all item IDs purchased by ipid.
 func GetPlayerShopItems(ipid string) ([]string, error) {
-if db == nil {
-return nil, nil
-}
-rows, err := db.Query("SELECT ITEM_ID FROM SHOP_PURCHASES WHERE IPID = ?", ipid)
-if err != nil {
-return nil, err
-}
-defer rows.Close()
-var items []string
-for rows.Next() {
-var id string
-if err := rows.Scan(&id); err != nil {
-return items, err
-}
-items = append(items, id)
-}
-return items, rows.Err()
+	if db == nil {
+		return nil, nil
+	}
+	rows, err := db.Query("SELECT ITEM_ID FROM SHOP_PURCHASES WHERE IPID = ?", ipid)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return items, err
+		}
+		items = append(items, id)
+	}
+	return items, rows.Err()
 }
 
 // SetActiveTag stores the player's chosen active tag.  Pass an empty string to
 // clear the tag.
 func SetActiveTag(ipid, tagID string) error {
-if db == nil {
-return nil
-}
-_, err := db.Exec(`
+	if db == nil {
+		return nil
+	}
+	_, err := db.Exec(`
 INSERT INTO PLAYER_ACTIVE_TAG(IPID, TAG_ID) VALUES(?, ?)
 ON CONFLICT(IPID) DO UPDATE SET TAG_ID = excluded.TAG_ID`, ipid, tagID)
-return err
+	return err
 }
 
 // GetActiveTag returns the player's active tag ID, or "" if none is set.
 func GetActiveTag(ipid string) string {
-if db == nil {
-return ""
-}
-var tagID string
-db.QueryRow("SELECT TAG_ID FROM PLAYER_ACTIVE_TAG WHERE IPID = ?", ipid).Scan(&tagID) //nolint:errcheck
-return tagID
+	if db == nil {
+		return ""
+	}
+	var tagID string
+	db.QueryRow("SELECT TAG_ID FROM PLAYER_ACTIVE_TAG WHERE IPID = ?", ipid).Scan(&tagID) //nolint:errcheck
+	if tagID == "" {
+		return ""
+	}
+	if !strings.HasPrefix(tagID, tempTagIDPrefix) {
+		return tagID
+	}
+	var expires int64
+	err := db.QueryRow(
+		"SELECT EXPIRES_AT FROM PEBBLE_TEMP_TAGS WHERE IPID = ? AND TAG_ID = ?",
+		ipid, tagID).Scan(&expires)
+	if err == sql.ErrNoRows || (err == nil && expires <= time.Now().UTC().Unix()) {
+		db.Exec("UPDATE PLAYER_ACTIVE_TAG SET TAG_ID = '' WHERE IPID = ? AND TAG_ID = ?", ipid, tagID) //nolint:errcheck
+		db.Exec("DELETE FROM PEBBLE_TEMP_TAGS WHERE IPID = ? AND TAG_ID = ?", ipid, tagID)             //nolint:errcheck
+		return ""
+	}
+
+	return tagID
 }
 
 // SetAccountActiveTag stores the active tag on the user's account so it survives
@@ -2661,6 +3125,36 @@ func SetGambleHide(username string, hide bool) error {
 		val = 1
 	}
 	_, err := db.Exec("UPDATE USERS SET GAMBLE_HIDE = ? WHERE USERNAME = ?", val, username)
+	return err
+}
+
+// GetEventAlertsHide returns whether the user has opted out of global
+// world-event announcements. Returns false if the user or DB is unavailable.
+func GetEventAlertsHide(username string) (bool, error) {
+	if db == nil {
+		return false, nil
+	}
+	var hide int
+	err := db.QueryRow("SELECT COALESCE(EVENT_ALERTS_HIDE, 0) FROM USERS WHERE USERNAME = ?", username).Scan(&hide)
+	if err == sql.ErrNoRows {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	return hide != 0, nil
+}
+
+// SetEventAlertsHide persists the world-event alert preference for an account.
+func SetEventAlertsHide(username string, hide bool) error {
+	if db == nil {
+		return nil
+	}
+	val := 0
+	if hide {
+		val = 1
+	}
+	_, err := db.Exec("UPDATE USERS SET EVENT_ALERTS_HIDE = ? WHERE USERNAME = ?", val, username)
 	return err
 }
 

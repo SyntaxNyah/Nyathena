@@ -358,7 +358,7 @@ func cmdCustomTest(scanner *bufio.Scanner) {
 func syntheticTestWorld(args []string) TestWorld {
 	w := TestWorld{
 		Config: TestConfig{
-			EnableCasino:        config != nil && config.EnableCasino,
+			EnableCasino:        config != nil && config.CasinoOn(),
 			EnableAccounts:      config != nil && config.EnableAccounts,
 			EnableVoice:         config != nil && config.EnableVoice,
 			PunishmentsDisabled: punishmentsGloballyDisabled.Load(),

@@ -134,6 +134,9 @@ func printCasinoDashboard(client *Client) {
 	}
 	sb.WriteString("\n── Slots Stats ──\n")
 	sb.WriteString(fmt.Sprintf("  Spins: %d  Payout: %d  Jackpots: %d\n", stats.TotalSpins, stats.TotalPayout, stats.Jackpots))
+	if pebbleEnabled() {
+		sb.WriteString("\nPebble Mode is also on. Casual no-stakes games: /minigame\n")
+	}
 	sb.WriteString(casinoCmdsSection)
 
 	client.SendServerMessage(sb.String())
@@ -297,6 +300,10 @@ func chipsTopArea(client *Client, args []string) {
 }
 
 func chipsGive(client *Client, args []string) {
+	if pebbleEnabled() {
+		client.SendServerMessage("Pebbles cannot be traded, and /chips give is unavailable in Pebble Mode.")
+		return
+	}
 	if len(args) < 2 {
 		client.SendServerMessage("Usage: /chips give <uid> <amount>")
 		return

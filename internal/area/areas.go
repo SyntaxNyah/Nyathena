@@ -134,12 +134,14 @@ type Area struct {
 	casinoMaxTables     int
 	casinoJackpot       bool
 	casinoJackpotPool   int64
+	pebbleMinigames     bool   // /minigame availability in this area
+	pebbleEvents        bool   // whether world events may spawn here
 	currentSong         string // last broadcast song name (encoded), used by /getmusic
 	randomPunishEnabled bool
 	mirrorArea          bool
 	punishmentArea      bool
 	dokiArea            bool
-	punishmentSafe      bool // /punishmentsafe: shields players here from moderator-issued punishment-system effects
+	punishmentSafe      bool               // /punishmentsafe: shields players here from moderator-issued punishment-system effects
 	judgeAllowed        bool               // whether the WT/CE judge buttons are usable in this area
 	icWarpGlobal        bool               // whether global icwarp is enabled
 	icWarpExemptUID     int                // UID exempt from global icwarp (-1 = none)
@@ -166,9 +168,13 @@ type AreaData struct {
 	Casino_max_bet    int    `toml:"casino_max_bet"`
 	Casino_max_tables int    `toml:"casino_max_tables"`
 	Casino_jackpot    bool   `toml:"casino_slots_jackpot"`
-	Mirror_area       bool   `toml:"mirror_area"`
-	Punishment_area   bool   `toml:"punishment_area"`
-	Doki_area         bool   `toml:"doki_area"`
+	// Pebble_minigames and Pebble_events are tri-state: nil means enabled
+	// (the default), explicit true/false overrides the area.
+	Pebble_minigames *bool `toml:"pebble_minigames"`
+	Pebble_events    *bool `toml:"pebble_events"`
+	Mirror_area      bool  `toml:"mirror_area"`
+	Punishment_area  bool  `toml:"punishment_area"`
+	Doki_area        bool  `toml:"doki_area"`
 	// Antipunish, when true, shields every player currently in this area from
 	// moderator-issued punishment-system effects: mods, shadow mods, and
 	// admins cannot apply text effects, dere archetypes, protocol/voice curses,
@@ -205,6 +211,8 @@ type defaults struct {
 	casino_max_bet    int
 	casino_max_tables int
 	casino_jackpot    bool
+	pebble_minigames  bool
+	pebble_events     bool
 	mirror_area       bool
 	punishment_area   bool
 }
@@ -229,6 +237,14 @@ func NewAreaWithVoiceDefault(data AreaData, charlen int, bufsize int, evi_mode E
 	if data.Judge_allowed != nil {
 		judgeAllowed = *data.Judge_allowed
 	}
+	pebbleMinigames := true
+	if data.Pebble_minigames != nil {
+		pebbleMinigames = *data.Pebble_minigames
+	}
+	pebbleEvents := true
+	if data.Pebble_events != nil {
+		pebbleEvents = *data.Pebble_events
+	}
 	return &Area{
 		data: data,
 		defaults: defaults{
@@ -247,12 +263,16 @@ func NewAreaWithVoiceDefault(data AreaData, charlen int, bufsize int, evi_mode E
 			casino_max_bet:    data.Casino_max_bet,
 			casino_max_tables: data.Casino_max_tables,
 			casino_jackpot:    data.Casino_jackpot,
+			pebble_minigames:  pebbleMinigames,
+			pebble_events:     pebbleEvents,
 			mirror_area:       data.Mirror_area,
 			punishment_area:   data.Punishment_area,
 		},
 		dokiArea:            data.Doki_area,
 		punishmentSafe:      data.Antipunish,
 		judgeAllowed:        judgeAllowed,
+		pebbleMinigames:     pebbleMinigames,
+		pebbleEvents:        pebbleEvents,
 		taken:               make([]bool, charlen),
 		defhp:               10,
 		prohp:               10,
@@ -822,6 +842,8 @@ func (a *Area) Reset() {
 	a.casinoMaxBet = a.defaults.casino_max_bet
 	a.casinoMaxTables = a.defaults.casino_max_tables
 	a.casinoJackpot = a.defaults.casino_jackpot
+	a.pebbleMinigames = a.defaults.pebble_minigames
+	a.pebbleEvents = a.defaults.pebble_events
 	a.tr.Index = 0
 	a.tr.State = TRIdle
 	a.tr.Testimony = []string{}
@@ -1289,6 +1311,34 @@ func (a *Area) CasinoJackpotPool() int64 {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	return a.casinoJackpotPool
+}
+
+// PebbleMinigames returns whether /minigame is available in this area.
+func (a *Area) PebbleMinigames() bool {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return a.pebbleMinigames
+}
+
+// SetPebbleMinigames enables or disables casual Pebble mini-games here.
+func (a *Area) SetPebbleMinigames(v bool) {
+	a.mu.Lock()
+	a.pebbleMinigames = v
+	a.mu.Unlock()
+}
+
+// PebbleEvents returns whether world events may spawn in this area.
+func (a *Area) PebbleEvents() bool {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return a.pebbleEvents
+}
+
+// SetPebbleEvents enables or disables world-event spawning here.
+func (a *Area) SetPebbleEvents(v bool) {
+	a.mu.Lock()
+	a.pebbleEvents = v
+	a.mu.Unlock()
 }
 
 // AddCasinoJackpotPool adds amount to the jackpot pool.

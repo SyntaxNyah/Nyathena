@@ -55,7 +55,7 @@ func onRegistered(client *Client, username string) {
 	client.SetModName(username)
 	// Backfill IGNORER_USERNAME on any ignore rows added before registration.
 	db.BackfillIgnoreUsername(client.Ipid(), username) //nolint:errcheck
-	if config.EnableCasino {
+	if config.CasinoOn() {
 		if err := db.EnsureChipBalance(client.Ipid()); err != nil {
 			logger.LogErrorf("Failed to seed chip balance on register for %v: %v", username, err)
 		}
@@ -67,6 +67,17 @@ func onRegistered(client *Client, username string) {
 				"  • 🏆 Casino leaderboard standings\n\n"+
 				"Use /account to view your profile.\n"+
 				"Use /chips to check your balance.\n"+
+				"Your account is linked to your connection — use /login <username> <password> to sign in on reconnect.",
+			username))
+	} else if config.PebbleOn() {
+		client.SendServerMessage(fmt.Sprintf(
+			"✅ Account '%v' created and logged in!\n\n"+
+				"📋 What your account tracks:\n"+
+				"  • 🪨 Pebbles (earned through activities and world events)\n"+
+				"  • ⏱ Playtime on this server\n"+
+				"  • 🏷️ Cosmetic tags from the Pebble shop\n\n"+
+				"Use /pebble to check your balance.\n"+
+				"Use /account to view your profile.\n"+
 				"Your account is linked to your connection — use /login <username> <password> to sign in on reconnect.",
 			username))
 	} else {
@@ -243,13 +254,22 @@ func cmdAccount(client *Client, _ []string, _ string) {
 				"Your account '%v' is not currently active. Use /login %v <password> to sign in.", u, u))
 			return
 		}
-		if config.EnableCasino {
+		if config.CasinoOn() {
 			client.SendServerMessage(
 				"You don't have an account yet.\n\n" +
 					"💡 Accounts are free and let you track:\n" +
 					"  • 💰 Nyathena Chips (casino currency)\n" +
 					"  • ⏱ Playtime on this server\n" +
 					"  • 🏆 Casino leaderboard standings\n\n" +
+					"Create one now with: /register <username> <password>\n" +
+					"(Username: 3–20 chars, letters/numbers/underscore; Password: 6+ chars)")
+		} else if config.PebbleOn() {
+			client.SendServerMessage(
+				"You don't have an account yet.\n\n" +
+					"💡 Accounts are free and let you track:\n" +
+					"  • 🪨 Pebbles (earned through activities and world events)\n" +
+					"  • 🏷️ Cosmetic tags from the Pebble shop\n" +
+					"  • ⏱ Playtime on this server\n\n" +
 					"Create one now with: /register <username> <password>\n" +
 					"(Username: 3–20 chars, letters/numbers/underscore; Password: 6+ chars)")
 		} else {
@@ -275,12 +295,18 @@ func cmdAccount(client *Client, _ []string, _ string) {
 		playtimeSec += int64(time.Since(connAt).Seconds())
 	}
 
-	if config.EnableCasino {
-		client.SendServerMessage(fmt.Sprintf(
-			"\n👤 Account: %v\n"+
-				"💰 Chips: %d\n"+
-				"⏱ Playtime: %v",
-			username, chips, formatPlaytime(playtimeSec)))
+	if config.CasinoOn() || config.PebbleOn() {
+		var sb strings.Builder
+		sb.WriteString(fmt.Sprintf("\n👤 Account: %v\n", username))
+		if config.CasinoOn() {
+			sb.WriteString(fmt.Sprintf("💰 Chips: %d\n", chips))
+		}
+		if config.PebbleOn() {
+			pebbles, _ := db.GetPebbleBalance(client.Ipid())
+			sb.WriteString(fmt.Sprintf("🪨 Pebbles: %d\n", pebbles))
+		}
+		sb.WriteString(fmt.Sprintf("⏱ Playtime: %v", formatPlaytime(playtimeSec)))
+		client.SendServerMessage(sb.String())
 	} else {
 		activeTag := db.GetActiveTag(client.Ipid())
 		tagDisplay := "(none)"
@@ -744,8 +770,12 @@ func cmdProfile(client *Client, args []string, _ string) {
 	sb.WriteString(fmt.Sprintf("  Account:     %v\n", username))
 	sb.WriteString(fmt.Sprintf("  Area:        %v\n", areaName))
 	sb.WriteString(fmt.Sprintf("  Playtime:    %v\n", playtimeDisplay))
-	if config != nil && config.EnableCasino {
+	if config != nil && config.CasinoOn() {
 		sb.WriteString(fmt.Sprintf("  Chips:       %d\n", chips))
+	}
+	if config != nil && config.PebbleOn() {
+		pebbles, _ := db.GetPebbleBalance(target.Ipid())
+		sb.WriteString(fmt.Sprintf("  Pebbles:     %d\n", pebbles))
 	}
 	sb.WriteString(fmt.Sprintf("  Active tag:  %v\n", tagDisplay))
 	sb.WriteString(fmt.Sprintf("  Favourites:  %v\n", favsDisplay))

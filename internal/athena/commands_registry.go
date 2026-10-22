@@ -31,7 +31,9 @@ type Command struct {
 	usage      string
 	desc       string
 	reqPerms   uint64
-	casinoCmd  bool   // when true, command is hidden/disabled if EnableCasino is false
+	casinoCmd  bool   // when true, command requires the legacy casino (Chips)
+	pebbleCmd  bool   // when true, command requires Pebble Mode
+	economyCmd bool   // when true, command requires either casino or Pebble Mode
 	accountCmd bool   // when true, command requires the account system (works without EnableCasino so long as EnableAccounts is true)
 	voiceCmd   bool   // when true, command is hidden/disabled if EnableVoice is false
 	category   string // help category (e.g. "general", "casino", "punishment")
@@ -2655,93 +2657,95 @@ func initCommands() {
 			category: "admin",
 		},
 		"unscramble": {
-			handler:   cmdUnscramble,
-			minArgs:   0,
-			usage:     "Usage: /unscramble [top [n]]",
-			desc:      "Check your unscramble wins or view the unscramble leaderboard. Answer active puzzles in IC chat to win chips!",
-			reqPerms:  permissions.PermissionField["NONE"],
-			casinoCmd: true,
-			category:  "chips",
+			handler:    cmdUnscramble,
+			minArgs:    0,
+			usage:      "Usage: /unscramble [top [n]]",
+			desc:       "Check your unscramble wins or view the unscramble leaderboard. Answer active puzzles in IC chat to win Pebbles (or chips in casino mode).",
+			reqPerms:   permissions.PermissionField["NONE"],
+			economyCmd: true,
+			category:   "chips",
 		},
 		"jobs": {
-			handler:   cmdJobs,
-			minArgs:   0,
-			usage:     "Usage: /jobs",
-			desc:      "List all available jobs that earn small chip rewards.",
-			reqPerms:  permissions.PermissionField["NONE"],
-			casinoCmd: true,
-			category:  "jobs",
+			handler:    cmdJobs,
+			minArgs:    0,
+			usage:      "Usage: /jobs",
+			desc:       "List all available jobs that earn small Pebble (or chip) rewards.",
+			reqPerms:   permissions.PermissionField["NONE"],
+			economyCmd: true,
+			category:   "jobs",
 		},
 		"jobtop": {
-			handler:   cmdJobTop,
-			minArgs:   0,
-			usage:     "Usage: /jobtop [n]",
-			desc:      "Show the job earnings leaderboard (top chip earners from jobs).",
-			reqPerms:  permissions.PermissionField["NONE"],
-			casinoCmd: true,
-			category:  "chips",
+			handler:    cmdJobTop,
+			minArgs:    0,
+			usage:      "Usage: /jobtop [n]",
+			desc:       "Show the job earnings leaderboard.",
+			reqPerms:   permissions.PermissionField["NONE"],
+			economyCmd: true,
+			category:   "chips",
 		},
 		"janitor": {
-			handler:   cmdJanitor,
-			minArgs:   0,
-			usage:     "Usage: /janitor",
-			desc:      "Work as a janitor to earn chips (45-minute cooldown).",
-			reqPerms:  permissions.PermissionField["NONE"],
-			casinoCmd: true,
-			category:  "jobs",
+			handler:    cmdJanitor,
+			minArgs:    0,
+			usage:      "Usage: /janitor",
+			desc:       "Work as a janitor to earn Pebbles or chips (45-minute cooldown).",
+			reqPerms:   permissions.PermissionField["NONE"],
+			economyCmd: true,
+			category:   "jobs",
 		},
 		"busker": {
-			handler:   cmdBusker,
-			minArgs:   0,
-			usage:     "Usage: /busker",
-			desc:      "Busk for tips outside the courthouse to earn chips (30-minute cooldown).",
-			reqPerms:  permissions.PermissionField["NONE"],
-			casinoCmd: true,
-			category:  "jobs",
+			handler:    cmdBusker,
+			minArgs:    0,
+			usage:      "Usage: /busker",
+			desc:       "Busk for tips outside the courthouse to earn Pebbles or chips (30-minute cooldown).",
+			reqPerms:   permissions.PermissionField["NONE"],
+			economyCmd: true,
+			category:   "jobs",
 		},
 		"paperboy": {
-			handler:   cmdPaperboy,
-			minArgs:   0,
-			usage:     "Usage: /paperboy",
-			desc:      "Deliver newspapers and briefs to earn chips (60-minute cooldown).",
-			reqPerms:  permissions.PermissionField["NONE"],
-			casinoCmd: true,
-			category:  "jobs",
+			handler:    cmdPaperboy,
+			minArgs:    0,
+			usage:      "Usage: /paperboy",
+			desc:       "Deliver newspapers and briefs to earn Pebbles or chips (60-minute cooldown).",
+			reqPerms:   permissions.PermissionField["NONE"],
+			economyCmd: true,
+			category:   "jobs",
 		},
 		"bailiffjob": {
-			handler:   cmdBailiffJob,
-			minArgs:   0,
-			usage:     "Usage: /bailiffjob",
-			desc:      "Stand guard duty as a bailiff to earn chips (2-hour cooldown).",
-			reqPerms:  permissions.PermissionField["NONE"],
-			casinoCmd: true,
-			category:  "jobs",
+			handler:    cmdBailiffJob,
+			minArgs:    0,
+			usage:      "Usage: /bailiffjob",
+			desc:       "Stand guard duty as a bailiff to earn Pebbles or chips (2-hour cooldown).",
+			reqPerms:   permissions.PermissionField["NONE"],
+			economyCmd: true,
+			category:   "jobs",
 		},
 		"clerk": {
-			handler:   cmdClerk,
-			minArgs:   0,
-			usage:     "Usage: /clerk",
-			desc:      "File paperwork as a clerk to earn chips (90-minute cooldown).",
-			reqPerms:  permissions.PermissionField["NONE"],
-			casinoCmd: true,
-			category:  "jobs",
+			handler:    cmdClerk,
+			minArgs:    0,
+			usage:      "Usage: /clerk",
+			desc:       "File paperwork as a clerk to earn Pebbles or chips (90-minute cooldown).",
+			reqPerms:   permissions.PermissionField["NONE"],
+			economyCmd: true,
+			category:   "jobs",
 		},
 		"shop": {
 			handler:    cmdShop,
 			minArgs:    0,
-			usage:      "Usage: /shop | /shop <category> | /shop buy <item_id> | /shop items | /shop passes | /shop passive",
-			desc:       "Browse the Nyathena Shop: 115+ cosmetic tags, job passes, and passive income upgrades. When the casino is disabled, tags are free to equip via /settag. Categories: gambling attorney anime gamer girly meme prestige.",
+			usage:      "Usage: /shop | /shop <category> | /shop buy <item_id> | /shop items",
+			desc:       "Browse the shop. In Pebble Mode, /shop classic lists all existing non-gambling tags (free), and /shop activity|community lists the cheap Pebble tags.",
 			reqPerms:   permissions.PermissionField["NONE"],
 			accountCmd: true,
+			pebbleCmd:  true,
 			category:   "chips",
 		},
 		"settag": {
 			handler:    cmdSetTag,
 			minArgs:    1,
 			usage:      "Usage: /settag <tag_id> | /settag none",
-			desc:       "Equip or swap a cosmetic tag. Your active tag appears next to your name in /gas and /players. When the casino is disabled, any tag id is free to equip.",
+			desc:       "Equip or swap a cosmetic tag. Your active tag appears next to your name in /gas and /players.",
 			reqPerms:   permissions.PermissionField["NONE"],
 			accountCmd: true,
+			pebbleCmd:  true,
 			category:   "chips",
 		},
 		"mytags": {
@@ -2751,6 +2755,7 @@ func initCommands() {
 			desc:       "Lists every tag you own (built-in and custom) with its id and name, and marks your active one. Use the id with /settag.",
 			reqPerms:   permissions.PermissionField["NONE"],
 			accountCmd: true,
+			pebbleCmd:  true,
 			category:   "chips",
 		},
 		"favourite": {
@@ -3468,6 +3473,7 @@ func initCommands() {
 			category: "general",
 		},
 	}
+	registerPebbleCommands()
 }
 
 // helpCategory describes a top-level /help section visible to players.
@@ -3485,9 +3491,10 @@ var helpCategoryList = []helpCategory{
 	{"testimony", "📝", "Testimony", "Testimony recorder — record and replay witness statements."},
 	{"minigames", "🎲", "Mini-games", "Hangman, Hot Potato, Quick Draw, Russian Roulette, Typing Race, giveaways."},
 	{"mafia", "🕵️", "Mafia / Werewolf", "Social-deduction minigame with roles, votes and night actions."},
-	{"casino", "🎰", "Casino", "Blackjack, Poker, Slots, Roulette, and more."},
-	{"chips", "💰", "Chips", "Chip balance, leaderboards, shop, and the bar."},
-	{"jobs", "💼", "Jobs", "Earn chips without gambling — cooldown-based jobs."},
+	{"pebble", "🪨", "Pebble Mode", "Casual mini-games, daily activities, the duck pond, and world events."},
+	{"casino", "🎰", "Casino", "Legacy casino — Blackjack, Poker, Slots, Roulette, Chips and stakes."},
+	{"chips", "💰", "Economy", "Pebble shop / legacy chip shop, tags, and balance commands."},
+	{"jobs", "💼", "Jobs", "Earn Pebbles (Pebble Mode) or chips (Casino) — cooldown-based jobs."},
 	{"account", "👤", "Account", "Register, login, wardrobe, and profile."},
 	{"moderation", "🔨", "Moderation", "Mute, kick, ban, jail, and other staff tools."},
 	{"voice", "🎙️", "Voice Chat", "Voice-chat moderation and per-area controls.  Requires a WebAO client with WebRTC support."},
@@ -3513,12 +3520,38 @@ func clientCanUseCommand(client *Client, name string, cmd Command) bool {
 		clientHasCommandGrant(client, name)
 }
 
+// commandModeAllowed applies the server-wide feature gates for a command.
+// Centralising the checks keeps runtime dispatch and /help visibility in sync.
+func commandModeAllowed(cmd Command, casinoOn, pebbleOn, accountsOn, voiceOn bool) bool {
+	if cmd.casinoCmd && !casinoOn {
+		return false
+	}
+	if cmd.pebbleCmd && !pebbleOn {
+		// A command that also belongs to the account system (shop/tags) is
+		// still available when accounts are enabled and Pebble Mode is off.
+		if !(cmd.accountCmd && accountsOn) {
+			return false
+		}
+	}
+	if cmd.economyCmd && !casinoOn && !pebbleOn {
+		return false
+	}
+	if cmd.accountCmd && !accountsOn && !(pebbleOn && cmd.pebbleCmd) {
+		return false
+	}
+	if cmd.voiceCmd && !voiceOn {
+		return false
+	}
+	return true
+}
+
 // ParseCommand calls the appropriate function for a given command.
 func ParseCommand(client *Client, command string, args []string) {
-	casinoEnabled := config != nil && config.EnableCasino
+	casinoEnabled := config != nil && config.CasinoOn()
+	pebbleEnabledNow := config != nil && config.PebbleOn()
 	// Account commands are available when either the casino (which uses accounts)
 	// or the standalone account system is enabled.
-	accountsEnabled := config != nil && (config.EnableCasino || config.EnableAccounts)
+	accountsEnabled := config != nil && (config.CasinoOn() || config.EnableAccounts)
 	voiceEnabledNow := config != nil && config.EnableVoice
 
 	if command == "help" {
@@ -3537,18 +3570,16 @@ func ParseCommand(client *Client, command string, args []string) {
 						client.SendServerMessage(renderPunishmentHelp(client, casinoEnabled, accountsEnabled, voiceEnabledNow))
 						return
 					}
+					if cat.name == "pebble" {
+						client.SendServerMessage(renderPebbleHelp(client, casinoEnabled, pebbleEnabledNow, accountsEnabled, voiceEnabledNow))
+						return
+					}
 					var lines []string
 					for name, cmd := range Commands {
 						if cmd.category != cat.name {
 							continue
 						}
-						if cmd.casinoCmd && !casinoEnabled {
-							continue
-						}
-						if cmd.accountCmd && !accountsEnabled {
-							continue
-						}
-						if cmd.voiceCmd && !voiceEnabledNow {
+						if !commandModeAllowed(cmd, casinoEnabled, pebbleEnabledNow, accountsEnabled, voiceEnabledNow) {
 							continue
 						}
 						if clientCanUseCommand(client, name, cmd) || cmd.publicHelp {
@@ -3568,7 +3599,7 @@ func ParseCommand(client *Client, command string, args []string) {
 
 			// Not a category — try to look up as a specific command
 			cmd, exists := Commands[cmdName]
-			if exists && !(cmd.casinoCmd && !casinoEnabled) && !(cmd.accountCmd && !accountsEnabled) && !(cmd.voiceCmd && !voiceEnabledNow) {
+			if exists && commandModeAllowed(cmd, casinoEnabled, pebbleEnabledNow, accountsEnabled, voiceEnabledNow) {
 				if clientCanUseCommand(client, cmdName, cmd) || cmd.publicHelp {
 					client.SendServerMessage(cmd.usage)
 				} else {
@@ -3612,13 +3643,7 @@ func ParseCommand(client *Client, command string, args []string) {
 				if cmd.category != cat.name {
 					continue
 				}
-				if cmd.casinoCmd && !casinoEnabled {
-					continue
-				}
-				if cmd.accountCmd && !accountsEnabled {
-					continue
-				}
-				if cmd.voiceCmd && !voiceEnabledNow {
+				if !commandModeAllowed(cmd, casinoEnabled, pebbleEnabledNow, accountsEnabled, voiceEnabledNow) {
 					continue
 				}
 				if clientCanUseCommand(client, name, cmd) || cmd.publicHelp {
@@ -3648,12 +3673,22 @@ func ParseCommand(client *Client, command string, args []string) {
 		client.SendServerMessage("Invalid command.")
 		return
 	}
-	// Block casino/account commands when the feature is disabled server-wide.
+	// Block commands whose feature gate is off server-wide.
 	if cmd.casinoCmd && !casinoEnabled {
-		client.SendServerMessage("The casino and player account system is not enabled on this server.")
+		client.SendServerMessage("The legacy casino is not enabled on this server.")
 		return
 	}
-	if cmd.accountCmd && !accountsEnabled {
+	if cmd.pebbleCmd && !pebbleEnabledNow {
+		if !(cmd.accountCmd && accountsEnabled) {
+			client.SendServerMessage("Pebble Mode is not enabled on this server.")
+			return
+		}
+	}
+	if cmd.economyCmd && !casinoEnabled && !pebbleEnabledNow {
+		client.SendServerMessage("The casino and Pebble Mode are both disabled on this server.")
+		return
+	}
+	if cmd.accountCmd && !accountsEnabled && !(pebbleEnabledNow && cmd.pebbleCmd) {
 		client.SendServerMessage("The player account system is not enabled on this server.")
 		return
 	}

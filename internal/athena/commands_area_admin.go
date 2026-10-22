@@ -99,9 +99,12 @@ func cmdAreaInfo(client *Client, _ []string, _ string) {
 			casinoStatus += fmt.Sprintf(", jackpot pool: %d", a.CasinoJackpotPool())
 		}
 	}
-	out := fmt.Sprintf("\nBG: %v\nEvi mode: %v\nAllow iniswap: %v\nNon-interrupting pres: %v\nCMs allowed: %v\nForce BG list: %v\nBG locked: %v\nMusic locked (CM-only): %v\nMusic frozen (all blocked): %v\nSpectate mode: %v\nCasino: %v",
+	out := fmt.Sprintf("\nBG: %v\nEvi mode: %v\nAllow iniswap: %v\nNon-interrupting pres: %v\nCMs allowed: %v\nForce BG list: %v\nBG locked: %v\nMusic locked (CM-only): %v\nMusic frozen (all blocked): %v\nSpectate mode: %v\nCasino (legacy Chips): %v\nPebble Mode: %v\nPebble Mini-Games: %v\nPebble World Events: %v",
 		a.Background(), a.EvidenceMode().String(), a.IniswapAllowed(), a.NoInterrupt(),
-		a.CMsAllowed(), a.ForceBGList(), a.LockBG(), a.LockMusic(), a.MusicFrozen(), a.SpectateMode(), casinoStatus)
+		a.CMsAllowed(), a.ForceBGList(), a.LockBG(), a.LockMusic(), a.MusicFrozen(), a.SpectateMode(), casinoStatus,
+		boolStr(pebbleEnabled(), "enabled", "disabled"),
+		boolStr(a.PebbleMinigames(), "available", "disabled"),
+		boolStr(a.PebbleEvents(), "enabled", "disabled"))
 	client.SendServerMessage(out)
 }
 

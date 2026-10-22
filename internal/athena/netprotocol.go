@@ -297,7 +297,10 @@ func pktReqDone(client *Client, _ *aolib.Packet) {
 	// When the casino is off but the account system is enabled, the account
 	// welcome message (wardrobe / default tags / playtime tracking) is shown
 	// to unauthenticated joiners.
-	if config.EnableCasino {
+	if config.PebbleOn() {
+		client.SendServerMessage(pebbleWelcomeMsg)
+	}
+	if config.CasinoOn() {
 		ipid := client.Ipid()
 		go func() {
 			if err := db.EnsureChipBalance(ipid); err != nil {
@@ -307,7 +310,7 @@ func pktReqDone(client *Client, _ *aolib.Packet) {
 		if !client.Authenticated() {
 			client.SendServerMessage(casinoWelcomeMsg)
 		}
-	} else if config.EnableAccounts && !client.Authenticated() {
+	} else if config.EnableAccounts && !client.Authenticated() && !config.PebbleOn() {
 		client.SendServerMessage(accountWelcomeMsg)
 	}
 
@@ -1070,7 +1073,7 @@ func pktIC(client *Client, p *aolib.Packet) {
 	typingRaceOnIC(client, msgText)
 
 	// Unscramble: check whether the IC message is the correct answer.
-	if config != nil && config.EnableCasino {
+	if config != nil && (config.CasinoOn() || config.PebbleOn()) {
 		unscrambleOnIC(client, msgText)
 	}
 

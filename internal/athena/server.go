@@ -294,7 +294,7 @@ func NewServer(conf *settings.Config) (*Server, error) {
 
 	// Sync chip balances for players who accumulated playtime before the casino
 	// was introduced. Uses INSERT OR IGNORE so existing balances are never touched.
-	if conf.EnableCasino {
+	if conf.CasinoOn() {
 		if n, err := db.SyncChipsForExistingPlaytime(); err != nil {
 			logger.LogErrorf("Failed to sync chips for pre-casino playtime: %v", err)
 		} else if n > 0 {
@@ -610,9 +610,19 @@ func NewServer(conf *settings.Config) (*Server, error) {
 	// Initialize the lockdown min-playtime purge threshold from config (minutes -> seconds).
 	lockdownMinPlaytime.Store(int64(conf.LockdownMinPlaytime) * 60)
 	go startConnTrackerCleanup()
-	if conf.EnableCasino {
+	if conf.CasinoOn() {
 		go startHourlyChipAward()
+	}
+	if conf.CasinoOn() || conf.PebbleOn() {
+		// Unscramble events award the active activity currency, so they run
+		// for either economy.
 		go startUnscrambleLoop()
+	}
+	if conf.PebbleOn() {
+		if _, err := db.PurgeExpiredTempTags(); err != nil {
+			logger.LogErrorf("Failed to purge expired temporary tags: %v", err)
+		}
+		go startPebbleWorldEventLoop()
 	}
 	if conf.EnableNewspaper {
 		go startNewspaperLoop()
@@ -2200,7 +2210,7 @@ func startHourlyChipAward() {
 	ticker := time.NewTicker(time.Hour)
 	defer ticker.Stop()
 	for range ticker.C {
-		if config == nil || !config.EnableCasino {
+		if config == nil || !config.CasinoOn() {
 			continue
 		}
 		// Capture now once so all per-client calculations use the same instant,

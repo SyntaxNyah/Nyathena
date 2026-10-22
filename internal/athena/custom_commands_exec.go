@@ -27,10 +27,10 @@ import (
 	"strings"
 	"time"
 
+	aolib "github.com/AO-Underground/aolib/go/v2"
 	"github.com/MangosArentLiterature/Athena/internal/area"
 	"github.com/MangosArentLiterature/Athena/internal/db"
 	"github.com/MangosArentLiterature/Athena/internal/logger"
-	aolib "github.com/AO-Underground/aolib/go/v2"
 	"github.com/MangosArentLiterature/Athena/internal/permissions"
 	"github.com/xhit/go-str2duration/v2"
 )
@@ -498,7 +498,7 @@ func buildWorldFromLive(caller *Client) TestWorld {
 	}
 	w := TestWorld{
 		Config: TestConfig{
-			EnableCasino:        config != nil && config.EnableCasino,
+			EnableCasino:        config != nil && config.CasinoOn(),
 			EnableAccounts:      config != nil && config.EnableAccounts,
 			EnableVoice:         config != nil && config.EnableVoice,
 			PunishmentsDisabled: punishmentsGloballyDisabled.Load(),

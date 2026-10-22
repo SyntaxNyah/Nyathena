@@ -104,7 +104,7 @@ func typingRaceStart(client *Client) {
 	typingRace.mu.Unlock()
 
 	var announce string
-	if config != nil && config.EnableCasino {
+	if config != nil && config.CasinoOn() {
 		announce = fmt.Sprintf(
 			"⌨️ TYPING RACE! Type /typingrace join in the next %.0f seconds to enter. First to type the phrase wins %d chips!",
 			typingRaceOptInDuration.Seconds(), typingRaceReward,
@@ -257,7 +257,7 @@ func typingRaceOnIC(client *Client, msgText string) {
 
 	// Chip rewards are only awarded when the casino/chip economy is enabled.
 	// When gambling is disabled, the race still runs but nothing is paid out.
-	if config != nil && config.EnableCasino {
+	if config != nil && config.CasinoOn() {
 		newBal, chipErr := db.AddChips(client.Ipid(), typingRaceReward)
 		if chipErr != nil {
 			logger.LogErrorf("typingrace: AddChips failed: %v", chipErr)

@@ -433,6 +433,7 @@ type Client struct {
 	dancing               bool           // Whether the client has dance mode active (flips sprite every message)
 	danceFlipped          bool           // Current flip state for dance mode; toggles each IC message
 	gambleHide            bool           // Whether the client has opted out of seeing gambling broadcast messages
+	eventAlertsHide       bool           // Whether the client has opted out of global world-event alerts
 	pendingRegUser        string         // Username from a pending /register that is awaiting captcha confirmation
 	pendingRegPass        []byte         // bcrypt hash from a pending /register that is awaiting captcha confirmation
 	pendingRegCaptcha     string         // Expected captcha token for the pending registration
@@ -1255,7 +1256,7 @@ func (client *Client) clientCleanup() {
 					}
 					oldPt := newPt - sessionSecs
 					chipsEarned := (newPt / secondsPerHour) - (oldPt / secondsPerHour) - alreadyAwarded
-					if chipsEarned > 0 && config.EnableCasino {
+					if chipsEarned > 0 && config.CasinoOn() {
 						if err := db.EnsureChipBalance(ipid); err == nil {
 							if _, err := db.AddChips(ipid, chipsEarned); err != nil {
 								logger.LogErrorf("Failed to award playtime chips for %v: %v", ipid, err)
@@ -1315,6 +1316,8 @@ func (client *Client) clientCleanup() {
 		sendPlayerArup()
 	}
 	handleCasinoDisconnect(client)
+	handleMinigameDisconnect(client)
+	cleanupSillyActivityState(client.Ipid())
 	handleMafiaDisconnect(client)
 	// Lower the /forcedisplay gate if this client was a pinned target, so the
 	// area stops rendering everyone as their character once they're gone.
@@ -2499,6 +2502,22 @@ func (client *Client) GambleHide() bool {
 func (client *Client) SetGambleHide(h bool) {
 	client.mu.Lock()
 	client.gambleHide = h
+	client.mu.Unlock()
+}
+
+// EventAlertsHide returns whether the client has opted out of global
+// world-event announcements.
+func (client *Client) EventAlertsHide() bool {
+	client.mu.Lock()
+	defer client.mu.Unlock()
+	return client.eventAlertsHide
+}
+
+// SetEventAlertsHide sets whether the client wants to suppress global
+// world-event announcements.
+func (client *Client) SetEventAlertsHide(h bool) {
+	client.mu.Lock()
+	client.eventAlertsHide = h
 	client.mu.Unlock()
 }
 

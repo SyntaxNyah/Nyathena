@@ -139,7 +139,22 @@ type ServerConfig struct {
 	TranslatorAPIURL                     string  `toml:"translator_api_url"`
 	TranslatorAPIKey                     string  `toml:"translator_api_key"`
 	TranslateCooldown                    int     `toml:"translate_cooldown"`
-	EnableCasino                         bool    `toml:"enable_casino"`
+	// EnableCasino is the legacy casino switch. It is kept for backwards
+	// compatibility; CasinoEnabled is the canonical replacement. Either one
+	// being true enables the legacy Nyathena Chips casino.
+	EnableCasino bool `toml:"enable_casino"`
+	// CasinoEnabled is the canonical legacy-casino switch.
+	CasinoEnabled bool `toml:"casino_enabled"`
+	// PebbleMode enables the no-stakes Pebble economy, casual mini-games,
+	// daily activities and world events. It is independent of the legacy
+	// casino: both can be enabled at once.
+	PebbleMode bool `toml:"pebble_mode"`
+	// PebbleEventChance is the "1 in N" daily chance for the Wrecked Ship
+	// world event. Values below 1 fall back to 5.
+	PebbleEventChance int `toml:"pebble_event_chance"`
+	// PebbleEventTimeoutMinutes is how long an unclaimed world event stays
+	// in the world before drifting away. Values below 1 fall back to 5.
+	PebbleEventTimeoutMinutes int `toml:"pebble_event_timeout_minutes"`
 	// EnableCustomCommands turns on the console-only custom command builder.
 	// Off by default: when false, no definition files are scanned at startup,
 	// the dispatch path never consults the custom-command registry, and the
@@ -395,6 +410,10 @@ func DefaultConfig() *Config {
 			TranslatorAPIKey:                     "",
 			TranslateCooldown:                    25,
 			EnableCasino:                         false,
+			CasinoEnabled:                        false,
+			PebbleMode:                           false,
+			PebbleEventChance:                    5,
+			PebbleEventTimeoutMinutes:            5,
 			EnableAccounts:                       true,
 			RegisterCaptcha:                      true,
 			JoinCaptcha:                          false,
@@ -454,6 +473,19 @@ func DefaultConfig() *Config {
 			NewIPIDVoiceCooldown:    30,
 		},
 	}
+}
+
+// CasinoOn reports whether the legacy Nyathena Chips casino is enabled.
+// Either the canonical casino_enabled flag or the legacy enable_casino alias
+// turns it on. Safe to call on a nil receiver.
+func (conf *Config) CasinoOn() bool {
+	return conf != nil && (conf.EnableCasino || conf.CasinoEnabled)
+}
+
+// PebbleOn reports whether Pebble Mode is enabled. Safe to call on a nil
+// receiver.
+func (conf *Config) PebbleOn() bool {
+	return conf != nil && conf.PebbleMode
 }
 
 // Load reads the server's main configuration file.

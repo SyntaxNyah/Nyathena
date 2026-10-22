@@ -28,10 +28,10 @@ import (
 	"strings"
 	"time"
 
+	aolib "github.com/AO-Underground/aolib/go/v2"
 	"github.com/MangosArentLiterature/Athena/internal/area"
 	"github.com/MangosArentLiterature/Athena/internal/db"
 	"github.com/MangosArentLiterature/Athena/internal/logger"
-	aolib "github.com/AO-Underground/aolib/go/v2"
 	"github.com/MangosArentLiterature/Athena/internal/permissions"
 	"github.com/MangosArentLiterature/Athena/internal/webhook"
 	"github.com/xhit/go-str2duration/v2"
@@ -462,8 +462,15 @@ func cmdLogin(client *Client, args []string, _ string) {
 		if hide, err := db.GetGambleHide(args[0]); err == nil {
 			client.SetGambleHide(hide)
 		}
+		// Restore the account's world-event alert preference.
+		if hide, err := db.GetEventAlertsHide(args[0]); err == nil {
+			client.SetEventAlertsHide(hide)
+		}
 		// Restore the account's active cosmetic tag so it shows without re-equipping.
-		if tag := db.GetAccountActiveTag(args[0]); tag != "" {
+		// A valid temporary event tag currently equipped wins over the account's
+		// stored tag so logging in does not wipe it.
+		currentTag := db.GetActiveTag(client.Ipid())
+		if tag := db.GetAccountActiveTag(args[0]); tag != "" && !strings.HasPrefix(currentTag, pebbleTempTagPrefix) {
 			db.SetActiveTag(client.Ipid(), tag) //nolint:errcheck
 		}
 		// Playtime-based auto-trust: if the account has accumulated at least one
