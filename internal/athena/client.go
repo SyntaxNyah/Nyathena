@@ -439,6 +439,7 @@ type Client struct {
 	dancing               bool           // Whether the client has dance mode active (flips sprite every message)
 	danceFlipped          bool           // Current flip state for dance mode; toggles each IC message
 	gambleHide            bool           // Whether the client has opted out of seeing gambling broadcast messages
+	deathrollHide         bool           // Whether the client has opted out of Deathroll broadcasts they are not participating in
 	eventAlertsHide       bool           // Whether the client has opted out of global world-event alerts
 	pendingRegUser        string         // Username from a pending /register that is awaiting captcha confirmation
 	pendingRegPass        []byte         // bcrypt hash from a pending /register that is awaiting captcha confirmation
@@ -2509,6 +2510,22 @@ func (client *Client) GambleHide() bool {
 func (client *Client) SetGambleHide(h bool) {
 	client.mu.Lock()
 	client.gambleHide = h
+	client.mu.Unlock()
+}
+
+// DeathrollHide returns whether the client has opted out of Deathroll
+// broadcasts they are not participating in.
+func (client *Client) DeathrollHide() bool {
+	client.mu.Lock()
+	defer client.mu.Unlock()
+	return client.deathrollHide
+}
+
+// SetDeathrollHide sets whether the client wants to suppress Deathroll
+// broadcasts they are not participating in.
+func (client *Client) SetDeathrollHide(h bool) {
+	client.mu.Lock()
+	client.deathrollHide = h
 	client.mu.Unlock()
 }
 

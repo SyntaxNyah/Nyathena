@@ -166,7 +166,7 @@ So you never have to remember to undo one, and a restart returns every area to i
 | `/roulette join` | Area roulette |
 | `/typingrace [join]` | First to type the phrase wins chips |
 | `/hangman start [theme\|custom <word>]` | Hangman with themed or custom words; wrong guessers are punished on a loss |
-| `/deathroll host [limit]` / `/deathroll join` / `/deathroll roll` | Server-wide Deathroll: take turns rolling `1d<previous roll>`; roll a 1 and lose the `/maso` effect, locked for 10 minutes. |
+| `/deathroll host [limit]` / `/deathroll join` / `/deathroll roll` | Room-scoped Deathroll: take turns rolling `1d<previous roll>`; roll a 1 and lose the `/maso` effect, locked for 10 minutes. `/deathroll limit <n>` changes the limit; `/deathroll hide` mutes broadcasts you are not part of. |
 | `/giveaway start <item>` / `/giveaway enter` | Run or enter a giveaway |
 | `/unscramble [top [n]]` | Your unscramble wins, or the leaderboard. Answer live puzzles in IC to win chips. |
 

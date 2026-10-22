@@ -2354,14 +2354,16 @@ func initCommands() {
 		"deathroll": {
 			handler: cmdDeathroll,
 			minArgs: 0,
-			usage: "Usage: /deathroll <host [limit] | join | start | roll | cancel | status>\n" +
-				"       /deathroll host [limit]  — open a lobby (default 100; e.g. /deathroll host 5000)\n" +
-				"       /deathroll join          — join the open lobby\n" +
+			usage: "Usage: /deathroll <host [limit] | join | start | roll | cancel | limit <n> | status | hide>\n" +
+				"       /deathroll host [limit]  — open a lobby in YOUR ROOM (default 100; e.g. /deathroll host 5000)\n" +
+				"       /deathroll join          — join the open lobby in your room\n" +
 				"       /deathroll start         — host only: shuffle and begin (2+ players)\n" +
 				"       /deathroll roll          — current player rolls 1d<current limit>\n" +
 				"       /deathroll cancel        — host only, before the start\n" +
-				"       /deathroll status        — show the lobby/game",
-			desc:     "Host or join Deathroll: take turns rolling 1d<previous roll>. Roll a 1 and lose the /maso effect for 10 minutes (locked).",
+				"       /deathroll limit <n>     — host only: change the starting limit before the start\n" +
+				"       /deathroll status        — show the lobby/game in your room\n" +
+				"       /deathroll hide          — toggle Deathroll broadcasts you are not part of",
+			desc:     "Host or join a room-scoped Deathroll game: take turns rolling 1d<previous roll>. Roll a 1 and lose the /maso effect for 10 minutes (locked). /deathroll hide mutes broadcasts you are not part of.",
 			reqPerms: permissions.PermissionField["NONE"],
 			category: "minigames",
 		},

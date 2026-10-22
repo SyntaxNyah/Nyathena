@@ -1266,7 +1266,7 @@ Lets **any** player mute server-wide `/global` (and `/g`) broadcasts for themsel
 ### Other Features
 - Hot Potato area minigame
 - Quick Draw area minigame
-- Deathroll server-wide minigame (`/deathroll host [limit]`, `join`, `start`, `roll`, `cancel`, `status`) — the loser gets a locked 10-minute `/maso` effect
+- Deathroll room-scoped minigame (`/deathroll host [limit]`, `join`, `start`, `roll`, `cancel`, `limit <n>`, `status`, `hide`) — only the host's room sees its OOC; the loser gets a locked 10-minute `/maso` effect
 - Chip Giveaway system
 - Area Roulette
 - Wardrobe/character management commands

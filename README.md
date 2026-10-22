@@ -237,7 +237,7 @@ A console-only way to author new slash commands **at runtime** — no restart, n
 - **`/gas`** hides empty areas with a count at the bottom
 - Locked-room kick lockout bug fix (kicked players can no longer walk back in)
 - Hot Potato, Quick Draw, Chip Giveaway, Area Roulette minigames
-- **Deathroll** — `/deathroll host [limit]` opens a server-wide lobby; players join with `/deathroll join` and take turns rolling `1d<previous roll>`. A 1 loses and earns a `/maso` effect locked for 10 minutes. See [docs/DEATHROLL_COMMANDS.md](docs/DEATHROLL_COMMANDS.md)
+- **Deathroll** — `/deathroll host [limit]` opens a room-scoped lobby; players in that room join with `/deathroll join` and take turns rolling `1d<previous roll>`. A 1 loses and earns a `/maso` effect locked for 10 minutes. Hosts can change the limit with `/deathroll limit <n>`; anyone can mute broadcasts with `/deathroll hide`. See [docs/DEATHROLL_COMMANDS.md](docs/DEATHROLL_COMMANDS.md)
 - Wardrobe management, in-place server restart via `syscall.Exec`
 
 ### Removed

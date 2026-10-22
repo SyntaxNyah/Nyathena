@@ -30,9 +30,28 @@ func punishmentLockTestSetup(t *testing.T) {
 	newTestClients(t)
 }
 
+// punishmentLockClient creates a registered client for the lock tests.
+func punishmentLockClient(t *testing.T, uid int, name string) (*Client, *captureConn) {
+	t.Helper()
+	conn := &captureConn{}
+	c := &Client{
+		conn:     conn,
+		uid:      uid,
+		ipid:     fmt.Sprintf("ip-lock-%d", uid),
+		oocName:  name,
+		showname: name,
+		char:     -1,
+		area:     makeTestArea("Lock Test"),
+	}
+	clients.AddClient(c)
+	clients.RegisterUID(c)
+	t.Cleanup(func() { clients.RemoveClient(c) })
+	return c, conn
+}
+
 func TestAddPunishmentLockedAndRemoveUnlocked(t *testing.T) {
 	punishmentLockTestSetup(t)
-	c, _ := deathrollTestClient(t, 100, "Locked")
+	c, _ := punishmentLockClient(t, 100, "Locked")
 	c.AddPunishment(PunishmentPirate, time.Hour, "plain")
 	c.AddPunishmentLocked(PunishmentUwu, time.Hour, time.Hour, "Deathroll: rolled a 1")
 
@@ -57,7 +76,7 @@ func TestAddPunishmentLockedAndRemoveUnlocked(t *testing.T) {
 
 func TestReapplyingSameTypePreservesLiveLock(t *testing.T) {
 	punishmentLockTestSetup(t)
-	c, _ := deathrollTestClient(t, 101, "Reapply")
+	c, _ := punishmentLockClient(t, 101, "Reapply")
 	c.AddPunishmentLocked(PunishmentUwu, time.Hour, time.Hour, "Deathroll: rolled a 1")
 	c.AddPunishment(PunishmentUwu, time.Minute, "re-applied")
 
@@ -68,7 +87,7 @@ func TestReapplyingSameTypePreservesLiveLock(t *testing.T) {
 
 func TestExpiredLockCanBeRemoved(t *testing.T) {
 	punishmentLockTestSetup(t)
-	c, _ := deathrollTestClient(t, 102, "Expired")
+	c, _ := punishmentLockClient(t, 102, "Expired")
 	c.AddPunishmentLocked(PunishmentUwu, time.Hour, -time.Second, "expired lock")
 
 	if locked := c.RemoveAllUnlockedPunishments(); len(locked) != 0 {
@@ -81,7 +100,7 @@ func TestExpiredLockCanBeRemoved(t *testing.T) {
 
 func TestMasoCannotRerollLockedEffect(t *testing.T) {
 	punishmentLockTestSetup(t)
-	c, conn := deathrollTestClient(t, 103, "Maso")
+	c, conn := punishmentLockClient(t, 103, "Maso")
 	c.AddPunishmentLocked(PunishmentUwu, time.Hour, time.Hour, "Deathroll: rolled a 1")
 	c.mu.Lock()
 	c.masoPunishment = PunishmentUwu
@@ -101,8 +120,8 @@ func TestUnpunishSelfRespectsLockButOtherModCanClear(t *testing.T) {
 	defer setupShadowDisconnectTestDB(t)()
 	punishmentLockTestSetup(t)
 
-	loser, loserConn := deathrollTestClient(t, 200, "Loser")
-	mod, _ := deathrollTestClient(t, 201, "Mod")
+	loser, loserConn := punishmentLockClient(t, 200, "Loser")
+	mod, _ := punishmentLockClient(t, 201, "Mod")
 	loser.perms = permissions.PermissionField["MUTE"]
 	mod.perms = permissions.PermissionField["MUTE"]
 	loser.AddPunishmentLocked(PunishmentUwu, time.Hour, time.Hour, "Deathroll: rolled a 1")
@@ -125,7 +144,7 @@ func TestUnpunishSelfRespectsLockButOtherModCanClear(t *testing.T) {
 
 func TestPotionOffCannotFlushLockedEffect(t *testing.T) {
 	punishmentLockTestSetup(t)
-	c, _ := deathrollTestClient(t, 202, "Potion")
+	c, _ := punishmentLockClient(t, 202, "Potion")
 	c.AddPunishmentLocked(PunishmentDrunk, time.Hour, time.Hour, "Deathroll: rolled a 1")
 
 	clearAllPotions(c)
