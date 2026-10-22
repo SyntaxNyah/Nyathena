@@ -1,6 +1,8 @@
 package athena
 
 import (
+	"bytes"
+	"encoding/json"
 	"strings"
 
 	aolib "github.com/AO-Underground/aolib/go/v2"
@@ -78,23 +80,61 @@ func (client *Client) registerInbound() {
 	}
 }
 
-// handleUnknownHeader frames an unmodeled header positionally from the Fanta
-// wire so its handler still runs. FL (client→server feature advertisement) and
-// PW (password) are the two headers aolib's canonical registry doesn't model in
-// this direction; everything else is dropped.
+// handleUnknownHeader frames an unmodeled header from the wire so its handler
+// still runs. FL (client→server feature advertisement) and PW (password) are
+// the two headers aolib's canonical registry doesn't model in this direction;
+// everything else is dropped.
+//
+// The FL branch is wire-format aware on purpose. aolib models FL as
+// server→client only (spec/packets/schemas/FL.schema.json:25), so a client's own
+// FL always lands here — and it can arrive in either form:
+//
+//	FantaCode: FL#timeleap#
+//	JSON:      {"$header":"FL","features":["timeleap"]}
+//
+// The JSON form must be decoded before aolib.NewPacket is tried: that parser is
+// a '#'-splitter, and on a JSON frame it returns a nil Body *without an error*,
+// so the positional path would hand pktFL an empty body and silently CLEAR the
+// client's feature set.
 func (client *Client) handleUnknownHeader(header string, wire []byte) {
-	pkt, err := aolib.NewPacket(strings.TrimSuffix(string(wire), "%"))
-	if err != nil {
-		return
-	}
 	switch header {
 	case "PW":
 		if client.Uid() == -1 {
 			return
 		}
+		pkt, err := aolib.NewPacket(strings.TrimSuffix(string(wire), "%"))
+		if err != nil {
+			return
+		}
 		pktPW(client, pkt)
+
 	case "FL":
-		// aolib models FL as server→client only; the client's own FL arrives here.
+		if features, ok := jsonFLFeatures(wire); ok {
+			client.SetFeatures(features)
+			return
+		}
+		pkt, err := aolib.NewPacket(strings.TrimSuffix(string(wire), "%"))
+		if err != nil {
+			return
+		}
 		pktFL(client, pkt)
 	}
+}
+
+// jsonFLFeatures extracts {"$header":"FL","features":[...]} from a JSON frame.
+// ok is false for any frame that is not a JSON FL, so the caller can fall back
+// to the positional path unchanged.
+func jsonFLFeatures(wire []byte) ([]string, bool) {
+	trimmed := bytes.TrimSpace(wire)
+	if len(trimmed) == 0 || trimmed[0] != '{' {
+		return nil, false
+	}
+	var p struct {
+		Header   string   `json:"$header"`
+		Features []string `json:"features"`
+	}
+	if err := json.Unmarshal(trimmed, &p); err != nil || p.Header != "FL" {
+		return nil, false
+	}
+	return p.Features, true
 }
