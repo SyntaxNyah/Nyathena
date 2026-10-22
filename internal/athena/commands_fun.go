@@ -754,6 +754,20 @@ func cmdErp(client *Client, _ []string, _ string) {
 	client.conn.Close()
 }
 
+// randomMasoPunishment picks a random effect from the same stateless pool
+// /maso uses. When avoid is not PunishmentNone it is skipped, so a reroll
+// always produces a different effect as long as the pool has alternatives.
+// Extracted so Deathroll's loser penalty is literally the /maso effect.
+func randomMasoPunishment(avoid PunishmentType) PunishmentType {
+	pick := areaRandomPunishments[rand.Intn(len(areaRandomPunishments))]
+	if avoid != PunishmentNone && len(areaRandomPunishments) > 1 {
+		for pick == avoid {
+			pick = areaRandomPunishments[rand.Intn(len(areaRandomPunishments))]
+		}
+	}
+	return pick
+}
+
 // cmdMaso lets any user self-apply a random punishment for a configurable
 // duration (default 10 m, max 24 h). Calling it again while a maso punishment
 // is active removes the old one and applies a new (different) random
@@ -781,18 +795,23 @@ func cmdMaso(client *Client, args []string, _ string) {
 	prev := client.masoPunishment
 	client.mu.Unlock()
 
+	// A Deathroll-locked effect is not a self-applied roll the player may reroll
+	// away; treat the lock as part of the punishment.
+	if prev != PunishmentNone {
+		if until := client.PunishmentLockedUntil(prev); !until.IsZero() && time.Now().Before(until) {
+			client.SendServerMessage(fmt.Sprintf(
+				"Your active maso punishment '%v' is locked for another %v and cannot be rerolled yet.",
+				prev, time.Until(until).Round(time.Second)))
+			return
+		}
+	}
+
 	// Remove the previously maso-applied punishment (no-op if it already expired).
 	if prev != PunishmentNone {
 		client.RemovePunishment(prev)
 	}
 
-	// Pick a random punishment; if rerolling, ensure it differs from the previous one.
-	newType := areaRandomPunishments[rand.Intn(len(areaRandomPunishments))]
-	if prev != PunishmentNone && len(areaRandomPunishments) > 1 {
-		for newType == prev {
-			newType = areaRandomPunishments[rand.Intn(len(areaRandomPunishments))]
-		}
-	}
+	newType := randomMasoPunishment(prev)
 
 	client.AddPunishment(newType, duration, "maso")
 

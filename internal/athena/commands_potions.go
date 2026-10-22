@@ -279,7 +279,11 @@ func clearAllPotions(c *Client) {
 			p.cleanup(c)
 		}
 		if p.pType != PunishmentNone && c.HasPunishment(p.pType) {
-			c.RemovePunishment(p.pType)
+			// A locked punishment (Deathroll loser penalty) is not a potion
+			// effect the player may flush early.
+			if until := c.PunishmentLockedUntil(p.pType); until.IsZero() || !time.Now().Before(until) {
+				c.RemovePunishment(p.pType)
+			}
 		}
 	}
 }

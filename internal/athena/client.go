@@ -341,6 +341,12 @@ type PunishmentState struct {
 	customData     string     // For PunishmentTranslator: target language name or "random"
 	icWarpArea     *area.Area // For PunishmentICWarp: the area where the warp applies; nil = inert
 	issuerTier     IssuerTier // who issued this — protects shadow/admin punishments from self-removal
+	// lockedUntil pins this punishment against SELF-service removal until the
+	// deadline passes (zero = unlocked). It is checked by /unpunish when the
+	// caller targets themselves, by /maso's reroll path, and by /potion off.
+	// Other moderators targeting the client, normal expiry, and DB restores
+	// deliberately ignore it. Used by the Deathroll loser penalty.
+	lockedUntil time.Time
 }
 
 type ClientPairInfo struct {
@@ -1317,6 +1323,7 @@ func (client *Client) clientCleanup() {
 	}
 	handleCasinoDisconnect(client)
 	handleMinigameDisconnect(client)
+	handleDeathrollDisconnect(client)
 	cleanupSillyActivityState(client.Ipid())
 	handleMafiaDisconnect(client)
 	// Lower the /forcedisplay gate if this client was a pinned target, so the
@@ -2756,13 +2763,38 @@ func (client *Client) AddPunishment(pType PunishmentType, duration time.Duration
 func (client *Client) AddPunishmentBy(pType PunishmentType, duration time.Duration, reason string, tier IssuerTier) {
 	client.mu.Lock()
 	defer client.mu.Unlock()
+	client.addPunishmentLocked(pType, duration, reason, tier, time.Time{})
+}
 
+// AddPunishmentLocked adds a punishment and pins it against self-service
+// removal for lockDuration. It is used by the Deathroll loser penalty so the
+// loser cannot clear or reroll the effect during the lock window.
+func (client *Client) AddPunishmentLocked(pType PunishmentType, duration, lockDuration time.Duration, reason string) {
+	lockUntil := time.Time{}
+	if lockDuration > 0 {
+		lockUntil = time.Now().UTC().Add(lockDuration)
+	}
+	client.mu.Lock()
+	defer client.mu.Unlock()
+	client.addPunishmentLocked(pType, duration, reason, IssuerSystem, lockUntil)
+}
+
+// addPunishmentLocked is the shared append path for punishments that carry no
+// custom data. client.mu must be held.
+//
+// A same-type re-application replaces the old entry (as before) but carries
+// over a still-live lock: otherwise /maso, /megamaso or a potion could shed a
+// Deathroll lock by re-applying the same effect.
+func (client *Client) addPunishmentLocked(pType PunishmentType, duration time.Duration, reason string, tier IssuerTier, lockUntil time.Time) {
 	// Remove existing punishment of the same type (prevent duplicate same-type punishments)
 	// Different punishment types can coexist and stack their effects
 	existed := false
 	for i := len(client.punishments) - 1; i >= 0; i-- {
 		if client.punishments[i].punishmentType == pType {
 			existed = true
+			if client.punishments[i].lockedUntil.After(lockUntil) {
+				lockUntil = client.punishments[i].lockedUntil
+			}
 			client.punishments = append(client.punishments[:i], client.punishments[i+1:]...)
 			break
 		}
@@ -2783,6 +2815,7 @@ func (client *Client) AddPunishmentBy(pType PunishmentType, duration time.Durati
 		lastEffect:     0,
 		targetUID:      -1,
 		issuerTier:     tier,
+		lockedUntil:    lockUntil,
 	})
 	// Maintain the /forcedisplay hot-path gate. A forcedisplay that wasn't
 	// already present — a fresh application or a DB restore on reconnect — raises
@@ -2792,6 +2825,20 @@ func (client *Client) AddPunishmentBy(pType PunishmentType, duration time.Durati
 	if pType == PunishmentForceDisplay && !existed {
 		activeForceDisplay.Add(1)
 	}
+}
+
+// PunishmentLockedUntil returns the self-service removal lock deadline for
+// pType, or the zero time if the punishment is absent or unlocked. A returned
+// time in the past means the lock has expired.
+func (client *Client) PunishmentLockedUntil(pType PunishmentType) time.Time {
+	client.mu.Lock()
+	defer client.mu.Unlock()
+	for _, p := range client.punishments {
+		if p.punishmentType == pType {
+			return p.lockedUntil
+		}
+	}
+	return time.Time{}
 }
 
 // PunishmentIssuerTier returns the tier of the moderator who applied the given
@@ -2947,6 +2994,32 @@ func (client *Client) RemoveAllPunishments() {
 		}
 	}
 	client.punishments = []PunishmentState{}
+}
+
+// RemoveAllUnlockedPunishments removes every punishment whose self-service lock
+// is absent or expired, and keeps the rest. It returns the types that were kept
+// so the caller can tell the player exactly what is still pinned. Used by
+// /unpunish when the caller targets themselves; targeting another player still
+// uses RemoveAllPunishments, because the lock only stops the loser opting out.
+func (client *Client) RemoveAllUnlockedPunishments() (locked []PunishmentType) {
+	client.mu.Lock()
+	defer client.mu.Unlock()
+
+	now := time.Now().UTC()
+	kept := client.punishments[:0]
+	for i := range client.punishments {
+		p := client.punishments[i]
+		if !p.lockedUntil.IsZero() && now.Before(p.lockedUntil) {
+			kept = append(kept, p)
+			locked = append(locked, p.punishmentType)
+			continue
+		}
+		if p.punishmentType == PunishmentForceDisplay {
+			activeForceDisplay.Add(-1)
+		}
+	}
+	client.punishments = kept
+	return locked
 }
 
 // HasPunishment checks if the client has a specific punishment type.

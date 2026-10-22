@@ -92,8 +92,13 @@ func TestContentGatePrecedesEveryLeakInPktIC(t *testing.T) {
 
 	// Everything the gate must precede, and why it matters if it does not.
 	mustFollow := []landmark{
+		// Match any typed PU broadcast rather than the literal data-type value:
+		// this keeps the ordering invariant intact across aolib constant
+		// migrations (the old "Type: 2" literal was replaced by
+		// aolib.PlayerDataTypeShowname) without weakening the check. Any PU
+		// broadcast added above the gate would still trip this.
 		{"the PU showname broadcast (a slur worn as a showname would reach every client uncensored)",
-			"aolib.PU{ID: client.Uid(), Type: 2"},
+			"broadcastToAll(&aolib.PU{"},
 		{"the torment branch (a censored message could escape via the delayed rebroadcast)",
 			"handleTormentedIC(client, ms)"},
 		{"the quickdraw hook (a censored line could win the minigame)",

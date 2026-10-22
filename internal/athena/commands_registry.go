@@ -2351,6 +2351,20 @@ func initCommands() {
 			reqPerms: permissions.PermissionField["NONE"],
 			category: "minigames",
 		},
+		"deathroll": {
+			handler: cmdDeathroll,
+			minArgs: 0,
+			usage: "Usage: /deathroll <host [limit] | join | start | roll | cancel | status>\n" +
+				"       /deathroll host [limit]  — open a lobby (default 100; e.g. /deathroll host 5000)\n" +
+				"       /deathroll join          — join the open lobby\n" +
+				"       /deathroll start         — host only: shuffle and begin (2+ players)\n" +
+				"       /deathroll roll          — current player rolls 1d<current limit>\n" +
+				"       /deathroll cancel        — host only, before the start\n" +
+				"       /deathroll status        — show the lobby/game",
+			desc:     "Host or join Deathroll: take turns rolling 1d<previous roll>. Roll a 1 and lose the /maso effect for 10 minutes (locked).",
+			reqPerms: permissions.PermissionField["NONE"],
+			category: "minigames",
+		},
 		// Casino commands
 		"bj": {
 			handler:   cmdBlackjack,
@@ -3489,7 +3503,7 @@ var helpCategoryList = []helpCategory{
 	{"general", "🎮", "General", "Movement, chat, dice, info commands."},
 	{"area", "🏛️", "Area", "Area management — backgrounds, music, locks, polls."},
 	{"testimony", "📝", "Testimony", "Testimony recorder — record and replay witness statements."},
-	{"minigames", "🎲", "Mini-games", "Hangman, Hot Potato, Quick Draw, Russian Roulette, Typing Race, giveaways."},
+	{"minigames", "🎲", "Mini-games", "Deathroll, Hangman, Hot Potato, Quick Draw, Russian Roulette, Typing Race, giveaways."},
 	{"mafia", "🕵️", "Mafia / Werewolf", "Social-deduction minigame with roles, votes and night actions."},
 	{"pebble", "🪨", "Pebble Mode", "Casual mini-games, daily activities, the duck pond, and world events."},
 	{"casino", "🎰", "Casino", "Legacy casino — Blackjack, Poker, Slots, Roulette, Chips and stakes."},

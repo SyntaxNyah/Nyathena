@@ -608,7 +608,18 @@ func cmdUnpunish(client *Client, args []string, usage string) {
 				skipped++
 				return
 			}
-			c.RemoveAllPunishments()
+			keptLocked := false
+			if c.Uid() == callerUID {
+				// Locks only stop the caller opting out of their own punishment;
+				// other players in the area are still cleared normally.
+				if locked := c.RemoveAllUnlockedPunishments(); len(locked) > 0 {
+					keptLocked = true
+					skipped++
+					c.SendServerMessage(fmt.Sprintf("Kept your locked punishment(s): %s.", punishmentLockedList(locked)))
+				}
+			} else {
+				c.RemoveAllPunishments()
+			}
 			c.SetMuted(Unmuted)
 			c.SetUnmuteTime(time.Time{})
 			c.SetJailedUntil(time.Time{})
@@ -622,12 +633,16 @@ func cmdUnpunish(client *Client, args []string, usage string) {
 			if err := db.DeleteAllPunishments(c.Ipid()); err != nil {
 				logger.LogErrorf("Failed to remove persistent punishments for %v: %v", c.Ipid(), err)
 			}
-			c.SendServerMessage("All punishments have been removed.")
+			if keptLocked {
+				c.SendServerMessage("All unlocked punishments have been removed. Your locked effect(s) remain.")
+			} else {
+				c.SendServerMessage("All punishments have been removed.")
+			}
 			count++
 		})
 		summary := fmt.Sprintf("Removed all punishments from %v client(s) in this area.", count)
 		if skipped > 0 {
-			summary += " Your own punishments were issued by an admin and cannot be self-removed."
+			summary += " Some of your own punishments were admin-issued or locked and were kept."
 		}
 		client.SendServerMessage(summary)
 		addToBuffer(client, "CMD", fmt.Sprintf("Removed all punishments from entire area (%v client(s)).", count), false)
@@ -679,7 +694,15 @@ func cmdUnpunish(client *Client, args []string, usage string) {
 		if *punishmentType == "" {
 			// Remove all punishments (text, mute, jail, and lag) from memory and DB,
 			// plus the showname-punisher stain so the drip stops for good.
-			c.RemoveAllPunishments()
+			keptLocked := false
+			if isSelf {
+				if locked := c.RemoveAllUnlockedPunishments(); len(locked) > 0 {
+					keptLocked = true
+					client.SendServerMessage(fmt.Sprintf("Kept your locked punishment(s): %s.", punishmentLockedList(locked)))
+				}
+			} else {
+				c.RemoveAllPunishments()
+			}
 			c.SetMuted(Unmuted)
 			c.SetUnmuteTime(time.Time{})
 			c.SetJailedUntil(time.Time{})
@@ -688,7 +711,11 @@ func cmdUnpunish(client *Client, args []string, usage string) {
 			if err := db.DeleteAllPunishments(c.Ipid()); err != nil {
 				logger.LogErrorf("Failed to remove persistent punishments for %v: %v", c.Ipid(), err)
 			}
-			c.SendServerMessage("All punishments have been removed.")
+			if keptLocked {
+				c.SendServerMessage("All unlocked punishments have been removed. Your locked effect(s) remain.")
+			} else {
+				c.SendServerMessage("All punishments have been removed.")
+			}
 		} else {
 			// Remove specific punishment type
 			pType := parsePunishmentType(*punishmentType)
@@ -707,6 +734,14 @@ func cmdUnpunish(client *Client, args []string, usage string) {
 			} else {
 				if !c.HasPunishment(pType) {
 					continue
+				}
+				if isSelf {
+					if until := c.PunishmentLockedUntil(pType); !until.IsZero() && time.Now().Before(until) {
+						client.SendServerMessage(fmt.Sprintf(
+							"Punishment '%v' is locked for another %v and cannot be self-removed.",
+							pType.String(), time.Until(until).Round(time.Second)))
+						continue
+					}
 				}
 				c.RemovePunishment(pType)
 				if err := db.DeleteTextPunishment(c.Ipid(), int(pType)); err != nil {
@@ -740,6 +775,20 @@ func cmdUnpunish(client *Client, args []string, usage string) {
 			}
 		}
 
+		// A locked effect cannot be removed through the caller's own IPID
+		// either — otherwise /unpunish <own-ipid> would bypass the lock.
+		if ipid == client.Ipid() && *punishmentType != "" {
+			pType := parsePunishmentType(*punishmentType)
+			if pType != PunishmentNone {
+				if until := client.PunishmentLockedUntil(pType); !until.IsZero() && time.Now().Before(until) {
+					client.SendServerMessage(fmt.Sprintf(
+						"Punishment '%v' is locked for another %v and cannot be self-removed.",
+						pType.String(), time.Until(until).Round(time.Second)))
+					continue
+				}
+			}
+		}
+
 		connected := getClientsByIpid(ipid)
 		if *punishmentType == "" {
 			removeTormentedIP(ipid)
@@ -748,11 +797,23 @@ func cmdUnpunish(client *Client, args []string, usage string) {
 				logger.LogErrorf("Failed to remove persistent punishments for %v: %v", ipid, err)
 			}
 			for _, c := range connected {
-				c.RemoveAllPunishments()
+				keptLocked := false
+				if c.Uid() == callerUID {
+					if locked := c.RemoveAllUnlockedPunishments(); len(locked) > 0 {
+						keptLocked = true
+						client.SendServerMessage(fmt.Sprintf("Kept your locked punishment(s): %s.", punishmentLockedList(locked)))
+					}
+				} else {
+					c.RemoveAllPunishments()
+				}
 				c.SetMuted(Unmuted)
 				c.SetUnmuteTime(time.Time{})
 				c.SetJailedUntil(time.Time{})
-				c.SendServerMessage("All punishments have been removed.")
+				if keptLocked {
+					c.SendServerMessage("All unlocked punishments have been removed. Your locked effect(s) remain.")
+				} else {
+					c.SendServerMessage("All punishments have been removed.")
+				}
 			}
 		} else {
 			pType := parsePunishmentType(*punishmentType)
@@ -768,6 +829,14 @@ func cmdUnpunish(client *Client, args []string, usage string) {
 				}
 				for _, c := range connected {
 					if c.HasPunishment(pType) {
+						if c.Uid() == callerUID {
+							if until := c.PunishmentLockedUntil(pType); !until.IsZero() && time.Now().Before(until) {
+								client.SendServerMessage(fmt.Sprintf(
+									"Punishment '%v' is locked for another %v and cannot be self-removed.",
+									pType.String(), time.Until(until).Round(time.Second)))
+								continue
+							}
+						}
 						c.RemovePunishment(pType)
 						c.SendServerMessage(fmt.Sprintf("Punishment '%v' has been removed.", pType.String()))
 					}
@@ -781,6 +850,16 @@ func cmdUnpunish(client *Client, args []string, usage string) {
 	report = strings.TrimSuffix(report, ", ")
 	client.SendServerMessage(fmt.Sprintf("Removed punishments from %v clients.", count))
 	addToBuffer(client, "CMD", fmt.Sprintf("Removed punishments from %v.", report), false)
+}
+
+// punishmentLockedList formats locked punishment types for a player-facing
+// message, e.g. "uwu, pirate".
+func punishmentLockedList(types []PunishmentType) string {
+	names := make([]string, len(types))
+	for i, p := range types {
+		names[i] = p.String()
+	}
+	return strings.Join(names, ", ")
 }
 
 // parsePunishmentType converts a string to PunishmentType
