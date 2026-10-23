@@ -267,7 +267,7 @@ standing between a FantaCode peer and an empty `TP#%` frame.
 | `internal/athena/session_inbound.go` | JSON-aware FL shim (`jsonFLFeatures`) |
 | `internal/athena/client.go` | `AddFeatures` (union) + deprecated `SetFeatures` |
 
-Branch `teleport`: `49c6811` (JSON FL adverts), `0300e07` (additive FL merge),
+Branch `timeleap`: `49c6811` (JSON FL adverts), `0300e07` (additive FL merge),
 `506ae81` (TP), on top of `85247fa`.
 
 ---
