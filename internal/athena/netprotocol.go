@@ -160,7 +160,7 @@ func pktId(client *Client, p *aolib.Packet) {
 		"noencryption", "yellowtext", "prezoom", "flipping", "customobjections",
 		"fastloading", "deskmod", "evidence", "cccc_ic_support", "arup", "casing_alerts",
 		"modcall_reason", "looping_sfx", "additive", "effects", "y_offset",
-		"expanded_desk_mods", "auth_packet", "grouppair", "timeleap",
+		"expanded_desk_mods", "auth_packet", "grouppair", "teleport",
 	}})
 
 	if config.AssetURL != "" {
@@ -1186,13 +1186,13 @@ func pktIC(client *Client, p *aolib.Packet) {
 		broadcastToAreaFrom(client.Ipid(), senderBypassesIgnore(client.Perms()), client.Area(), ms)
 	}
 	silenced = silenced || restricted
-	// TimeLeap transcript: remember the message the room actually heard, in the
+	// Teleport transcript: remember the message the room actually heard, in the
 	// structured form a replay needs. Area.buffer only keeps formatted log lines
 	// and Area.icMessages only keeps pre-punishment text per IPID, so neither can
 	// reconstruct an MSToClient.
 	if !silenced {
 		color, _ := strconv.Atoi(string(ms.TextColor))
-		tlLogFor(client.Area()).append(tlLogLine{
+		tpLogFor(client.Area()).append(tpLogLine{
 			TS:       time.Now().Unix(),
 			UID:      client.Uid(),
 			CharID:   client.CharID(),

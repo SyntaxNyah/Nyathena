@@ -89,8 +89,8 @@ func (client *Client) registerInbound() {
 // server→client only (spec/packets/schemas/FL.schema.json:25), so a client's own
 // FL always lands here — and it can arrive in either form:
 //
-//	FantaCode: FL#timeleap#
-//	JSON:      {"$header":"FL","features":["timeleap"]}
+//	FantaCode: FL#teleport#
+//	JSON:      {"$header":"FL","features":["teleport"]}
 //
 // The JSON form must be decoded before aolib.NewPacket is tried: that parser is
 // a '#'-splitter, and on a JSON frame it returns a nil Body *without an error*,

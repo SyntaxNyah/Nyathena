@@ -13,10 +13,10 @@ import "testing"
 // server advertises JSON in the decryptor greeting.
 func TestFLJSONAdvertLands(t *testing.T) {
 	c := &Client{}
-	c.handleUnknownHeader("FL", []byte(`{"$header":"FL","features":["timeleap"]}`))
+	c.handleUnknownHeader("FL", []byte(`{"$header":"FL","features":["teleport"]}`))
 
-	if !c.SupportsFeature("timeleap") {
-		t.Fatal("JSON FL advert did not register \"timeleap\"")
+	if !c.SupportsFeature("teleport") {
+		t.Fatal("JSON FL advert did not register \"teleport\"")
 	}
 }
 
@@ -36,9 +36,9 @@ func TestFLPositionalAdvertStillLands(t *testing.T) {
 // features registers all of them (AsyncAO packs every feature into one frame).
 func TestFLAdvertMultipleFeatures(t *testing.T) {
 	c := &Client{}
-	c.handleUnknownHeader("FL", []byte("FL#grouppair#timeleap#"))
+	c.handleUnknownHeader("FL", []byte("FL#grouppair#teleport#"))
 
-	for _, f := range []string{"grouppair", "timeleap"} {
+	for _, f := range []string{"grouppair", "teleport"} {
 		if !c.SupportsFeature(f) {
 			t.Fatalf("positional FL advert did not register %q", f)
 		}
@@ -51,9 +51,9 @@ func TestFLAdvertMultipleFeatures(t *testing.T) {
 func TestFLAdvertSurvivesSecondFrame(t *testing.T) {
 	c := &Client{}
 	c.handleUnknownHeader("FL", []byte("FL#grouppair#"))
-	c.handleUnknownHeader("FL", []byte(`{"$header":"FL","features":["timeleap"]}`))
+	c.handleUnknownHeader("FL", []byte(`{"$header":"FL","features":["teleport"]}`))
 
-	for _, f := range []string{"grouppair", "timeleap"} {
+	for _, f := range []string{"grouppair", "teleport"} {
 		if !c.SupportsFeature(f) {
 			t.Fatalf("second FL advert erased %q", f)
 		}
@@ -64,10 +64,10 @@ func TestFLAdvertSurvivesSecondFrame(t *testing.T) {
 // retraction. "FL#" is the wire form after the read loop strips '%'.
 func TestEmptyFLDoesNotClear(t *testing.T) {
 	c := &Client{}
-	c.handleUnknownHeader("FL", []byte("FL#timeleap#"))
+	c.handleUnknownHeader("FL", []byte("FL#teleport#"))
 	c.handleUnknownHeader("FL", []byte("FL#"))
 
-	if !c.SupportsFeature("timeleap") {
+	if !c.SupportsFeature("teleport") {
 		t.Fatal("empty FL advert cleared the feature set")
 	}
 }
@@ -76,10 +76,10 @@ func TestEmptyFLDoesNotClear(t *testing.T) {
 // the wrong type cannot fall through to the positional path and clear the set.
 func TestFLMalformedJSONDoesNotClear(t *testing.T) {
 	c := &Client{}
-	c.handleUnknownHeader("FL", []byte("FL#timeleap#"))
+	c.handleUnknownHeader("FL", []byte("FL#teleport#"))
 	c.handleUnknownHeader("FL", []byte(`{"$header":"FL","features":123}`))
 
-	if !c.SupportsFeature("timeleap") {
+	if !c.SupportsFeature("teleport") {
 		t.Fatal("malformed JSON FL advert cleared the feature set")
 	}
 }
@@ -88,9 +88,9 @@ func TestFLMalformedJSONDoesNotClear(t *testing.T) {
 // not mistaken for an advert.
 func TestFLJSONSkipsNonFLHeader(t *testing.T) {
 	c := &Client{}
-	c.handleUnknownHeader("FL", []byte(`{"$header":"MS","features":["timeleap"]}`))
+	c.handleUnknownHeader("FL", []byte(`{"$header":"MS","features":["teleport"]}`))
 
-	if c.SupportsFeature("timeleap") {
+	if c.SupportsFeature("teleport") {
 		t.Fatal("non-FL JSON body was treated as an FL advert")
 	}
 }
