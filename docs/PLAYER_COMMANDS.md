@@ -84,6 +84,8 @@ For moderator-only commands, see [`MOD_COMMANDS.md`](MOD_COMMANDS.md). For casin
 | `/bglist` | List every available background |
 | `/swapevi <id1> <id2>` | Swap two pieces of evidence |
 | `/testimony <record\|stop\|play\|update\|insert\|delete>` | Drive the area's testimony recorder. Witnesses must be in `/pos wit` for their lines to be captured. |
+| `/savetestimony <name>` | Save the area's recorded testimony under a name so it can be replayed later (CM only) |
+| `/loadtestimony [name]` | Load a saved testimony for playback, or list the saved ones (CM only) |
 | `/examine` | Start cross-examination playback |
 | `/vote <option>` | Vote on the area's active poll |
 | `/cvote <action> <uid> [reason]` | Community moderation vote (kick/mute/ban/warn/areakick). Moderators have the final say. |

@@ -44,10 +44,6 @@ import (
 // commandRegex matches valid command names (e.g., /join, /join-tournament, /area_kick, /51), case-insensitively.
 var commandRegex = regexp.MustCompile(`(?i)^/[a-z0-9_]+(-[a-z0-9_]+)*`)
 
-// tstNavRegex matches testimony navigation controls (<, >, >N) in IC messages.
-// Compiled once at package init to avoid repeated allocation during testimony playback.
-var tstNavRegex = regexp.MustCompile(`[<>]([[:digit:]]+)?`)
-
 // maxShownameLength is the maximum number of characters allowed in a showname.
 const maxShownameLength = 30
 
@@ -1018,23 +1014,22 @@ func pktIC(client *Client, p *aolib.Packet) {
 		}
 	}
 	if client.Area().TstState() == area.TRPlayback {
-		s := tstNavRegex.FindString(msgText)
-		if s != "" {
-			if strings.ContainsRune(s, '<') {
+		// Only a bare navigation token steers the testimony; anything else is
+		// ordinary IC and falls through to the normal broadcast below.
+		if dir, idStr, ok := parseTestimonyNav(msgText); ok {
+			switch {
+			case dir == "<":
 				client.Area().TstRewind()
-				broadcastToArea(client.Area(), ParseMSToClientString(client.Area().CurrentTstStatement()))
+				broadcastTestimonyStatement(client.Area())
 				return
-			}
-			_, idStr, _ := strings.Cut(s, ">")
-			id, err := strconv.Atoi(idStr)
-			if err != nil {
+			case idStr == "":
 				client.Area().TstAdvance()
-				broadcastToArea(client.Area(), ParseMSToClientString(client.Area().CurrentTstStatement()))
+				broadcastTestimonyStatement(client.Area())
 				return
-			} else {
-				if id > 0 && id < client.Area().TstLen() {
+			default:
+				if id, ok := jumpTestimonyTarget(client.Area(), idStr); ok {
 					client.Area().TstJump(id)
-					broadcastToArea(client.Area(), ParseMSToClientString(client.Area().CurrentTstStatement()))
+					broadcastTestimonyStatement(client.Area())
 					return
 				}
 			}

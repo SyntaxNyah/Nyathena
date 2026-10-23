@@ -158,10 +158,10 @@ grantcmd bob terminal,purgedb
 `defense_attorney` is a regular player running a trial in one area tonight and needs the testimony-recorder commands, but you don't want to hand them general CM powers (kicking people from the area, locking it, etc.) via `/cm`.
 
 ```
-grantcmd defense_attorney testify,add,delete,update,testimony,examine
+grantcmd defense_attorney testify,add,delete,update,testimony,examine,savetestimony,loadtestimony
 ```
 
-Note `examine` doesn't actually need a grant (it has no permission requirement at all — anyone can play back existing testimony), it's included here just so the same player can also start cross-examination; the rest (`testify`/`add`/`delete`/`update`/`testimony`) are the ones that are otherwise CM-only.
+Note `examine` doesn't actually need a grant (it has no permission requirement at all — anyone can play back existing testimony), it's included here just so the same player can also start cross-examination; the rest (`testify`/`add`/`delete`/`update`/`testimony`/`savetestimony`/`loadtestimony`) are the ones that are otherwise CM-only.
 
 ### Example 4 — Giving an event DJ the ability to move people to a stage area
 

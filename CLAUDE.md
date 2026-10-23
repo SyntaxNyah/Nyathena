@@ -1263,7 +1263,30 @@ Lets **any** player mute server-wide `/global` (and `/g`) broadcasts for themsel
 - **Scoped to cross-area broadcasts, not to every OOC-shaped packet.** Local (area) OOC (`broadcastToAreaFrom`), direct messages (`/pm`) and staff/system broadcasts — `/mod -g`, `/modchat`, `/announce`, moderation alerts (`[CENSOR]`, `[RAIDGUARD]`, `[BAN]`, `[AUDIT]`, ...) — are never affected by this toggle, since those are either local, addressed specifically to the player, or something staff need seen regardless of a player's OOC preference.
 - Toggling back off restores `/global` broadcasts immediately; there is nothing to miss in between since nothing is buffered — messages sent while hidden are simply never delivered to that client.
 
+### Testimony Recorder: Playback Belongs to Nobody (Bug Fix)
+
+Testimony playback used to re-broadcast each recorded statement with the char id it was recorded with. Every AO2 client treats an `MS` whose char id matches its own as the echo of a message it just sent and resets its IC input panel — the desktop client calls `reset_ui()` (input box, objection/realization/screenshake state, evidence spinner) and webAO calls `resetICParams()` (input box, flash/shake, preanim/sfx, selected shout). Since a recorded statement carries the witness's char id, replaying it wiped the input of whoever held that slot — almost always the witness, still typing — which is why the feature looked like it "hijacked" people.
+
+Playback now goes through `Area.CurrentTstPlaybackStatement()` (`internal/area/testimony.go`), which mirrors Akashi's `Statement::playbackFields()`: the char id slot (field 8) becomes **-1**, a value that belongs to no one, and an empty showname (field 15) is filled from the character folder (field 2) because clients fall back to the showname for the name box once there is no usable char id. The character folder, emote, message, text colour, sfx and pair block all survive, so the statement still renders and animates as the witness who recorded it. Recording itself is untouched: stored statements keep the real char id, and only the playback copy is anonymised. Every replay site (`/examine`, `/testimony play`, and the `<`/`>`/`>N` navigation) calls `broadcastTestimonyStatement` (`internal/athena/testimony_playback.go`), so no future call site can forget the rewrite. Pinned by `TestTestimonyPlaybackBelongsToNobody` (`internal/area/testimony_hijack_test.go`) and `TestTestimonyPlaybackPacketBelongsToNobody` (`internal/athena/testimony_playback_test.go`, which checks both the FantaCode and JSON wires).
+
+**Navigation only fires on a bare token (bug fix).** The navigation matcher used to search for `<`, `>` or `>N` *anywhere* in an IC message, so an ordinary line like "I <3 that" was swallowed — never reaching the room — and rewound the testimony instead. `parseTestimonyNav` now anchors on the whole trimmed message (`^([<>])([0-9]*)$`), the same rule Akashi uses, so only a message that is exactly `<`, `>` or `>N` navigates. Pinned by `TestParseTestimonyNav` and `TestJumpTestimonyTarget`.
+
+**`HasTestimony` counts a single statement (bug fix).** It required `len > 2` (title plus two statements), so a testimony with one statement could be recorded but never examined — including one loaded from a file. It is now `len > 1`, matching Akashi's `statementCount()-1 > 0`.
+
+### `/savetestimony` and `/loadtestimony`
+
+Testimonies can be persisted and replayed later, Akashi-style (`internal/athena/testimony_files.go`):
+
+| Command | Behaviour |
+|---------|-----------|
+| `/savetestimony <name>` | Saves the area's recorded testimony to `<config>/testimony/<name>.txt`. Refuses an existing name. |
+| `/loadtestimony <name>` | Replaces the area's testimony with the saved one, stops any active recording/playback and rewinds to the title; `/examine` starts playback. |
+| `/loadtestimony` | Lists the saved testimony names. |
+
+Both are `CM` commands in the 📝 Testimony help category, and are grantable to a player with `grantcmd` like the rest of the recorder. Names are validated against `^[a-z0-9_-]{1,64}$` (lower-cased), so a name can never contain a separator, `.`/`..` or a drive letter and can never leave the testimony directory. The file format is one statement per line, each statement's MS fields wire-escaped and joined with `#` — Akashi's `toSavedLine`/`fromSavedLine` — which keeps a message containing `#`, `%`, `$` or `&` from splitting into extra fields. Loading unescapes each field, re-escapes it for the in-memory form and clears the char id to `-1` (a saved id would name whoever holds that slot in the current session), rejects a file over 256 KiB or past `max_testimony` + 1 statements, and rejects the whole file if any line is not a statement rather than loading it partially. Pinned by `TestTestimonySaveLoadRoundTrip`, `TestTestimonySaveDoesNotDoubleEscape`, `TestTestimonyLoadNormalisesHandEditedFields`, `TestTestimonyLoadErrors`, `TestSanitizeTestimonyName`, `TestListSavedTestimonies` and `TestTestimonyFileCommandsRegistered`.
+
 ### Other Features
+
 - Hot Potato area minigame
 - Quick Draw area minigame
 - Deathroll room-scoped minigame (`/deathroll host [limit]`, `join`, `start`, `roll`, `cancel`, `limit <n>`, `status`, `hide`) — only the host's room sees its OOC; the loser gets a locked 10-minute `/maso` effect
@@ -1272,7 +1295,7 @@ Lets **any** player mute server-wide `/global` (and `/g`) broadcasts for themsel
 - Wardrobe/character management commands
 - `/randomchar`
 - In-place server restart via `syscall.Exec`
-- Testimony recorder (inherited from upstream Athena)
+- Testimony recorder (`/testify`, `/testimony`, `/examine`, `/savetestimony`, `/loadtestimony`) — playback packets carry char id -1 so a replay never clears a live player's input
 - `/about` credits SyntaxNyah's fork and full credit to MangosArentLiterature's upstream Athena.
 
 ## Testing

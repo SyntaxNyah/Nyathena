@@ -1036,10 +1036,16 @@ func (a *Area) MotdHeldByCM() bool {
 }
 
 // HasTestimony returns whether the area has a recorded testimony.
+//
+// Anything past the title counts: a titled testimony with a single statement is
+// a real (if short) testimony and can be played back, exactly as Akashi's
+// recorder treats statementCount()-1 > 0. The old len > 2 threshold silently
+// refused to play anything with fewer than two statements, which also meant a
+// testimony saved and reloaded with one statement could never be examined.
 func (a *Area) HasTestimony() bool {
 	a.mu.Lock()
 	defer a.mu.Unlock()
-	return len(a.tr.Testimony) > 2
+	return len(a.tr.Testimony) > 1
 }
 
 // Testimony returns the area's recorded testimony.

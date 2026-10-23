@@ -1160,6 +1160,14 @@ func initCommands() {
 			reqPerms: permissions.PermissionField["NONE"],
 			category: "general",
 		},
+		"loadtestimony": {
+			handler:  cmdLoadTestimony,
+			minArgs:  0,
+			usage:    "Usage: /loadtestimony [name]\nWith no name, lists every saved testimony. Loading replaces the area's current testimony; /examine starts playback.",
+			desc:     "Loads a saved testimony for playback, or lists the saved testimonies (CM only).",
+			reqPerms: permissions.PermissionField["CM"],
+			category: "testimony",
+		},
 		"maso": {
 			handler:  cmdMaso,
 			minArgs:  0,
@@ -1190,6 +1198,14 @@ func initCommands() {
 			desc:     "Community moderation voting. Players vote to kick/mute/ban/warn/areakick; moderators have final say.",
 			reqPerms: permissions.PermissionField["NONE"],
 			category: "general",
+		},
+		"savetestimony": {
+			handler:  cmdSaveTestimony,
+			minArgs:  1,
+			usage:    "Usage: /savetestimony <name>\nSaves the area's recorded testimony to the server's testimony directory. Names accept letters, numbers, dashes and underscores.",
+			desc:     "Saves the current testimony to a file so it can be replayed later (CM only).",
+			reqPerms: permissions.PermissionField["CM"],
+			category: "testimony",
 		},
 		"setrole": {
 			handler:  cmdChangeRole,

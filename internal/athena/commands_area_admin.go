@@ -1062,7 +1062,7 @@ func cmdExamine(client *Client, _ []string, _ string) {
 	client.Area().SetTstState(area.TRPlayback)
 	client.SendServerMessage("Starting cross-examination.")
 	broadcastToArea(client.Area(), &aolib.RTToClient{Animation: aolib.RTAnimationCrossExamination})
-	broadcastToArea(client.Area(), ParseMSToClientString(client.Area().CurrentTstStatement()))
+	broadcastTestimonyStatement(client.Area())
 }
 
 // Handles /update
@@ -1152,7 +1152,7 @@ func cmdTestimony(client *Client, args []string, _ string) {
 		client.Area().SetTstState(area.TRPlayback)
 		client.SendServerMessage("Playing testimony.")
 		broadcastToArea(client.Area(), &aolib.RTToClient{Animation: aolib.RTAnimationCrossExamination})
-		broadcastToArea(client.Area(), ParseMSToClientString(client.Area().CurrentTstStatement()))
+		broadcastTestimonyStatement(client.Area())
 	case "update":
 		if client.Area().TstState() != area.TRPlayback {
 			client.SendServerMessage("The recorder is not active.")
@@ -1177,6 +1177,77 @@ func cmdTestimony(client *Client, args []string, _ string) {
 			}
 		}
 	}
+}
+
+// Handles /savetestimony
+
+// cmdSaveTestimony writes the area's recorded testimony to
+// <config>/testimony/<name>.txt, one statement per line, in the same escaped
+// form Akashi's recorder saves with (see testimony_files.go).
+func cmdSaveTestimony(client *Client, args []string, _ string) {
+	if !client.HasCMPermission() && !clientHasCommandGrant(client, "savetestimony") {
+		client.SendServerMessage("You do not have permission to use that command.")
+		return
+	}
+	// A title alone is nothing to replay, so there is nothing worth saving.
+	if !client.Area().HasTestimony() {
+		client.SendServerMessage("Can't save an empty testimony.")
+		return
+	}
+	name, ok := sanitizeTestimonyName(args[0])
+	if !ok {
+		client.SendServerMessage("Invalid testimony name. Use only letters, numbers, dashes and underscores (max 64 characters).")
+		return
+	}
+	if testimonyFileExists(name) {
+		client.SendServerMessage("Unable to save testimony. Testimony name already exists.")
+		return
+	}
+	if err := saveTestimonyFile(name, client.Area().TstStatements()); err != nil {
+		client.SendServerMessage(fmt.Sprintf("Unable to save testimony: %v", err))
+		return
+	}
+	client.SendServerMessage(fmt.Sprintf("Testimony saved. To load it use /loadtestimony %v", name))
+	addToBuffer(client, "CMD", fmt.Sprintf("Saved the testimony as %v.", name), false)
+}
+
+// Handles /loadtestimony
+
+// cmdLoadTestimony loads a saved testimony into the area's recorder for
+// playback. With no argument it lists what has been saved. Loading stops any
+// active recording/playback so a stale state can never run over statements the
+// room never heard; /examine starts the cross-examination afterwards.
+func cmdLoadTestimony(client *Client, args []string, _ string) {
+	if !client.HasCMPermission() && !clientHasCommandGrant(client, "loadtestimony") {
+		client.SendServerMessage("You do not have permission to use that command.")
+		return
+	}
+	if len(args) == 0 {
+		names := listSavedTestimonies()
+		if len(names) == 0 {
+			client.SendServerMessage("No testimonies have been saved yet. Save one with /savetestimony <name>.")
+			return
+		}
+		client.SendServerMessage("Saved testimonies:\n" + strings.Join(names, "\n"))
+		return
+	}
+	name, ok := sanitizeTestimonyName(args[0])
+	if !ok {
+		client.SendServerMessage("Invalid testimony name. Use only letters, numbers, dashes and underscores (max 64 characters).")
+		return
+	}
+	// The recorder's own cap: the title plus max_testimony statements.
+	limit := config.MaxStatement + 1
+	statements, err := loadTestimonyFile(name, limit)
+	if err != nil {
+		client.SendServerMessage(fmt.Sprintf("Unable to load testimony: %v", err))
+		return
+	}
+	client.Area().TstReplaceAll(statements)
+	client.Area().SetTstState(area.TRIdle)
+	client.Area().TstJump(0)
+	client.SendServerMessage("Testimony loaded successfully. Use /examine to start playback.")
+	addToBuffer(client, "CMD", fmt.Sprintf("Loaded the testimony %v.", name), false)
 }
 
 // Handles /unban
