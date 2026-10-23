@@ -2,7 +2,8 @@
 
 > Server: **Nyathena** (Athena fork)
 > Clients: **AsyncAO** (Go) and **LemmyAO** (TypeScript / aolib-ts)
-> Status: **groundwork landed** on the `teleport` branch of all three repos.
+> Status: **groundwork landed** on the `timeleap` branch of all three repos
+> (the branch kept its original name; the feature was renamed).
 > POC scope: save/restore of a room snapshot. See §12 for what is deliberately
 > not done yet. §13 specifies **D-Mail (`DM`)**, a sibling extension that is
 > **designed but not implemented**.
@@ -18,6 +19,30 @@
 
 ---
 
+## Why this exists
+
+**Teleport lets a room jump back to an earlier moment.** Someone saves the room as
+it is — the IC log, who was standing where, the background, the music, the
+evidence — and later restores it, so the scene comes back exactly as it was.
+
+What players use it for:
+
+* **Flashbacks.** "This is what actually happened that night" — rewind and replay
+  the moment instead of re-typing it.
+* **Recovery.** A scene got wiped by an area change, a bot flood, or a misclick:
+  restore the last good state instead of rebuilding it by hand.
+* **Branching.** Save at a decision point, play one path, restore, play another.
+
+"1:1" is the requirement, not a slogan: a restore should reproduce the room, not
+approximate it. That is why the snapshot carries a structured transcript rather
+than the formatted mod log (§6).
+
+Teleport is **not** D-Mail (§13). A D-Mail sends a message that *claims* the past
+changed and plays a worldline shift; Teleport actually puts the room back. A
+D-Mail can trigger a Teleport — that is the one-way bridge.
+
+---
+
 ## 0. Design principle
 
 Teleport is a **Nyathena server extension**, not a first-class aolib spec change.
@@ -25,7 +50,7 @@ It uses the library's custom-packet extension point for one new **JSON-only**
 header, `TP`:
 
 * registered with `packetutil.RegisterLocal("TP", tpCodec())` (`register.go`) —
-  the same call GP uses, so it stays out of aolib's inbound registry;
+  the same call GP (GroupPair) uses, so it stays out of aolib's inbound registry;
 * **absent from `aolib/spec/`** and from the conformance vectors;
 * no FantaCode form, ever. `tpCodec` returns an explicit error for the Fanta
   closures instead of leaving them nil (GP leaves them nil, which is a latent
