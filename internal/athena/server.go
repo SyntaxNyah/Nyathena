@@ -189,6 +189,20 @@ var (
 	// connecting. Known IPIDs (those in ipFirstSeenTracker) are still allowed through.
 	serverLockdown atomic.Bool
 
+	// modcallsDisabled is the /modcall disable kill switch: while set, pktModcall
+	// refuses every ZZ before it reaches a cooldown, the buffer, the staff
+	// fan-out, the Discord webhook or the report file.
+	//
+	// In-memory on purpose and never persisted. The command's own contract is
+	// "until the flag is turned back on or the server restarts", so a restart is
+	// always a clean slate -- a switch that survived one could outlive the raid
+	// it was thrown for and quietly leave a server with no way to call a mod.
+	modcallsDisabled atomic.Bool
+
+	// modcallsSuppressed counts what the switch turned away since it was last
+	// switched on, so /modcall status can say how much was actually stopped.
+	modcallsSuppressed atomic.Int64
+
 	// playerLockdownThreshold holds the runtime-adjustable player count cap for the
 	// capacity lockdown feature.  When the connected player count reaches this value,
 	// new join attempts are rejected.  0 means the threshold is disabled.

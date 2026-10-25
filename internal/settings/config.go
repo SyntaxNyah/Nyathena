@@ -107,6 +107,12 @@ type ServerConfig struct {
 	RaidGuardAutoLockdown                bool    `toml:"raid_guard_auto_lockdown"`
 	RaidGuardSlurSevereWeight            int     `toml:"raid_guard_slur_severe_weight"`
 	RaidGuardSlurFlaggedWeight           int     `toml:"raid_guard_slur_flagged_weight"`
+	RaidGuardModcallJoinMs               int     `toml:"raid_guard_modcall_join_ms"`
+	RaidGuardModcallDwell                int     `toml:"raid_guard_modcall_dwell"`
+	RaidGuardModcallWindow               int     `toml:"raid_guard_modcall_window"`
+	RaidGuardModcallMinAttempts          int     `toml:"raid_guard_modcall_min_attempts"`
+	RaidGuardModcallFanout               int     `toml:"raid_guard_modcall_fanout"`
+	RaidGuardModcallNuke                 bool    `toml:"raid_guard_modcall_nuke"`
 	ModcallCooldown                      int     `toml:"modcall_cooldown"`
 	ConnRateLimit                        int     `toml:"connection_rate_limit"`
 	ConnRateLimitWindow                  int     `toml:"connection_rate_limit_window"`
@@ -378,6 +384,12 @@ func DefaultConfig() *Config {
 			RaidGuardAutoLockdown:                false,
 			RaidGuardSlurSevereWeight:            40,
 			RaidGuardSlurFlaggedWeight:           20,
+			RaidGuardModcallJoinMs:               2500,
+			RaidGuardModcallDwell:                60,
+			RaidGuardModcallWindow:               2400,
+			RaidGuardModcallMinAttempts:          5,
+			RaidGuardModcallFanout:               3,
+			RaidGuardModcallNuke:                 true,
 			ModcallCooldown:                      0,
 			ConnRateLimit:                        10,
 			ConnRateLimitWindow:                  10,

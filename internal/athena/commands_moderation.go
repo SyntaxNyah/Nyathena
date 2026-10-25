@@ -1648,6 +1648,85 @@ func cmdTormentList(client *Client, _ []string, _ string) {
 	client.SendServerMessage(b.String())
 }
 
+// cmdModcall is the server-wide modcall kill switch: /modcall <disable|enable>,
+// or /modcall (bare) / /modcall status to report it.
+//
+// It exists because a modcall flood cannot be answered by any per-caller limit.
+// Every IPID can only call once per modcall_cooldown, so a raid spends fresh
+// identities -- six calls from six throwaway connections are six separate
+// "first" calls, each one legal, none of them suppressible by waiting one
+// identity out. The only thing that stops that is switching the channel itself
+// off for a while.
+//
+// Deliberately in-memory, never persisted: "until the flag is turned back on or
+// the server restarts" is the contract, and a switch that survived a restart
+// could outlive the incident it was thrown for and leave a server where nobody
+// can reach a moderator.
+//
+// The registry gate is MOD_CHAT so everyone who *receives* modcalls can also
+// read the state; flipping it re-checks BAN inside the handler, the same split
+// /raidguard uses (see raidguard_cmd.go's header for why).
+func cmdModcall(client *Client, args []string, usage string) {
+	sub := "status"
+	if len(args) > 0 {
+		sub = strings.ToLower(strings.TrimSpace(args[0]))
+	}
+
+	if sub == "status" || sub == "state" {
+		state := "ENABLED"
+		if modcallsDisabled.Load() {
+			state = "DISABLED"
+		}
+		client.SendServerMessage(fmt.Sprintf(
+			"📬 Modcalls are currently %v.\n%v modcall attempt(s) refused since they were last disabled.\n"+
+				"This switch is in-memory: a server restart always comes back with modcalls ENABLED.",
+			state, modcallsSuppressed.Load()))
+		return
+	}
+
+	var disable bool
+	switch sub {
+	case "disable", "off":
+		disable = true
+	case "enable", "on":
+		disable = false
+	default:
+		client.SendServerMessage("Unknown subcommand:\n" + usage)
+		return
+	}
+
+	if !permissions.HasPermission(client.Perms(), permissions.PermissionField["BAN"]) && !clientHasCommandGrant(client, "modcall") {
+		client.SendServerMessage("You do not have permission to change modcall availability.")
+		return
+	}
+
+	if !modcallsDisabled.CompareAndSwap(!disable, disable) {
+		state := "ENABLED"
+		if disable {
+			state = "DISABLED"
+		}
+		client.SendServerMessage(fmt.Sprintf("Modcalls are already %v.", state))
+		return
+	}
+
+	if disable {
+		modcallsSuppressed.Store(0)
+		sendGlobalServerMessage("📭 Modcalls are now DISABLED server-wide. If you need a moderator, please ask in OOC.")
+		client.SendServerMessage("Modcalls DISABLED. Every modcall packet is refused and counted until /modcall enable, or until the server restarts.")
+		addToBuffer(client, "CMD", "Disabled modcalls server-wide.", true)
+		logger.WriteAudit(fmt.Sprintf("%v | MODCALL_SWITCH | disabled by=%v (UID %v, IPID %v)",
+			time.Now().UTC().Format("15:04:05"), clientDisplayName(client), client.Uid(), client.Ipid()))
+		return
+	}
+
+	refused := modcallsSuppressed.Swap(0)
+	sendGlobalServerMessage("📬 Modcalls are now ENABLED server-wide.")
+	client.SendServerMessage(fmt.Sprintf("Modcalls ENABLED. %v attempt(s) had been refused while they were off; the modcall cooldowns of those callers were not consumed.", refused))
+	addToBuffer(client, "CMD", fmt.Sprintf("Enabled modcalls server-wide (%v attempt(s) had been refused).", refused), true)
+	logger.WriteAudit(fmt.Sprintf("%v | MODCALL_SWITCH | enabled by=%v (UID %v, IPID %v) after %v refused attempt(s)",
+		time.Now().UTC().Format("15:04:05"), clientDisplayName(client), client.Uid(), client.Ipid(), refused))
+}
+
 // cmdLockdown toggles server lockdown mode, or manages the lockdown whitelist.
 // Subcommands:
 //

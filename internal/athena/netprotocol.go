@@ -1719,6 +1719,41 @@ func pktPing(client *Client, _ *aolib.Packet) {
 
 // Handles ZZ#%
 func pktModcall(client *Client, p *aolib.Packet) {
+	// Parsed first so the raid guard and the kill switch below can both see the
+	// reason. ParseZZToServer always returns a usable value (it fills defaults
+	// for a short body rather than failing), so the ignored error is safe here
+	// and was already being ignored further down.
+	zz, _ := aolib.ParseZZToServer(p.Body)
+
+	// Scored BEFORE any cooldown gate, deliberately. Both gates below return
+	// before the packet is logged, buffered or delivered, so a script that
+	// hammers ZZ is invisible to every other detector on this server: with a
+	// 40-minute modcall_cooldown it looks exactly like a player who called once.
+	// The guard has to see the refusals, not just the one delivery that gets
+	// through. A true result means it acted (silence, kick, ban or nuke) and the
+	// message that earned the verdict must not be delivered.
+	if raidGuardOnModcall(client, zz.Reason) {
+		return
+	}
+
+	// A quarantine the guard placed is captchaRestricted, and pktIC and pktOOC
+	// both drop packets for a restricted connection while this path never
+	// checked -- so a silenced spammer kept reaching staff with every modcall.
+	// Same fast-path counter guard as pktIC uses.
+	if activeCaptchaRestricted.Load() > 0 && client.captchaRestricted.Load() {
+		return
+	}
+
+	// /modcall disable. Refused before the cooldowns on purpose: a suppressed
+	// attempt must not burn the sender's own 40-minute modcall_cooldown, so that
+	// re-enabling modcalls cannot lock out someone who happened to call while
+	// the switch was off.
+	if modcallsDisabled.Load() {
+		modcallsSuppressed.Add(1)
+		client.SendServerMessage("Modcalls are currently disabled by staff. Please report it in OOC instead.")
+		return
+	}
+
 	if limited, remaining := checkNewIPIDModcallCooldown(client.Ipid()); limited {
 		unit := "seconds"
 		if remaining == 1 {
@@ -1736,7 +1771,6 @@ func pktModcall(client *Client, p *aolib.Packet) {
 		return
 	}
 	setIPModcallTime(client.Ipid())
-	zz, _ := aolib.ParseZZToServer(p.Body)
 	addToBuffer(client, "MOD", fmt.Sprintf("Called moderator for reason: %v", zz.Reason), false)
 	if client.Area().LogSilenced() {
 		return

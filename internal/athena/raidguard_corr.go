@@ -328,10 +328,111 @@ func (e *echoWindow) Breadth(now time.Time) int {
 	return n
 }
 
+// modcallWindow counts modcall attempts per IPID over a long rolling window.
+//
+// This exists because the per-IPID modcall cooldown was structurally invisible
+// to every detector: `checkNewIPIDModcallCooldown` and
+// `checkIPModcallCooldown` both return before the packet is logged, scored or
+// delivered, so a script firing ZZ in a loop looked exactly like a player who
+// called once. Counting the ATTEMPTS -- including the ones the cooldowns
+// refuse -- is what turns "5 modcalls in 40 minutes" from an unobservable
+// claim into a threshold.
+//
+// Keyed by IPID rather than by connection on purpose: the cooldown is
+// IPID-scoped and survives reconnects, so the count that judges it has to as
+// well. The window is passed in per call rather than captured, so a test can
+// drive expiry with explicit windows and no sleeping.
+type modcallWindow struct {
+	mu       sync.Mutex
+	maxIPIDs int
+	attempts map[string][]time.Time
+}
+
+func newModcallWindow(maxIPIDs int) *modcallWindow {
+	if maxIPIDs <= 0 {
+		maxIPIDs = 4096
+	}
+	return &modcallWindow{maxIPIDs: maxIPIDs, attempts: make(map[string][]time.Time)}
+}
+
+// pruneLocked drops timestamps outside the window and forgets IPIDs left with
+// none. Callers hold m.mu.
+func (m *modcallWindow) pruneLocked(ipid string, now time.Time, window time.Duration) {
+	if window <= 0 {
+		window = 40 * time.Minute
+	}
+	times := m.attempts[ipid]
+	cutoff := now.Add(-window)
+	i := 0
+	for i < len(times) && !times[i].After(cutoff) {
+		i++
+	}
+	if i == len(times) {
+		delete(m.attempts, ipid)
+		return
+	}
+	if i > 0 {
+		m.attempts[ipid] = times[i:]
+	}
+}
+
+// Observe records one attempt and reports how many this IPID has made inside
+// the window, this one included.
+//
+// Returns 0 for an IPID the entry cap has no room for: a flood wide enough to
+// exhaust 4096 slots is already being handled by the arrival burst and the raw
+// packet rate limit, and inventing a count for an identity we did not record
+// would be worse than dropping it.
+func (m *modcallWindow) Observe(ipid string, now time.Time, window time.Duration) int {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.pruneLocked(ipid, now, window)
+	if _, known := m.attempts[ipid]; !known && len(m.attempts) >= m.maxIPIDs {
+		return 0
+	}
+	m.attempts[ipid] = append(m.attempts[ipid], now)
+	return len(m.attempts[ipid])
+}
+
+// Count reports this IPID's attempts inside the window without recording one,
+// for /raidguard status and tests.
+func (m *modcallWindow) Count(ipid string, now time.Time, window time.Duration) int {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.pruneLocked(ipid, now, window)
+	return len(m.attempts[ipid])
+}
+
+// DistinctIPIDs reports how many different IPIDs have modcalled inside the
+// window. Used only to mark the server under attack -- it never scores anybody,
+// so a busy evening of genuine help requests can only tighten thresholds for
+// connections that already have evidence of their own.
+func (m *modcallWindow) DistinctIPIDs(now time.Time, window time.Duration) int {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	n := 0
+	for ipid := range m.attempts {
+		m.pruneLocked(ipid, now, window)
+		if len(m.attempts[ipid]) > 0 {
+			n++
+		}
+	}
+	return n
+}
+
+// Reset forgets one IPID's attempts, so /raidguard clear leaves a false
+// positive exactly as clean as it found them.
+func (m *modcallWindow) Reset(ipid string) {
+	m.mu.Lock()
+	delete(m.attempts, ipid)
+	m.mu.Unlock()
+}
+
 // Package-level layer-2 state.
 var (
 	raidCorrWindow  *CorrelationWindow
 	raidEchoWindow  *echoWindow
+	raidModcalls    = newModcallWindow(4096)
 	raidArrivals    = newArrivalWindow(time.Second)
 	raidCorrOnce    sync.Once
 	raidAttackUntil atomic.Int64 // unix nanos; server is "under attack" until then
@@ -553,11 +654,41 @@ func raidObserveArrival(now time.Time) bool {
 	return false
 }
 
+// raidModcallWindowLen is how long a modcall attempt stays counted:
+// raid_guard_modcall_window, default 2400 seconds (40 minutes) -- the same
+// shape as the operator's modcall_cooldown, so "5 per cooldown period" means
+// what it says even though the two settings are independent.
+func raidModcallWindowLen() time.Duration {
+	if config != nil && config.RaidGuardModcallWindow > 0 {
+		return time.Duration(config.RaidGuardModcallWindow) * time.Second
+	}
+	return 40 * time.Minute
+}
+
+// raidObserveModcall records one modcall attempt and marks the server under
+// attack once enough distinct IPIDs are calling moderators at once. Called from
+// raidGuardOnModcall before any cooldown has had a say, so refusals count.
+//
+// The fan-out condition is deliberately a distinct-IPID count rather than a
+// total: six connections calling once each is a raid, while one connection
+// calling six times is a spammer and is handled per-connection by
+// SigModcallSpam. Neither path creates evidence for anybody -- marking the
+// attack flag only tightens thresholds for connections that already have some.
+func raidObserveModcall(ipid string, now time.Time) (attempts int) {
+	window := raidModcallWindowLen()
+	attempts = raidModcalls.Observe(ipid, now, window)
+	if raidModcalls.DistinctIPIDs(now, raidCorrWindowLen()) >= raidGuardModcallFanout() {
+		markRaidAttack(now)
+	}
+	return attempts
+}
+
 // resetRaidGuardState clears all layer-2 state. Tests only.
 func resetRaidGuardState() {
 	raidCorrOnce = sync.Once{}
 	raidCorrWindow = nil
 	raidEchoWindow = nil
+	raidModcalls = newModcallWindow(4096)
 	raidArrivals = newArrivalWindow(time.Second)
 	raidAttackUntil.Store(0)
 }

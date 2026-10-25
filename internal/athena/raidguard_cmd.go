@@ -153,6 +153,24 @@ func raidGuardStatus(client *Client) {
 	banDur, _ := raidGuardBanDuration()
 	sb.WriteString(fmt.Sprintf("Autoban duration: %v.\n", banDur))
 
+	// Modcall rules. Both the scored signal and the deterministic action are
+	// listed, because the deterministic one is the only action in the guard that
+	// skips the ban gate and staff need to know it is on.
+	nukeState := "ON"
+	if !raidGuardModcallNukeEnabled() {
+		nukeState = "OFF (scored only)"
+	}
+	sb.WriteString(fmt.Sprintf("\nModcalls: %d attempt(s) in %v declares the spam signal; a brand-new IPID "+
+		"calling within %v of joining (or twice within %v) is acted on immediately.\n"+
+		"  deterministic modcall action: %s — resolves to '%v', still capped by the ceiling above and "+
+		"never applied to an exempt player.\n"+
+		"  %d distinct IPID(s) modcalling inside the correlation window marks the server under attack.\n",
+		raidGuardModcallMinAttempts(), raidModcallWindowLen(), raidGuardModcallJoinMs(),
+		raidGuardModcallDwell(), nukeState, raidGuardModcallNukeVerdict(), raidGuardModcallFanout()))
+	if modcallsDisabled.Load() {
+		sb.WriteString("  ⚠ Modcalls are currently DISABLED server-wide (/modcall enable) — every ZZ is refused.\n")
+	}
+
 	// Live layer-2 state.
 	corrLen := 0
 	if w := raidCorr(); w != nil {
@@ -289,6 +307,10 @@ func raidGuardClearOne(target *Client) (cleared bool, liftedCaptcha bool) {
 	guardRestricted := acted == VerdictChallenge || acted == VerdictSilence ||
 		acted == VerdictKick || acted == VerdictBan
 	rs.clear()
+	// The modcall attempt counter is IPID-scoped and lives outside raidState, so
+	// clearing the connection alone would leave a vouched-for player one attempt
+	// away from the spam threshold. Clear both halves of the escape hatch.
+	raidModcalls.Reset(target.Ipid())
 
 	if guardRestricted && (target.awaitingCaptcha.Load() || target.captchaRestricted.Load()) {
 		target.releaseJoinCaptcha("raidguard-clear", true)
@@ -318,6 +340,8 @@ func (rs *raidState) clear() {
 	rs.sawAskchaa = true
 	rs.fired = 0
 	rs.score = 0
+	rs.modcallAttempts = 0
+	rs.modcallScore = 0
 	rs.acted = VerdictClean
 }
 

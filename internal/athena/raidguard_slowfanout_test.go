@@ -151,7 +151,7 @@ func replaySlowFanout(t *testing.T) (states map[string]*raidState, firstCorrobor
 		if raider[l.ipid] {
 			raidMsgSeen++
 		}
-		fired := raidGuardCorrelate(rs, l.ipid, l.text, l.ts)
+		fired, _ := raidGuardCorrelate(rs, l.ipid, l.text, l.ts)
 		if len(fired) > 0 && firstCorroboratedAt < 0 {
 			firstCorroboratedAt = raidMsgSeen
 		}

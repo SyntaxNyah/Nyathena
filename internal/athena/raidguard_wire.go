@@ -192,7 +192,8 @@ func raidGuardOnIC(client *Client, ms *MSToClient, text string) {
 		SinceCharPick: sinceCharPick,
 		Now:           now,
 	})
-	fired = append(fired, raidGuardCorrelate(rs, client.Ipid(), text, now)...)
+	correlated, _ := raidGuardCorrelate(rs, client.Ipid(), text, now)
+	fired = append(fired, correlated...)
 	if len(fired) > 0 {
 		raidGuardEvaluate(client, rs, "IC message")
 	}
@@ -200,10 +201,13 @@ func raidGuardOnIC(client *Client, ms *MSToClient, text string) {
 
 // raidGuardCorrelate feeds one message to the server-wide layer and folds
 // whatever it says back into this connection's evidence. Written once and shared
-// by the IC and OOC hooks so the two channels can never drift apart on which
-// half of the graded corroboration they record -- the fan-out being detected
-// does not care which channel it arrived on, and neither should this.
-func raidGuardCorrelate(rs *raidState, ipid, text string, now time.Time) (fired []SignalKind) {
+// by the IC, OOC and modcall hooks so the three channels can never drift apart on
+// which half of the graded corroboration they record -- the fan-out being
+// detected does not care which channel it arrived on, and neither should this.
+//
+// Returns whether anybody else is saying the same thing, because the modcall
+// nuke ladder treats a carbon-copied reason as one of its script factors.
+func raidGuardCorrelate(rs *raidState, ipid, text string, now time.Time) (fired []SignalKind, echoed bool) {
 	echoed, corroborated := raidObserveContent(ipid, text, now)
 	if corroborated && rs.noteCorrelated() {
 		fired = append(fired, SigDupeAcrossIPIDs)
@@ -214,7 +218,7 @@ func raidGuardCorrelate(rs *raidState, ipid, text string, now time.Time) (fired 
 	if echoed && rs.noteEchoed() {
 		fired = append(fired, SigEchoedAcrossIPIDs)
 	}
-	return fired
+	return fired, echoed
 }
 
 // raidGuardOnWordHit folds a word-list match into this connection's evidence.
@@ -269,8 +273,68 @@ func raidGuardOnOOC(client *Client, oocName, text string) {
 		SinceCharPick: sinceCharPick,
 		Now:           now,
 	})
-	fired = append(fired, raidGuardCorrelate(rs, client.Ipid(), text, now)...)
+	correlatedOOC, _ := raidGuardCorrelate(rs, client.Ipid(), text, now)
+	fired = append(fired, correlatedOOC...)
 	if len(fired) > 0 {
 		raidGuardEvaluate(client, rs, "OOC message")
 	}
+}
+
+// raidGuardOnModcall folds one ZZ packet into the guard and reports whether the
+// connection must not go on to deliver it.
+//
+// Called from pktModcall ABOVE both of its cooldown gates, deliberately. Those
+// gates return before the packet is logged, buffered or scored, so a script
+// firing ZZ in a loop used to leave no trace at all beyond the single delivery
+// a 40-minute cooldown lets through -- which is why six fresh IPIDs calling a
+// moderator on joining produced nothing but the handshake-replay watch they
+// also happened to earn. Counting the ATTEMPTS, refused ones included, is the
+// whole point of this hook.
+//
+// Three things happen here:
+//
+//  1. The attempt is counted against its IPID over raid_guard_modcall_window,
+//     and enough distinct IPIDs calling at once marks the server under attack.
+//  2. The reason is fed to the same cross-IPID correlator IC and OOC use, so a
+//     canned reason repeated by fresh connections fires SigDupeAcrossIPIDs and
+//     satisfies the ban gate honestly -- no gate is bypassed for this.
+//  3. The scored signals and the deterministic nuke ladder are evaluated; see
+//     noteModcall for the three rules and their gates.
+//
+// Returns true when the guard acted in a way that must stop the message: the
+// connection was silenced, kicked, banned, or nuked. That mirrors
+// oocGuardVerdictSuppresses and the ordering pktIC documents -- the verdict
+// stops the packet that earned it, rather than the next one.
+func raidGuardOnModcall(client *Client, reason string) (acted bool) {
+	if raidGuardExempt(client) {
+		return false
+	}
+	rs := client.raidGuard()
+	if rs == nil {
+		return false
+	}
+	now := time.Now()
+	attempts := raidObserveModcall(client.Ipid(), now)
+	correlated, echoed := raidGuardCorrelate(rs, client.Ipid(), reason, now)
+
+	fired, nuke := rs.noteModcall(modcallEvidence{
+		Attempts:        attempts,
+		SinceJoin:       raidGuardSinceJoin(client, now),
+		BrandNew:        raidGuardBrandNew(client, rs),
+		HandshakeReplay: rs.firedSignal(SigHandshakeReplay),
+		FastCharPick:    rs.firedSignal(SigFastCharPick),
+		Spoke:           rs.hasSpoken(),
+		EchoedReason:    echoed,
+	})
+	if nuke && raidGuardModcallNukeEnabled() {
+		if raidGuardModcallNuke(client, rs, "modcall on join") {
+			return true
+		}
+	}
+	fired = append(fired, correlated...)
+	if len(fired) > 0 {
+		raidGuardEvaluate(client, rs, "modcall")
+	}
+	_, _, verdict := rs.snapshot()
+	return verdict >= VerdictSilence
 }

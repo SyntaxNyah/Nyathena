@@ -606,6 +606,14 @@ func initCommands() {
 			reqPerms: permissions.PermissionField["MOD_SPEAK"],
 			category: "moderation",
 		},
+		"modcall": {
+			handler:  cmdModcall,
+			minArgs:  0,
+			usage:    "Usage: /modcall <enable|disable|status>\nBare /modcall reports the current state.",
+			desc:     "Enables, disables or reports server-wide modcalls. While disabled every modcall packet is refused and counted before any cooldown, buffer line, webhook or report runs. The switch is in-memory and comes back enabled when the server restarts.",
+			reqPerms: permissions.PermissionField["MOD_CHAT"],
+			category: "moderation",
+		},
 		"modchat": {
 			handler:  cmdModChat,
 			minArgs:  1,

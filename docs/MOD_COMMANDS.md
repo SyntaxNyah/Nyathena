@@ -78,6 +78,7 @@ Censor trips (AutoMod banned words and `censored_names.txt` shownames) alert eve
 | `/announce <message>` | MUTE | Broadcasts a `[Announcement] <message>` server OOC message to every connected player. In-game equivalent of the Discord bot's `/announce` slash command — use it without needing the Discord bridge configured. |
 | `/useralert <uid> <message>` | MUTE | Sends a **popup** (BB packet) to a specific player by UID. Moderators only. |
 | `/useralert global <message>` | MUTE | Sends a **popup** (BB packet) to **every** connected player. Moderators only. |
+| `/modcall <enable\|disable\|status>` | MOD_CHAT to read, BAN to change | Server-wide modcall kill switch. While disabled every modcall packet is refused before any cooldown or log line, and the sender is told to report in OOC instead. Bare `/modcall` (or `/modcall status`) reports the state and how many attempts have been refused since it was switched off. **In-memory only** — a server restart always restores modcalls, which is deliberate: a switch that survived a restart could outlive the incident it was thrown for. A suppressed attempt does **not** consume the sender's `modcall_cooldown`, so re-enabling does not lock out anyone who called while it was off. |
 
 ---
 

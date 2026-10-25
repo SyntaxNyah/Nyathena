@@ -704,6 +704,69 @@ raid_guard_arrival_burst = 12
 # Default: false
 raid_guard_auto_lockdown = false
 
+# ---------------------------------------------------------------------------
+# Raid guard: modcall behaviour
+# ---------------------------------------------------------------------------
+# Modcalls used to be invisible to the guard in three separate ways, and these
+# settings close all three: pktModcall had no hook, both of its cooldowns
+# returned before anything was recorded, and the reason text never reached the
+# cross-IPID correlator. A script firing ZZ in a loop therefore looked exactly
+# like one quiet player who called once. Real incident: six fresh IPIDs re-ran
+# the handshake and called a moderator the second they joined; the guard saw
+# only the handshake replay (45, a watch) and never reached an action.
+
+# How long a modcall ATTEMPT (refused ones included) stays counted against an
+# IPID. Set this to the same span as modcall_cooldown so that "5 modcalls per
+# cooldown period" means what it says.
+# Default: 2400 (40 minutes)
+raid_guard_modcall_window = 2400
+
+# Attempts inside that window before the "modcall spam" signal fires. The score
+# curve is quadratic, not a lump: 1 attempt scores 0, 2 score 4, 3 score 13,
+# 4 score 27, and the 5th reaches the signal's full weight (45). A real player
+# who calls once -- or even twice -- therefore never alerts on anything, while a
+# loop that fires ZZ every 100ms is at the cap almost instantly.
+# Default: 5
+raid_guard_modcall_min_attempts = 5
+
+# A modcall arriving this many milliseconds after a connection JOINS is
+# impossible for a person: the "Call Mod" dialog has to be opened and a reason
+# typed. On a brand-new IPID (playtime below raid_guard_strict_playtime) this is
+# acted on immediately, not scored -- see raid_guard_modcall_nuke.
+# Default: 2500
+raid_guard_modcall_join_ms = 2500
+
+# Second-attempt rule for the deterministic action: a second modcall inside this
+# many seconds of joining, on a brand-new IPID, is acted on immediately. Calls
+# spaced minutes apart are NOT affected by this -- that is a person asking again,
+# and it only ever earns the quadratic score above.
+# Default: 60
+raid_guard_modcall_dwell = 60
+
+# Distinct IPIDs modcalling inside raid_guard_corr_window that mark the server
+# under attack, the same flag an arrival burst sets. This never scores anybody;
+# like every other under-attack route it only tightens thresholds for
+# connections that already have evidence of their own.
+# Default: 3
+raid_guard_modcall_fanout = 3
+
+# The deterministic modcall action. When a brand-new IPID modcalls within
+# raid_guard_modcall_join_ms of joining (or twice within raid_guard_modcall_dwell),
+# this acts immediately instead of waiting for a score -- the one place in the
+# guard that skips both the ban gate and the three-signal disconnect floor.
+#
+# What it does NOT skip: moderators and every playtime-exempt IPID are never
+# acted on, and the verdict is still clamped by raid_guard_max_action, so with
+# max_action = "captcha" this produces a captcha rather than a ban.
+#
+# A second attempt later in the session is only acted on this way when another
+# script tell is present (a replayed handshake, an impossibly fast character
+# pick, or a carbon-copy of another IPID's reason). Never having spoken at all
+# counts too, but only from the third attempt: a shy newcomer who calls twice
+# about something they saw is plausible, so that case is left to the score.
+# Default: true
+raid_guard_modcall_nuke = true
+
 # Modcall cooldown: Minimum number of seconds a user must wait between modcalls.
 # Set to 0 to disable the cooldown (allow unlimited modcalls).
 # Example: setting this to 60 means a user can only send one modcall per 60 seconds.
