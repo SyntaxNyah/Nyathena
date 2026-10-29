@@ -1349,6 +1349,11 @@ func pktAM(client *Client, p *aolib.Packet) {
 		}
 		for _, a := range areas {
 			if a.Name() == decodedSong {
+				// A leashed dog may only move to its master's area. Forced
+				// moves (moderation, vote kicks) do not pass through here.
+				if client.leashBlocksAreaChange(a) {
+					return
+				}
 				if !client.ChangeArea(a) {
 					// Mods already received an OOC message from ChangeArea (lock
 					// warning or jail notice); only non-mods need this generic reply.
@@ -1654,6 +1659,12 @@ func pktOOC(client *Client, p *aolib.Packet) {
 	// before reaching here, so those are never observed -- no separate skip
 	// needed.
 	raidGuardOnOOC(client, ct.Name, decode(msg))
+
+	// AO Gold paywall: the punished speaker's OOC line is replaced at the
+	// very last moment, after moderation/content gates have seen the real
+	// text and after raid-guard has scored it. The log records the paywall
+	// the room actually saw, matching how IC text punishments are logged.
+	msg = applyGoldPaywall(client, msg)
 
 	broadcastToAreaFrom(client.Ipid(), senderBypassesIgnore(client.Perms()), client.Area(),
 		&aolib.CTToClient{Name: displayUsername, Message: msg, IsFromServer: false})

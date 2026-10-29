@@ -70,6 +70,9 @@ func cmdPair(client *Client, args []string, _ string) {
 		client.SendServerMessage("You have not selected a character.")
 		return
 	}
+	if client.refuseIfLeashed() {
+		return
+	}
 
 	uid, err := strconv.Atoi(args[0])
 	if err != nil {
@@ -85,6 +88,11 @@ func cmdPair(client *Client, args []string, _ string) {
 
 	if target == client {
 		client.SendServerMessage("You cannot pair with yourself.")
+		return
+	}
+
+	if target.Leash() != nil {
+		client.SendServerMessage(fmt.Sprintf("%v is already part of a leash.", oocDisplayName(target)))
 		return
 	}
 
@@ -159,6 +167,12 @@ func cmdForcePair(client *Client, args []string, _ string) {
 		return
 	}
 
+	// A moderator force-pair overrides any leash either target was in. Clear
+	// both claims (and their pair state) before installing the new pair so no
+	// stale master/dog pointer survives and drags the old dog around later.
+	dissolveLeashForForce(target1, target2)
+	dissolveLeashForForce(target2, target1)
+
 	target1.SetPairWantedID(target2.CharID())
 	target2.SetPairWantedID(target1.CharID())
 	target1.SetForcePairUID(target2.Uid())
@@ -179,6 +193,25 @@ func cmdForcePair(client *Client, args []string, _ string) {
 // the entire client list and clear PairWantedID + ForcePairUID on anyone who
 // references us by UID OR by current/historical CharID, then clear our own.
 func cmdUnpair(client *Client, _ []string, _ string) {
+	// A leash owns the pair. The dog cannot release itself; the master can,
+	// which frees both sides. This runs before the group check so a dog that
+	// somehow still has a group pointer cannot slip out through /leavegroup's
+	// path either.
+	if l := client.Leash(); l != nil {
+		if l.Dog() == client {
+			client.SendPopup(leashAbandonPopup)
+			return
+		}
+		_, dog := l.Members()
+		dissolveLeash(l)
+		if dog != nil {
+			dog.SendPopup("Your master has released the leash")
+		}
+		client.SendServerMessage("Leash released.")
+		addToBuffer(client, "CMD", "Released the leash.", false)
+		return
+	}
+
 	// Leaving a multi-pair group dissolves the whole group (decided behavior).
 	if g := client.PairGroup(); g != nil {
 		g.remove(client, oocDisplayName(client)+" left — the pairing group has been updated.")
@@ -245,6 +278,12 @@ func clearPairLinksOnDisconnect(client *Client) {
 	// behind lets it auto-complete against a recycled UID/CharID later — the
 	// desync this cleanup exists to prevent. Disconnects are infrequent, so the
 	// O(n) walk is cheap.
+	//
+	// A leash is dissolved first: it clears both sides' pair fields and pops
+	// the survivor the right message (abandonment for a departing dog, release
+	// for a departing master), so the scan below does not also send a generic
+	// pair-cancelled line.
+	clearLeashOnDisconnect(client)
 	removeGroupMemberOnDisconnect(client)
 	clientUID := client.Uid()
 	clientCharID := client.CharID()
@@ -287,9 +326,19 @@ func cmdForceUnpair(client *Client, args []string, _ string) {
 		return
 	}
 
-	if target.PairWantedID() == -1 && target.ForcePairUID() == -1 {
+	if target.PairWantedID() == -1 && target.ForcePairUID() == -1 && target.Leash() == nil {
 		client.SendServerMessage("That player is not paired.")
 		return
+	}
+
+	// A forced unpair also breaks any leash the target is part of, whichever
+	// end of it they are on. The other end is told before the pair fields are
+	// cleared so the message can still name them.
+	if l := target.Leash(); l != nil {
+		if other := l.Other(target); other != nil {
+			other.SendServerMessage(fmt.Sprintf("Your leash with %v was broken by %v.", oocDisplayName(target), client.OOCName()))
+		}
+		dissolveLeash(l)
 	}
 
 	// Clear the partner's pair state.

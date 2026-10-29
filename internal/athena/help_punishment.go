@@ -74,6 +74,11 @@ var punishmentHelpGroups = []punishmentSubcategory{
 			"horse", "lion", "trex", "fish", "zoo", "bunny"},
 	},
 	{
+		emoji: "🔗", title: "Pairing / claims",
+		desc: "Force a pair with a one-way claim. The dog follows its master between areas, through punishment-safe rooms too, and cannot /unpair itself.",
+		cmds: []string{"leash"},
+	},
+	{
 		emoji: "👁", title: "Visibility / cosmetic",
 		desc: "Hides the player or alters their visual presentation.",
 		cmds: []string{"emoji", "invisible", "shrink", "grow", "wide", "areainiswap",
@@ -114,6 +119,11 @@ var punishmentHelpGroups = []punishmentSubcategory{
 		cmds: []string{"stack", "torment", "lovebomb", "degrade",
 			"emoticon", "51", "icwarp", "megamaso", "maso",
 			"randompunishall", "togglerandompunish", "tournament"},
+	},
+	{
+		emoji: "💳", title: "Premium paywall",
+		desc: "Replace every message with a fake AO Gold / Skrapegropen Premium paywall notice. Branding rotates randomly. Supports 'global'. Remove with /unpunish -t gold.",
+		cmds: []string{"gold", "premium", "paywall"},
 	},
 	{
 		emoji: "🧹", title: "Removal & control",

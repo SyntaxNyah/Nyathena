@@ -199,7 +199,7 @@ Copy `config_sample/` to `config/` before first run.
 
 ### Punishment System (120+ Commands)
 
-All punishment commands require `MUTE` permission unless noted. They support `-d <duration>` (max 24 h), `-r <reason>`, `-h` (hidden — suppresses the per-target OOC notification so the punishment applies silently; the issuer summary appends `(hidden)` so the mod can confirm), comma-separated UIDs, and the `global` keyword (applies to every non-moderator in the issuer's area). Multiple types stack on a single player.
+All punishment commands require `MUTE` permission unless noted (`/leash` is the exception: it is a pairing claim and requires `KICK`). They support `-d <duration>` (max 24 h), `-r <reason>`, `-h` (hidden — suppresses the per-target OOC notification so the punishment applies silently; the issuer summary appends `(hidden)` so the mod can confirm), comma-separated UIDs, and the `global` keyword (applies to every non-moderator in the issuer's area). Multiple types stack on a single player.
 
 The `-h` flag works on every applicator: single-effect commands (`/tsundere 7 -h`, `/tsundere global -h`), `/stack`, `/lovebomb`, `/sfxcurse`, `/shrink` / `/grow` / `/wide`, `/randompunishall` (also suppresses the area-wide "unleashed random chaos" announcement), `/translator curse`, and `/icwarp <uid>`. Self-applied effects (`/megamaso`, `/maso`) and the PvP `/coinflip` mini-game are unaffected since they aren't moderator-issued.
 
@@ -220,6 +220,9 @@ Wave-2 additions (14): `/zalgo` (combining-mark corruption), `/leetspeak`, `/sma
 `/gordonramsay`, `/biblebot`, `/grounded`, `/mime`, `/subtitles`, `/spotlight`, `/recipe`, `/rickroll`, `/pickup`, `/brainrot`, `/cheese`
 
 `/cheese` discards the target's text entirely and replaces every message with one of **100+ "statements about cheese"** (facts, puns, varieties, and the running gag that cheese is, technically, a sauce). Same shared punishment plumbing as the others (`-d`/`-r`/`-h`, comma UID lists, `global`, `/stack`, persistence, `/unpunish -t cheese`). Corpus size is pinned by `cheeseLineCount` in tests so it can't silently shrink. Like `/medieval` it requires `MUTE` (mod-only) and is **not** in the self-applied `/maso`/`/megamaso` pool.
+
+#### Premium Paywall (`/gold`)
+`/gold` (aliases `/premium`, `/paywall`) is the AO Gold / Skrapegropen Premium joke punishment. Every IC and OOC message the target sends is replaced with one of six branded fake-paywall notices: `[You require AO gold/premium to see this message]`, `This message requires SkrapeGOLD account to be seen.`, `If you have not purchased a GOLD account, you may not view this message.`, `You need AO Premium subscription to see this message.`, `This message is only visible to users with SkrapeGolden account.`, and `OOPS! This message requires a Premium Skrapegropen Account.` (the misspelling in the original copy is fixed). IC replacement runs through `ApplyPunishmentToText`; OOC replacement is `applyGoldPaywall` in `pktOOC`, applied after AutoMod/torment/raid-guard have seen the real text. It is a normal `MUTE` punishment (supports `-d`/`-r`/`-h`/`global`, persists, stacks), removed with `/unpunish -t gold`. Implemented in `internal/athena/punishments_premium.go`, command in `commands_punishment.go` (`cmdGold`), registered under all three names.
 
 #### Animal Filters (15)
 `/monkey`, `/snake`, `/dog`, `/cat`, `/bird`, `/cow`, `/frog`, `/duck`, `/horse`, `/lion`, `/bunny`, `/zoo` (a random one of the others per message), plus:
@@ -362,10 +365,13 @@ A pending pair request never blocks speech: while waiting for the partner to acc
 
 `/unpair` is a full bidirectional reset: it clears `PairWantedID` and `ForcePairUID` on every client that references the canceller (by UID or by current/historical CharID), preventing the desync where a stale pair-wanted-id lingered on a peer after the canceller's character changed.
 
+**`/leash <master uid> <dog uid>`** (`KICK`) is a one-way claim built on the same UID pair. It force-pairs the two players, applies `/dog` to the **dog only**, and stores a shared `Leash` pointer on both clients (`internal/athena/leash.go`) rather than a pair of raw UIDs, so neither side can be left pointing at a departed or recycled connection. Claiming over an existing pair/leash clears the old links first, and each previous partner receives a `BB` popup: `Your partner has been leashed`. The leash is deliberately allowed to **cross punishment-safe areas**: `/leash` uses `cmdPunishmentIgnoringSafeArea`, and the dog follows the master through shelters. A master's `ChangeArea` drags the dog into the new area (normal join side effects, music, roster, background all run); locks, admin-locks, and jail still apply to the dog. A leashed dog trying to move anywhere other than its master's area gets a `BB` popup: `Dogs don't abandon their master`. The dog's own `/unpair` is refused with that popup; the master's `/unpair`, a moderator's `/forceunpair`, and `/forcepair`/`/forcegrouppair` all break the claim. `/pair` and `/grouppair` refuse to steal a leashed player. On disconnect, the survivor is popped: a departing dog triggers the abandonment line at the master, while a departing master releases the dog. The `/dog` effect itself is not removed when the leash is released; `/unpunish -t dog` lifts it.
+
 **Discoverability:** `/lfp` toggles a Looking-For-Pair flag; `/pairlist` lists every flagged player in the area with UID, display name and character.
 ```
 /pair <uid>
 /unpair
+/leash [-d duration] [-r reason] [-h] <master uid> <dog uid>
 /lfp
 /pairlist
 ```

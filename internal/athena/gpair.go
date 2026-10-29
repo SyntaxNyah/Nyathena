@@ -82,6 +82,9 @@ func startGroupPair(client *Client, args []string, force bool) {
 			client.SendServerMessage("You have not selected a character.")
 			return
 		}
+		if client.refuseIfLeashed() {
+			return
+		}
 		if client.PairGroup() != nil {
 			client.SendServerMessage("You are already in a pairing group.")
 			return
@@ -129,6 +132,14 @@ func startGroupPair(client *Client, args []string, force bool) {
 				client.SendServerMessage(oocDisplayName(t) + " is already in a pairing group.")
 				return
 			}
+		}
+		// A consent group cannot steal a leashed player. Force mode is a
+		// moderator override, so it breaks the leash instead of refusing.
+		if force {
+			dissolveLeashForForce(t, nil)
+		} else if t.Leash() != nil {
+			client.SendServerMessage(oocDisplayName(t) + " is already part of a leash.")
+			return
 		}
 		for _, e := range invitees {
 			if e == t {

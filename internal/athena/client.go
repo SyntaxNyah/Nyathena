@@ -311,6 +311,11 @@ const (
 	// writing any Go. Appended last so existing persisted SUBTYPE values keep
 	// their meaning.
 	PunishmentCustomText
+	// Gold is the AO Gold / Skrapegropen Premium paywall. Every message is
+	// replaced with a fake "you need a premium account to see this" notice,
+	// rotating through the branded variants. Appended last so existing
+	// persisted SUBTYPE values keep their meaning.
+	PunishmentGold
 )
 
 // IssuerTier records the permission tier of the moderator who applied a
@@ -365,11 +370,15 @@ const emergencyBypassWindow = 30 * time.Second
 type Client struct {
 	pair      ClientPairInfo
 	pairGroup *PairGroup
-	software  string          // client-advertised software from the ID handshake
-	version   string          // client-advertised version from the ID handshake
-	features  map[string]bool // client-advertised feature flags (client→server FL)
-	mu        sync.Mutex
-	conn      net.Conn
+	// leash is the /leash claim this client is part of, or nil. It is a
+	// pointer shared by the master and the dog (see leash.go), so either side
+	// can find the other without a scan or a stale UID.
+	leash    *Leash
+	software string          // client-advertised software from the ID handshake
+	version  string          // client-advertised version from the ID handshake
+	features map[string]bool // client-advertised feature flags (client→server FL)
+	mu       sync.Mutex
+	conn     net.Conn
 	// writeMu serializes inline socket writes with each other. Deliberately
 	// separate from mu: nothing that blocks on I/O may hold the mutex ordinary
 	// field accessors use -- see Client.write.
@@ -1354,6 +1363,14 @@ func (client *Client) SendServerMessage(message string) {
 	client.Send(&aolib.CTToClient{Name: serverName, Message: message, IsFromServer: true})
 }
 
+// SendPopup shows a client-side AO2 BB dialog. Desktop AO2 renders it as a
+// modal message box and WebAO as a notice. The message is passed raw: Send
+// escapes FantaCode content on the way out and JSON mode encodes the typed
+// field directly, so pre-encoding here would double-escape one of the wires.
+func (client *Client) SendPopup(message string) {
+	client.Send(&aolib.BB{Message: message})
+}
+
 // SendMotd sends the MOTD to the client as a single OOC message. Embedded
 // newlines are preserved so the client renders the full block as one cohesive
 // entry rather than repeating the server name on every line.
@@ -1790,6 +1807,20 @@ func (client *Client) SetPairGroup(g *PairGroup) {
 	client.pairGroup = g
 }
 
+// Leash returns the /leash claim this client is part of, or nil.
+func (client *Client) Leash() *Leash {
+	client.mu.Lock()
+	defer client.mu.Unlock()
+	return client.leash
+}
+
+// SetLeash assigns (or clears, with nil) this client's /leash claim.
+func (client *Client) SetLeash(l *Leash) {
+	client.mu.Lock()
+	defer client.mu.Unlock()
+	client.leash = l
+}
+
 // Software returns the client-advertised software string (ID handshake).
 func (client *Client) Software() string {
 	client.mu.Lock()
@@ -2074,6 +2105,11 @@ func (client *Client) ChangeArea(a *area.Area) bool {
 	// against an unrendered viewport on WebAO (same fix as initial join).
 	client.Send(&aolib.BN{Background: a.Background()})
 	addToBuffer(client, "AREA", "Joined area.", false)
+	// A leash drags its dog along. Run this last so the master is fully in the
+	// new area (music, roster, background) before the dog's own area change
+	// fans out. The punishment-safe area flag is deliberately not consulted:
+	// the dog follows its master through shelters too.
+	client.dragLeashedDog()
 	return true
 }
 
@@ -3504,6 +3540,8 @@ func (p PunishmentType) String() string {
 		return "fish"
 	case PunishmentCustomText:
 		return "texteffect"
+	case PunishmentGold:
+		return "gold"
 	default:
 		return "none"
 	}

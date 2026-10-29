@@ -812,6 +812,12 @@ func cmdMove(client *Client, args []string, usage string) {
 		var skipped int
 		var skippedReport string
 		for _, c := range toMove {
+			// A dog moving itself through /move still can't abandon its
+			// master. Moving a dog by another UID is moderator-forced and
+			// deliberately allowed below.
+			if c == client && c.leashBlocksAreaChange(wantedArea) {
+				continue
+			}
 			// Never drag a player out of a punishment-free (safe) area into an
 			// area where punishment effects can still be applied — that would
 			// let a mod teleport someone from a shelter straight into a
@@ -837,6 +843,9 @@ func cmdMove(client *Client, args []string, usage string) {
 		client.SendServerMessage(summary)
 		addToBuffer(client, "CMD", fmt.Sprintf("Moved %v to %v.", report, wantedArea.Name()), false)
 	} else {
+		if client.leashBlocksAreaChange(wantedArea) {
+			return
+		}
 		if !client.ChangeArea(wantedArea) {
 			client.SendServerMessage("You are not invited to that area.")
 		}

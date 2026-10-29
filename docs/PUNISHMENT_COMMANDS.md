@@ -181,7 +181,7 @@ Rewrite the target's IC text — light to heavy transformations. All support `gl
 
 ---
 
-## Themed Quote Replacers (8)
+## Themed Quote Replacers (11)
 
 Discard the player's text and substitute a themed line per message. All support `global` and `-h`.
 
@@ -197,6 +197,22 @@ Discard the player's text and substitute a themed line per message. All support 
 | `/rickroll` | Meme-styled lyric-adjacent stand-in lines |
 | `/pickup` | Catastrophically cheesy pickup lines |
 | `/brainrot` | Maximum skibidi sigma brainrot energy |
+| `/gold` (aliases `/premium`, `/paywall`) | AO Gold / Skrapegropen Premium paywall. Every IC **and OOC** message becomes a fake premium notice; branding rotates randomly. Removed with `/unpunish -t gold`. |
+
+### `/gold` — AO Gold / Skrapegropen Premium paywall
+
+The target's messages are replaced with one of these notices:
+
+```
+[You require AO gold/premium to see this message]
+This message requires SkrapeGOLD account to be seen.
+If you have not purchased a GOLD account, you may not view this message.
+You need AO Premium subscription to see this message.
+This message is only visible to users with SkrapeGolden account.
+OOPS! This message requires a Premium Skrapegropen Account.
+```
+
+The OOC replacement happens after AutoMod, torment, and raid-guard have seen the original text, so the punishment cannot be used to bypass moderation. Like every other text punishment it supports `-d`, `-r`, `-h`, comma-separated UIDs, `global`, `/stack`, persistence, and `/unpunish -t gold`.
 
 ---
 

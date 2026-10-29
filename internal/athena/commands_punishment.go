@@ -25,9 +25,9 @@ import (
 	"strings"
 	"time"
 
+	aolib "github.com/AO-Underground/aolib/go/v2"
 	"github.com/MangosArentLiterature/Athena/internal/db"
 	"github.com/MangosArentLiterature/Athena/internal/logger"
-	aolib "github.com/AO-Underground/aolib/go/v2"
 	"github.com/MangosArentLiterature/Athena/internal/permissions"
 	"github.com/xhit/go-str2duration/v2"
 )
@@ -85,6 +85,21 @@ func extractHiddenFlag(args []string) ([]string, bool) {
 // exactly the players the punishment landed on, so the two can never disagree
 // about who was spared.
 func cmdPunishment(client *Client, args []string, usage string, pType PunishmentType) []*Client {
+	return cmdPunishmentMode(client, args, usage, pType, false)
+}
+
+// cmdPunishmentIgnoringSafeArea is the same applicator with the area-level
+// punishment-safe check skipped. It exists for /leash: a leash is a persistent
+// claim, and the dog effect has to follow that claim through shelters rather
+// than silently failing because the target happened to stand in one. The
+// server-wide console kill switch is still enforced by cmdPunishmentMode.
+func cmdPunishmentIgnoringSafeArea(client *Client, args []string, usage string, pType PunishmentType) []*Client {
+	return cmdPunishmentMode(client, args, usage, pType, true)
+}
+
+// cmdPunishmentMode is the shared implementation behind both entry points.
+// ignoreSafeArea is deliberately opt-in and only /leash uses it.
+func cmdPunishmentMode(client *Client, args []string, usage string, pType PunishmentType, ignoreSafeArea bool) []*Client {
 	if punishmentsSystemDisabled(client) {
 		return nil
 	}
@@ -142,7 +157,7 @@ func cmdPunishment(client *Client, args []string, usage string, pType Punishment
 			if c.Area() != targetArea || c.Uid() == issuerUID || permissions.IsModerator(c.Perms()) {
 				return
 			}
-			if punishmentSafeBlocked(c) {
+			if !ignoreSafeArea && punishmentSafeBlocked(c) {
 				notePunishmentSafeSkip(&skipped, &skippedReport, c)
 				return
 			}
@@ -181,7 +196,7 @@ func cmdPunishment(client *Client, args []string, usage string, pType Punishment
 	var punished []*Client
 
 	for _, c := range toPunish {
-		if punishmentSafeBlocked(c) {
+		if !ignoreSafeArea && punishmentSafeBlocked(c) {
 			notePunishmentSafeSkip(&skipped, &skippedReport, c)
 			continue
 		}
@@ -447,6 +462,12 @@ func cmdSnake(client *Client, args []string, usage string) {
 
 func cmdDog(client *Client, args []string, usage string) {
 	cmdPunishment(client, args, usage, PunishmentDog)
+}
+
+// cmdGold applies the AO Gold / Skrapegropen Premium paywall. Registered as
+// /gold, /premium, and /paywall; all three share this handler.
+func cmdGold(client *Client, args []string, usage string) {
+	cmdPunishment(client, args, usage, PunishmentGold)
 }
 
 func cmdCat(client *Client, args []string, usage string) {
@@ -1175,6 +1196,8 @@ func parsePunishmentType(s string) PunishmentType {
 		return PunishmentMinefield
 	case "stealthmute":
 		return PunishmentStealthMute
+	case "gold", "premium", "paywall":
+		return PunishmentGold
 	default:
 		return PunishmentNone
 	}

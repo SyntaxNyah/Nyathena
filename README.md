@@ -18,7 +18,7 @@ This is the main thing Nyathena exists for. All punishment commands support `-d 
 
 **Text Effects (60):** `/whisper`, `/backward`, `/stutterstep`, `/elongate`, `/uppercase`, `/lowercase`, `/robotic`, `/alternating`, `/fancy`, `/uwu`, `/pirate`, `/shakespearean`, `/caveman`, `/censor`, `/fromsoftware`, `/confused`, `/paranoid`, `/drunk`, `/hiccup`, `/whistle`, `/mumble`, `/slang`, `/cherri`, `/albhed`, `/morse`, `/vowelhell`, `/upsidedown`, `/autospell`, `/thesaurusoverload`, `/valleygirl`, `/babytalk`, `/thirdperson`, `/unreliablenarrator`, `/uncannyvalley`, `/chef`, `/karen`, `/passiveaggressive`, `/nervous`, `/sarcasm`, `/academic`, `/philosopher`, `/poet`, `/quote`, `/spaghetti`, `/essay`, `/rng`, `/haiku`, `/dreamsequence`, `/timewarp`, `/zalgo`, `/leetspeak`, `/smallcaps`, `/piglatin`, `/vaporwave`, `/lisp`, `/spoonerism`, `/keysmash`, `/weeb` (350+ romaji corpus), `/politician`, `/clickbait`, `/markov` (babble brewed from the area's own chat history), `/alliteration`, `/cipher` (escalating ROT13 → BINARY → BASE64)
 
-**Themed Quote Replacers (10):** `/gordonramsay` (60+ kitchen tirades), `/biblebot`, `/grounded`, `/mime`, `/subtitles`, `/spotlight`, `/recipe`, `/rickroll`, `/pickup`, `/brainrot`
+**Themed Quote Replacers (11):** `/gordonramsay` (60+ kitchen tirades), `/biblebot`, `/grounded`, `/mime`, `/subtitles`, `/spotlight`, `/recipe`, `/rickroll`, `/pickup`, `/brainrot`, `/gold` (AO Gold / Skrapegropen Premium paywall)
 
 **Persona / Personality (5):** `/clown`, `/jester`, `/joker`, `/tourettes`, `/translator` (via DeepL API)
 
@@ -204,6 +204,8 @@ Daily-rotating log files per area under `logs/<AreaName>/`. Format: `[HH:MM:SS] 
 ### Persistent Pairing
 
 UID-based mutual pairing that survives area and character changes. Pair messages use each player's showname when set. `/unpair` does a full bidirectional reset — no stale pair state left on the peer. Flag yourself `/lfp` (Looking For Pair) and browse the area's flagged players with `/pairlist`.
+
+**`/leash <master uid> <dog uid>`** (`KICK`) claims a player as your dog: it force-pairs them to you, applies `/dog`, and drags them along on every area change — including through punishment-safe rooms. Claiming someone already paired pops `Your partner has been leashed` at their old partner. The dog cannot `/unpair`; trying pops `Dogs don't abandon their master`. The master's `/unpair` (or a moderator's `/forceunpair`) releases the claim.
 
 ### Custom Command Builder (Console)
 

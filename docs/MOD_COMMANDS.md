@@ -169,8 +169,9 @@ A name a moderator set in a room that had no CM at all is kept until the room em
 |---------|-----------|-------------|
 | `/charstuck [-d duration] <uid>` | MUTE | Lock to current character |
 | `/charcurse <uid> <charname>` | KICK | Force a one-time character swap (target may change afterward) |
-| `/forcepair <uid1> <uid2>` | MUTE | Force two players into a UID-tracked pair |
-| `/forceunpair <uid>` | MUTE | Break a forced pair |
+| `/forcepair <uid1> <uid2>` | KICK | Force two players into a UID-tracked pair |
+| `/forceunpair <uid>` | KICK | Break a forced pair or leash |
+| `/leash [-d duration] [-r reason] [-h] <master uid> <dog uid>` | KICK | Claim a player as your dog: force-pair, apply `/dog`, drag them between areas (including punishment-safe rooms). The dog cannot `/unpair`; the master can. Previous partners get a `Your partner has been leashed` popup |
 | `/setrole <uid> <role>` | ADMIN | Set a player's role (permission tier) |
 | `/clearpos <uid>` | MOVE_USERS | Clear forced position |
 | `/showname <uid> <name>` | MUTE | Force a showname |
@@ -204,7 +205,7 @@ Two things deliberately remain:
 | Group | Commands |
 |-------|----------|
 | Text effects (60) | `/whisper /backward /stutterstep /elongate /uppercase /lowercase /robotic /alternating /fancy /uwu /pirate /shakespearean /caveman /censor /fromsoftware /confused /paranoid /drunk /hiccup /whistle /mumble /slang /cherri /albhed /morse /vowelhell /upsidedown /autospell /thesaurusoverload /valleygirl /babytalk /thirdperson /unreliablenarrator /uncannyvalley /chef /karen /passiveaggressive /nervous /sarcasm /academic /philosopher /poet /quote /spaghetti /essay /rng /haiku /dreamsequence /timewarp /zalgo /leetspeak /smallcaps /piglatin /vaporwave /lisp /spoonerism /keysmash /weeb /politician /clickbait /markov /alliteration /cipher` |
-| Themed quote replacers | `/gordonramsay /biblebot /grounded /mime /subtitles /spotlight /recipe /rickroll /pickup /brainrot` |
+| Themed quote replacers (11) | `/gordonramsay /biblebot /grounded /mime /subtitles /spotlight /recipe /rickroll /pickup /brainrot /gold` — `/gold` is the AO Gold / Skrapegropen Premium paywall (`/premium` and `/paywall` aliases; affects IC and OOC) |
 | Persona / personality | `/clown /jester /joker /tourettes /translator` |
 | Dere archetypes (26) | `/tsundere /yandere /kuudere /dandere /deredere /himedere /kamidere /undere /bakadere /mayadere /smugdere /deretsun /bokodere /thugdere /teasedere /dorodere /hinedere /hajidere /rindere /utsudere /darudere /butsudere /sdere /mdere /tsuyodere /omnidere` |
 | Animal filters (14) | `/monkey /snake /dog /cat /bird /cow /frog /duck /horse /lion /trex /fish /zoo /bunny` — `/trex` roars RAAASRFH, `/fish` blubs, and `/horse` also swaps the target onto a random uma character |
