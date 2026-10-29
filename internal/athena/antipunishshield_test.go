@@ -205,8 +205,11 @@ func TestAntiPunishShieldBackfire(t *testing.T) {
 	if !w.mod.HasActivePunishment(PunishmentDog) {
 		t.Fatal("backfire did not apply the dog punishment to the issuer")
 	}
-	if got := w.modConn.String(); !strings.Contains(got, "backfired") {
-		t.Errorf("issuer was not told about the backfire; got %q", got)
+	if got := w.modConn.String(); strings.Contains(got, "backfired") {
+		t.Errorf("moderator was told about the backfire; it must land silently, got %q", got)
+	}
+	if got := w.modConn.String(); !strings.Contains(got, "Applied 'dog'") {
+		t.Errorf("moderator did not get the normal success summary; got %q", got)
 	}
 	if got := w.targetConn.String(); !strings.Contains(got, "backfired on them instead") {
 		t.Errorf("shielded target was not told it backfired; got %q", got)

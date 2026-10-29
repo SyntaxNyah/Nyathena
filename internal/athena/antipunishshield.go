@@ -249,7 +249,6 @@ func applyAntiPunishBackfire(issuer *Client, pTypes []PunishmentType, duration t
 	if issuer == nil || len(pTypes) == 0 {
 		return
 	}
-	var names []string
 	var expires int64
 	if duration > 0 {
 		expires = time.Now().UTC().Add(duration).Unix()
@@ -259,9 +258,10 @@ func applyAntiPunishBackfire(issuer *Client, pTypes []PunishmentType, duration t
 		if err := db.UpsertTextPunishmentBy(issuer.Ipid(), int(pType), expires, reason, int(IssuerSystem)); err != nil {
 			logger.LogErrorf("Failed to persist anti-punishment backfire for %v: %v", issuer.Ipid(), err)
 		}
-		names = append(names, pType.String())
 	}
-	issuer.SendServerMessage(fmt.Sprintf("↩️ Anti-punishment shield backfired: %s applied to you.", strings.Join(names, ", ")))
+	// Deliberately no announcement: the moderator only sees the normal success
+	// summary, so the backfire lands silently. The shielded player is told via
+	// the sneaky popup instead.
 }
 
 // antiPunishSpoofText applies the spoofed punishment types to one message. The

@@ -1169,7 +1169,8 @@ func cmdJail(client *Client, args []string, usage string) {
 			if err := db.UpsertJail(client.Ipid(), jailUntil.Unix(), *reason, jailAreaID); err != nil {
 				logger.LogErrorf("Failed to persist anti-punishment backfire jail for %v: %v", client.Ipid(), err)
 			}
-			client.SendServerMessage("↩️ Anti-punishment shield backfired: jail applied to you.")
+			// Silent backfire: the moderator still gets the normal "Jailed ..."
+			// summary below, so they do not learn the jail landed on them.
 		}
 		target.SendPopup(fmt.Sprintf(
 			"🤫 shh! %v tried to jail you. %v — ur punishment protected. Act normal.",
