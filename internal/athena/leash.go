@@ -18,13 +18,18 @@ package athena
 
 // /leash: a one-way claim layered on top of the normal UID-tracked pair.
 //
-// A Leash is shared by exactly two clients — a master and a dog. Both hold a
-// pointer to the same Leash, so neither side can be left with a stale UID
-// after the other disconnects, changes character, or is claimed by someone
-// else. It is deliberately separate from PairGroup: a dog is not a group
-// member, and a group cannot override the leash's pair injection.
+// A Leash is shared by one master and up to maxLeashDogs dogs. Every member
+// holds a pointer to the same Leash, so no side can be left with a stale UID
+// after a disconnect, character change, or claim by someone else. The
+// master/first-dog pair fields stay UID-tracked for movement and moderation,
+// while a leash-owned PairGroup mirrors the full pack into the multi-pair
+// renderer so JSON clients draw every dog alongside the master.
 //
-// The dog follows the master through area changes, including punishment-safe
+// The PairGroup is only a render mirror: the Leash is the authority. A dog
+// cannot escape by /leavegroup, /deny, /pair, /unpair, or /unforcegrouppair;
+// full /unpunish and moderator overrides release the claim.
+//
+// Every dog follows the master through area changes, including punishment-safe
 // areas. `/leash` also bypasses the punishment-safe check when it applies the
 // /dog effect, because the leash is a claim rather than a one-shot punishment.
 
@@ -33,6 +38,7 @@ import (
 	"fmt"
 	"io"
 	"strconv"
+	"strings"
 	"sync"
 
 	"github.com/MangosArentLiterature/Athena/internal/area"
@@ -41,13 +47,15 @@ import (
 const (
 	leashAbandonPopup = "Dogs don't abandon their master"
 	leashClaimPopup   = "Your partner has been leashed"
+	maxLeashDogs      = 6
 )
 
-// Leash is the master/dog relationship created by /leash.
+// Leash is the master/dogs relationship created by /leash.
 type Leash struct {
 	mu     sync.Mutex
 	master *Client
-	dog    *Client
+	dogs   []*Client
+	group  *PairGroup
 }
 
 // Master returns the client holding the leash, or nil if it was dissolved.
@@ -57,79 +65,272 @@ func (l *Leash) Master() *Client {
 	return l.master
 }
 
-// Dog returns the leashed client, or nil if it was dissolved.
+// Dog returns the first leashed client, or nil if it was dissolved. It is kept
+// for the single-dog pairing paths and tests; use Dogs for the full pack.
 func (l *Leash) Dog() *Client {
 	l.mu.Lock()
 	defer l.mu.Unlock()
-	return l.dog
+	if len(l.dogs) == 0 {
+		return nil
+	}
+	return l.dogs[0]
 }
 
-// Members returns both ends of the leash. Either value may be nil after a
-// dissolve. The pointers are copied so callers never hold the leash lock
+// Dogs returns a copy of the leashed clients, in leash order (first dog is the
+// one the master's legacy pair slot points at).
+func (l *Leash) Dogs() []*Client {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return append([]*Client(nil), l.dogs...)
+}
+
+// Members returns the master and the first dog. Either value may be nil after
+// a dissolve. The pointers are copied so callers never hold the leash lock
 // while sending messages or taking a client lock.
 func (l *Leash) Members() (master, dog *Client) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
-	return l.master, l.dog
+	if len(l.dogs) > 0 {
+		dog = l.dogs[0]
+	}
+	return l.master, dog
 }
 
-// Other returns the client on the other end of the leash from c, or nil.
+// AllMembers returns the master followed by every dog, or nil after a
+// dissolve. The slice is a copy; callers may message or mutate clients freely.
+func (l *Leash) AllMembers() []*Client {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	if l.master == nil {
+		return nil
+	}
+	members := make([]*Client, 0, len(l.dogs)+1)
+	members = append(members, l.master)
+	members = append(members, l.dogs...)
+	return members
+}
+
+// IsDog reports whether c is one of the leashed dogs.
+func (l *Leash) IsDog(c *Client) bool {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	for _, dog := range l.dogs {
+		if dog == c {
+			return true
+		}
+	}
+	return false
+}
+
+// Contains reports whether c is the master or one of the dogs.
+func (l *Leash) Contains(c *Client) bool {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	if l.master == c {
+		return true
+	}
+	for _, dog := range l.dogs {
+		if dog == c {
+			return true
+		}
+	}
+	return false
+}
+
+// Other returns the client on the other end of the leash from c, or nil. For a
+// master with several dogs it returns the first dog; multi-dog callers should
+// use Dogs or AllMembers.
 func (l *Leash) Other(c *Client) *Client {
 	l.mu.Lock()
 	defer l.mu.Unlock()
-	switch c {
-	case l.master:
-		return l.dog
-	case l.dog:
-		return l.master
+	if c == l.master {
+		if len(l.dogs) > 0 {
+			return l.dogs[0]
+		}
+		return nil
+	}
+	for _, dog := range l.dogs {
+		if dog == c {
+			return l.master
+		}
 	}
 	return nil
 }
 
-// Dissolve clears both clients' leash pointers. It is idempotent: calling it
-// after a dissolve is a no-op, so disconnect cleanup and command handlers can
-// both call it safely.
+// Dissolve clears every client's leash pointer and tears down the render
+// group. It is idempotent: calling it after a dissolve is a no-op, so
+// disconnect cleanup and command handlers can both call it safely.
 func (l *Leash) Dissolve() {
 	if l == nil {
 		return
 	}
 	l.mu.Lock()
-	master, dog := l.master, l.dog
-	l.master, l.dog = nil, nil
+	master := l.master
+	dogs := append([]*Client(nil), l.dogs...)
+	group := l.group
+	l.master, l.dogs, l.group = nil, nil, nil
 	l.mu.Unlock()
 
+	if group != nil {
+		group.dissolve("")
+	}
 	if master != nil {
 		master.SetLeash(nil)
 	}
-	if dog != nil {
+	for _, dog := range dogs {
 		dog.SetLeash(nil)
 	}
 }
 
+// addDogs appends dogs, installs the shared pointer, refreshes the legacy pair
+// fields, and rebuilds the multi-pair render group.
+func (l *Leash) addDogs(dogs []*Client) {
+	if l == nil || len(dogs) == 0 {
+		return
+	}
+	l.mu.Lock()
+	l.dogs = append(l.dogs, dogs...)
+	l.mu.Unlock()
+	for _, dog := range dogs {
+		dog.SetLeash(l)
+	}
+	l.syncPairFields()
+	l.rebuildGroup()
+}
+
+// removeDog detaches one dog. If it was the last dog the whole leash is
+// dissolved; otherwise the group and the master's first-dog pair slot are
+// refreshed. The removed dog's pair fields are left to the caller, which
+// usually wants to install a different pair immediately.
+func (l *Leash) removeDog(dog *Client) (master *Client, remaining []*Client, dissolved bool) {
+	if l == nil {
+		return nil, nil, false
+	}
+	l.mu.Lock()
+	idx := -1
+	for i, d := range l.dogs {
+		if d == dog {
+			idx = i
+			break
+		}
+	}
+	if idx < 0 {
+		l.mu.Unlock()
+		return nil, nil, false
+	}
+	l.dogs = append(l.dogs[:idx], l.dogs[idx+1:]...)
+	master = l.master
+	remaining = append([]*Client(nil), l.dogs...)
+	if len(remaining) == 0 {
+		group := l.group
+		l.master, l.dogs, l.group = nil, nil, nil
+		l.mu.Unlock()
+		dog.SetLeash(nil)
+		if master != nil {
+			master.SetLeash(nil)
+			master.SetForcePairUID(-1)
+			master.SetPairWantedID(-1)
+		}
+		if group != nil {
+			group.dissolve("")
+		}
+		return master, nil, true
+	}
+	l.mu.Unlock()
+
+	dog.SetLeash(nil)
+	l.syncPairFields()
+	l.rebuildGroup()
+	return master, remaining, false
+}
+
+// syncPairFields makes the master point at the first dog and every dog point
+// at the master. The extra dogs ride in the PairGroup's additional_chars list;
+// the standard pair slots can only name one partner.
+func (l *Leash) syncPairFields() {
+	master := l.Master()
+	dogs := l.Dogs()
+	if master == nil || len(dogs) == 0 {
+		return
+	}
+	master.SetForcePairUID(dogs[0].Uid())
+	master.SetPairWantedID(dogs[0].CharID())
+	for _, dog := range dogs {
+		dog.SetForcePairUID(master.Uid())
+		dog.SetPairWantedID(master.CharID())
+	}
+}
+
+// rebuildGroup replaces the render mirror with an accepted, leash-owned group
+// containing the master and every current dog. The master is first so the
+// standard pair slots anchor on the pack's owner.
+func (l *Leash) rebuildGroup() {
+	l.mu.Lock()
+	master := l.master
+	dogs := append([]*Client(nil), l.dogs...)
+	old := l.group
+	l.group = nil
+	l.mu.Unlock()
+
+	if old != nil {
+		old.dissolve("")
+	}
+	if master == nil || len(dogs) == 0 {
+		return
+	}
+
+	members := make([]*Client, 0, len(dogs)+1)
+	members = append(members, master)
+	members = append(members, dogs...)
+	accepted := make(map[int]bool, len(members))
+	for _, m := range members {
+		accepted[m.Uid()] = true
+	}
+	group := &PairGroup{
+		members:  members,
+		accepted: accepted,
+		groupID:  fmt.Sprintf("leash-%d", master.Uid()),
+		forced:   true,
+		leash:    true,
+	}
+
+	l.mu.Lock()
+	// A concurrent dissolve/removal won the race; leave the group detached.
+	if l.master != master || len(l.dogs) != len(dogs) {
+		l.mu.Unlock()
+		return
+	}
+	l.group = group
+	l.mu.Unlock()
+
+	for _, m := range members {
+		m.SetPairGroup(group)
+	}
+	sendGroupState(group)
+}
+
 // dissolveLeash clears a leash and the pair state it rode on. Use this when
 // breaking a claim; use Leash.Dissolve directly only when the caller is about
-// to replace both pair states itself.
+// to replace the pair states itself.
 func dissolveLeash(l *Leash) {
 	if l == nil {
 		return
 	}
-	master, dog := l.Members()
+	members := l.AllMembers()
 	l.Dissolve()
-	if master != nil {
-		master.SetForcePairUID(-1)
-		master.SetPairWantedID(-1)
-	}
-	if dog != nil {
-		dog.SetForcePairUID(-1)
-		dog.SetPairWantedID(-1)
+	for _, m := range members {
+		m.SetForcePairUID(-1)
+		m.SetPairWantedID(-1)
 	}
 }
 
 // removeLeashForUnpunish breaks a leash because /unpunish is clearing the
 // target's full punishment set. The leash itself is not a PunishmentType, so
 // /unpunish -t <type> deliberately does not call this — removing /dog must not
-// silently release the claim. Both ends are told, including a partner outside
-// the issuer's area. Returns true when a leash was actually broken.
+// silently release the claim. Unpunishing one dog detaches just that dog;
+// unpunishing the master releases the whole pack. Every affected member is
+// told, including partners outside the issuer's area. Returns true when a
+// leash was actually broken.
 func removeLeashForUnpunish(target, issuer *Client) bool {
 	if target == nil {
 		return false
@@ -138,35 +339,58 @@ func removeLeashForUnpunish(target, issuer *Client) bool {
 	if l == nil {
 		return false
 	}
-	master, dog := l.Members()
-	dissolveLeash(l)
 	msg := fmt.Sprintf("Your leash was removed by %v.", oocDisplayName(issuer))
-	if master != nil {
-		master.SendServerMessage(msg)
+	master := l.Master()
+	if master == target {
+		members := l.AllMembers()
+		dissolveLeash(l)
+		for _, m := range members {
+			m.SendServerMessage(msg)
+		}
+		return true
 	}
-	if dog != nil {
-		dog.SendServerMessage(msg)
+
+	master, remaining, dissolved := l.removeDog(target)
+	if master == nil && !dissolved {
+		return false
+	}
+	target.SetForcePairUID(-1)
+	target.SetPairWantedID(-1)
+	target.SendServerMessage(msg)
+	if master != nil {
+		master.SendServerMessage(fmt.Sprintf("%v's leash was removed by %v.",
+			oocDisplayName(target), oocDisplayName(issuer)))
+	}
+	for _, dog := range remaining {
+		dog.SendServerMessage(fmt.Sprintf("%v was released from the leash by %v.",
+			oocDisplayName(target), oocDisplayName(issuer)))
 	}
 	return true
 }
 
-// dragLeashedDog moves a master's dog into the area the master just joined.
-// Called at the tail of Client.ChangeArea, after the master has fully joined,
-// so the dog's own area change runs every normal join side effect (roster,
-// music, background, player count). Punishment-safe areas are not consulted:
-// a leash follows its master through shelters.
-func (client *Client) dragLeashedDog() {
+// dragLeashedDogs moves every dog into the area the master just joined. Called
+// at the tail of Client.ChangeArea, after the master has fully joined, so each
+// dog's own area change runs every normal join side effect (roster, music,
+// background, player count). Punishment-safe areas are not consulted: a leash
+// follows its master through shelters.
+func (client *Client) dragLeashedDogs() {
 	l := client.Leash()
 	if l == nil || l.Master() != client {
 		return
 	}
-	dog := l.Dog()
+	dogs := l.Dogs()
 	target := client.Area()
-	if dog == nil || dog == client || target == nil || dog.Area() == target {
+	if len(dogs) == 0 || target == nil {
 		return
 	}
-	if !dog.ChangeArea(target) {
-		client.SendServerMessage(fmt.Sprintf("%v could not follow you into %v.", oocDisplayName(dog), target.Name()))
+	for _, dog := range dogs {
+		if dog == nil || dog == client || dog.Area() == target {
+			continue
+		}
+		if !dog.ChangeArea(target) {
+			client.SendServerMessage(fmt.Sprintf("%v could not follow you into %v.",
+				oocDisplayName(dog), target.Name()))
+		}
 	}
 }
 
@@ -177,7 +401,7 @@ func (client *Client) dragLeashedDog() {
 // do not use this: moderation must still be able to move a leashed player.
 func (client *Client) leashBlocksAreaChange(dest *area.Area) bool {
 	l := client.Leash()
-	if l == nil || l.Dog() != client || dest == nil {
+	if l == nil || !l.IsDog(client) || dest == nil {
 		return false
 	}
 	master := l.Master()
@@ -195,7 +419,7 @@ func (client *Client) refuseIfLeashed() bool {
 	if l == nil {
 		return false
 	}
-	if l.Dog() == client {
+	if l.IsDog(client) {
 		client.SendPopup(leashAbandonPopup)
 		return true
 	}
@@ -212,21 +436,43 @@ func leaveGroupForLeash(c *Client, reason string) {
 	}
 }
 
-// releaseLeashForClaim dissolves any leash a target was already in and notifies
-// the previous partner with the claim popup. newPartner is the other half of
-// the new leash; it is skipped because it is about to be claimed itself.
+// releaseLeashForClaim detaches a target from any leash it was already in and
+// notifies the previous pack with the claim popup. newPartner is the other half
+// of the new leash; it is skipped because it is about to be claimed itself.
+// Detaching a dog leaves the old master's remaining pack intact; detaching a
+// master dissolves the whole old pack.
 func releaseLeashForClaim(c, newPartner *Client, notified map[*Client]bool) {
 	l := c.Leash()
 	if l == nil {
 		return
 	}
-	other := l.Other(c)
-	dissolveLeash(l)
-	if other == nil || other == newPartner || notified[other] {
+	if l.Master() == c {
+		members := l.AllMembers()
+		dissolveLeash(l)
+		for _, m := range members {
+			if m == c || m == newPartner || notified[m] {
+				continue
+			}
+			m.SendPopup(leashClaimPopup)
+			notified[m] = true
+		}
 		return
 	}
-	other.SendPopup(leashClaimPopup)
-	notified[other] = true
+
+	master, remaining, dissolved := l.removeDog(c)
+	if master == nil && !dissolved {
+		return
+	}
+	c.SetForcePairUID(-1)
+	c.SetPairWantedID(-1)
+	affected := append([]*Client{master}, remaining...)
+	for _, m := range affected {
+		if m == nil || m == newPartner || notified[m] {
+			continue
+		}
+		m.SendPopup(leashClaimPopup)
+		notified[m] = true
+	}
 }
 
 // claimPairLinks clears every pairing reference to target on other clients,
@@ -255,11 +501,14 @@ func claimPairLinks(target, spare *Client, notified map[*Client]bool) {
 		}
 		// If this peer was in a leash with the target, drop that stale claim
 		// too. A leash with somebody else is none of this claim's business.
-		if l := c.Leash(); l != nil {
-			master, dog := l.Members()
-			if master == target || dog == target {
-				l.Dissolve()
+		if l := c.Leash(); l != nil && l.Contains(target) {
+			if l.Master() == target {
+				dissolveLeash(l)
+			} else {
+				l.removeDog(target)
 			}
+			target.SetForcePairUID(-1)
+			target.SetPairWantedID(-1)
 		}
 		if !notified[c] {
 			c.SendPopup(leashClaimPopup)
@@ -270,50 +519,87 @@ func claimPairLinks(target, spare *Client, notified map[*Client]bool) {
 	target.SetPairWantedID(-1)
 }
 
-// clearLeashOnDisconnect dissolves a departing client's leash and tells the
-// survivor why. The dog leaving earns the master the abandonment popup; the
-// master leaving frees the dog with a release popup.
+// clearLeashOnDisconnect detaches a departing dog or dissolves the whole pack
+// when the master leaves. A departing dog earns the master the abandonment
+// popup; the master leaving frees every dog with a release popup.
 func clearLeashOnDisconnect(client *Client) {
 	l := client.Leash()
 	if l == nil {
 		return
 	}
-	master, dog := l.Members()
-	l.Dissolve()
-	if master != nil {
-		master.SetForcePairUID(-1)
-		master.SetPairWantedID(-1)
-	}
-	if dog != nil {
-		dog.SetForcePairUID(-1)
-		dog.SetPairWantedID(-1)
+	if l.Master() == client {
+		dogs := l.Dogs()
+		l.Dissolve()
+		client.SetForcePairUID(-1)
+		client.SetPairWantedID(-1)
+		for _, dog := range dogs {
+			dog.SetForcePairUID(-1)
+			dog.SetPairWantedID(-1)
+			dog.SendPopup("Your master disconnected — the leash has been released")
+		}
+		return
 	}
 
-	switch {
-	case dog == client && master != nil:
+	master, remaining, dissolved := l.removeDog(client)
+	client.SetForcePairUID(-1)
+	client.SetPairWantedID(-1)
+	if master != nil {
 		master.SendPopup(leashAbandonPopup)
-	case master == client && dog != nil:
-		dog.SendPopup("Your master disconnected — the leash has been released")
+		if dissolved {
+			master.SetForcePairUID(-1)
+			master.SetPairWantedID(-1)
+		}
+	}
+	for _, dog := range remaining {
+		dog.SendServerMessage(fmt.Sprintf("%v disconnected — the leash has been updated.",
+			oocDisplayName(client)))
 	}
 }
 
 // dissolveLeashForForce breaks a leash because a moderator is force-pairing or
 // force-grouping one of its members. This is an override, not a claim, so the
-// other end gets a plain release notice rather than the "claimed" popup.
+// rest of the pack gets a plain release notice rather than the "claimed" popup.
 func dissolveLeashForForce(c *Client, newPartner *Client) {
 	l := c.Leash()
 	if l == nil {
 		return
 	}
-	other := l.Other(c)
-	dissolveLeash(l)
-	if other != nil && other != newPartner {
-		other.SendServerMessage(fmt.Sprintf("Your leash with %v was broken by a moderator.", oocDisplayName(c)))
+	if l.Master() == c {
+		members := l.AllMembers()
+		dissolveLeash(l)
+		for _, m := range members {
+			if m == c || m == newPartner {
+				continue
+			}
+			m.SendServerMessage(fmt.Sprintf("Your leash with %v was broken by a moderator.",
+				oocDisplayName(c)))
+		}
+		return
+	}
+
+	master, remaining, dissolved := l.removeDog(c)
+	if master == nil && !dissolved {
+		return
+	}
+	c.SetForcePairUID(-1)
+	c.SetPairWantedID(-1)
+	if master != nil && master != newPartner {
+		master.SendServerMessage(fmt.Sprintf("Your leash with %v was broken by a moderator.",
+			oocDisplayName(c)))
+	}
+	for _, dog := range remaining {
+		if dog == newPartner {
+			continue
+		}
+		dog.SendServerMessage(fmt.Sprintf("%v was released from the leash by a moderator.",
+			oocDisplayName(c)))
 	}
 }
 
-// Handles /leash — a moderator forces two players into a pair and turns the
-// second into the first's dog.
+// Handles /leash — a moderator forces one master and up to maxLeashDogs dogs
+// into a persistent pack. Every dog gets /dog, follows the master, and renders
+// through the multi-pair group. Re-issuing the command with the same master
+// adds more dogs until the cap is reached.
 func cmdLeash(client *Client, args []string, usage string) {
 	if punishmentsSystemDisabled(client) {
 		return
@@ -329,87 +615,175 @@ func cmdLeash(client *Client, args []string, usage string) {
 	durationStr := flags.String("d", "10m", "")
 	flags.Parse(args)
 
-	if len(flags.Args()) < 2 {
+	positional := flags.Args()
+	if len(positional) < 2 {
 		client.SendServerMessage("Not enough arguments:\n" + usage)
 		return
 	}
-	if len(flags.Args()) > 2 {
-		client.SendServerMessage("Too many arguments:\n" + usage)
+	if len(positional) > 1+maxLeashDogs {
+		client.SendServerMessage(fmt.Sprintf(
+			"Too many arguments (a leash can hold at most %d dogs):\n%s", maxLeashDogs, usage))
 		return
 	}
 
-	masterUID, err := strconv.Atoi(flags.Arg(0))
+	masterUID, err := strconv.Atoi(positional[0])
 	if err != nil {
 		client.SendServerMessage("Invalid master UID.")
 		return
 	}
-	dogUID, err := strconv.Atoi(flags.Arg(1))
-	if err != nil {
-		client.SendServerMessage("Invalid dog UID.")
-		return
-	}
-	if masterUID == dogUID {
-		client.SendServerMessage("A player cannot be their own master.")
-		return
-	}
-
 	master, err := getClientByUid(masterUID)
 	if err != nil {
 		client.SendServerMessage(fmt.Sprintf("Client with UID %v does not exist.", masterUID))
-		return
-	}
-	dog, err := getClientByUid(dogUID)
-	if err != nil {
-		client.SendServerMessage(fmt.Sprintf("Client with UID %v does not exist.", dogUID))
-		return
-	}
-	if master == dog {
-		client.SendServerMessage("A player cannot be their own master.")
 		return
 	}
 	if master.CharID() < 0 {
 		client.SendServerMessage(fmt.Sprintf("UID %v has not selected a character.", masterUID))
 		return
 	}
-	if dog.CharID() < 0 {
-		client.SendServerMessage(fmt.Sprintf("UID %v has not selected a character.", dogUID))
+
+	requested := make([]*Client, 0, len(positional)-1)
+	seen := make(map[int]bool, len(positional)-1)
+	for _, arg := range positional[1:] {
+		dogUID, err := strconv.Atoi(arg)
+		if err != nil {
+			client.SendServerMessage("Invalid dog UID.")
+			return
+		}
+		if dogUID == masterUID {
+			client.SendServerMessage("A player cannot be their own master.")
+			return
+		}
+		if seen[dogUID] {
+			client.SendServerMessage(fmt.Sprintf("Duplicate dog UID %v.", dogUID))
+			return
+		}
+		seen[dogUID] = true
+		dog, err := getClientByUid(dogUID)
+		if err != nil {
+			client.SendServerMessage(fmt.Sprintf("Client with UID %v does not exist.", dogUID))
+			return
+		}
+		if dog == master {
+			client.SendServerMessage("A player cannot be their own master.")
+			return
+		}
+		if dog.CharID() < 0 {
+			client.SendServerMessage(fmt.Sprintf("UID %v has not selected a character.", dogUID))
+			return
+		}
+		requested = append(requested, dog)
+	}
+
+	// If the master is already a dog in somebody else's leash, this command
+	// promotes them. The old claim is released below, after the punishment has
+	// succeeded, so a failed command never breaks the old pack.
+	existing := master.Leash()
+	if existing != nil && existing.Master() != master {
+		existing = nil
+	}
+	existingDogs := []*Client(nil)
+	if existing != nil {
+		existingDogs = existing.Dogs()
+	}
+
+	newDogs := make([]*Client, 0, len(requested))
+	already := make([]string, 0)
+	for _, dog := range requested {
+		if existing != nil && existing.IsDog(dog) {
+			already = append(already, oocDisplayName(dog))
+			continue
+		}
+		newDogs = append(newDogs, dog)
+	}
+	if len(already) > 0 {
+		client.SendServerMessage(fmt.Sprintf("Already on this leash: %v.", strings.Join(already, ", ")))
+	}
+	if len(newDogs) == 0 {
+		client.SendServerMessage("No new dogs to add.")
+		return
+	}
+	if len(existingDogs)+len(newDogs) > maxLeashDogs {
+		client.SendServerMessage(fmt.Sprintf("A leash can hold at most %d dogs.", maxLeashDogs))
 		return
 	}
 
 	// Apply the dog effect first, through the shared applicator with the
-	// punishment-safe check bypassed. If the global kill switch is armed (or
-	// the duration is invalid), nothing is punished and we must not create a
-	// half-formed leash.
-	dogArgs := []string{"-d", *durationStr, "-r", *reason, strconv.Itoa(dog.Uid())}
+	// punishment-safe check bypassed. One shared call keeps the whole pack
+	// all-or-nothing: if the global kill switch is armed, the duration is
+	// invalid, or an admin's anti-punishment shield spoofs any target, no
+	// half-formed leash is created.
+	dogUIDs := make([]string, len(newDogs))
+	for i, dog := range newDogs {
+		dogUIDs[i] = strconv.Itoa(dog.Uid())
+	}
+	dogArgs := []string{"-d", *durationStr, "-r", *reason, strings.Join(dogUIDs, ",")}
 	if hidden {
 		dogArgs = append(dogArgs, "-h")
 	}
-	if punished := cmdPunishmentIgnoringSafeArea(client, dogArgs, usage, PunishmentDog); len(punished) == 0 {
+	punished := cmdPunishmentIgnoringSafeArea(client, dogArgs, usage, PunishmentDog)
+	if len(punished) == 0 {
+		return
+	}
+	if len(punished) != len(newDogs) {
+		client.SendServerMessage("Leash not created: at least one dog was shielded from the /dog punishment.")
 		return
 	}
 
-	// Claim both ends: break any existing leash, pair, or multi-pair group.
+	// Claim every member: break any existing leash, pair, or multi-pair group.
+	// New members are pre-marked so the claim popups reach only the players
+	// whose old partner was taken, not the pack being formed.
 	notified := make(map[*Client]bool)
-	releaseLeashForClaim(master, dog, notified)
-	releaseLeashForClaim(dog, master, notified)
-	leaveGroupForLeash(master, oocDisplayName(master)+" has been leashed — the pairing group has been updated.")
-	leaveGroupForLeash(dog, oocDisplayName(dog)+" has been leashed — the pairing group has been updated.")
-	claimPairLinks(master, dog, notified)
-	claimPairLinks(dog, master, notified)
-
-	master.SetPairWantedID(dog.CharID())
-	dog.SetPairWantedID(master.CharID())
-	master.SetForcePairUID(dog.Uid())
-	dog.SetForcePairUID(master.Uid())
-
-	l := &Leash{master: master, dog: dog}
-	master.SetLeash(l)
-	dog.SetLeash(l)
-
-	if !hidden {
-		master.SendServerMessage(fmt.Sprintf("You have leashed %v.", oocDisplayName(dog)))
-		dog.SendServerMessage(fmt.Sprintf("You have been leashed by %v.", oocDisplayName(master)))
+	notified[master] = true
+	for _, dog := range newDogs {
+		notified[dog] = true
 	}
-	client.SendServerMessage(fmt.Sprintf("Leashed %v to %v.", oocDisplayName(dog), oocDisplayName(master)))
-	addToBuffer(client, "CMD", fmt.Sprintf("Leashed UID %v to UID %v.", dog.Uid(), master.Uid()), false)
+
+	if master.Leash() != nil && master.Leash().Master() != master {
+		releaseLeashForClaim(master, nil, notified)
+	}
+
+	leash := master.Leash()
+	if leash == nil {
+		leaveGroupForLeash(master, oocDisplayName(master)+" has been leashed — the pairing group has been updated.")
+		leash = &Leash{master: master}
+		master.SetLeash(leash)
+		claimPairLinks(master, newDogs[0], notified)
+	}
+
+	for _, dog := range newDogs {
+		if dog.Leash() != nil {
+			releaseLeashForClaim(dog, master, notified)
+		}
+		leaveGroupForLeash(dog, oocDisplayName(dog)+" has been leashed — the pairing group has been updated.")
+		claimPairLinks(dog, master, notified)
+	}
+	leash.addDogs(newDogs)
+
+	names := make([]string, len(newDogs))
+	for i, dog := range newDogs {
+		names[i] = oocDisplayName(dog)
+	}
+	joined := strings.Join(names, ", ")
+	if !hidden {
+		if len(existingDogs) == 0 {
+			master.SendServerMessage(fmt.Sprintf("You have leashed %v.", joined))
+		} else {
+			master.SendServerMessage(fmt.Sprintf("You added %v to your leash.", joined))
+		}
+		for _, dog := range newDogs {
+			dog.SendServerMessage(fmt.Sprintf("You have been leashed by %v.", oocDisplayName(master)))
+		}
+		for _, dog := range existingDogs {
+			dog.SendServerMessage(fmt.Sprintf("Your master added %v to the leash.", joined))
+		}
+	}
+	if len(existingDogs) == 0 {
+		client.SendServerMessage(fmt.Sprintf("Leashed %v to %v.", joined, oocDisplayName(master)))
+		addToBuffer(client, "CMD", fmt.Sprintf("Leashed UID %v to UID %v.",
+			strings.Join(dogUIDs, ","), master.Uid()), false)
+	} else {
+		client.SendServerMessage(fmt.Sprintf("Added %v to %v's leash.", joined, oocDisplayName(master)))
+		addToBuffer(client, "CMD", fmt.Sprintf("Added UID %v to UID %v's leash.",
+			strings.Join(dogUIDs, ","), master.Uid()), false)
+	}
 }

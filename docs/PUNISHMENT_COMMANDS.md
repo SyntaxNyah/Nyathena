@@ -47,7 +47,7 @@ The universal removal command. Clears **all** punishment types including lag.
 
 `/unpunish all` also clears the torment list (`lag`). `/unpunish -t lag <uid>` removes it from a specific target. Nothing in game *adds* to that list any more — `/lag` was removed; the AutoMod censor arms it automatically, and the server console keeps `torment <ipid>`.
 
-Full removal (`/unpunish <uid>` and `/unpunish all`) **also breaks any `/leash` claim** the target is part of, including the pair and follow behaviour. `/unpunish -t dog` deliberately removes only the barking effect and leaves the leash intact.
+Full removal (`/unpunish <uid>` and `/unpunish all`) **also breaks any `/leash` claim** the target is part of. Unpunishing a dog detaches just that dog and leaves the rest of the pack; unpunishing the master releases every dog. `/unpunish -t dog` deliberately removes only the barking effect and leaves the leash intact.
 
 **Examples:**
 ```

@@ -2117,7 +2117,7 @@ func (client *Client) ChangeArea(a *area.Area) bool {
 	// new area (music, roster, background) before the dog's own area change
 	// fans out. The punishment-safe area flag is deliberately not consulted:
 	// the dog follows its master through shelters too.
-	client.dragLeashedDog()
+	client.dragLeashedDogs()
 	return true
 }
 

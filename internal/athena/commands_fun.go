@@ -200,7 +200,7 @@ func cmdUnpair(client *Client, _ []string, _ string) {
 	// group check so a dog that somehow still has a group pointer cannot slip
 	// out through /leavegroup's path either.
 	if l := client.Leash(); l != nil {
-		if l.Dog() == client {
+		if l.IsDog(client) {
 			client.SendPopup(leashAbandonPopup)
 			return
 		}
@@ -328,13 +328,33 @@ func cmdForceUnpair(client *Client, args []string, _ string) {
 	}
 
 	// A forced unpair also breaks any leash the target is part of, whichever
-	// end of it they are on. The other end is told before the pair fields are
-	// cleared so the message can still name them.
+	// end of it they are on. A dog is detached from the pack; a master's whole
+	// pack is released. Survivors are told before the pair fields are cleared
+	// so the messages can still name the target.
 	if l := target.Leash(); l != nil {
-		if other := l.Other(target); other != nil {
-			other.SendServerMessage(fmt.Sprintf("Your leash with %v was broken by %v.", oocDisplayName(target), client.OOCName()))
+		if l.Master() == target {
+			members := l.AllMembers()
+			dissolveLeash(l)
+			for _, m := range members {
+				if m == target {
+					continue
+				}
+				m.SendServerMessage(fmt.Sprintf("Your leash with %v was broken by %v.",
+					oocDisplayName(target), client.OOCName()))
+			}
+		} else {
+			master, remaining, _ := l.removeDog(target)
+			target.SetForcePairUID(-1)
+			target.SetPairWantedID(-1)
+			if master != nil {
+				master.SendServerMessage(fmt.Sprintf("Your leash with %v was broken by %v.",
+					oocDisplayName(target), client.OOCName()))
+			}
+			for _, dog := range remaining {
+				dog.SendServerMessage(fmt.Sprintf("%v was released from the leash by %v.",
+					oocDisplayName(target), client.OOCName()))
+			}
 		}
-		dissolveLeash(l)
 	}
 
 	// Clear the partner's pair state.

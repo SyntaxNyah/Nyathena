@@ -62,6 +62,14 @@ func sendGroupState(g *PairGroup) {
 	}
 }
 
+// pairGroupBlocksForce reports whether c is in a pairing group that force mode
+// must respect. A leash group is only the render mirror of the leash: force
+// mode breaks the leash (and therefore its group) below instead of refusing.
+func pairGroupBlocksForce(c *Client) bool {
+	g := c.PairGroup()
+	return g != nil && !(c.Leash() != nil && g.IsLeash())
+}
+
 // startGroupPair implements /grouppair and /forcegrouppair. For /grouppair the
 // initiator invites any number of other players and joins their own group;
 // force skips the accept flow and marks everyone accepted immediately. The
@@ -115,7 +123,7 @@ func startGroupPair(client *Client, args []string, force bool) {
 				client.SendServerMessage("You have not selected a character.")
 				return
 			}
-			if t.PairGroup() != nil {
+			if pairGroupBlocksForce(t) {
 				client.SendServerMessage("You are already in a pairing group.")
 				return
 			}
@@ -128,7 +136,7 @@ func startGroupPair(client *Client, args []string, force bool) {
 				client.SendServerMessage("That player has not selected a character.")
 				return
 			}
-			if t.PairGroup() != nil {
+			if pairGroupBlocksForce(t) {
 				client.SendServerMessage(oocDisplayName(t) + " is already in a pairing group.")
 				return
 			}
@@ -211,7 +219,7 @@ func cmdUnforceGroupPair(client *Client, _ []string, _ string) {
 			return
 		}
 		g := c.PairGroup()
-		if g == nil || !g.IsForced() {
+		if g == nil || !g.IsForced() || g.IsLeash() {
 			return
 		}
 		if _, ok := seen[g]; ok {
@@ -233,6 +241,12 @@ func cmdUnforceGroupPair(client *Client, _ []string, _ string) {
 
 // cmdLeaveGroup handles /leavegroup: the caller gracefully leaves their group.
 func cmdLeaveGroup(client *Client, _ []string, _ string) {
+	// The leash is the claim; its group is only a rendering mirror. Letting a
+	// dog leave the mirror would hide it without releasing the claim, so the
+	// usual leash refusal (popup for a dog, instruction for a master) applies.
+	if client.refuseIfLeashed() {
+		return
+	}
 	g := client.PairGroup()
 	if g == nil {
 		client.SendServerMessage("You are not in a pairing group.")

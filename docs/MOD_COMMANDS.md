@@ -171,7 +171,7 @@ A name a moderator set in a room that had no CM at all is kept until the room em
 | `/charcurse <uid> <charname>` | KICK | Force a one-time character swap (target may change afterward) |
 | `/forcepair <uid1> <uid2>` | KICK | Force two players into a UID-tracked pair |
 | `/forceunpair <uid>` | KICK | Break a forced pair or leash |
-| `/leash [-d duration] [-r reason] [-h] <master uid> <dog uid>` | KICK | Claim a player as your dog: force-pair, apply `/dog`, drag them between areas (including punishment-safe rooms). Neither end can `/unpair`; full `/unpunish` or `/forceunpair` removes it. Previous partners get a `Your partner has been leashed` popup |
+| `/leash [-d duration] [-r reason] [-h] <master uid> <dog uid> [dog uid ...]` | KICK | Claim up to 6 players as your dogs: force-pairs the pack, applies `/dog` to every dog, drags them between areas (including punishment-safe rooms), and renders the full pack together on multi-pair/JSON clients. Re-issue the command with the same master to add more dogs. Neither end can `/unpair`; full `/unpunish` or `/forceunpair` removes it. Unpunishing one dog detaches only that dog. Previous partners get a `Your partner has been leashed` popup |
 | `/antipunishshield <uid> [backfire]` | ADMIN | Make a player immune to punishment effects until restart. The issuing moderator sees their messages spoofed as if the punishment worked; `backfire` also applies it to the moderator. `/kick`, `/ban`, and `/mute` are unaffected |
 | `/setrole <uid> <role>` | ADMIN | Set a player's role (permission tier) |
 | `/clearpos <uid>` | MOVE_USERS | Clear forced position |

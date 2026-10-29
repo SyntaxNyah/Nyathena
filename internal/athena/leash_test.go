@@ -4,6 +4,7 @@
 package athena
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 
@@ -83,6 +84,20 @@ func newLeashTestWorld(t *testing.T, safeCafe bool) *leashTestWorld {
 func (w *leashTestWorld) issue(t *testing.T) {
 	t.Helper()
 	cmdLeash(w.mod, []string{"2", "3"}, "usage")
+}
+
+// addClient creates an extra character in the leash world. Multi-dog tests use
+// it instead of bloating every single-dog test's fixture.
+func (w *leashTestWorld) addClient(t *testing.T, uid, char int) (*Client, *captureConn) {
+	t.Helper()
+	conn := &captureConn{}
+	client := &Client{
+		conn: conn, uid: uid, ipid: fmt.Sprintf("ip-leash-%d", uid), char: char, area: w.cafe,
+		pair: ClientPairInfo{wanted_id: -1}, forcePairUID: -1,
+	}
+	clients.AddClient(client)
+	clients.RegisterUID(client)
+	return client, conn
 }
 
 // TestLeashCommandRegistered pins the command's permission and minimum args.
@@ -381,9 +396,152 @@ func TestLeashMasterDisconnectFreesDog(t *testing.T) {
 	}
 }
 
+// TestLeashMultipleDogsSharePack verifies the multi-dog claim: one Leash is
+// shared by the master and every dog, every dog gets /dog, the master's legacy
+// pair slot points at the first dog, and the leash-owned PairGroup renders the
+// full pack in master-first order.
+func TestLeashMultipleDogsSharePack(t *testing.T) {
+	w := newLeashTestWorld(t, false)
+	dog2, _ := w.addClient(t, 5, 3)
+
+	cmdLeash(w.mod, []string{"2", "3", "4", "5"}, "usage")
+
+	l := w.master.Leash()
+	if l == nil {
+		t.Fatal("master has no leash")
+	}
+	dogs := []*Client{w.dog, w.other, dog2}
+	if got := l.Dogs(); len(got) != len(dogs) {
+		t.Fatalf("leash has %d dogs, want %d", len(got), len(dogs))
+	}
+	for _, dog := range dogs {
+		if dog.Leash() != l {
+			t.Fatalf("%v does not share the master's Leash", oocDisplayName(dog))
+		}
+		if !l.IsDog(dog) {
+			t.Fatalf("%v is not reported as a dog", oocDisplayName(dog))
+		}
+		if !dog.HasActivePunishment(PunishmentDog) {
+			t.Fatalf("%v did not receive the /dog punishment", oocDisplayName(dog))
+		}
+		if dog.ForcePairUID() != w.master.Uid() {
+			t.Fatalf("%v ForcePairUID = %d, want master %d",
+				oocDisplayName(dog), dog.ForcePairUID(), w.master.Uid())
+		}
+	}
+	if w.master.HasActivePunishment(PunishmentDog) {
+		t.Error("master should not receive the /dog punishment")
+	}
+	if w.master.ForcePairUID() != w.dog.Uid() {
+		t.Errorf("master ForcePairUID = %d, want first dog %d", w.master.ForcePairUID(), w.dog.Uid())
+	}
+
+	group := w.master.PairGroup()
+	if group == nil || !group.IsLeash() {
+		t.Fatal("leash did not install a leash-owned PairGroup")
+	}
+	for _, c := range append([]*Client{w.master}, dogs...) {
+		if c.PairGroup() != group {
+			t.Fatalf("%v is not in the leash group", oocDisplayName(c))
+		}
+	}
+	accepted := group.acceptedMembers()
+	wantOrder := []*Client{w.master, w.dog, w.other, dog2}
+	if len(accepted) != len(wantOrder) {
+		t.Fatalf("group has %d accepted members, want %d", len(accepted), len(wantOrder))
+	}
+	for i, want := range wantOrder {
+		if accepted[i] != want {
+			t.Fatalf("group order[%d] = %v, want %v", i, oocDisplayName(accepted[i]), oocDisplayName(want))
+		}
+	}
+	if gp := group.buildGP(); gp.GroupID != "leash-2" || len(gp.Members) != len(wantOrder) {
+		t.Fatalf("GP = %+v, want group leash-2 with %d members", gp, len(wantOrder))
+	}
+
+	// The standard pair slot anchors on the first dog for the master and on
+	// the master for each dog; additional_chars carries the whole roster.
+	ms := &MSToClient{}
+	applyPairGroupInjection(w.master, ms)
+	if ms.PairedCharID != w.dog.CharIDStr() {
+		t.Errorf("master PairedCharID = %q, want first dog %q", ms.PairedCharID, w.dog.CharIDStr())
+	}
+	if len(ms.AdditionalChars) != len(wantOrder) {
+		t.Fatalf("master additional_chars = %d, want %d", len(ms.AdditionalChars), len(wantOrder))
+	}
+	for i, want := range wantOrder {
+		if got := ms.AdditionalChars[i].CharID; got != want.CharID() {
+			t.Errorf("additional_chars[%d] = %d, want %d", i, got, want.CharID())
+		}
+	}
+	dogMS := &MSToClient{}
+	applyPairGroupInjection(w.other, dogMS)
+	if dogMS.PairedCharID != w.master.CharIDStr() {
+		t.Errorf("dog PairedCharID = %q, want master %q", dogMS.PairedCharID, w.master.CharIDStr())
+	}
+
+	// All dogs follow the master into another area.
+	if !w.master.ChangeArea(w.pizza) {
+		t.Fatal("master could not move to Pizza Room")
+	}
+	for _, dog := range dogs {
+		if dog.Area() != w.pizza {
+			t.Errorf("%v did not follow to Pizza Room; area = %v",
+				oocDisplayName(dog), dog.Area().Name())
+		}
+	}
+}
+
+// TestLeashAddsDogsAndCapsAtSix verifies that re-issuing /leash grows the pack
+// and that a seventh dog is refused without disturbing the existing six.
+func TestLeashAddsDogsAndCapsAtSix(t *testing.T) {
+	w := newLeashTestWorld(t, false)
+	extras := make([]*Client, 0, 4)
+	for i := 0; i < 4; i++ {
+		c, _ := w.addClient(t, 5+i, 3+i)
+		extras = append(extras, c)
+	}
+
+	cmdLeash(w.mod, []string{"2", "3"}, "usage")
+	cmdLeash(w.mod, []string{"2", "4", "5", "6", "7", "8"}, "usage")
+
+	l := w.master.Leash()
+	if l == nil {
+		t.Fatal("master has no leash")
+	}
+	if got := len(l.Dogs()); got != maxLeashDogs {
+		t.Fatalf("leash has %d dogs, want %d", got, maxLeashDogs)
+	}
+	if w.master.ForcePairUID() != w.dog.Uid() {
+		t.Errorf("master ForcePairUID = %d, want first dog %d", w.master.ForcePairUID(), w.dog.Uid())
+	}
+	allDogs := append([]*Client{w.dog, w.other}, extras...)
+	for _, dog := range allDogs {
+		if dog.Leash() != l {
+			t.Errorf("%v is not on the six-dog leash", oocDisplayName(dog))
+		}
+	}
+
+	spare, _ := w.addClient(t, 9, 7)
+	cmdLeash(w.mod, []string{"2", "9"}, "usage")
+	if spare.Leash() != nil {
+		t.Fatal("seventh dog was added to the leash")
+	}
+	if spare.HasActivePunishment(PunishmentDog) {
+		t.Error("seventh dog received /dog despite the cap")
+	}
+	if w.master.Leash() != l || len(l.Dogs()) != maxLeashDogs {
+		t.Error("cap rejection disturbed the existing six-dog leash")
+	}
+	if got := w.modConn.String(); !strings.Contains(got, "at most 6") {
+		t.Errorf("issuer was not told about the cap; got %q", got)
+	}
+}
+
 // TestForcePairBreaksLeash verifies a moderator force-pairing over a leash
 // clears the claim instead of leaving a stale dog pointer.
 func TestForcePairBreaksLeash(t *testing.T) {
+
 	w := newLeashTestWorld(t, false)
 	w.issue(t)
 
@@ -399,5 +557,212 @@ func TestForcePairBreaksLeash(t *testing.T) {
 	if w.master.ForcePairUID() != w.other.Uid() || w.other.ForcePairUID() != w.master.Uid() {
 		t.Errorf("new force-pair was not installed: master=%d other=%d",
 			w.master.ForcePairUID(), w.other.ForcePairUID())
+	}
+}
+
+// TestLeashDogDisconnectKeepsRemainingPack verifies that losing one dog shrinks
+// the pack instead of releasing every other dog, and that the master's legacy
+// pair slot moves to the new first dog.
+func TestLeashDogDisconnectKeepsRemainingPack(t *testing.T) {
+	w := newLeashTestWorld(t, false)
+	dog2, _ := w.addClient(t, 5, 3)
+	cmdLeash(w.mod, []string{"2", "3", "4", "5"}, "usage")
+	l := w.master.Leash()
+	if l == nil {
+		t.Fatal("master has no leash")
+	}
+
+	clearPairLinksOnDisconnect(w.dog)
+
+	if w.dog.Leash() != nil {
+		t.Fatal("disconnecting dog kept its leash pointer")
+	}
+	if w.master.Leash() != l || w.other.Leash() != l || dog2.Leash() != l {
+		t.Fatal("disconnecting one dog released the rest of the pack")
+	}
+	if got := l.Dogs(); len(got) != 2 || got[0] != w.other || got[1] != dog2 {
+		t.Fatalf("remaining dogs = %v, want [other dog2]", got)
+	}
+	if w.master.ForcePairUID() != w.other.Uid() {
+		t.Errorf("master ForcePairUID = %d, want new first dog %d",
+			w.master.ForcePairUID(), w.other.Uid())
+	}
+	if w.other.ForcePairUID() != w.master.Uid() || dog2.ForcePairUID() != w.master.Uid() {
+		t.Error("remaining dogs lost their pair link to the master")
+	}
+	group := w.master.PairGroup()
+	if group == nil || !group.IsLeash() || len(group.acceptedMembers()) != 3 {
+		t.Fatal("leash group was not rebuilt for the remaining pack")
+	}
+	if w.dog.PairGroup() != nil {
+		t.Error("disconnected dog is still in the leash group")
+	}
+	if got := w.masterConn.String(); !strings.Contains(got, leashAbandonPopup) {
+		t.Errorf("master did not get the abandonment popup; got %q", got)
+	}
+
+	clearPairLinksOnDisconnect(w.other)
+	if got := l.Dogs(); len(got) != 1 || got[0] != dog2 {
+		t.Fatalf("remaining dogs after second disconnect = %v, want [dog2]", got)
+	}
+	if w.master.ForcePairUID() != dog2.Uid() {
+		t.Errorf("master ForcePairUID = %d, want %d", w.master.ForcePairUID(), dog2.Uid())
+	}
+
+	clearPairLinksOnDisconnect(dog2)
+	if w.master.Leash() != nil || w.master.ForcePairUID() != -1 || w.master.PairWantedID() != -1 {
+		t.Errorf("last dog disconnect left master state: leash=%v force=%d wanted=%d",
+			w.master.Leash(), w.master.ForcePairUID(), w.master.PairWantedID())
+	}
+	if w.master.PairGroup() != nil {
+		t.Error("last dog disconnect left the master in a pair group")
+	}
+}
+
+// TestLeashGroupCannotBeLeftOrDisbanded pins the escape hatches: a dog cannot
+// leave or deny the render group, and /unforcegrouppair ignores leash groups.
+func TestLeashGroupCannotBeLeftOrDisbanded(t *testing.T) {
+	w := newLeashTestWorld(t, false)
+	dog2, _ := w.addClient(t, 5, 3)
+	cmdLeash(w.mod, []string{"2", "3", "4", "5"}, "usage")
+	l := w.master.Leash()
+	group := w.master.PairGroup()
+	if l == nil || group == nil || !group.IsLeash() {
+		t.Fatal("multi-dog leash did not install its group")
+	}
+
+	cmdLeaveGroup(w.dog, nil, "")
+	if w.dog.Leash() != l || w.dog.PairGroup() != group {
+		t.Fatal("/leavegroup let a dog out of the leash group")
+	}
+	if got := w.dogConn.String(); !strings.Contains(got, leashAbandonPopup) {
+		t.Errorf("dog did not get the abandonment popup on /leavegroup; got %q", got)
+	}
+
+	cmdDeny(w.other, nil, "")
+	if w.other.Leash() != l || w.other.PairGroup() != group {
+		t.Fatal("/deny let a dog out of the leash group")
+	}
+
+	cmdUnforceGroupPair(w.mod, nil, "")
+	if w.master.Leash() != l || w.dog.Leash() != l || w.other.Leash() != l || dog2.Leash() != l {
+		t.Fatal("/unforcegrouppair broke the leash claim")
+	}
+	if w.master.PairGroup() != group || w.dog.PairGroup() != group ||
+		w.other.PairGroup() != group || dog2.PairGroup() != group {
+		t.Fatal("/unforcegrouppair removed the leash render group")
+	}
+	if got := len(group.acceptedMembers()); got != 4 {
+		t.Errorf("leash group has %d members after escape attempts, want 4", got)
+	}
+}
+
+// TestForceUnpairDetachesOnlyTargetDog verifies /forceunpair on one dog detaches
+// that dog and leaves the rest of the pack intact.
+func TestForceUnpairDetachesOnlyTargetDog(t *testing.T) {
+	w := newLeashTestWorld(t, false)
+	dog2, _ := w.addClient(t, 5, 3)
+	cmdLeash(w.mod, []string{"2", "3", "4", "5"}, "usage")
+	l := w.master.Leash()
+	if l == nil {
+		t.Fatal("master has no leash")
+	}
+
+	cmdForceUnpair(w.mod, []string{"3"}, "usage")
+
+	if w.dog.Leash() != nil {
+		t.Fatal("/forceunpair left the target dog on the leash")
+	}
+	if w.master.Leash() != l || w.other.Leash() != l || dog2.Leash() != l {
+		t.Fatal("/forceunpair released the whole pack instead of one dog")
+	}
+	if got := l.Dogs(); len(got) != 2 || got[0] != w.other || got[1] != dog2 {
+		t.Fatalf("remaining dogs = %v, want [other dog2]", got)
+	}
+	if w.master.ForcePairUID() != w.other.Uid() {
+		t.Errorf("master ForcePairUID = %d, want new first dog %d",
+			w.master.ForcePairUID(), w.other.Uid())
+	}
+	if w.dog.ForcePairUID() != -1 || w.dog.PairWantedID() != -1 {
+		t.Errorf("target dog kept pair state: force=%d wanted=%d",
+			w.dog.ForcePairUID(), w.dog.PairWantedID())
+	}
+	if got := w.masterConn.String(); !strings.Contains(got, "was broken by") {
+		t.Errorf("master was not told the leash was broken; got %q", got)
+	}
+	if group := w.master.PairGroup(); group == nil || !group.IsLeash() || len(group.acceptedMembers()) != 3 {
+		t.Fatal("leash group was not rebuilt after /forceunpair")
+	}
+}
+
+// TestForcePairDetachesOnlyTargetDog verifies /forcepair over one dog detaches
+// that dog and installs the new pair without dissolving the remaining pack.
+func TestForcePairDetachesOnlyTargetDog(t *testing.T) {
+	w := newLeashTestWorld(t, false)
+	dog2, _ := w.addClient(t, 5, 3)
+	spare, _ := w.addClient(t, 6, 4)
+	cmdLeash(w.mod, []string{"2", "3", "4", "5"}, "usage")
+	l := w.master.Leash()
+	if l == nil {
+		t.Fatal("master has no leash")
+	}
+
+	cmdForcePair(w.mod, []string{"5", "6"}, "usage")
+
+	if dog2.Leash() != nil {
+		t.Fatal("/forcepair left the target dog on the leash")
+	}
+	if w.master.Leash() != l || w.dog.Leash() != l || w.other.Leash() != l {
+		t.Fatal("/forcepair released the rest of the pack")
+	}
+	if got := l.Dogs(); len(got) != 2 {
+		t.Fatalf("leash has %d dogs after /forcepair, want 2", len(got))
+	}
+	if dog2.ForcePairUID() != spare.Uid() || spare.ForcePairUID() != dog2.Uid() {
+		t.Errorf("new force-pair not installed: dog2=%d spare=%d",
+			dog2.ForcePairUID(), spare.ForcePairUID())
+	}
+	if group := w.master.PairGroup(); group == nil || !group.IsLeash() || len(group.acceptedMembers()) != 3 {
+		t.Fatal("leash group was not rebuilt after /forcepair")
+	}
+}
+
+// TestUnpunishDogDetachesOnlyThatDog verifies full /unpunish on one dog keeps
+// the rest of the pack, while /unpunish on the master releases everyone.
+func TestUnpunishDogDetachesOnlyThatDog(t *testing.T) {
+	w := newLeashTestWorld(t, false)
+	dog2, _ := w.addClient(t, 5, 3)
+	cmdLeash(w.mod, []string{"2", "3", "4", "5"}, "usage")
+	l := w.master.Leash()
+	if l == nil {
+		t.Fatal("master has no leash")
+	}
+
+	cmdUnpunish(w.mod, []string{"5"}, "usage")
+
+	if dog2.Leash() != nil {
+		t.Fatal("unpunished dog stayed on the leash")
+	}
+	if w.master.Leash() != l || w.dog.Leash() != l || w.other.Leash() != l {
+		t.Fatal("unpunishing one dog released the rest of the pack")
+	}
+	if got := l.Dogs(); len(got) != 2 {
+		t.Fatalf("leash has %d dogs after unpunishing the third, want 2", len(got))
+	}
+	if w.master.ForcePairUID() != w.dog.Uid() {
+		t.Errorf("master ForcePairUID = %d, want unchanged first dog %d",
+			w.master.ForcePairUID(), w.dog.Uid())
+	}
+	if dog2.ForcePairUID() != -1 || dog2.PairWantedID() != -1 {
+		t.Errorf("unpunished dog kept pair state: force=%d wanted=%d",
+			dog2.ForcePairUID(), dog2.PairWantedID())
+	}
+
+	cmdUnpunish(w.mod, []string{"2"}, "usage")
+	if w.master.Leash() != nil || w.dog.Leash() != nil || w.other.Leash() != nil {
+		t.Fatal("unpunishing the master did not release the whole pack")
+	}
+	if w.master.ForcePairUID() != -1 || w.dog.ForcePairUID() != -1 || w.other.ForcePairUID() != -1 {
+		t.Error("master unpunish left pair state behind")
 	}
 }

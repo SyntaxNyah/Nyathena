@@ -37,6 +37,7 @@ type PairGroup struct {
 	accepted map[int]bool // by UID
 	groupID  string       // stable id carried in the GP roster packet
 	forced   bool         // true when created by /forcegrouppair (members had no say)
+	leash    bool         // true when this group is the render mirror of a /leash claim
 }
 
 // roster returns a human-readable, comma-joined member name list.
@@ -109,6 +110,16 @@ func (g *PairGroup) IsForced() bool {
 	g.mu.Lock()
 	defer g.mu.Unlock()
 	return g.forced
+}
+
+// IsLeash reports whether this group is the multi-pair render mirror of a
+// /leash claim. Leash groups are not ordinary force groups: /unforcegrouppair
+// must not disband them, and /leavegroup/deny cannot be used to slip out of a
+// claim. The Leash owns their lifecycle.
+func (g *PairGroup) IsLeash() bool {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	return g.leash
 }
 
 // buildGP snapshots the accepted roster as a GP packet (ordered, speaker
@@ -256,6 +267,9 @@ func (g *PairGroup) accept(member *Client) {
 
 // cmdAccept handles /accept.
 func cmdAccept(client *Client, _ []string, _ string) {
+	if client.refuseIfLeashed() {
+		return
+	}
 	g := client.PairGroup()
 	if g == nil {
 		client.SendServerMessage("You have no pending pairing group request.")
@@ -266,6 +280,9 @@ func cmdAccept(client *Client, _ []string, _ string) {
 
 // cmdDeny handles /deny.
 func cmdDeny(client *Client, _ []string, _ string) {
+	if client.refuseIfLeashed() {
+		return
+	}
 	g := client.PairGroup()
 	if g == nil {
 		client.SendServerMessage("You have no pending pairing group request.")
