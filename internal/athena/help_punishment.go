@@ -104,6 +104,11 @@ var punishmentHelpGroups = []punishmentSubcategory{
 		cmds: []string{"contagious", "minefield", "silencebell", "stealthmute"},
 	},
 	{
+		emoji: "🛡", title: "Anti-punishment shield",
+		desc: "Admin-only, until server restart. The shielded player is immune to punishment effects; the moderator who applied one sees their messages spoofed as if it worked. 'backfire' also applies the punishment to that moderator. /kick, /ban and /mute still work.",
+		cmds: []string{"antipunishshield"},
+	},
+	{
 		emoji: "🔊", title: "Audio / SFX",
 		desc: "Forces audio side-effects on every IC line.",
 		cmds: []string{"sfxcurse", "unsfx"},

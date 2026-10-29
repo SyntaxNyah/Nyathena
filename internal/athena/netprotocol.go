@@ -126,6 +126,9 @@ func pktHdid(client *Client, p *aolib.Packet) {
 	// the first (and only) point a connection's HDID is known -- means the
 	// popup keys on the hardware ID, not the IP.
 	client.isNewHDID = recordHDFirstSeen(client.Hdid())
+	// /antipunishshield is held by HDID across reconnects until the server
+	// restarts. Apply it as soon as the HDID is known.
+	applyStoredAntiPunishShield(client)
 
 	if client.CheckBanned(db.HDID) {
 		return
@@ -250,6 +253,9 @@ func pktReqDone(client *Client, _ *aolib.Packet) {
 	}
 	client.SetUid(uids.GetUid())
 	clients.RegisterUID(client)
+	// Belt-and-braces for the IPID fallback: pktHdid normally applies the
+	// shield, but a client whose HDID was unavailable still gets it here.
+	applyStoredAntiPunishShield(client)
 	client.SetConnectedAt(time.Now())
 	client.lastPingNano.Store(time.Now().UnixNano()) // seed so the ping timeout window starts from join time
 	players.AddPlayer()
@@ -326,7 +332,7 @@ func pktReqDone(client *Client, _ *aolib.Packet) {
 	// Torment reconnect cycle: if this IPID is lagged, restart the disconnect timer
 	// immediately. This punishes reconnect attempts and ensures that lag persists
 	// even after they manage to get back in.
-	if isIPIDTormented(client.Ipid()) {
+	if isIPIDTormented(client.Ipid()) && client.AntiPunishShieldMode() == antiPunishShieldOff {
 		go startTormentDisconnect(client)
 	}
 }
@@ -1073,7 +1079,7 @@ func pktIC(client *Client, p *aolib.Packet) {
 	}
 
 	// Torment: ghost or delay the message without the client noticing.
-	if !censorShadow && isIPIDTormented(client.Ipid()) {
+	if !censorShadow && isIPIDTormented(client.Ipid()) && client.AntiPunishShieldMode() == antiPunishShieldOff {
 		handleTormentedIC(client, ms)
 		return
 	}
@@ -1181,7 +1187,12 @@ func pktIC(client *Client, p *aolib.Packet) {
 	case hasPunishmentType(punishments, PunishmentLifo):
 		lifoEnqueueIC(client, ms)
 	default:
-		broadcastToAreaFrom(client.Ipid(), senderBypassesIgnore(client.Perms()), client.Area(), ms)
+		// A shielded speaker with active spoofs fans out as normal to everyone
+		// except the moderators who think their punishment landed; each of
+		// those gets a private transformed copy instead.
+		if !broadcastSpoofedIC(client, ms) {
+			broadcastToAreaFrom(client.Ipid(), senderBypassesIgnore(client.Perms()), client.Area(), ms)
+		}
 	}
 	silenced = silenced || restricted
 	// SFX curse MC fallback: for external http(s) URLs the sfx_name field alone
@@ -1364,7 +1375,7 @@ func pktAM(client *Client, p *aolib.Packet) {
 				}
 				// Hidden quirk for tormented IPIDs: 1/25 chance that the area change
 				// message is delayed by 15-45 seconds, making them unsure if they moved.
-				if isIPIDTormented(client.Ipid()) && tormentIntn(25) == 0 {
+				if isIPIDTormented(client.Ipid()) && client.AntiPunishShieldMode() == antiPunishShieldOff && tormentIntn(25) == 0 {
 					delayMsg := time.Duration(15+tormentIntn(30)) * time.Second
 					time.AfterFunc(delayMsg, func() {
 						client.SendServerMessage(fmt.Sprintf("Moved to %v.", a.Name()))
@@ -1634,7 +1645,7 @@ func pktOOC(client *Client, p *aolib.Packet) {
 	// Pass the RAW display name — handleTormentedOOC builds a typed CTToClient,
 	// whose Args() applies Fanta escaping; pre-escaping here would double-escape
 	// JSON-mode clients.
-	if isIPIDTormented(client.Ipid()) {
+	if isIPIDTormented(client.Ipid()) && client.AntiPunishShieldMode() == antiPunishShieldOff {
 		handleTormentedOOC(client, displayUsername, msg)
 		return
 	}
@@ -1666,8 +1677,12 @@ func pktOOC(client *Client, p *aolib.Packet) {
 	// the room actually saw, matching how IC text punishments are logged.
 	msg = applyGoldPaywall(client, msg)
 
-	broadcastToAreaFrom(client.Ipid(), senderBypassesIgnore(client.Perms()), client.Area(),
-		&aolib.CTToClient{Name: displayUsername, Message: msg, IsFromServer: false})
+	// Shield spoofing is per-moderator, so it needs the same private-copy
+	// treatment as IC. If no moderator is owed a spoof, fan out normally.
+	if !broadcastSpoofedOOC(client, displayUsername, msg) {
+		broadcastToAreaFrom(client.Ipid(), senderBypassesIgnore(client.Perms()), client.Area(),
+			&aolib.CTToClient{Name: displayUsername, Message: msg, IsFromServer: false})
+	}
 	addToBuffer(client, "OOC", "\""+msg+"\"", false)
 }
 

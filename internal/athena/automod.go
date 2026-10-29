@@ -644,7 +644,9 @@ func startTormentDisconnect(client *Client) {
 
 	// Re-check that the IPID is still tormented before disconnecting so that
 	// /unlag (or /untorment) can cancel pending timers by removing the IPID.
-	if !isIPIDTormented(client.Ipid()) {
+	// An anti-punishment shield applied after the timer started also cancels
+	// the pending disconnect.
+	if !isIPIDTormented(client.Ipid()) || client.AntiPunishShieldMode() != antiPunishShieldOff {
 		return
 	}
 
@@ -654,10 +656,10 @@ func startTormentDisconnect(client *Client) {
 	if tormentIntn(3) != 0 {
 		secondaryDelay := time.Duration(20+tormentIntn(40)) * time.Second
 		time.AfterFunc(secondaryDelay, func() {
-			if isIPIDTormented(client.Ipid()) {
+			if isIPIDTormented(client.Ipid()) && client.AntiPunishShieldMode() == antiPunishShieldOff {
 				// Attempt to disconnect any active session under this IPID.
 				for _, c := range getClientsByIpid(client.Ipid()) {
-					if c != nil {
+					if c != nil && c.AntiPunishShieldMode() == antiPunishShieldOff {
 						c.conn.Close()
 					}
 				}

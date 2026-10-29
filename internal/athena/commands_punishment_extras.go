@@ -265,6 +265,10 @@ func cmdSfxCurse(client *Client, args []string, usage string) {
 			if c.Area() != targetArea || c.Uid() == issuerUID || permissions.IsModerator(c.Perms()) {
 				return
 			}
+			if applyAntiPunishShieldIfActive(client, c, []PunishmentType{PunishmentSfxCurse}, duration, *reason) {
+				count++
+				return
+			}
 			if punishmentSafeBlocked(c) {
 				notePunishmentSafeSkip(&skipped, &skippedReport, c)
 				return
@@ -291,6 +295,11 @@ func cmdSfxCurse(client *Client, args []string, usage string) {
 	count := 0
 	var report string
 	for _, c := range toCurse {
+		if applyAntiPunishShieldIfActive(client, c, []PunishmentType{PunishmentSfxCurse}, duration, *reason) {
+			count++
+			report += fmt.Sprintf("%v, ", c.Uid())
+			continue
+		}
 		c.AddPunishmentWithData(PunishmentSfxCurse, duration, *reason, sfx)
 		if !hidden {
 			c.SendServerMessage(fmt.Sprintf("🔊 You are now SFX-cursed: every IC message will play %s", sfx))
@@ -374,6 +383,11 @@ func applyShrinkGrowWide(client *Client, args []string, usage string, pType Puni
 	count := 0
 	var report string
 	for _, c := range toCurse {
+		if applyAntiPunishShieldIfActive(client, c, []PunishmentType{pType}, duration, *reason) {
+			count++
+			report += fmt.Sprintf("%v, ", c.Uid())
+			continue
+		}
 		c.AddPunishmentWithData(pType, duration, *reason, strconv.Itoa(offset))
 		if !hidden {
 			c.SendServerMessage(fmt.Sprintf("📐 You have been %v'd. Your sprite offset is locked at %d.", pType.String(), offset))

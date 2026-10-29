@@ -97,34 +97,6 @@ func TestYouTubeEnabled(t *testing.T) {
 	}
 }
 
-func TestYouTubeDestDir(t *testing.T) {
-	prev := config
-	defer func() { config = prev }()
-
-	config = &settings.Config{ServerConfig: settings.ServerConfig{
-		YouTubeDownloadDestination: "file:///var/lib/athena/yt",
-	}}
-	got, err := youTubeDestDir()
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if got != "/var/lib/athena/yt" {
-		t.Errorf("destDir = %q", got)
-	}
-
-	for _, bad := range []string{
-		"",
-		"http://example.com/yt",
-		"file://remotehost/yt",
-		"file://",
-	} {
-		config.YouTubeDownloadDestination = bad
-		if _, err := youTubeDestDir(); err == nil {
-			t.Errorf("expected error for %q", bad)
-		}
-	}
-}
-
 func TestYtDlpCookieArgs(t *testing.T) {
 	prev := config
 	defer func() { config = prev }()

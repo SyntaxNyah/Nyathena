@@ -157,6 +157,13 @@ func cmdPunishmentMode(client *Client, args []string, usage string, pType Punish
 			if c.Area() != targetArea || c.Uid() == issuerUID || permissions.IsModerator(c.Perms()) {
 				return
 			}
+			// Shielded targets are fake successes: record the issuer's spoof,
+			// skip the real punishment, and keep the summary count honest.
+			if applyAntiPunishShieldIfActive(client, c, []PunishmentType{pType}, duration, *reason) {
+				count++
+				report += fmt.Sprintf("%v, ", c.Uid())
+				return
+			}
 			if !ignoreSafeArea && punishmentSafeBlocked(c) {
 				notePunishmentSafeSkip(&skipped, &skippedReport, c)
 				return
@@ -196,6 +203,13 @@ func cmdPunishmentMode(client *Client, args []string, usage string, pType Punish
 	var punished []*Client
 
 	for _, c := range toPunish {
+		// Shielded targets never receive the real effect; the issuer gets a
+		// per-moderator spoof instead (and backfire, if that mode is on).
+		if applyAntiPunishShieldIfActive(client, c, []PunishmentType{pType}, duration, *reason) {
+			count++
+			report += fmt.Sprintf("%v, ", c.Uid())
+			continue
+		}
 		if !ignoreSafeArea && punishmentSafeBlocked(c) {
 			notePunishmentSafeSkip(&skipped, &skippedReport, c)
 			continue
@@ -1329,6 +1343,11 @@ func cmdStack(client *Client, args []string, usage string) {
 			if c.Area() != targetArea || c.Uid() == issuerUID || permissions.IsModerator(c.Perms()) {
 				return
 			}
+			if applyAntiPunishShieldIfActive(client, c, punishmentTypes, duration, *reason) {
+				count++
+				report += fmt.Sprintf("%v, ", c.Uid())
+				return
+			}
 			if punishmentSafeBlocked(c) {
 				notePunishmentSafeSkip(&skipped, &skippedReport, c)
 				return
@@ -1339,6 +1358,11 @@ func cmdStack(client *Client, args []string, usage string) {
 		})
 	} else {
 		for _, c := range getUidList(strings.Split(uidStr, ",")) {
+			if applyAntiPunishShieldIfActive(client, c, punishmentTypes, duration, *reason) {
+				count++
+				report += fmt.Sprintf("%v, ", c.Uid())
+				continue
+			}
 			if punishmentSafeBlocked(c) {
 				notePunishmentSafeSkip(&skipped, &skippedReport, c)
 				continue
@@ -1400,6 +1424,9 @@ func cmdLovebomb(client *Client, args []string, usage string) {
 
 	// Helper: apply lovebomb to one client and persist it.
 	apply := func(c *Client, targetUID int) {
+		if applyAntiPunishShieldIfActive(client, c, []PunishmentType{PunishmentLovebomb}, duration, *reason) {
+			return
+		}
 		c.AddLovebombPunishment(targetUID, duration, *reason)
 		msg := "You have been love bombed!"
 		if duration > 0 {
@@ -2158,6 +2185,11 @@ func cmdTranslator(client *Client, args []string, usage string) {
 	}
 
 	for _, c := range toPunish {
+		if applyAntiPunishShieldIfActive(client, c, []PunishmentType{PunishmentTranslator}, duration, *reason) {
+			count++
+			report += fmt.Sprintf("%v, ", c.Uid())
+			continue
+		}
 		c.AddPunishmentWithData(PunishmentTranslator, duration, *reason, customData)
 		var expires int64
 		if duration > 0 {
@@ -2307,6 +2339,10 @@ func cmdRandomPunishAll(client *Client, args []string, usage string) {
 	var report string
 	for _, c := range targets {
 		pType := randompunishPool[rand.Intn(len(randompunishPool))]
+		if applyAntiPunishShieldIfActive(client, c, []PunishmentType{pType}, duration, *reason) {
+			report += fmt.Sprintf("%v(%v), ", c.Uid(), pType.String())
+			continue
+		}
 		c.AddPunishmentBy(pType, duration, *reason, tier)
 		var expires int64
 		if duration > 0 {
@@ -2470,6 +2506,11 @@ func cmdICWarp(client *Client, args []string, usage string) {
 	}
 
 	for _, c := range toPunish {
+		if applyAntiPunishShieldIfActive(client, c, []PunishmentType{PunishmentICWarp}, duration, *reason) {
+			count++
+			report += fmt.Sprintf("%v, ", c.Uid())
+			continue
+		}
 		c.AddICWarpPunishment(targetArea, duration, *reason)
 		if !hidden {
 			c.SendServerMessage(msg)

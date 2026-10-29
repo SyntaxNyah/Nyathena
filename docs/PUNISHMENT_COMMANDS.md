@@ -526,6 +526,21 @@ These manipulate frame *flow* only (no Opus decode), so they're CGO-free.
 
 ---
 
+## Anti-Punishment Shield (ADMIN)
+
+`/antipunishshield <uid> [backfire]` makes a player immune to punishment-system effects until the server restarts. The shield is held in memory by HDID (IPID fallback), so it survives reconnects but not a restart. `/kick`, `/ban`, and `/mute` are real moderation and are not affected.
+
+| Mode | Behaviour |
+|------|-----------|
+| `/antipunishshield <uid>` | **Spoof (default).** The punishment does not land. The issuing moderator is recorded as a spoof viewer: everyone else, including the target, sees the target's normal IC/OOC lines, but that moderator sees a transformed copy as if the punishment worked. |
+| `/antipunishshield <uid> backfire` | The same spoof, plus the punishment is applied to the issuing moderator for real. |
+
+Every attempt also sends the shielded player a sneaky popup naming the moderator and punishment, e.g. `🤫 shh! Mod tried to punish you with 'dog'. It didn't stick — ur punishment protected. Act normal.` In backfire mode the popup says it backfired on the moderator instead. The moderator sees the spoof and thinks it worked, so the target acting normal is the joke.
+
+Full `/unpunish` clears the target's spoof records as well as any real punishments; the shield itself remains until restart. Every punishment insert is guarded centrally, so direct/mechanical effects cannot bypass it; `/stack`, `/lovebomb`, `/randompunishall`, `/translator`, `/sfxcurse`, `/shrink`, `/grow`, `/wide`, `/forcecolor`, `/icwarp`, and `/contagious` call the same gate. `/jail` and the torment (lag) branch are covered too.
+
+---
+
 ## Safety Features
 
 - **Maximum duration:** 24 hours (auto-capped)

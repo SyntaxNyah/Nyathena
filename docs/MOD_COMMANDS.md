@@ -172,6 +172,7 @@ A name a moderator set in a room that had no CM at all is kept until the room em
 | `/forcepair <uid1> <uid2>` | KICK | Force two players into a UID-tracked pair |
 | `/forceunpair <uid>` | KICK | Break a forced pair or leash |
 | `/leash [-d duration] [-r reason] [-h] <master uid> <dog uid>` | KICK | Claim a player as your dog: force-pair, apply `/dog`, drag them between areas (including punishment-safe rooms). Neither end can `/unpair`; full `/unpunish` or `/forceunpair` removes it. Previous partners get a `Your partner has been leashed` popup |
+| `/antipunishshield <uid> [backfire]` | ADMIN | Make a player immune to punishment effects until restart. The issuing moderator sees their messages spoofed as if the punishment worked; `backfire` also applies it to the moderator. `/kick`, `/ban`, and `/mute` are unaffected |
 | `/setrole <uid> <role>` | ADMIN | Set a player's role (permission tier) |
 | `/clearpos <uid>` | MOVE_USERS | Clear forced position |
 | `/showname <uid> <name>` | MUTE | Force a showname |

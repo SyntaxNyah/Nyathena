@@ -1157,6 +1157,32 @@ func cmdJail(client *Client, args []string, usage string) {
 		jailUntil = time.Now().UTC().Add(parsedDur)
 	}
 
+	// The anti-punishment shield covers the jail state too. The target is not
+	// moved or jailed; the moderator gets the normal success line, and backfire
+	// mode puts the jail on the moderator instead.
+	if mode := target.AntiPunishShieldMode(); mode != antiPunishShieldOff {
+		outcome := "It didn't stick"
+		if mode == antiPunishShieldBackfire && target != client {
+			outcome = "It backfired on them instead"
+			client.SetJailedUntil(jailUntil)
+			client.SetJailAreaID(jailAreaID)
+			if err := db.UpsertJail(client.Ipid(), jailUntil.Unix(), *reason, jailAreaID); err != nil {
+				logger.LogErrorf("Failed to persist anti-punishment backfire jail for %v: %v", client.Ipid(), err)
+			}
+			client.SendServerMessage("↩️ Anti-punishment shield backfired: jail applied to you.")
+		}
+		target.SendPopup(fmt.Sprintf(
+			"🤫 shh! %v tried to jail you. %v — ur punishment protected. Act normal.",
+			oocDisplayName(client), outcome))
+		areaName := target.Area().Name()
+		if jailAreaID >= 0 {
+			areaName = areas[jailAreaID].Name()
+		}
+		client.SendServerMessage(fmt.Sprintf("Jailed [%v] %v in %v.", uid, target.OOCName(), areaName))
+		addToBuffer(client, "CMD", fmt.Sprintf("Jailed [%v] %v in %v (shielded).", uid, target.OOCName(), areaName), false)
+		return
+	}
+
 	// Force-move the target to the jail area first (before setting jailed state so
 	// any existing jail doesn't block the move), then apply the jail.
 	if jailAreaID >= 0 {

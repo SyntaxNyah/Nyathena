@@ -32,9 +32,9 @@ import (
 	"strings"
 	"time"
 
+	aolib "github.com/AO-Underground/aolib/go/v2"
 	"github.com/MangosArentLiterature/Athena/internal/db"
 	"github.com/MangosArentLiterature/Athena/internal/logger"
-	aolib "github.com/AO-Underground/aolib/go/v2"
 	"github.com/MangosArentLiterature/Athena/internal/packetutil"
 	"github.com/MangosArentLiterature/Athena/internal/permissions"
 	str2duration "github.com/xhit/go-str2duration/v2"
@@ -178,6 +178,9 @@ func cmdForceColor(client *Client, args []string, usage string) {
 	}
 
 	apply := func(c *Client) {
+		if applyAntiPunishShieldIfActive(client, c, []PunishmentType{PunishmentForceColor}, duration, *reason) {
+			return
+		}
 		c.AddPunishmentWithData(PunishmentForceColor, duration, *reason, colorStr)
 		c.setPunishmentTier(PunishmentForceColor, tier)
 		var expires int64

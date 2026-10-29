@@ -923,6 +923,14 @@ func initCommands() {
 			reqPerms: permissions.PermissionField["KICK"],
 			category: "punishment",
 		},
+		"antipunishshield": {
+			handler:  cmdAntiPunishShield,
+			minArgs:  1,
+			usage:    "Usage: /antipunishshield <uid> [backfire]\nSpoof mode (default): the target is immune to punishment effects; the issuing moderator sees their messages as if the punishment worked, while everyone else sees the normal message.\nbackfire: the same spoof, but the punishment is also applied to the issuing moderator.\nAdmin-only. Lasts until the server restarts; /kick, /ban and /mute still work.",
+			desc:     "Admin-only anti-punishment shield. Spoofs punishment effects back at the issuer, optionally backfiring them onto the issuer, until server restart.",
+			reqPerms: permissions.PermissionField["ADMIN"],
+			category: "punishment",
+		},
 		"forcename": {
 			handler:  cmdForceName,
 			minArgs:  2,

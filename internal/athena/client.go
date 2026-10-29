@@ -373,12 +373,20 @@ type Client struct {
 	// leash is the /leash claim this client is part of, or nil. It is a
 	// pointer shared by the master and the dog (see leash.go), so either side
 	// can find the other without a scan or a stale UID.
-	leash    *Leash
-	software string          // client-advertised software from the ID handshake
-	version  string          // client-advertised version from the ID handshake
-	features map[string]bool // client-advertised feature flags (client→server FL)
-	mu       sync.Mutex
-	conn     net.Conn
+	leash *Leash
+	// antiPunishShield is the /antipunishshield mode (off/spoof/backfire).
+	// antiPunishSpoofs records which moderators think they punished this
+	// client, so their IC/OOC view can be transformed while everyone else
+	// sees the normal message. The map is guarded by mu; the atomic count is
+	// the IC hot-path fast gate.
+	antiPunishShield     atomic.Int32
+	antiPunishSpoofs     map[*Client][]antiPunishSpoof
+	antiPunishSpoofCount atomic.Int32
+	software             string          // client-advertised software from the ID handshake
+	version              string          // client-advertised version from the ID handshake
+	features             map[string]bool // client-advertised feature flags (client→server FL)
+	mu                   sync.Mutex
+	conn                 net.Conn
 	// writeMu serializes inline socket writes with each other. Deliberately
 	// separate from mu: nothing that blocks on I/O may hold the mutex ordinary
 	// field accessors use -- see Client.write.
@@ -2814,6 +2822,16 @@ func (client *Client) AddPunishment(pType PunishmentType, duration time.Duration
 // /unpunish can block anyone below ADMIN from silently lifting a punishment
 // that an admin applied to them.
 func (client *Client) AddPunishmentBy(pType PunishmentType, duration time.Duration, reason string, tier IssuerTier) {
+	client.addPunishmentBy(pType, duration, reason, tier, false)
+}
+
+// addPunishmentBy performs the actual insert. ignoreShield is only for the
+// anti-punishment shield's own backfire, which must be able to land on a
+// moderator who is themselves shielded.
+func (client *Client) addPunishmentBy(pType PunishmentType, duration time.Duration, reason string, tier IssuerTier, ignoreShield bool) {
+	if !ignoreShield && client.AntiPunishShieldMode() != antiPunishShieldOff {
+		return
+	}
 	client.mu.Lock()
 	defer client.mu.Unlock()
 	client.addPunishmentLocked(pType, duration, reason, tier, time.Time{})
@@ -2941,6 +2959,14 @@ func (client *Client) setPunishmentTier(pType PunishmentType, tier IssuerTier) {
 // metadata (customData), e.g. the target language for PunishmentTranslator.
 // Same same-type-deduplication as AddPunishment.
 func (client *Client) AddPunishmentWithData(pType PunishmentType, duration time.Duration, reason, customData string) {
+	client.addPunishmentWithData(pType, duration, reason, customData, false)
+}
+
+// addPunishmentWithData is the shield-aware insert behind AddPunishmentWithData.
+func (client *Client) addPunishmentWithData(pType PunishmentType, duration time.Duration, reason, customData string, ignoreShield bool) {
+	if !ignoreShield && client.AntiPunishShieldMode() != antiPunishShieldOff {
+		return
+	}
 	client.mu.Lock()
 	defer client.mu.Unlock()
 
@@ -2984,6 +3010,14 @@ func (client *Client) RemovePunishment(pType PunishmentType) {
 // AddLovebombPunishment adds a lovebomb punishment with an optional specific target UID.
 // Use targetUID=-1 for a random area target on each message.
 func (client *Client) AddLovebombPunishment(targetUID int, duration time.Duration, reason string) {
+	client.addLovebombPunishment(targetUID, duration, reason, false)
+}
+
+// addLovebombPunishment is the shield-aware insert behind AddLovebombPunishment.
+func (client *Client) addLovebombPunishment(targetUID int, duration time.Duration, reason string, ignoreShield bool) {
+	if !ignoreShield && client.AntiPunishShieldMode() != antiPunishShieldOff {
+		return
+	}
 	client.mu.Lock()
 	defer client.mu.Unlock()
 
@@ -3011,6 +3045,14 @@ func (client *Client) AddLovebombPunishment(targetUID int, duration time.Duratio
 // AddICWarpPunishment adds an icwarp punishment tied to a specific area.
 // The warp only activates while the client is in that particular area.
 func (client *Client) AddICWarpPunishment(warpArea *area.Area, duration time.Duration, reason string) {
+	client.addICWarpPunishment(warpArea, duration, reason, false)
+}
+
+// addICWarpPunishment is the shield-aware insert behind AddICWarpPunishment.
+func (client *Client) addICWarpPunishment(warpArea *area.Area, duration time.Duration, reason string, ignoreShield bool) {
+	if !ignoreShield && client.AntiPunishShieldMode() != antiPunishShieldOff {
+		return
+	}
 	client.mu.Lock()
 	defer client.mu.Unlock()
 
@@ -3047,6 +3089,11 @@ func (client *Client) RemoveAllPunishments() {
 		}
 	}
 	client.punishments = []PunishmentState{}
+	// Full removal also drops any /antipunishshield spoofs, so the moderators
+	// who thought their punishments landed stop seeing the fake effect. The
+	// shield itself is a separate restart-persistent flag and stays on.
+	client.antiPunishSpoofs = nil
+	client.antiPunishSpoofCount.Store(0)
 }
 
 // RemoveAllUnlockedPunishments removes every punishment whose self-service lock
