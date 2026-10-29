@@ -125,6 +125,31 @@ func dissolveLeash(l *Leash) {
 	}
 }
 
+// removeLeashForUnpunish breaks a leash because /unpunish is clearing the
+// target's full punishment set. The leash itself is not a PunishmentType, so
+// /unpunish -t <type> deliberately does not call this — removing /dog must not
+// silently release the claim. Both ends are told, including a partner outside
+// the issuer's area. Returns true when a leash was actually broken.
+func removeLeashForUnpunish(target, issuer *Client) bool {
+	if target == nil {
+		return false
+	}
+	l := target.Leash()
+	if l == nil {
+		return false
+	}
+	master, dog := l.Members()
+	dissolveLeash(l)
+	msg := fmt.Sprintf("Your leash was removed by %v.", oocDisplayName(issuer))
+	if master != nil {
+		master.SendServerMessage(msg)
+	}
+	if dog != nil {
+		dog.SendServerMessage(msg)
+	}
+	return true
+}
+
 // dragLeashedDog moves a master's dog into the area the master just joined.
 // Called at the tail of Client.ChangeArea, after the master has fully joined,
 // so the dog's own area change runs every normal join side effect (roster,

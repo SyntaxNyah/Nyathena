@@ -185,9 +185,9 @@ func TestLeashBypassesPunishmentSafeArea(t *testing.T) {
 	}
 }
 
-// TestLeashDogCannotUnpair verifies the dog gets the abandonment popup and the
-// pair survives, while the master's /unpair releases it cleanly.
-func TestLeashDogCannotUnpair(t *testing.T) {
+// TestLeashNeitherEndCanUnpair verifies /unpair is not an escape hatch for
+// either end of a leash. Full /unpunish and /forceunpair are the removal paths.
+func TestLeashNeitherEndCanUnpair(t *testing.T) {
 	w := newLeashTestWorld(t, false)
 	w.issue(t)
 
@@ -205,16 +205,69 @@ func TestLeashDogCannotUnpair(t *testing.T) {
 
 	cmdUnpair(w.master, nil, "")
 
+	if w.dog.Leash() == nil || w.master.Leash() == nil {
+		t.Fatal("master's /unpair dissolved the leash")
+	}
+	if w.master.ForcePairUID() != w.dog.Uid() {
+		t.Fatalf("master pair was cleared: ForcePairUID=%d", w.master.ForcePairUID())
+	}
+	if got := w.masterConn.String(); !strings.Contains(got, "cannot unpair while holding a leash") {
+		t.Errorf("master was not refused; got %q", got)
+	}
+}
+
+// assertLeashBroken checks that both ends lost the claim and their pair state.
+func assertLeashBroken(t *testing.T, w *leashTestWorld) {
+	t.Helper()
 	if w.dog.Leash() != nil || w.master.Leash() != nil {
-		t.Error("master's /unpair did not dissolve the leash")
+		t.Fatalf("leash survived: dog=%v master=%v", w.dog.Leash(), w.master.Leash())
 	}
-	if w.master.ForcePairUID() != -1 || w.dog.ForcePairUID() != -1 {
-		t.Errorf("pair state survived master release: master=%d dog=%d",
-			w.master.ForcePairUID(), w.dog.ForcePairUID())
+	if w.dog.ForcePairUID() != -1 || w.master.ForcePairUID() != -1 {
+		t.Errorf("pair state survived: dog=%d master=%d",
+			w.dog.ForcePairUID(), w.master.ForcePairUID())
 	}
-	if got := w.dogConn.String(); !strings.Contains(got, "Your master has released the leash") {
-		t.Errorf("dog was not told the master released it; got %q", got)
-	}
+}
+
+// TestUnpunishBreaksLeash verifies the full /unpunish forms release the claim,
+// while /unpunish -t dog only removes the barking effect.
+func TestUnpunishBreaksLeash(t *testing.T) {
+	t.Run("uid full removal", func(t *testing.T) {
+		w := newLeashTestWorld(t, false)
+		w.issue(t)
+
+		cmdUnpunish(w.mod, []string{"3"}, "usage")
+
+		assertLeashBroken(t, w)
+		if got := w.dogConn.String(); !strings.Contains(got, "leash was removed") {
+			t.Errorf("dog was not told the leash was removed; got %q", got)
+		}
+		if got := w.masterConn.String(); !strings.Contains(got, "leash was removed") {
+			t.Errorf("master was not told the leash was removed; got %q", got)
+		}
+	})
+
+	t.Run("unpunish all", func(t *testing.T) {
+		w := newLeashTestWorld(t, false)
+		w.issue(t)
+
+		cmdUnpunish(w.mod, []string{"all"}, "usage")
+
+		assertLeashBroken(t, w)
+	})
+
+	t.Run("-t dog keeps the leash", func(t *testing.T) {
+		w := newLeashTestWorld(t, false)
+		w.issue(t)
+
+		cmdUnpunish(w.mod, []string{"-t", "dog", "3"}, "usage")
+
+		if w.dog.Leash() == nil || w.master.Leash() == nil {
+			t.Fatal("/unpunish -t dog released the leash")
+		}
+		if w.dog.HasActivePunishment(PunishmentDog) {
+			t.Error("/unpunish -t dog did not remove the dog effect")
+		}
+	})
 }
 
 // TestForceUnpairBreaksLeash verifies a moderator can override the claim.

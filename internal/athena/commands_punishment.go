@@ -618,10 +618,16 @@ func cmdUnpunish(client *Client, args []string, usage string) {
 	// /unpunish all — clear all punishments from every client in the moderator's area.
 	if strings.EqualFold(flags.Arg(0), "all") {
 		myArea := client.Area()
-		var count, skipped int
+		var count, skipped, leashes int
 		clients.ForEach(func(c *Client) {
 			if c.Area() != myArea {
 				return
+			}
+			// The leash is not a PunishmentType, so it would otherwise survive
+			// the punishment wipe. Break it before the self-removal gate: that
+			// gate protects staff-issued punishments, not a claim.
+			if removeLeashForUnpunish(c, client) {
+				leashes++
 			}
 			// Self-removal protection: skip the caller if they're below ADMIN
 			// and carry an admin-issued punishment.
@@ -662,6 +668,9 @@ func cmdUnpunish(client *Client, args []string, usage string) {
 			count++
 		})
 		summary := fmt.Sprintf("Removed all punishments from %v client(s) in this area.", count)
+		if leashes > 0 {
+			summary += fmt.Sprintf(" %d leash(es) broken.", leashes)
+		}
 		if skipped > 0 {
 			summary += " Some of your own punishments were admin-issued or locked and were kept."
 		}
@@ -688,10 +697,17 @@ func cmdUnpunish(client *Client, args []string, usage string) {
 	}
 
 	toUnpunish := getUidList(uidTokens)
-	var count int
+	var count, leashes int
 	var report string
 
 	for _, c := range toUnpunish {
+		// Full /unpunish clears the claim too. The specific -t form must not:
+		// /unpunish -t dog removes the barking, not the leash.
+		if *punishmentType == "" {
+			if removeLeashForUnpunish(c, client) {
+				leashes++
+			}
+		}
 		// Self-removal protection runs once per target. Anyone below ADMIN
 		// cannot strip an admin-issued punishment off themselves; admins
 		// bypass the gate. Mod and shadow mod sit at the same tier, so
@@ -818,6 +834,11 @@ func cmdUnpunish(client *Client, args []string, usage string) {
 				logger.LogErrorf("Failed to remove persistent punishments for %v: %v", ipid, err)
 			}
 			for _, c := range connected {
+				// The caller targeted an IPID, but the connected holder still
+				// owns the in-memory claim; break it along with the rest.
+				if removeLeashForUnpunish(c, client) {
+					leashes++
+				}
 				keptLocked := false
 				if c.Uid() == callerUID {
 					if locked := c.RemoveAllUnlockedPunishments(); len(locked) > 0 {
@@ -869,7 +890,11 @@ func cmdUnpunish(client *Client, args []string, usage string) {
 	}
 
 	report = strings.TrimSuffix(report, ", ")
-	client.SendServerMessage(fmt.Sprintf("Removed punishments from %v clients.", count))
+	summary := fmt.Sprintf("Removed punishments from %v clients.", count)
+	if leashes > 0 {
+		summary += fmt.Sprintf(" %d leash(es) broken.", leashes)
+	}
+	client.SendServerMessage(summary)
 	addToBuffer(client, "CMD", fmt.Sprintf("Removed punishments from %v.", report), false)
 }
 

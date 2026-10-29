@@ -2272,8 +2272,8 @@ func initCommands() {
 		"unpunish": {
 			handler:  cmdUnpunish,
 			minArgs:  1,
-			usage:    "Usage: /unpunish all\n       /unpunish [-t punishment_type] <uid1>,<uid2>...\n       /unpunish [-t punishment_type] <ipid>\nall: Remove all punishments from every client in your current area.\n-t: Specific punishment type to remove (omit to remove all).\nA non-numeric target is treated as a raw IPID, so offline players can be unpunished too.\nThe full-removal forms also clear the punishment_names.txt showname stain, stopping its per-minute random punishment drip.",
-			desc:     "Removes punishment(s) from user(s) by UID or IPID, or all punishments from the entire area with 'all'.",
+			usage:    "Usage: /unpunish all\n       /unpunish [-t punishment_type] <uid1>,<uid2>...\n       /unpunish [-t punishment_type] <ipid>\nall: Remove all punishments from every client in your current area.\n-t: Specific punishment type to remove (omit to remove all).\nA non-numeric target is treated as a raw IPID, so offline players can be unpunished too.\nThe full-removal forms also clear the punishment_names.txt showname stain, stopping its per-minute random punishment drip.\nFull removal also breaks any /leash claim; -t dog removes only the dog effect.",
+			desc:     "Removes punishment(s) from user(s) by UID or IPID, or all punishments from the entire area with 'all'. Full removal also breaks leashes.",
 			reqPerms: permissions.PermissionField["MUTE"],
 			category: "punishment",
 		},

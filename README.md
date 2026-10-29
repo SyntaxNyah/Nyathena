@@ -205,7 +205,7 @@ Daily-rotating log files per area under `logs/<AreaName>/`. Format: `[HH:MM:SS] 
 
 UID-based mutual pairing that survives area and character changes. Pair messages use each player's showname when set. `/unpair` does a full bidirectional reset — no stale pair state left on the peer. Flag yourself `/lfp` (Looking For Pair) and browse the area's flagged players with `/pairlist`.
 
-**`/leash <master uid> <dog uid>`** (`KICK`) claims a player as your dog: it force-pairs them to you, applies `/dog`, and drags them along on every area change — including through punishment-safe rooms. Claiming someone already paired pops `Your partner has been leashed` at their old partner. The dog cannot `/unpair`; trying pops `Dogs don't abandon their master`. The master's `/unpair` (or a moderator's `/forceunpair`) releases the claim.
+**`/leash <master uid> <dog uid>`** (`KICK`) claims a player as your dog: it force-pairs them to you, applies `/dog`, and drags them along on every area change — including through punishment-safe rooms. Claiming someone already paired pops `Your partner has been leashed` at their old partner. `/unpair` is refused for both ends — a dog gets `Dogs don't abandon their master` — so the claim is released with full `/unpunish`/`/unpunish all` or a moderator's `/forceunpair`. `/unpunish -t dog` removes only the barking and leaves the leash on.
 
 ### Custom Command Builder (Console)
 

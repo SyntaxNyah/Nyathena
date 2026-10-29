@@ -171,7 +171,7 @@ A name a moderator set in a room that had no CM at all is kept until the room em
 | `/charcurse <uid> <charname>` | KICK | Force a one-time character swap (target may change afterward) |
 | `/forcepair <uid1> <uid2>` | KICK | Force two players into a UID-tracked pair |
 | `/forceunpair <uid>` | KICK | Break a forced pair or leash |
-| `/leash [-d duration] [-r reason] [-h] <master uid> <dog uid>` | KICK | Claim a player as your dog: force-pair, apply `/dog`, drag them between areas (including punishment-safe rooms). The dog cannot `/unpair`; the master can. Previous partners get a `Your partner has been leashed` popup |
+| `/leash [-d duration] [-r reason] [-h] <master uid> <dog uid>` | KICK | Claim a player as your dog: force-pair, apply `/dog`, drag them between areas (including punishment-safe rooms). Neither end can `/unpair`; full `/unpunish` or `/forceunpair` removes it. Previous partners get a `Your partner has been leashed` popup |
 | `/setrole <uid> <role>` | ADMIN | Set a player's role (permission tier) |
 | `/clearpos <uid>` | MOVE_USERS | Clear forced position |
 | `/showname <uid> <name>` | MUTE | Force a showname |

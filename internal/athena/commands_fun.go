@@ -193,22 +193,18 @@ func cmdForcePair(client *Client, args []string, _ string) {
 // the entire client list and clear PairWantedID + ForcePairUID on anyone who
 // references us by UID OR by current/historical CharID, then clear our own.
 func cmdUnpair(client *Client, _ []string, _ string) {
-	// A leash owns the pair. The dog cannot release itself; the master can,
-	// which frees both sides. This runs before the group check so a dog that
-	// somehow still has a group pointer cannot slip out through /leavegroup's
-	// path either.
+	// A leash owns the pair. Neither end can release it with /unpair: the dog
+	// would be abandoning its master, and the master releasing it would turn
+	// /unpair into a one-command escape hatch. Full /unpunish and a
+	// moderator's /forceunpair are the removal paths. This runs before the
+	// group check so a dog that somehow still has a group pointer cannot slip
+	// out through /leavegroup's path either.
 	if l := client.Leash(); l != nil {
 		if l.Dog() == client {
 			client.SendPopup(leashAbandonPopup)
 			return
 		}
-		_, dog := l.Members()
-		dissolveLeash(l)
-		if dog != nil {
-			dog.SendPopup("Your master has released the leash")
-		}
-		client.SendServerMessage("Leash released.")
-		addToBuffer(client, "CMD", "Released the leash.", false)
+		client.SendServerMessage("You cannot unpair while holding a leash. Ask a moderator to /forceunpair or /unpunish you.")
 		return
 	}
 

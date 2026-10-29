@@ -127,7 +127,7 @@ var punishmentHelpGroups = []punishmentSubcategory{
 	},
 	{
 		emoji: "🧹", title: "Removal & control",
-		desc: "Inspect and lift active punishments. /punishments lists what's on a player; /unpunish removes ALL types including lag.",
+		desc: "Inspect and lift active punishments. /punishments lists what's on a player; /unpunish removes ALL types including lag and breaks leashes.",
 		cmds: []string{"punishments", "unpunish", "unlag", "unicwarp", "unlovebomb",
 			"un51", "unacademic", "unbabytalk", "undegrade",
 			"unphilosopher", "unpoet", "unquote", "unrecipe", "unsarcasm",
