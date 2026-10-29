@@ -119,6 +119,19 @@ func splitPairedID(raw string) (pid, order int) {
 	return pid, order
 }
 
+// pairIDWithOrder returns partnerID carrying the classic pair-order suffix
+// from the client's sentID. Only "^1" (speaker behind) is meaningful; a bare
+// id and an explicit "^0" both mean the default (speaker in front), and any
+// other value is ignored rather than forwarded as arbitrary "^" text. A
+// sentID with no real partner (e.g. "-1^1") is treated as no order.
+func pairIDWithOrder(partnerID, sentID string) string {
+	pid, order := splitPairedID(sentID)
+	if pid >= 0 && order == 1 {
+		return partnerID + "^1"
+	}
+	return partnerID
+}
+
 // parseMSEffect converts Nyathena's "name|folder|sound" effect string into
 // aolib's Effect struct.
 func parseMSEffect(s string) aolib.Effect {

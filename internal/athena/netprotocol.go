@@ -386,6 +386,33 @@ func pktChangeChar(client *Client, p *aolib.Packet) {
 	raidGuardOnCharPick(client)
 }
 
+// applyForcePairInjection keeps a force-paired speaker's pair slots pointed at
+// their partner even after either player changes character or position. It
+// also syncs the position so both characters broadcast from the same
+// courtroom position.
+//
+// The client may have sent a classic "<id>^1" pair-order suffix (speaker
+// behind). Rewriting PairedCharID to the partner's current id must preserve
+// that suffix: dropping it silently forced every force-paired speaker back to
+// the default (speaker in front), regardless of the client's pair-order
+// setting.
+func applyForcePairInjection(client *Client, ms *MSToClient) {
+	if client.ForcePairUID() < 0 {
+		return
+	}
+	partner, err := getClientByUid(client.ForcePairUID())
+	if err != nil || partner.CharID() < 0 {
+		return
+	}
+	ms.PairedCharID = pairIDWithOrder(partner.CharIDStr(), ms.PairedCharID)
+	client.SetPairWantedID(partner.CharID())
+	partner.SetPairWantedID(client.CharID())
+	if pos := partner.Pos(); pos != "" {
+		ms.Side = aolib.Side(pos)
+		client.SetPos(pos)
+	}
+}
+
 // Handles MS#%
 func pktIC(client *Client, p *aolib.Packet) {
 	// Welcome to the MS packet validation hell.
@@ -882,21 +909,10 @@ func pktIC(client *Client, p *aolib.Packet) {
 		censorShadow = true
 	}
 
-	// If force-paired, always sync the wanted CharID to the partner's current CharID,
-	// keeping the pair active even when either player changes character or position.
-	// Also sync the position so both characters are always broadcast at the same
-	// courtroom position, preventing the pairing sprite from breaking on clients.
-	if client.ForcePairUID() >= 0 {
-		if partner, err := getClientByUid(client.ForcePairUID()); err == nil && partner.CharID() >= 0 {
-			ms.PairedCharID = partner.CharIDStr()
-			client.SetPairWantedID(partner.CharID())
-			partner.SetPairWantedID(client.CharID())
-			if pos := partner.Pos(); pos != "" {
-				ms.Side = aolib.Side(pos)
-				client.SetPos(pos)
-			}
-		}
-	}
+	// If force-paired, always sync the wanted CharID to the partner's current
+	// CharID, keeping the pair active even when either player changes character
+	// or position. The helper preserves the client's pair-order suffix.
+	applyForcePairInjection(client, ms)
 
 	// If the client used /pair to set a desired pair but has not selected one via the
 	// in-client pair button (PairedCharID is absent or -1), inject the server-set pair

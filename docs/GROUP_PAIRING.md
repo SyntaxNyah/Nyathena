@@ -169,6 +169,16 @@ aolib's `Args()` re-packs it on decode — so a FantaCode speaker's `^order`
 reaches JSON clients and vice versa. This is distinct from `/pairorder` (§9),
 which reorders the unbounded group roster.
 
+Force-pair injection (`applyForcePairInjection` in `netprotocol.go`) rewrites
+`paired_charid` to the partner's current character on every MS so the pair
+survives character/position changes. That rewrite preserves the incoming `^1`
+suffix (`pairIDWithOrder` in `ms_codec.go`); without it, every force-paired
+speaker was silently reset to the default order (speaker in front). `^0` and
+out-of-range values are normalized to a bare id. The client must actually send
+a partner id for the suffix to exist — LemmyAO's Pair button now populates
+`#pair_select` even when the character roster has not finished downloading, and
+treats character slot 0 as a valid partner.
+
 Note: `paired_order` is live in aolib-go **v2.6.1** (Nyathena) and aolib-ts
 **2.6.1** (LemmyAO, once published to npm — the local `aolib` repo's
 `ts/package.json` is already at 2.6.1).

@@ -27,7 +27,7 @@ type AdditionalChar struct {
 	Side   string       `json:"side"`
 	Offset aolib.Offset `json:"offset"`
 	Flip   aolib.Flip   `json:"flip"`
-	Order  int          `json:"order"` // z-offset: 0 behind the speaker (default), 1 in front
+	Order  int          `json:"order"` // roster z-order: 0 front-most, increasing toward the back
 }
 
 // MSToServer is the client -> server MS (26 fields + Blips).
