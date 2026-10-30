@@ -297,6 +297,10 @@ Key options beyond upstream defaults (`config/config.toml`):
 
 See `CLAUDE.md` for the full configuration reference.
 
+### Configs that won't parse
+
+`config.toml`, `areas.toml` and `roles.toml` are sanitised before they are parsed, so the usual Windows-vs-Linux encoding traps cannot stop the server from booting. A UTF-8 byte-order mark, UTF-16 text (what PowerShell's `>` and `Out-File` write by default) and stray NUL bytes are repaired in place, with a warning naming the file and what was fixed; parsing then uses the repaired copy in memory, so a read-only `config/` still boots. A file that cannot be repaired mechanically (Latin-1, Shift-JIS, …) is left untouched and the parser's own error is reported.
+
 Setting up staff roles, or want to hand one player or moderator a single extra command (like `/ban`) without changing their role at all? See **[docs/PERMISSIONS_GUIDE.md](docs/PERMISSIONS_GUIDE.md)** — the full permission system reference, with copy-pasteable examples.
 
 ### WSS Setup

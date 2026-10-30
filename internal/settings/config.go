@@ -24,7 +24,6 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	"github.com/BurntSushi/toml"
 	"github.com/MangosArentLiterature/Athena/internal/area"
 	"github.com/MangosArentLiterature/Athena/internal/logger"
 	"github.com/MangosArentLiterature/Athena/internal/permissions"
@@ -500,9 +499,10 @@ func (conf *Config) PebbleOn() bool {
 	return conf != nil && conf.PebbleMode
 }
 
-// Load reads the server's main configuration file.
+// Load reads the server's main configuration file. The file is repaired first
+// if it was saved with a BOM or as UTF-16 (see decodeTOMLFile).
 func (conf *Config) Load() error {
-	_, err := toml.DecodeFile(ConfigPath+"/config.toml", conf)
+	_, err := decodeTOMLFile(ConfigPath+"/config.toml", conf)
 	if err != nil {
 		return err
 	}
@@ -611,7 +611,7 @@ func LoadAreas() ([]area.AreaData, error) {
 	var conf struct {
 		Area []area.AreaData
 	}
-	_, err := toml.DecodeFile(ConfigPath+"/areas.toml", &conf)
+	_, err := decodeTOMLFile(ConfigPath+"/areas.toml", &conf)
 	if err != nil {
 		return conf.Area, err
 	}
@@ -626,7 +626,7 @@ func LoadRoles() ([]permissions.Role, error) {
 	var conf struct {
 		Role []permissions.Role
 	}
-	_, err := toml.DecodeFile(ConfigPath+"/roles.toml", &conf)
+	_, err := decodeTOMLFile(ConfigPath+"/roles.toml", &conf)
 	if err != nil {
 		return conf.Role, err
 	}

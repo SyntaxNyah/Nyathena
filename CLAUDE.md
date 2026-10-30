@@ -86,6 +86,8 @@ make release      # goreleaser (requires goreleaser installed)
 
 Copy `config_sample/` to `config/` before first run.
 
+Every TOML load (`config.toml`, `areas.toml`, `roles.toml`) goes through `decodeTOMLFile` in `internal/settings/tomlfile.go`, which repairs a UTF-8 BOM, UTF-16 text (PowerShell's default redirect encoding) and stray NUL bytes in place before parsing, then parses the cleaned bytes so a read-only `config/` still boots. See "Configs that won't parse" in `README.md`.
+
 ### config/config.toml — [Server]
 
 | Key | Default | Description |
