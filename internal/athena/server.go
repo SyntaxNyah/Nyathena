@@ -351,6 +351,7 @@ func NewServer(conf *settings.Config) (*Server, error) {
 	seedJoinCaptchaVerified()
 	initCustomChallenges()
 	initCaptchaPlugin()
+	initSpookyPlugin()
 	if bad := validateJoinCaptchaKinds(conf.JoinCaptchaKinds); len(bad) > 0 {
 		logger.LogWarningf("config: join_captcha_kinds contains unknown challenge kind(s) %v -- valid kinds are %v",
 			bad, joinChallengeKindList())

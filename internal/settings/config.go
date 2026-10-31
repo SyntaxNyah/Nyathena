@@ -181,7 +181,10 @@ type ServerConfig struct {
 	JoinCaptchaRotate      int      `toml:"join_captcha_rotate"`
 	CaptchaPlugin          string   `toml:"captcha_plugin"`
 	CaptchaPluginTimeout   int      `toml:"captcha_plugin_timeout"`
+	SpookyPlugin           string   `toml:"spooky_plugin"`
+	SpookyPluginTimeout    int      `toml:"spooky_plugin_timeout"`
 	JoinCaptchaPopup       bool     `toml:"join_captcha_popup"`
+	Halloween              bool     `toml:"halloween"`
 	// JoinPopup and JoinPopupMessage are the join popup (see joinpopup.go):
 	// an operator-authored welcome message -- rules, a Discord invite, a
 	// website -- shown once to any HDID connecting to this server for the
@@ -440,7 +443,10 @@ func DefaultConfig() *Config {
 			JoinCaptchaRotate:                    3600,
 			CaptchaPlugin:                        "",
 			CaptchaPluginTimeout:                 3000,
+			SpookyPlugin:                         "",
+			SpookyPluginTimeout:                  1000,
 			JoinCaptchaPopup:                     true,
+			Halloween:                            false,
 			JoinPopup:                            false,
 			JoinPopupMessage:                     "",
 			EnableCommunityVote:                  false,

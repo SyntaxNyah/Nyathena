@@ -1179,6 +1179,8 @@ func (client *Client) SendPacketSync(header string, contents ...string) {
 // PlayerDataType enum only models 0-3) and the SendPacketSync kick/ban
 // rejection path.
 func (client *Client) Send(p aolib.Outgoing) {
+	halloweenHauntOutgoing(p)
+	hauntOutgoing(p)
 	if client.jsonMode.Load() {
 		b, err := packetutil.Encode(p, aolib.WireJSON)
 		if err != nil {
