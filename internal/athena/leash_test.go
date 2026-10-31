@@ -766,3 +766,159 @@ func TestUnpunishDogDetachesOnlyThatDog(t *testing.T) {
 		t.Error("master unpunish left pair state behind")
 	}
 }
+
+// TestLeashBackfireReversesClaim pins the backfire reversal: a moderator who
+// tries to leash a player carrying an /antipunishshield backfire ends up as
+// that player's dog, with the /dog effect on the moderator instead of the
+// shielded player.
+func TestLeashBackfireReversesClaim(t *testing.T) {
+	resetAntiPunishShieldStore(t)
+	w := newLeashTestWorld(t, false)
+	// The moderator has to hold a character to be a master, and therefore to
+	// be flipped into the dog slot.
+	w.mod.SetCharID(3)
+	w.dog.SetAntiPunishShield(antiPunishShieldBackfire)
+
+	cmdLeash(w.mod, []string{"1", "3"}, "usage")
+
+	if !w.mod.HasActivePunishment(PunishmentDog) {
+		t.Fatal("backfire did not put /dog on the moderator")
+	}
+	if w.dog.HasActivePunishment(PunishmentDog) {
+		t.Fatal("shielded player actually received the /dog punishment")
+	}
+	l := w.dog.Leash()
+	if l == nil {
+		t.Fatal("shielded player is not part of a leash")
+	}
+	if l.Master() != w.dog {
+		t.Fatal("shielded player is not the master of the reversed leash")
+	}
+	if w.mod.Leash() != l || l.Dog() != w.mod {
+		t.Fatalf("reversed leash dog = %v, want the moderator", l.Dog())
+	}
+	if w.mod.ForcePairUID() != w.dog.Uid() || w.dog.ForcePairUID() != w.mod.Uid() {
+		t.Errorf("pair links not reversed: mod=%d shielded=%d",
+			w.mod.ForcePairUID(), w.dog.ForcePairUID())
+	}
+	if got := w.modConn.String(); !strings.Contains(got, "bounced the leash") {
+		t.Errorf("moderator was not told the leash bounced; got %q", got)
+	}
+	if got := w.modConn.String(); !strings.Contains(got, "You have been leashed by") {
+		t.Errorf("moderator was not told they are the dog; got %q", got)
+	}
+	if got := w.dogConn.String(); !strings.Contains(got, "You have leashed") {
+		t.Errorf("shielded player was not told they hold the leash; got %q", got)
+	}
+	if got := w.dogConn.String(); !strings.Contains(got, "backfired on them instead") {
+		t.Errorf("shielded player did not get the sneaky backfire popup; got %q", got)
+	}
+}
+
+// TestLeashSpoofShieldStillRefuses verifies the default (spoof) shield is not a
+// reversal: the dog effect cannot land, so no leash may be created and the
+// moderator must not pick up /dog either.
+func TestLeashSpoofShieldStillRefuses(t *testing.T) {
+	resetAntiPunishShieldStore(t)
+	w := newLeashTestWorld(t, false)
+	w.mod.SetCharID(3)
+	w.dog.SetAntiPunishShield(antiPunishShieldSpoof)
+
+	cmdLeash(w.mod, []string{"1", "3"}, "usage")
+
+	if w.dog.Leash() != nil || w.mod.Leash() != nil {
+		t.Fatal("a spoof-shielded dog still got leashed")
+	}
+	if w.dog.HasPunishment(PunishmentDog) {
+		t.Fatal("shielded player received /dog in spoof mode")
+	}
+	if w.mod.HasActivePunishment(PunishmentDog) {
+		t.Fatal("spoof mode backfired /dog onto the moderator")
+	}
+	if got := w.modConn.String(); !strings.Contains(got, "Applied 'dog' punishment") {
+		t.Errorf("moderator did not get the spoofed success summary; got %q", got)
+	}
+	if got := w.modConn.String(); strings.Contains(got, "bounced the leash") {
+		t.Errorf("spoof mode reversed the leash; got %q", got)
+	}
+}
+
+// TestLeashBackfireRefusesMixedPack verifies a backfire shield cannot flip a
+// multi-dog claim: a leash has one master, and the other dogs would be left
+// without the effect. The refusal happens before any /dog lands, so a bounced
+// command never leaves the rest of the pack punished.
+func TestLeashBackfireRefusesMixedPack(t *testing.T) {
+	resetAntiPunishShieldStore(t)
+	w := newLeashTestWorld(t, false)
+	w.mod.SetCharID(3)
+	w.dog.SetAntiPunishShield(antiPunishShieldBackfire)
+
+	cmdLeash(w.mod, []string{"1", "3", "4"}, "usage")
+
+	if w.dog.Leash() != nil || w.other.Leash() != nil || w.mod.Leash() != nil {
+		t.Fatal("a mixed pack was leashed despite the backfire shield")
+	}
+	for _, c := range []*Client{w.mod, w.dog, w.other} {
+		if c.HasPunishment(PunishmentDog) {
+			t.Errorf("UID %d received /dog from a refused mixed pack", c.Uid())
+		}
+	}
+	if got := w.modConn.String(); !strings.Contains(got, "one-on-one leash") {
+		t.Errorf("moderator did not get the one-on-one refusal; got %q", got)
+	}
+}
+
+// TestLeashBackfireRefusesThirdPartyMaster verifies the claim only reverses onto
+// the moderator holding it: leashing a shielded player to somebody else is
+// refused outright, before the backfire could dog the issuer without a leash.
+func TestLeashBackfireRefusesThirdPartyMaster(t *testing.T) {
+	resetAntiPunishShieldStore(t)
+	w := newLeashTestWorld(t, false)
+	w.mod.SetCharID(3)
+	w.dog.SetAntiPunishShield(antiPunishShieldBackfire)
+
+	cmdLeash(w.mod, []string{"4", "3"}, "usage")
+
+	if w.dog.Leash() != nil || w.other.Leash() != nil {
+		t.Fatal("a third-party master was leashed to a shielded dog")
+	}
+	for _, c := range []*Client{w.mod, w.dog, w.other} {
+		if c.HasPunishment(PunishmentDog) {
+			t.Errorf("UID %d received /dog from a refused third-party leash", c.Uid())
+		}
+	}
+	if got := w.modConn.String(); !strings.Contains(got, "only bounces a leash you hold yourself") {
+		t.Errorf("moderator did not get the third-party refusal; got %q", got)
+	}
+}
+
+// TestLeashBackfireRepeatKeepsClaim verifies a second identical command after
+// the reversal is refused instead of detaching the moderator from the leash it
+// would then rebuild with no master.
+func TestLeashBackfireRepeatKeepsClaim(t *testing.T) {
+	resetAntiPunishShieldStore(t)
+	w := newLeashTestWorld(t, false)
+	w.mod.SetCharID(3)
+	w.dog.SetAntiPunishShield(antiPunishShieldBackfire)
+
+	cmdLeash(w.mod, []string{"1", "3"}, "usage")
+	l := w.dog.Leash()
+	if l == nil {
+		t.Fatal("first leash did not reverse")
+	}
+
+	cmdLeash(w.mod, []string{"1", "3"}, "usage")
+
+	if w.dog.Leash() != l || w.mod.Leash() != l {
+		t.Fatal("re-issuing the bounced leash changed the claim")
+	}
+	if got := l.Dogs(); len(got) != 1 || got[0] != w.mod {
+		t.Fatalf("reversed leash dogs = %v, want just the moderator", got)
+	}
+	if l.Master() != w.dog {
+		t.Fatal("reversed leash lost its master")
+	}
+	if got := w.modConn.String(); !strings.Contains(got, "already on") {
+		t.Errorf("moderator did not get the repeat refusal; got %q", got)
+	}
+}

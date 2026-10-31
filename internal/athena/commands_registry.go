@@ -919,7 +919,7 @@ func initCommands() {
 			handler:  cmdLeash,
 			minArgs:  2,
 			usage:    "Usage: /leash [-d duration] [-r reason] [-h] <master uid> <dog uid> [dog uid ...]",
-			desc:     "Claims up to 6 players as your dogs: force-pairs the pack, applies /dog to every dog, drags them between areas (including punishment-safe rooms), and renders them together on multi-pair clients. Neither end can /unpair; full /unpunish or /forceunpair removes it.",
+			desc:     "Claims up to 6 players as your dogs: force-pairs the pack, applies /dog to every dog, drags them between areas (including punishment-safe rooms), and renders them together on multi-pair clients. Neither end can /unpair; full /unpunish or /forceunpair removes it. A backfire shield reverses a one-on-one claim onto the moderator.",
 			reqPerms: permissions.PermissionField["KICK"],
 			category: "punishment",
 		},

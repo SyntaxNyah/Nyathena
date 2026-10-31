@@ -97,6 +97,29 @@ func cmdPunishmentIgnoringSafeArea(client *Client, args []string, usage string, 
 	return cmdPunishmentMode(client, args, usage, pType, true)
 }
 
+// maxPunishmentDuration is the hard cap on every -d value. It lives here so the
+// /leash backfire path can validate a duration before it flips a claim around.
+const maxPunishmentDuration = 24 * time.Hour
+
+// parsePunishmentDuration parses a -d value and caps it at 24 hours. It reports
+// the parse error itself so every entry point fails identically; the cap notice
+// is optional because /leash's backfire path calls the applicator afterwards,
+// which would otherwise send the same notice twice.
+func parsePunishmentDuration(client *Client, durationStr string, quietCap bool) (time.Duration, bool) {
+	duration, err := str2duration.ParseDuration(durationStr)
+	if err != nil {
+		client.SendServerMessage("Invalid duration format. Use format like: 10m, 1h, 30s")
+		return 0, false
+	}
+	if duration > maxPunishmentDuration {
+		duration = maxPunishmentDuration
+		if !quietCap {
+			client.SendServerMessage("Duration capped at 24 hours.")
+		}
+	}
+	return duration, true
+}
+
 // cmdPunishmentMode is the shared implementation behind both entry points.
 // ignoreSafeArea is deliberately opt-in and only /leash uses it.
 func cmdPunishmentMode(client *Client, args []string, usage string, pType PunishmentType, ignoreSafeArea bool) []*Client {
@@ -120,18 +143,9 @@ func cmdPunishmentMode(client *Client, args []string, usage string, pType Punish
 		return nil
 	}
 
-	// Parse duration
-	duration, err := str2duration.ParseDuration(*durationStr)
-	if err != nil {
-		client.SendServerMessage("Invalid duration format. Use format like: 10m, 1h, 30s")
+	duration, ok := parsePunishmentDuration(client, *durationStr, false)
+	if !ok {
 		return nil
-	}
-
-	// Cap at 24 hours
-	maxDuration := 24 * time.Hour
-	if duration > maxDuration {
-		duration = maxDuration
-		client.SendServerMessage(fmt.Sprintf("Duration capped at 24 hours."))
 	}
 
 	tier := issuerTierFor(client)

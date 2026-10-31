@@ -32,6 +32,11 @@ package athena
 // Every dog follows the master through area changes, including punishment-safe
 // areas. `/leash` also bypasses the punishment-safe check when it applies the
 // /dog effect, because the leash is a claim rather than a one-shot punishment.
+//
+// A dog protected by an `/antipunishshield ... backfire` cannot be leashed: the
+// /dog effect lands on the issuing moderator instead, so the claim follows the
+// punishment and reverses. The shielded player holds the leash and the moderator
+// becomes the dog.
 
 import (
 	"flag"
@@ -596,6 +601,19 @@ func dissolveLeashForForce(c *Client, newPartner *Client) {
 	}
 }
 
+// backfireShieldedDog returns the first requested dog whose /antipunishshield is
+// in backfire mode, or nil. A backfire shield never lets the /dog effect land on
+// the shielded player — it lands on the issuer — so the claim has to follow the
+// punishment or the moderator would stay master of a dog that was never leashed.
+func backfireShieldedDog(dogs []*Client) *Client {
+	for _, dog := range dogs {
+		if dog.AntiPunishShieldMode() == antiPunishShieldBackfire {
+			return dog
+		}
+	}
+	return nil
+}
+
 // Handles /leash — a moderator forces one master and up to maxLeashDogs dogs
 // into a persistent pack. Every dog gets /dog, follows the master, and renders
 // through the multi-pair group. Re-issuing the command with the same master
@@ -707,6 +725,42 @@ func cmdLeash(client *Client, args []string, usage string) {
 		return
 	}
 
+	// A backfire shield turns the claim around: the /dog effect already lands on
+	// the issuer in that mode, so the leash follows the punishment and the
+	// shielded player ends up holding it. A leash has a single master, so only a
+	// one-on-one claim the issuer holds themselves can flip — bouncing a mixed
+	// pack would strand the other dogs without the effect that makes them dogs.
+	// Decided before any punishment is applied, so a refused command never
+	// leaves a half-built pack with /dog already on it.
+	bounce := backfireShieldedDog(newDogs)
+	if bounce != nil {
+		switch {
+		case client != master:
+			client.SendServerMessage(fmt.Sprintf(
+				"Leash not created: %v's anti-punishment shield only bounces a leash you hold yourself.",
+				oocDisplayName(bounce)))
+			return
+		case len(newDogs) > 1:
+			client.SendServerMessage(fmt.Sprintf(
+				"Leash not created: %v's anti-punishment shield only reverses a one-on-one leash.",
+				oocDisplayName(bounce)))
+			return
+		}
+		// Re-issuing the same command after a bounce would detach the moderator
+		// from the leash the swap below is about to rebuild, so refuse it the
+		// same way the normal path refuses a dog that is already on the leash.
+		if l := bounce.Leash(); l != nil && l.Master() == bounce && l.IsDog(client) {
+			client.SendServerMessage(fmt.Sprintf("You are already on %v's leash.", oocDisplayName(bounce)))
+			return
+		}
+		// The backfire has to land before the claim can follow it, so a broken
+		// -d aborts here exactly like it does for every other punishment
+		// command instead of flipping the leash without its /dog effect.
+		if _, ok := parsePunishmentDuration(client, *durationStr, true); !ok {
+			return
+		}
+	}
+
 	// Apply the dog effect first, through the shared applicator with the
 	// punishment-safe check bypassed. One shared call keeps the whole pack
 	// all-or-nothing: if the global kill switch is armed, the duration is
@@ -721,10 +775,19 @@ func cmdLeash(client *Client, args []string, usage string) {
 		dogArgs = append(dogArgs, "-h")
 	}
 	punished := cmdPunishmentIgnoringSafeArea(client, dogArgs, usage, PunishmentDog)
-	if len(punished) == 0 {
+	if bounce != nil {
+		// The shielded dog never took the effect: the gate recorded the spoof
+		// and the backfire put /dog on the moderator for real, silently. Swap
+		// the ends before the pair links are built; everything below then
+		// creates a normal leash with the shielded player as the master.
+		master, newDogs = bounce, []*Client{client}
+		existingDogs = nil
+		if l := master.Leash(); l != nil && l.Master() == master {
+			existingDogs = l.Dogs()
+		}
+	} else if len(punished) == 0 {
 		return
-	}
-	if len(punished) != len(newDogs) {
+	} else if len(punished) != len(newDogs) {
 		client.SendServerMessage("Leash not created: at least one dog was shielded from the /dog punishment.")
 		return
 	}
@@ -777,7 +840,14 @@ func cmdLeash(client *Client, args []string, usage string) {
 			dog.SendServerMessage(fmt.Sprintf("Your master added %v to the leash.", joined))
 		}
 	}
-	if len(existingDogs) == 0 {
+	if bounce != nil {
+		client.SendServerMessage(fmt.Sprintf(
+			"🦴 %v's anti-punishment shield bounced the leash — you are the dog now.",
+			oocDisplayName(master)))
+		addToBuffer(client, "CMD", fmt.Sprintf(
+			"Leash UID %v -> UID %v backfired; UID %v holds the leash.",
+			client.Uid(), master.Uid(), master.Uid()), true)
+	} else if len(existingDogs) == 0 {
 		client.SendServerMessage(fmt.Sprintf("Leashed %v to %v.", joined, oocDisplayName(master)))
 		addToBuffer(client, "CMD", fmt.Sprintf("Leashed UID %v to UID %v.",
 			strings.Join(dogUIDs, ","), master.Uid()), false)
