@@ -635,6 +635,7 @@ func cmdPlaytimeAdd(client *Client, args []string) {
 		client.SendServerMessage("Failed to update playtime: " + err.Error())
 		return
 	}
+	invalidatePlaytime(ipid)
 
 	client.SendServerMessage(fmt.Sprintf(
 		"✅ Added %v of playtime to '%v'. New total: %v.",
@@ -759,6 +760,7 @@ func cmdPlaytimeSet(client *Client, args []string) {
 		client.SendServerMessage("Failed to update playtime: " + err.Error())
 		return
 	}
+	invalidatePlaytime(ipid)
 
 	client.SendServerMessage(fmt.Sprintf(
 		"✅ Set playtime for '%v' to %v.", targetUser, formatPlaytime(newTotal)))

@@ -44,6 +44,7 @@ import (
 // commandRegex matches valid command names (e.g., /join, /join-tournament, /area_kick, /51), case-insensitively.
 var commandRegex = regexp.MustCompile(`(?i)^/[a-z0-9_]+(-[a-z0-9_]+)*`)
 var loginAttemptRegex = regexp.MustCompile(`(?i)^\s*(?:\.{1,2}/|\.|\?)?login\s+\S+\s+\S+`)
+
 // maxShownameLength is the maximum number of characters allowed in a showname.
 const maxShownameLength = 30
 
@@ -134,6 +135,16 @@ func pktHdid(client *Client, p *aolib.Packet) {
 		return
 	}
 
+	// Multiclient limiting is per DEVICE (hashed HDID), not per IP. A household
+	// behind one NAT can have several players; one machine opening many tabs is
+	// still stopped. The optional multiclient_ip_limit is the per-IP backstop.
+	clients.RegisterHDID(client)
+	if config != nil && config.MCLimit != 0 && clients.CountByHDID(client.Hdid()) > admissionLimit(config.MCLimit) {
+		client.SendSync(&aolib.BD{Reason: "Too many connections from your device. Please disconnect your other clients."})
+		client.markClosed()
+		return
+	}
+
 	client.Send(&aolib.IDToClient{PlayerID: 0, Software: "Nyathena", Version: version})
 }
 
@@ -214,6 +225,13 @@ func pktResCount(client *Client, _ *aolib.Packet) {
 // Handles RC#%
 func pktReqChar(client *Client, _ *aolib.Packet) {
 	raidGuardOnHandshakeStep(client)
+	// The character list is identical for every connection between reloads, so
+	// send the shared serialized buffer instead of rebuilding thousands of
+	// SCCharDataItem values on every join.
+	if cached := getSCPacketBytes(client.JSONMode()); cached != nil {
+		client.sendPrebuilt(cached)
+		return
+	}
 	client.Send(&aolib.SC{CharData: scCharDataItems(getCharacters())})
 }
 
@@ -227,6 +245,10 @@ func pktReqAM(client *Client, _ *aolib.Packet) {
 	// escaping on the wire and its JSON form carries the raw values, so
 	// pre-escaping would double-escape JSON-mode clients.
 	if client.JSONMode() {
+		if cached := getSMJSONBytes(); cached != nil {
+			client.sendPrebuilt(cached)
+			return
+		}
 		items := make([]string, 0, len(areas)+len(getMusicList()))
 		for _, a := range areas {
 			items = append(items, a.Name())
@@ -277,9 +299,13 @@ func pktReqDone(client *Client, _ *aolib.Packet) {
 	// DONE and after the client's UID is assigned, guarantees the voice panel
 	// can render whether or not the client also caught the early copy.
 	sendVoiceCaps(client)
-	sendCMArup()
-	sendStatusArup()
-	sendLockArup()
+	// A join changes the player count, but not the CM/status/lock state. Send
+	// the current values to the new client only; every existing client already
+	// has them, and broadcasting all three on every join was three full client
+	// sweeps per connection.
+	sendCMArupTo(client)
+	sendStatusArupTo(client)
+	sendLockArupTo(client)
 	// Notify the client of their actual UID so the player list widget filters correctly.
 	client.Send(&aolib.IDToClient{PlayerID: client.Uid(), Software: "Nyathena", Version: version})
 	sendPlayerListToClient(client)
@@ -328,6 +354,12 @@ func pktReqDone(client *Client, _ *aolib.Packet) {
 	issueJoinCaptcha(client)
 
 	logger.LogInfof("Client (IPID:%v UID:%v) joined the server", client.Ipid(), client.Uid())
+
+	// Per-identity repeat ledger: a connection that reconnects over and over is
+	// only visible across sockets. This is deliberately after the join sequence
+	// so a first join records zero and a normal reconnect does not interrupt the
+	// player's roster sync.
+	raidGuardOnJoinComplete(client)
 
 	// Torment reconnect cycle: if this IPID is lagged, restart the disconnect timer
 	// immediately. This punishes reconnect attempts and ensures that lag persists
@@ -1207,7 +1239,7 @@ func pktIC(client *Client, p *aolib.Packet) {
 		// except the moderators who think their punishment landed; each of
 		// those gets a private transformed copy instead.
 		if !broadcastSpoofedIC(client, ms) {
-			broadcastToAreaFrom(client.Ipid(), senderBypassesIgnore(client.Perms()), client.Area(), ms)
+			broadcastToAreaFromOnce(client.Ipid(), senderBypassesIgnore(client.Perms()), client.Area(), ms)
 		}
 	}
 	silenced = silenced || restricted
@@ -1476,7 +1508,6 @@ func pktOOC(client *Client, p *aolib.Packet) {
 		return
 	}
 
-
 	// While lockdown is active, a non-moderator under the purge's playtime
 	// threshold is silently dropped -- see the matching check in pktIC.
 	if serverLockdown.Load() && lockdownShouldSilence(client) {
@@ -1514,10 +1545,10 @@ func pktOOC(client *Client, p *aolib.Packet) {
 	// first word off all three word strings, some mistaken login prompts
 	// can be cancelled.
 	if loginAttemptRegex.MatchString(decode(ct.Message)) {
-    	client.SendServerMessage("Be careful with the login command.")
-    	return
+		client.SendServerMessage("Be careful with the login command.")
+		return
 	}
-	
+
 	// Join captcha: a plain OOC message from an unverified connection is
 	// blocked -- but if the player simply typed the answer without the
 	// command, take it. The captcha's difficulty is meant to be the question,
@@ -1706,7 +1737,7 @@ func pktOOC(client *Client, p *aolib.Packet) {
 	// Shield spoofing is per-moderator, so it needs the same private-copy
 	// treatment as IC. If no moderator is owed a spoof, fan out normally.
 	if !broadcastSpoofedOOC(client, displayUsername, msg) {
-		broadcastToAreaFrom(client.Ipid(), senderBypassesIgnore(client.Perms()), client.Area(),
+		broadcastToAreaFromOnce(client.Ipid(), senderBypassesIgnore(client.Perms()), client.Area(),
 			&aolib.CTToClient{Name: displayUsername, Message: msg, IsFromServer: false})
 	}
 	addToBuffer(client, "OOC", "\""+msg+"\"", false)
@@ -1948,7 +1979,7 @@ func pktMA(client *Client, p *aolib.Packet) {
 			}
 		}
 		client.SendServerMessage(fmt.Sprintf("Kicked %d client(s).", len(targets)))
-		sendPlayerArup()
+		requestPlayerArup()
 		addToBuffer(client, "CMD", fmt.Sprintf("Kicked %v from server for reason: %v.", targetIPID, reason), true)
 		return
 	}
@@ -1990,7 +2021,7 @@ func pktMA(client *Client, p *aolib.Packet) {
 		c.conn.Close()
 	}
 	client.SendServerMessage(fmt.Sprintf("Banned %d client(s).", len(targets)))
-	sendPlayerArup()
+	requestPlayerArup()
 	addToBuffer(client, "CMD", fmt.Sprintf("Banned %v from server for %v: %v.", targetIPID, durationStr, reason), true)
 }
 

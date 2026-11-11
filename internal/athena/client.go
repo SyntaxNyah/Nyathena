@@ -401,6 +401,7 @@ type Client struct {
 	// happens before HandleClient's goroutine is created).
 	isNewHDID             bool
 	hdid                  string
+	hdidCounted           atomic.Bool
 	uid                   int
 	area                  *area.Area
 	char                  int
@@ -410,6 +411,8 @@ type Client struct {
 	lastmsg               string
 	lastTextColor         string
 	perms                 uint64
+	isModerator           atomic.Bool
+	permissionsKnown      atomic.Bool
 	authenticated         bool
 	mod_name              string
 	pos                   string
@@ -492,12 +495,19 @@ type Client struct {
 	captchaRestricted    atomic.Bool
 	captchaStrikes       atomic.Int32
 	pendingJoinChallenge joinChallenge
+	// guardChallenge marks a challenge the RAID GUARD issued rather than the
+	// ordinary join gate. It keeps two behaviours independent of the global
+	// join_captcha switch: /verify can still resolve the question when the join
+	// captcha is off, and failing/timing out the question kicks the connection
+	// instead of leaving it muted forever.
+	guardChallenge atomic.Bool
 
 	// raid is this connection's accumulated raid-guard evidence, created lazily
 	// on first observation so a server with the guard disabled never allocates
 	// one. Guarded by client.mu; the raidState is itself self-synchronised, so
 	// callers only hold client.mu long enough to fetch the pointer.
-	raid *raidState
+	raid     *raidState
+	raidFast atomic.Pointer[raidState]
 
 	// censorAlertsOff mutes the staff censor-trip OOC alerts for this session
 	// (/censoralerts off). Only consulted for clients holding MOD_CHAT; every
@@ -572,6 +582,11 @@ type Client struct {
 	done          chan struct{}
 	closeDoneOnce sync.Once
 	closed        atomic.Bool
+	// isWebSocket distinguishes a nhooyr WebSocket transport from plain TCP.
+	// A WebSocket write deadline closes the underlying connection outright, so
+	// a write error there must end the client instead of being ignored like a
+	// transient TCP error. Set once by HandleWS before HandleClient starts.
+	isWebSocket atomic.Bool
 
 	// jsonMode is set the first time this client sends a JSON-encoded packet
 	// (object starting with '{'). Once set, every subsequent inbound packet
@@ -589,13 +604,13 @@ type Client struct {
 	sess *aolib.ClientSession
 }
 
-// sendQueueSize bounds the per-client outbound packet backlog. Sized to
-// comfortably absorb the worst legitimate burst: sendPlayerListToClient emits
-// up to ~5 packets per existing player on join, so even a 1000-player server
-// has headroom. At ~150 bytes/packet this is ~1.2 MiB per client in the worst
-// case — only reached transiently by a stuck consumer, after which packets
-// drop silently rather than disconnecting the client.
-const sendQueueSize = 8192
+// sendQueueSize bounds the per-client outbound packet backlog. Roster batching
+// makes a FantaCode join one queue entry; JSON/WebSocket joins still use one
+// frame per existing player (up to ~5 × 500 = 2500 on a full server), so 4096
+// covers the worst legitimate burst with headroom. The channel stores slice
+// headers, ~98 KiB at this size versus ~196 KiB at the old 8192; payloads are
+// separate and drop silently only for a stuck consumer.
+const sendQueueSize = 4096
 
 // NewClient returns a new client. The outbound writer goroutine is NOT
 // started here — HandleClient starts it once the connection has cleared the
@@ -618,6 +633,9 @@ func NewClient(conn net.Conn, ipid string) *Client {
 		sendCh:             make(chan []byte, sendQueueSize),
 		done:               make(chan struct{}),
 	}
+	// The default permission set is known (plain player, no moderator bit), so
+	// the hot-path exemption check can skip client.mu from the first packet.
+	client.permissionsKnown.Store(true)
 	// The aolib session decodes inbound frames and dispatches them to the typed
 	// On*/OnCustom handlers registered in registerInbound. It also owns the
 	// outbound Send callback (unused here — Client.Send keeps its own path).
@@ -719,15 +737,27 @@ func (client *Client) runWriter() {
 			if logger.EnableNetworkLogging {
 				logger.WriteNetworkLog(client.ipid, client.Hdid(), "SEND", string(buf))
 			}
-			if err != nil && errors.Is(err, net.ErrClosed) {
-				// The conn has been explicitly closed (cleanup, ping
-				// timeout, kick path, etc.). No more sends will succeed.
-				return
+			if err != nil {
+				if errors.Is(err, net.ErrClosed) {
+					// The conn has been explicitly closed (cleanup, ping
+					// timeout, kick path, etc.). No more sends will succeed.
+					return
+				}
+				if client.isWebSocket.Load() {
+					// nhooyr.io/websocket closes the whole connection when a
+					// write deadline is hit, so this error is terminal. The old
+					// code ignored it and kept looping forever with a dead
+					// socket; the read loop may not notice until its next
+					// packet, and a client that has stopped sending leaves a
+					// zombie holding RAM and a multiclient slot.
+					logger.LogInfof("WebSocket write failed for IPID:%v, closing: %v", client.ipid, err)
+					client.markClosed()
+					return
+				}
+				// Plain TCP: a transient timeout/broken pipe can be a Wi-Fi
+				// roam or a momentary rebuffer. The read loop remains the
+				// authoritative signal that the connection is gone.
 			}
-			// Any other error (timeout, transient I/O, broken pipe) is
-			// ignored. If the connection is truly dead the read loop will
-			// notice and trigger cleanup, which will close the conn and
-			// land us in the net.ErrClosed branch above.
 		case <-client.done:
 			return
 		}
@@ -840,7 +870,18 @@ func (client *Client) HandleClient() {
 		}
 	}
 
-	if config.MCLimit != 0 && clients.CountByIPID(client.Ipid()) >= config.MCLimit {
+	// Per-IP backstop. An explicit multiclient_ip_limit wins; otherwise, when
+	// per-device limiting is on, cap pre-HI connection floods at 4× the device
+	// limit (minimum 16). Joined clients still get their per-HDID allowance, so
+	// a household is not blocked by this.
+	ipLimit := config.MulticlientIPLimit
+	if ipLimit <= 0 && config.MCLimit > 0 {
+		ipLimit = config.MCLimit * 4
+		if ipLimit < 16 {
+			ipLimit = 16
+		}
+	}
+	if ipLimit > 0 && clients.CountByIPID(client.Ipid()) >= admissionLimit(ipLimit) {
 		client.SendSync(&aolib.BD{Reason: "Too many connections from your IP. Please disconnect your other clients. If you have no other clients open, wait 1-2 minutes and try again."})
 		client.conn.Close()
 		return
@@ -1264,6 +1305,9 @@ func (client *Client) logSnapshot() clientLogSnapshot {
 func (client *Client) clientCleanup() {
 	if client.Uid() != -1 {
 		logger.LogInfof("Client (IPID:%v UID:%v) left the server", client.ipid, client.Uid())
+		// Release the per-identity active-connection slot recorded at join so
+		// the next connection counts as a reroll only after this one is gone.
+		raidLedgerNoteDisconnect(client, time.Now())
 
 		// Accumulate session playtime and award 1 chip per newly-completed hour.
 		// AddPlaytimeReturning is a single atomic SQL operation, so concurrent
@@ -1279,6 +1323,10 @@ func (client *Client) clientCleanup() {
 						logger.LogErrorf("Failed to add playtime for %v: %v", ipid, err)
 						return
 					}
+					// The security paths cache playtime for five minutes; a
+					// session that just ended has changed the authoritative
+					// value, so drop the stale entry now.
+					invalidatePlaytime(ipid)
 					oldPt := newPt - sessionSecs
 					chipsEarned := (newPt / secondsPerHour) - (oldPt / secondsPerHour) - alreadyAwarded
 					if chipsEarned > 0 && config.CasinoOn() {
@@ -1337,8 +1385,8 @@ func (client *Client) clientCleanup() {
 		if !client.Hidden() {
 			client.Area().RemoveVisiblePlayer()
 		}
-		broadcastToAll(&aolib.PR{ID: client.Uid(), Type: aolib.PlayerListUpdateRemove})
-		sendPlayerArup()
+		broadcastToAllOnce(&aolib.PR{ID: client.Uid(), Type: aolib.PlayerListUpdateRemove})
+		requestPlayerArup()
 	}
 	handleCasinoDisconnect(client)
 	handleMinigameDisconnect(client)
@@ -1633,6 +1681,11 @@ func (client *Client) SetPerms(perms uint64) {
 	client.mu.Lock()
 	client.perms = perms
 	client.mu.Unlock()
+	// Cache the one permission bit the raid-guard hot path consults on every
+	// IC/OOC packet, so an ordinary player does not pay a mutex acquisition just
+	// to prove they are not a moderator.
+	client.isModerator.Store(permissions.IsModerator(perms))
+	client.permissionsKnown.Store(true)
 }
 
 // Authenticated returns whether the client is logged in to any account
@@ -2025,7 +2078,7 @@ func (client *Client) JoinArea(area *area.Area) {
 		song = "~stop.mp3"
 	}
 	client.Send(&aolib.MCToClient{Name: song, CharID: client.CharID(), Showname: "Server", Looping: true, Channel: aolib.MusicChannelMusic, Effects: aolib.MusicEffects{}})
-	sendPlayerArup()
+	requestPlayerArup()
 }
 
 // ChangeArea changes the client's current area.
@@ -3635,7 +3688,7 @@ func (client *Client) CheckRateLimit() bool {
 	}
 
 	// Check if rate limit is exceeded
-	if len(client.msgTimestamps) >= config.RateLimit {
+	if len(client.msgTimestamps) >= admissionLimit(config.RateLimit) {
 		return true
 	}
 
@@ -3677,7 +3730,7 @@ func (client *Client) CheckOOCRateLimit() bool {
 		client.oocMsgTimestamps = client.oocMsgTimestamps[validIdx:]
 	}
 
-	if len(client.oocMsgTimestamps) >= config.OOCRateLimit {
+	if len(client.oocMsgTimestamps) >= admissionLimit(config.OOCRateLimit) {
 		return true
 	}
 

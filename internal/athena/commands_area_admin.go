@@ -648,7 +648,7 @@ func cmdKickOther(client *Client, args []string, _ string) {
 		count++
 	})
 	client.SendServerMessage(fmt.Sprintf("Kicked %v ghost client(s).", count))
-	sendPlayerArup()
+	requestPlayerArup()
 }
 
 // Handles /lock

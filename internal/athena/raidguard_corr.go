@@ -41,7 +41,6 @@ import (
 	"hash/fnv"
 	"strings"
 	"sync"
-	"sync/atomic"
 	"time"
 	"unicode"
 
@@ -98,6 +97,12 @@ func normalizeRaidText(s string) string {
 // that was entirely two players independently typing /gas and /cm. Short
 // identical lines are what ordinary players legitimately have in common.
 func raidFingerprints(text string, minLen int) []uint64 {
+	// A normalized message cannot be longer than its source bytes, so a short
+	// source can be rejected before the normalization allocation. Most chat
+	// lines never reach the 15-character correlation floor.
+	if minLen > 0 && len(text) < minLen {
+		return nil
+	}
 	norm := normalizeRaidText(text)
 	if len(norm) < minLen {
 		return nil
@@ -182,9 +187,29 @@ func NewCorrelationWindow(window time.Duration, maxEntries int) *CorrelationWind
 func (w *CorrelationWindow) Observe(fp uint64, ipid string, now time.Time) int {
 	w.mu.Lock()
 	defer w.mu.Unlock()
-
 	w.pruneLocked(now)
+	return w.observeLocked(fp, ipid, now)
+}
 
+// ObserveMany records every fingerprint of one message under a single lock and
+// a single prune. raidObserveContent used to take the global lock up to eight
+// times per message; under a fan-out that was the correlation window's own
+// hotspot. out must have at least len(fps) entries.
+func (w *CorrelationWindow) ObserveMany(fps []uint64, ipid string, now time.Time, out []int) {
+	if len(out) < len(fps) {
+		return
+	}
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	w.pruneLocked(now)
+	for i, fp := range fps {
+		out[i] = w.observeLocked(fp, ipid, now)
+	}
+}
+
+// observeLocked is the per-fingerprint tally shared by Observe and ObserveMany.
+// Callers hold w.mu and have already pruned.
+func (w *CorrelationWindow) observeLocked(fp uint64, ipid string, now time.Time) int {
 	e, ok := w.entries[fp]
 	if !ok || now.Sub(e.first) > w.window {
 		e = &corrEntry{ipids: make(map[string]struct{}, 4), first: now}
@@ -428,15 +453,8 @@ func (m *modcallWindow) Reset(ipid string) {
 	m.mu.Unlock()
 }
 
-// Package-level layer-2 state.
-var (
-	raidCorrWindow  *CorrelationWindow
-	raidEchoWindow  *echoWindow
-	raidModcalls    = newModcallWindow(4096)
-	raidArrivals    = newArrivalWindow(time.Second)
-	raidCorrOnce    sync.Once
-	raidAttackUntil atomic.Int64 // unix nanos; server is "under attack" until then
-)
+// Layer-2 state lives in raidSystem.corr (raidguard_system.go); the windows
+// below are created lazily because their sizes come from config.
 
 // raidAttackHold is how long a detected raid keeps the server flagged as under
 // attack after the last piece of evidence. Long enough that the flag does not
@@ -444,25 +462,25 @@ var (
 const raidAttackHold = 2 * time.Minute
 
 func raidCorrInit() {
-	raidCorrOnce.Do(func() {
+	raidSystem.corr.once.Do(func() {
 		w := raidCorrWindowLen()
 		max := 4096
 		if config != nil && config.RaidGuardCorrMaxEntries > 0 {
 			max = config.RaidGuardCorrMaxEntries
 		}
-		raidCorrWindow = NewCorrelationWindow(w, max)
-		raidEchoWindow = newEchoWindow(w)
+		raidSystem.corr.window = NewCorrelationWindow(w, max)
+		raidSystem.corr.echo = newEchoWindow(w)
 	})
 }
 
 func raidCorr() *CorrelationWindow {
 	raidCorrInit()
-	return raidCorrWindow
+	return raidSystem.corr.window
 }
 
 func raidEchoes() *echoWindow {
 	raidCorrInit()
-	return raidEchoWindow
+	return raidSystem.corr.echo
 }
 
 // raidCorrWindowLen is how long a piece of text stays correlatable.
@@ -494,7 +512,7 @@ func raidCorrWindowLen() time.Duration {
 // their session, and nothing here is confident enough to spend that
 // automatically. A moderator who wants the purge still runs /lockdown on.
 func markRaidAttack(now time.Time) {
-	raidAttackUntil.Store(now.Add(raidAttackHold).UnixNano())
+	raidSystem.corr.attackUntil.Store(now.Add(raidAttackHold).UnixNano())
 
 	if config == nil || !config.RaidGuardAutoLockdown {
 		return
@@ -502,6 +520,7 @@ func markRaidAttack(now time.Time) {
 	if !serverLockdown.CompareAndSwap(false, true) {
 		return // already locked down; nothing to announce
 	}
+	engageServerLockdown()
 	logger.LogInfof("Raid guard: coordinated raid detected -- lockdown engaged automatically")
 	logger.WriteAudit(fmt.Sprintf("%v | RAID_GUARD_LOCKDOWN | automatic lockdown on raid detection",
 		now.UTC().Format("15:04:05")))
@@ -525,7 +544,7 @@ func alertRaidLockdown() {
 // unusual player is structurally unbannable by this system no matter how they
 // behave.
 func raidGuardUnderAttack() bool {
-	return time.Now().UnixNano() < raidAttackUntil.Load()
+	return time.Now().UnixNano() < raidSystem.corr.attackUntil.Load()
 }
 
 // raidCorrThresholds returns the two cross-IPID corroboration levels, and the
@@ -611,9 +630,11 @@ func raidObserveContent(ipid, text string, now time.Time) (echoed, corroborated 
 		return false, false
 	}
 	w := raidCorr()
+	var counts [maxShinglesPerMsg]int
+	w.ObserveMany(fps, ipid, now, counts[:len(fps)])
 	var canonical uint64
-	for _, fp := range fps {
-		n := w.Observe(fp, ipid, now)
+	for i, fp := range fps {
+		n := counts[i]
 		if n >= strong {
 			corroborated = true
 		}
@@ -647,7 +668,7 @@ func raidObserveArrival(now time.Time) bool {
 	if config != nil && config.RaidGuardArrivalBurst > 0 {
 		burst = config.RaidGuardArrivalBurst
 	}
-	if raidArrivals.Observe(now) >= burst {
+	if raidSystem.corr.arrivals.Observe(now) >= burst {
 		markRaidAttack(now)
 		return true
 	}
@@ -676,8 +697,8 @@ func raidModcallWindowLen() time.Duration {
 // attack flag only tightens thresholds for connections that already have some.
 func raidObserveModcall(ipid string, now time.Time) (attempts int) {
 	window := raidModcallWindowLen()
-	attempts = raidModcalls.Observe(ipid, now, window)
-	if raidModcalls.DistinctIPIDs(now, raidCorrWindowLen()) >= raidGuardModcallFanout() {
+	attempts = raidSystem.corr.modcalls.Observe(ipid, now, window)
+	if raidSystem.corr.modcalls.DistinctIPIDs(now, raidCorrWindowLen()) >= raidGuardModcallFanout() {
 		markRaidAttack(now)
 	}
 	return attempts
@@ -685,10 +706,5 @@ func raidObserveModcall(ipid string, now time.Time) (attempts int) {
 
 // resetRaidGuardState clears all layer-2 state. Tests only.
 func resetRaidGuardState() {
-	raidCorrOnce = sync.Once{}
-	raidCorrWindow = nil
-	raidEchoWindow = nil
-	raidModcalls = newModcallWindow(4096)
-	raidArrivals = newArrivalWindow(time.Second)
-	raidAttackUntil.Store(0)
+	raidSystem.corr = newRaidCorrelation()
 }

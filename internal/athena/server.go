@@ -37,6 +37,7 @@ import (
 	discordbot "github.com/MangosArentLiterature/Athena/internal/discord/bot"
 	"github.com/MangosArentLiterature/Athena/internal/logger"
 	"github.com/MangosArentLiterature/Athena/internal/ms"
+	"github.com/MangosArentLiterature/Athena/internal/packetutil"
 	"github.com/MangosArentLiterature/Athena/internal/permissions"
 	"github.com/MangosArentLiterature/Athena/internal/playercount"
 	"github.com/MangosArentLiterature/Athena/internal/settings"
@@ -89,7 +90,7 @@ var (
 	uids           *uidmanager.UidManager
 	players        playercount.PlayerCount
 	enableDiscord  bool
-	clients        *ClientList = &ClientList{list: make(map[*Client]struct{}), uidIndex: make(map[int]*Client), ipidCounts: make(map[string]int)}
+	clients        *ClientList = &ClientList{list: make(map[*Client]struct{}), uidIndex: make(map[int]*Client), ipidCounts: make(map[string]int), hdidCounts: make(map[string]int)}
 	updatePlayers              = make(chan int)      // Updates the advertiser's player count.
 	advertDone                 = make(chan struct{}) // Signals the advertiser to stop.
 	FatalError                 = make(chan error)    // Signals that the server should stop after a fatal error.
@@ -188,6 +189,13 @@ var (
 	// serverLockdown, when set to true, prevents all new (previously-unseen) IPIDs from
 	// connecting. Known IPIDs (those in ipFirstSeenTracker) are still allowed through.
 	serverLockdown atomic.Bool
+
+	// lockdownUntil bounds how long a lockdown may remain engaged without
+	// anybody touching it. A lockdown that is forgotten blocks every genuinely
+	// new player indefinitely; the watcher lifts it at the deadline and tells
+	// staff. 0 means "no expiry" (the old behaviour).
+	lockdownUntil      atomic.Int64
+	lockdownExpiryOnce sync.Once
 
 	// modcallsDisabled is the /modcall disable kill switch: while set, pktModcall
 	// refuses every ZZ before it reaches a cooldown, the buffer, the staff
@@ -372,7 +380,7 @@ func NewServer(conf *settings.Config) (*Server, error) {
 
 	s := &Server{
 		config:                 conf,
-		clients:                &ClientList{list: make(map[*Client]struct{}), uidIndex: make(map[int]*Client), ipidCounts: make(map[string]int)},
+		clients:                &ClientList{list: make(map[*Client]struct{}), uidIndex: make(map[int]*Client), ipidCounts: make(map[string]int), hdidCounts: make(map[string]int)},
 		uids:                   &uidmanager.UidManager{},
 		updatePlayers:          updatePlayers,
 		advertDone:             advertDone,
@@ -917,6 +925,7 @@ func HandleWS(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	client := NewClient(websocket.NetConn(context.TODO(), c, websocket.MessageText), ipid)
+	client.isWebSocket.Store(true)
 	go client.HandleClient()
 }
 
@@ -1085,25 +1094,56 @@ func getAreaIndex(a *area.Area) int {
 
 // sendPlayerListToClient sends PR and PU packets for all currently joined players to a new client.
 func sendPlayerListToClient(newClient *Client) {
+	packets := make([]aolib.Outgoing, 0, 32)
 	clients.ForEach(func(c *Client) {
 		if c.Uid() == -1 || c == newClient || c.Hidden() {
 			return
 		}
 		uid := c.Uid()
-		newClient.Send(&aolib.PR{ID: uid, Type: aolib.PlayerListUpdateAdd})
+		packets = append(packets, &aolib.PR{ID: uid, Type: aolib.PlayerListUpdateAdd})
 		// Filtered like any other name broadcast. This is the path that made
 		// the filter necessary: a name set before a word was added to the list
 		// is otherwise re-sent, in full, to every person who joins from then
 		// on, long after the input-time check stopped running.
 		if n := (&aolib.PU{ID: uid, Type: aolib.PlayerDataTypeOocName, Data: c.OOCName()}); c.OOCName() != "" && puAllowed(n) {
-			newClient.Send(n)
+			packets = append(packets, n)
 		}
-		newClient.Send(&aolib.PU{ID: uid, Type: aolib.PlayerDataTypeCharName, Data: c.CurrentCharacter()})
+		packets = append(packets, &aolib.PU{ID: uid, Type: aolib.PlayerDataTypeCharName, Data: c.CurrentCharacter()})
 		if n := (&aolib.PU{ID: uid, Type: aolib.PlayerDataTypeShowname, Data: decode(c.Showname())}); puAllowed(n) {
-			newClient.Send(n)
+			packets = append(packets, n)
 		}
-		newClient.Send(&aolib.PU{ID: uid, Type: aolib.PlayerDataTypeAreaID, Data: strconv.Itoa(getAreaIndex(c.Area()))})
+		packets = append(packets, &aolib.PU{ID: uid, Type: aolib.PlayerDataTypeAreaID, Data: strconv.Itoa(getAreaIndex(c.Area()))})
 	})
+	sendRosterToClient(newClient, packets)
+}
+
+// sendRosterToClient delivers a full roster snapshot to one joining client.
+// FantaCode callers get one concatenated buffer (the client already reads
+// frames until '%', so back-to-back frames are valid); JSON/WebSocket callers
+// get one frame per packet because a browser parses one JSON value per message.
+func sendRosterToClient(client *Client, packets []aolib.Outgoing) {
+	if client == nil || len(packets) == 0 {
+		return
+	}
+	for _, p := range packets {
+		halloweenHauntOutgoing(p)
+	}
+	if client.JSONMode() {
+		for _, p := range packets {
+			encoded, err := packetutil.Encode(p, aolib.WireJSON)
+			if err != nil {
+				logger.LogWarningf("dropped roster %v packet - JSON encode failed: %v", p.Header(), err)
+				continue
+			}
+			client.sendPrebuilt(encoded)
+		}
+		return
+	}
+	var batch []byte
+	for _, p := range packets {
+		batch = append(batch, encodeFanta(p)...)
+	}
+	client.sendPrebuilt(batch)
 }
 
 // broadcastPlayerJoin sends PR and PU packets to all clients when a new player joins.
@@ -1113,13 +1153,17 @@ func broadcastPlayerJoin(client *Client) {
 		return
 	}
 	uid := client.Uid()
-	broadcastToAll(&aolib.PR{ID: uid, Type: aolib.PlayerListUpdateAdd})
+	packets := make([]aolib.Outgoing, 0, 5)
+	packets = append(packets, &aolib.PR{ID: uid, Type: aolib.PlayerListUpdateAdd})
 	if client.OOCName() != "" {
-		broadcastToAll(&aolib.PU{ID: uid, Type: aolib.PlayerDataTypeOocName, Data: client.OOCName()})
+		packets = append(packets, &aolib.PU{ID: uid, Type: aolib.PlayerDataTypeOocName, Data: client.OOCName()})
 	}
-	broadcastToAll(&aolib.PU{ID: uid, Type: aolib.PlayerDataTypeCharName, Data: client.CurrentCharacter()})
-	broadcastToAll(&aolib.PU{ID: uid, Type: aolib.PlayerDataTypeShowname, Data: decode(client.Showname())})
-	broadcastToAll(&aolib.PU{ID: uid, Type: aolib.PlayerDataTypeAreaID, Data: strconv.Itoa(getAreaIndex(client.Area()))})
+	packets = append(packets,
+		&aolib.PU{ID: uid, Type: aolib.PlayerDataTypeCharName, Data: client.CurrentCharacter()},
+		&aolib.PU{ID: uid, Type: aolib.PlayerDataTypeShowname, Data: decode(client.Showname())},
+		&aolib.PU{ID: uid, Type: aolib.PlayerDataTypeAreaID, Data: strconv.Itoa(getAreaIndex(client.Area()))},
+	)
+	broadcastToAllBatch(packets)
 }
 
 // broadcastIPIDToMods sends a player's IPID (PU type 4) to every currently
@@ -1155,18 +1199,52 @@ func sendModIPIDsToClient(newClient *Client) {
 	})
 }
 
-// sendPlayerArup sends a player ARUP to all connected clients.
-// Visible (non-hidden) player counts are read from each area's pre-maintained counter.
-func sendPlayerArup() {
-	plCounts := make([]string, 0, len(areas))
+// playerCountArupData returns the visible player count for every area. The
+// slice is rebuilt per ARUP because the counts change on join/leave/area move.
+func playerCountArupData() []string {
+	counts := make([]string, 0, len(areas))
 	for _, a := range areas {
-		plCounts = append(plCounts, strconv.Itoa(a.VisiblePlayerCount()))
+		counts = append(counts, strconv.Itoa(a.VisiblePlayerCount()))
 	}
-	broadcastToAll(&aolib.ARUP{UpdateType: aolib.AreaUpdateTypePlayerCount, UpdateData: plCounts})
+	return counts
 }
 
-// sendCMArup sends a CM ARUP to all connected clients.
-func sendCMArup() {
+// Player-count ARUPs are high-frequency and identical for every recipient.
+// Coalescing them on a short ticker means a mass kick or a join wave produces a
+// handful of updates instead of one full broadcast per event; the counts are
+// still delivered well inside a client frame.
+var (
+	playerArupDirty       atomic.Bool
+	playerArupFlusherOnce sync.Once
+)
+
+// requestPlayerArup marks the player-count ARUP dirty and ensures the flusher
+// is running. Callers on join/leave/area-change paths use this instead of
+// broadcasting synchronously.
+func requestPlayerArup() {
+	playerArupFlusherOnce.Do(func() {
+		go playerArupFlusher()
+	})
+	playerArupDirty.Store(true)
+}
+
+func playerArupFlusher() {
+	ticker := time.NewTicker(200 * time.Millisecond)
+	defer ticker.Stop()
+	for range ticker.C {
+		if playerArupDirty.Swap(false) {
+			sendPlayerArup()
+		}
+	}
+}
+
+// sendPlayerArup sends a player ARUP to all connected clients.
+func sendPlayerArup() {
+	broadcastToAllOnce(&aolib.ARUP{UpdateType: aolib.AreaUpdateTypePlayerCount, UpdateData: playerCountArupData()})
+}
+
+// cmArupData builds the per-area case-manager display list.
+func cmArupData() []string {
 	returnL := make([]string, 0, len(areas))
 	for _, a := range areas {
 		cmUIDs := a.CMs()
@@ -1184,16 +1262,36 @@ func sendCMArup() {
 		}
 		returnL = append(returnL, strings.Join(cms, ", "))
 	}
-	broadcastToAll(&aolib.ARUP{UpdateType: aolib.AreaUpdateTypeCaseManager, UpdateData: returnL})
+	return returnL
 }
 
-// sendStatusArup sends a status ARUP to all connected clients.
-func sendStatusArup() {
+// sendCMArup sends a CM ARUP to all connected clients.
+func sendCMArup() {
+	broadcastToAllOnce(&aolib.ARUP{UpdateType: aolib.AreaUpdateTypeCaseManager, UpdateData: cmArupData()})
+}
+
+// sendCMArupTo sends the current CM list to one client.
+func sendCMArupTo(client *Client) {
+	client.Send(&aolib.ARUP{UpdateType: aolib.AreaUpdateTypeCaseManager, UpdateData: cmArupData()})
+}
+
+// statusArupData builds the per-area status list.
+func statusArupData() []string {
 	statuses := make([]string, 0, len(areas))
 	for _, a := range areas {
 		statuses = append(statuses, a.Status().String())
 	}
-	broadcastToAll(&aolib.ARUP{UpdateType: aolib.AreaUpdateTypeStatus, UpdateData: statuses})
+	return statuses
+}
+
+// sendStatusArup sends a status ARUP to all connected clients.
+func sendStatusArup() {
+	broadcastToAllOnce(&aolib.ARUP{UpdateType: aolib.AreaUpdateTypeStatus, UpdateData: statusArupData()})
+}
+
+// sendStatusArupTo sends the current status list to one client.
+func sendStatusArupTo(client *Client) {
+	client.Send(&aolib.ARUP{UpdateType: aolib.AreaUpdateTypeStatus, UpdateData: statusArupData()})
 }
 
 // areaLockDisplay returns the lock state to advertise for an area in the lock
@@ -1224,13 +1322,23 @@ func areaLockDisplay(a *area.Area) area.Lock {
 	return area.LockFree
 }
 
-// sendLockArup sends a lock ARUP to all connected clients.
-func sendLockArup() {
+// lockArupData builds the per-area lock display list.
+func lockArupData() []string {
 	locks := make([]string, 0, len(areas))
 	for _, a := range areas {
 		locks = append(locks, areaLockDisplay(a).String())
 	}
-	broadcastToAll(&aolib.ARUP{UpdateType: aolib.AreaUpdateTypeLocked, UpdateData: locks})
+	return locks
+}
+
+// sendLockArup sends a lock ARUP to all connected clients.
+func sendLockArup() {
+	broadcastToAllOnce(&aolib.ARUP{UpdateType: aolib.AreaUpdateTypeLocked, UpdateData: lockArupData()})
+}
+
+// sendLockArupTo sends the current lock list to one client.
+func sendLockArupTo(client *Client) {
+	client.Send(&aolib.ARUP{UpdateType: aolib.AreaUpdateTypeLocked, UpdateData: lockArupData()})
 }
 
 // getRole returns the role with the corresponding name, or an error if the role does not exist.
@@ -1373,7 +1481,7 @@ func checkConnRateLimit(ipid string) (rejected, autoban bool) {
 	times = append(times, now)
 	connTracker.timestamps[ipid] = times
 
-	if len(times) <= config.ConnRateLimit {
+	if len(times) <= admissionLimit(config.ConnRateLimit) {
 		return false, false
 	}
 
@@ -1796,7 +1904,7 @@ func checkIPOOCRateLimit(ipid string) bool {
 	} else if i > 0 {
 		times = times[i:]
 	}
-	if len(times) >= config.OOCRateLimit {
+	if len(times) >= admissionLimit(config.OOCRateLimit) {
 		ipOOCTracker.timestamps[ipid] = times
 		return true
 	}
@@ -1826,7 +1934,7 @@ func checkIPPingRateLimit(ipid string) bool {
 	} else if i > 0 {
 		times = times[i:]
 	}
-	if len(times) >= config.PingRateLimit {
+	if len(times) >= admissionLimit(config.PingRateLimit) {
 		ipPingTracker.timestamps[ipid] = times
 		return true
 	}
@@ -1900,7 +2008,7 @@ func checkNewIPIDOOCCooldown(ipid string) (bool, int) {
 	if !exists {
 		return false, 0
 	}
-	cooldown := time.Duration(config.NewIPIDOOCCooldown) * time.Second
+	cooldown := time.Duration(admissionCooldown(config.NewIPIDOOCCooldown, config.NewIPIDOOCCooldownNormal)) * time.Second
 	elapsed := time.Since(t)
 	if elapsed < cooldown {
 		remaining := int(math.Ceil((cooldown - elapsed).Seconds()))
@@ -1924,7 +2032,7 @@ func checkNewIPIDICCooldown(ipid string) (bool, int) {
 	if !exists {
 		return false, 0
 	}
-	cooldown := time.Duration(config.NewIPIDICCooldown) * time.Second
+	cooldown := time.Duration(admissionCooldown(config.NewIPIDICCooldown, config.NewIPIDICCooldownNormal)) * time.Second
 	elapsed := time.Since(t)
 	if elapsed < cooldown {
 		remaining := int(math.Ceil((cooldown - elapsed).Seconds()))
@@ -1945,7 +2053,7 @@ func checkNewIPIDModcallCooldown(ipid string) (bool, int) {
 	if !exists {
 		return false, 0
 	}
-	cooldown := time.Duration(config.NewIPIDModcallCooldown) * time.Second
+	cooldown := time.Duration(admissionCooldown(config.NewIPIDModcallCooldown, config.NewIPIDModcallCooldownNormal)) * time.Second
 	elapsed := time.Since(t)
 	if elapsed < cooldown {
 		remaining := int(math.Ceil((cooldown - elapsed).Seconds()))
@@ -2000,7 +2108,67 @@ func checkGlobalNewIPRateLimit(ipid string) bool {
 	}
 	globalNewIPTracker.timestamps = times
 
-	return len(times) >= config.GlobalNewIPRateLimit
+	return len(times) >= admissionLimit(config.GlobalNewIPRateLimit)
+}
+
+// lockdownTTL is how long a lockdown stays engaged without renewal. 0 disables
+// the automatic lift.
+func lockdownTTL() time.Duration {
+	seconds := 300
+	if config != nil {
+		seconds = config.LockdownTTL
+		if seconds < 0 {
+			seconds = 300
+		}
+	}
+	if seconds == 0 {
+		return 0
+	}
+	return time.Duration(seconds) * time.Second
+}
+
+// engageServerLockdown turns lockdown on and starts (or refreshes) its expiry
+// clock. Does not run the playtime purge; callers that want the purge still do
+// that explicitly.
+func engageServerLockdown() {
+	serverLockdown.Store(true)
+	if ttl := lockdownTTL(); ttl > 0 {
+		lockdownUntil.Store(time.Now().Add(ttl).UnixNano())
+	} else {
+		lockdownUntil.Store(0)
+	}
+	lockdownExpiryOnce.Do(func() {
+		go lockdownExpiryWatch()
+	})
+}
+
+// liftServerLockdown clears lockdown and its expiry clock.
+func liftServerLockdown() {
+	serverLockdown.Store(false)
+	lockdownUntil.Store(0)
+}
+
+// lockdownExpiryWatch lifts a lockdown nobody renewed. It runs for the server
+// lifetime; future lockdowns simply set a new deadline.
+func lockdownExpiryWatch() {
+	ticker := time.NewTicker(10 * time.Second)
+	defer ticker.Stop()
+	for range ticker.C {
+		until := lockdownUntil.Load()
+		if until <= 0 || !serverLockdown.Load() || time.Now().UnixNano() < until {
+			continue
+		}
+		liftServerLockdown()
+		logger.LogInfof("Server lockdown expired automatically")
+		logger.WriteAudit(fmt.Sprintf("%v | LOCKDOWN_EXPIRED | automatic lockdown lift",
+			time.Now().UTC().Format("15:04:05")))
+		msg := "🔓 Server lockdown expired automatically. New IPIDs can connect again. Run /lockdown on if it is still needed."
+		clients.ForEach(func(c *Client) {
+			if c.Uid() != -1 && permissions.HasPermission(c.Perms(), permissions.PermissionField["MOD_CHAT"]) {
+				c.Send(&aolib.CTToClient{Name: "OOC", Message: msg, IsFromServer: true})
+			}
+		})
+	}
 }
 
 // serverLockdownRejection reports whether this IPID is being rejected specifically
@@ -2067,7 +2235,7 @@ func rateLimitAutobanThresholdFor(c *Client) (threshold int, bannable bool) {
 		return base, true // no playtime tiers configured -- flat threshold for everyone
 	}
 
-	playtime, err := db.GetPlaytime(c.Ipid())
+	playtime, err := cachedPlaytime(c.Ipid())
 	if err != nil {
 		logger.LogErrorf("rate-limit autoban: failed to get playtime for IPID %v: %v", c.Ipid(), err)
 		return 0, false // fail open: never auto-ban a real player on a DB hiccup
@@ -2090,8 +2258,8 @@ func rateLimitAutobanThresholdFor(c *Client) (threshold int, bannable bool) {
 // messages should be silently dropped instead of broadcast -- the same
 // non-moderator, under-threshold population purgeLockdownFloodClients kicks.
 // Callers on the IC/OOC hot path must check serverLockdown.Load() first (this
-// function does not) so the cost of a moderator check plus a DB read is only
-// ever paid while lockdown is actually active. A connection the one-shot
+// function does not) so the cost of a moderator check plus a cached playtime
+// lookup is only ever paid while lockdown is actually active. A connection the one-shot
 // purge sweep hasn't reached yet, or one that reconnects mid-lockdown as an
 // already-known IPID (which the sweep never sees at all, since it only runs
 // once, the instant lockdown switches on), is still caught here on every
@@ -2107,7 +2275,7 @@ func lockdownShouldSilence(c *Client) bool {
 	if isLockdownExempt(c.Ipid()) {
 		return false
 	}
-	playtime, err := db.GetPlaytime(c.Ipid())
+	playtime, err := cachedPlaytime(c.Ipid())
 	if err != nil {
 		logger.LogErrorf("lockdown: failed to get playtime for IPID %v: %v", c.Ipid(), err)
 		return false // fail open: never silence a real message on a DB hiccup
@@ -2165,7 +2333,7 @@ func purgeLockdownFloodClients() {
 	if n == 0 {
 		return
 	}
-	sendPlayerArup()
+	requestPlayerArup()
 	msg := fmt.Sprintf("🔒 Lockdown purge: kicked %d connection(s) with under %d minute(s) of total playtime.", n, threshold/60)
 	logger.LogInfof("%s", msg)
 	clients.ForEach(func(c *Client) {

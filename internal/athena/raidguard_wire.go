@@ -39,7 +39,18 @@ import (
 // never so much as touches a raidState or the cross-IPID correlation window.
 // Every hook below checks this first, before client.raidGuard().
 func raidGuardExempt(client *Client) bool {
-	return client == nil || permissions.IsModerator(client.Perms())
+	if client == nil {
+		return true
+	}
+	if client.isModerator.Load() {
+		return true
+	}
+	if client.permissionsKnown.Load() {
+		return false
+	}
+	// Struct-literal test clients and a client whose permissions have not been
+	// set yet fall back to the authoritative field.
+	return permissions.IsModerator(client.Perms())
 }
 
 // raidGuardEvaluate is the canonical "something fired" tail: snapshot the
@@ -53,7 +64,7 @@ func raidGuardEvaluate(client *Client, rs *raidState, trigger string) {
 	}
 	score, _, _ := rs.snapshot()
 	scale, _ := raidGuardTier(client)
-	raidGuardEnforce(client, rs, verdictForTier(score, scale), trigger)
+	raidSystem.enforce(client, rs, verdictForTier(score, scale), trigger)
 }
 
 // raidGuardTimings returns how long ago this connection was accepted and how
@@ -102,8 +113,23 @@ func raidGuardOnAskchaa(client *Client) {
 	// PN once a UID exists, and every client implementation sends askchaa only in
 	// reply to PN, so nothing the server said can have prompted it. See
 	// SigHandshakeReplay for the per-client evidence.
-	if client.Uid() != -1 && rs.noteAskchaaPostJoin() {
-		raidGuardEvaluate(client, rs, "handshake replay")
+	if client.Uid() != -1 {
+		if client.guardChallengeActivity() {
+			return
+		}
+		now := time.Now()
+		if rs.noteAskchaaPostJoin() {
+			raidGuardEvaluate(client, rs, "handshake replay")
+		}
+		// The connection-scoped signal fires once, so a reconnect used to clear
+		// it completely. The ledger remembers the behaviour across sockets; a
+		// second protocol-impossible replay from the same identity is a repeat
+		// offence rather than another first warning.
+		if !client.closed.Load() {
+			if count := raidLedgerNoteReplay(client, now); count >= raidGuardRerollLimit() {
+				raidSystem.repeatOffence(client, "handshake rerolls", count)
+			}
+		}
 	}
 }
 
@@ -142,6 +168,9 @@ func raidGuardOnCharPick(client *Client) {
 	if rs == nil {
 		return
 	}
+	if client.guardChallengeActivity() {
+		return
+	}
 	now := time.Now()
 	if client.CharPickedAt().IsZero() {
 		client.SetCharPickedAt(now)
@@ -150,8 +179,31 @@ func raidGuardOnCharPick(client *Client) {
 	if accepted := client.AcceptedAt(); !accepted.IsZero() {
 		sinceAccept = now.Sub(accepted)
 	}
-	if fired := rs.noteCharPick(sinceAccept, now); len(fired) > 0 {
+	fired := rs.noteCharPick(sinceAccept, now)
+	// Rapid re-rolling is counted across reconnects, not just inside this
+	// connection. Three fast CCs make one churn flag; enough flags from the same
+	// IPID+HDID are a repeat offence even if every session looked clean alone.
+	if count := raidLedgerNoteCharChange(client, now); count >= raidGuardCCFlagLimit() {
+		raidSystem.repeatOffence(client, "rapid character changes", count)
+	}
+	if len(fired) > 0 && !client.closed.Load() {
 		raidGuardEvaluate(client, rs, "character pick")
+	}
+}
+
+// raidGuardOnJoinComplete records one completed handshake in the per-identity
+// ledger. It is called at the end of pktReqDone, after the UID exists, so the
+// first ordinary join scores zero and only an actual reroll loop accumulates.
+func raidGuardOnJoinComplete(client *Client) {
+	if raidGuardExempt(client) {
+		return
+	}
+	if rs := client.raidGuard(); rs == nil {
+		return
+	}
+	now := time.Now()
+	if count := raidLedgerNoteJoin(client, now); count >= raidGuardRerollLimit() {
+		raidSystem.repeatOffence(client, "handshake rerolls", count)
 	}
 }
 
@@ -312,6 +364,9 @@ func raidGuardOnModcall(client *Client, reason string) (acted bool) {
 	rs := client.raidGuard()
 	if rs == nil {
 		return false
+	}
+	if client.guardChallengeActivity() {
+		return true
 	}
 	now := time.Now()
 	attempts := raidObserveModcall(client.Ipid(), now)

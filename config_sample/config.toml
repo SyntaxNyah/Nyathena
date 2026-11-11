@@ -148,6 +148,13 @@ player_lockdown_threshold = 0
 # Set to 0 to disable (lockdown will only block new IPIDs, same as before).
 lockdown_min_playtime = 30
 
+# Seconds a lockdown may stay engaged without being renewed. When it expires
+# the server lifts it automatically and tells staff, so a forgotten lockdown
+# cannot block every genuinely new player indefinitely. Set to 0 to disable the
+# automatic lift (the old behaviour).
+# Default: 300
+lockdown_ttl = 300
+
 # Server-private key used to derive lockdown whitelist passkeys. Each IPID has a
 # unique passkey (HMAC-SHA256 of the IPID, keyed by this value) shown to them in
 # the message they get when lockdown blocks them (rejected at connect, or kicked
@@ -180,9 +187,19 @@ max_message_length = 256
 # Valid units are "s" (second), "m" (minute), "h" (hour), "d" (day), "w" (week).
 default_ban_duration = "3d"
 
-# Sets the number of client connections that can be made from the same IP, also known as "multiclienting".
-# Set to 0 to disable multiclient limiting.
+# Sets the number of client connections allowed from the same DEVICE, keyed by
+# the hashed HDID supplied in the HI packet. This is the multiclient limit:
+# several players behind one NAT each get their own allowance, while one machine
+# opening many tabs is still stopped. Set to 0 to disable per-device limiting.
 multiclient_limit = 16
+
+# Optional per-IP backstop for multiclienting. Unlike multiclient_limit this is
+# keyed on the IPID (IP hash), so it can stop pre-HI connection floods or a
+# household opening an unreasonable total number of clients. Set to 0 to use the
+# automatic safety backstop: 4× multiclient_limit, minimum 16, whenever
+# multiclient_limit is above 0. Set an explicit value to override it.
+# Default: 0 (automatic backstop)
+multiclient_ip_limit = 0
 
 # Sets the URL for the server's WebAO assets.
 # If this is blank, vanilla assets will be used.
@@ -541,6 +558,58 @@ raid_guard_score_kick = 100
 # Default: 160
 raid_guard_score_ban = 160
 
+# Seconds for the accumulated behavioural score to halve. A single false flag
+# (for example, one fast character pick) therefore fades instead of staying on
+# the connection's record for the rest of the session; a sustained burst adds
+# evidence faster than it decays and still reaches an action. 0 disables decay
+# and restores the old lifetime score.
+# Default: 300
+raid_guard_heat_half_life = 300
+
+# --- Repeat-offence counters (behaviour, not score) ---------------------------
+#
+# The score above is per connection and is discarded when the socket closes.
+# These counters are keyed by the connection's IPID + hashed HDID and survive
+# reconnects, so a script that reconnects to clear its score is still visible.
+# They are deliberately behaviour-based: the number of observed rerolls/flags
+# is the trigger, and playtime decides whether the identity is banned (brand
+# new), kicked (established), or only alerted (playtime-exempt).
+
+# Seconds in which completed joins count toward a handshake reroll. The first
+# join is zero; the fourth inside the window is the third reroll.
+# Default: 600
+raid_guard_reroll_window = 600
+
+# Rerolls inside that window before the repeat action fires.
+# Default: 3
+raid_guard_reroll_limit = 3
+
+# Seconds in which three CCs closer together than raid_guard_char_churn_ms
+# make one rapid-character-change flag.
+# Default: 60
+raid_guard_cc_window = 60
+
+# Seconds a rapid-character-change flag stays counted.
+# Default: 1800
+raid_guard_cc_flag_window = 1800
+
+# Rapid-character-change flags before the repeat action fires.
+# Default: 3
+raid_guard_cc_flag_limit = 3
+
+# A guard-issued challenge is not the ordinary join gate: it was issued because
+# the connection already looked automated, so it gets a smaller strike budget
+# and a shorter deadline. Failing either one closes the connection instead of
+# leaving it muted and connected.
+# Default: 2
+raid_guard_challenge_strikes = 2
+
+# Seconds a guard-issued challenge may sit unanswered. 0 is treated as the
+# default rather than "no timeout"; an unanswerable challenge must not outlive
+# the connection it was issued to.
+# Default: 60
+raid_guard_challenge_timeout = 60
+
 # --- Individual signal tuning ---
 #
 # These tune exactly when specific behavioural signals fire. Every signal
@@ -786,6 +855,16 @@ connection_rate_limit = 10
 # Default: 10 seconds
 connection_rate_limit_window = 10
 
+# Heat-scaled admission: percentage applied to connection, message, OOC, ping
+# and new-IP COUNT limits while the server is NOT under attack. 100 uses the
+# configured values everywhere. 200 doubles the normal allowance while leaving
+# the configured values as the strict under-attack limits. Values below 100 are
+# ignored; this only ever relaxes, never tightens.
+# The raid guard must have marked the server under attack before the strict
+# values apply (correlation, arrival burst or modcall fan-out).
+# Default: 100
+admission_normal_scale = 100
+
 # Whether to automatically ban IPs that are repeatedly rejected by the connection rate limit.
 # When an IP has its connection rejected more than conn_flood_autoban_threshold times
 # (within the same connection-rate window), it is banned for default_ban_duration.
@@ -886,6 +965,16 @@ new_ipid_ic_cooldown = 10
 # allowed to send a modcall. This prevents throwaway connections from flooding moderators.
 # Set to 0 to disable. Default: 60 seconds.
 new_ipid_modcall_cooldown = 60
+
+# Normal-operation versions of the three new-IP cooldowns above. 0 means "use
+# the configured value". These apply only while the raid guard has not marked
+# the server under attack, so an operator can keep a strict attack-time cooldown
+# (for example 350 seconds for OOC) without imposing it on a quiet evening.
+# Suggested normal values: OOC 30, IC 5, modcall 120.
+# Defaults: 0 (use the configured values)
+new_ipid_ooc_cooldown_normal = 0
+new_ipid_ic_cooldown_normal = 0
+new_ipid_modcall_cooldown_normal = 0
 
 # Global new-IP rate limit: Maximum number of distinct new IPs (IPIDs that have never
 # connected to this server session before) that can be accepted within the time window below.
@@ -1188,6 +1277,14 @@ join_captcha_action = "mute"
 # 0 disables the timeout (the gate simply stays up until they answer).
 # Default: 180
 join_captcha_timeout = 180
+
+# Seconds a connection may remain shadow-muted after striking out under the
+# "mute" action before it is disconnected. This bounds the zombie lifetime: the
+# muted socket still consumes RAM and a multiclient slot, and a bot that keeps
+# sending heartbeats would otherwise never be reaped. A real player who solves
+# the question is released before this fires. Set to 0 to disable the bound.
+# Default: 300
+join_captcha_mute_timeout = 300
 
 # Also show the question in a client-side popup (the AO2 BB packet) as well as
 # in OOC. Desktop AO2 renders it as a message box, WebAO as a notice. Set false

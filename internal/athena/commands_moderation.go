@@ -177,7 +177,7 @@ func cmdBan(client *Client, args []string, usage string) {
 	}
 	report := reportBuilder.String()
 	client.SendServerMessage(fmt.Sprintf("Banned %v IPID(s).", count))
-	sendPlayerArup()
+	requestPlayerArup()
 	addToBuffer(client, "CMD", fmt.Sprintf("Banned %v from server for %v: %v.", report, *duration, reason), true)
 	alertBannedAccountLinks(seenIPIDs)
 }
@@ -418,7 +418,7 @@ func cmdKick(client *Client, args []string, usage string) {
 	}
 	report := reportBuilder.String()
 	client.SendServerMessage(fmt.Sprintf("Kicked %v clients.", count))
-	sendPlayerArup()
+	requestPlayerArup()
 	addToBuffer(client, "CMD", fmt.Sprintf("Kicked %v from server for reason: %v.", report, reason), true)
 }
 
@@ -1866,7 +1866,11 @@ func cmdLockdown(client *Client, args []string, usage string) {
 
 	// Toggle lockdown.
 	active := !serverLockdown.Load()
-	serverLockdown.Store(active)
+	if active {
+		engageServerLockdown()
+	} else {
+		liftServerLockdown()
+	}
 	if active {
 		clients.ForEach(func(c *Client) {
 			if c.Uid() != -1 && permissions.IsModerator(c.Perms()) {
@@ -1986,7 +1990,7 @@ func cmdBotBan(client *Client, _ []string, _ string) {
 			logger.LogErrorf("while posting botban webhook: %v", err)
 		}
 	}
-	sendPlayerArup()
+	requestPlayerArup()
 }
 
 // cmdSetGlobalNewIPLimit updates the global new-IP rate limit at runtime.

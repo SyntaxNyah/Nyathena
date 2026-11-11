@@ -136,7 +136,7 @@ func raidGuardStatus(client *Client) {
 		"\nScore thresholds (baseline): watch %d, captcha %d, silence %d, kick %d, ban %d.\n",
 		raidGuardInt(config.RaidGuardScoreWatch, 40), raidGuardInt(config.RaidGuardScoreChallenge, 60),
 		raidGuardInt(config.RaidGuardScoreSilence, 80), raidGuardInt(config.RaidGuardScoreKick, 100),
-		raidGuardInt(config.RaidGuardScoreBan, 140)))
+		raidGuardInt(config.RaidGuardScoreBan, raidGuardDefaultScoreBan)))
 
 	// The four playtime tiers, same predicate the lockdown purge, the join
 	// captcha and the repeat-offender autoban read.
@@ -152,6 +152,13 @@ func raidGuardStatus(client *Client) {
 
 	banDur, _ := raidGuardBanDuration()
 	sb.WriteString(fmt.Sprintf("Autoban duration: %v.\n", banDur))
+	halfLife := raidGuardHeatHalfLife()
+	heatText := "disabled"
+	if halfLife > 0 {
+		heatText = fmt.Sprintf("%v (protocol signals x3, slur evidence x2)", halfLife)
+	}
+	sb.WriteString(fmt.Sprintf("Heat decay: %s; normal admission scale %d%% (configured limits apply under attack).\n",
+		heatText, admissionNormalScale()))
 
 	// Modcall rules. Both the scored signal and the deterministic action are
 	// listed, because the deterministic one is the only action in the guard that
@@ -201,6 +208,8 @@ func raidGuardStatus(client *Client) {
 		score   int
 		acted   Verdict
 		signals []string
+		rerolls int
+		ccFlags int
 	}
 	var rows []row
 	clients.ForEach(func(c *Client) {
@@ -209,10 +218,11 @@ func raidGuardStatus(client *Client) {
 			return
 		}
 		score, signals, acted := rs.snapshot()
-		if score == 0 && acted == VerdictClean {
+		rerolls, ccFlags := raidLedgerCounts(c, time.Now())
+		if score == 0 && acted == VerdictClean && rerolls == 0 && ccFlags == 0 {
 			return
 		}
-		rows = append(rows, row{uid: c.Uid(), name: clientDisplayName(c), score: score, acted: acted, signals: signals})
+		rows = append(rows, row{uid: c.Uid(), name: clientDisplayName(c), score: score, acted: acted, signals: signals, rerolls: rerolls, ccFlags: ccFlags})
 	})
 	sort.Slice(rows, func(i, j int) bool { return rows[i].score > rows[j].score })
 
@@ -222,8 +232,12 @@ func raidGuardStatus(client *Client) {
 	} else {
 		var lines []string
 		for _, r := range rows {
-			lines = append(lines, fmt.Sprintf("  UID %d (%s) — score %d, verdict so far: %v\n    signals: %s",
-				r.uid, r.name, r.score, r.acted, strings.Join(r.signals, ", ")))
+			extra := ""
+			if r.rerolls > 0 || r.ccFlags > 0 {
+				extra = fmt.Sprintf("; rerolls %d, char-churn flags %d", r.rerolls, r.ccFlags)
+			}
+			lines = append(lines, fmt.Sprintf("  UID %d (%s) — score %d, verdict so far: %v%s\n    signals: %s",
+				r.uid, r.name, r.score, r.acted, extra, strings.Join(r.signals, ", ")))
 		}
 		sb.WriteString(strings.Join(lines, "\n"))
 	}
@@ -310,7 +324,7 @@ func raidGuardClearOne(target *Client) (cleared bool, liftedCaptcha bool) {
 	// The modcall attempt counter is IPID-scoped and lives outside raidState, so
 	// clearing the connection alone would leave a vouched-for player one attempt
 	// away from the spam threshold. Clear both halves of the escape hatch.
-	raidModcalls.Reset(target.Ipid())
+	raidSystem.corr.modcalls.Reset(target.Ipid())
 
 	if guardRestricted && (target.awaitingCaptcha.Load() || target.captchaRestricted.Load()) {
 		target.releaseJoinCaptcha("raidguard-clear", true)

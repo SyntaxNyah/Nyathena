@@ -55,6 +55,7 @@ package athena
 
 import (
 	"fmt"
+	"math"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -62,7 +63,6 @@ import (
 	"unicode"
 
 	aolib "github.com/AO-Underground/aolib/go/v2"
-	"github.com/MangosArentLiterature/Athena/internal/db"
 	"github.com/MangosArentLiterature/Athena/internal/logger"
 	"github.com/MangosArentLiterature/Athena/internal/permissions"
 	"github.com/xhit/go-str2duration/v2"
@@ -424,6 +424,18 @@ type raidState struct {
 
 	fired SignalKind // bitmask, not an index -- see markFired
 	score int
+	// scoreAt/score are the legacy total used as a fallback when a state was
+	// constructed directly by a test. Real signals populate the per-signal heat
+	// buckets below, so protocol evidence can outlive weak content evidence.
+	scoreAt time.Time
+	heat    [numRaidSignals]float64
+	heatAt  [numRaidSignals]time.Time
+
+	// modcallHeat carries the incremental raidModcallBurstScore curve, which is
+	// paid out before SigModcallSpam itself is declared.
+	modcallHeat   float64
+	modcallHeatAt time.Time
+
 	acted Verdict
 }
 
@@ -464,8 +476,114 @@ func (rs *raidState) markFiredWeighted(k SignalKind, weight int) bool {
 		return false
 	}
 	rs.fired |= bit
+	now := time.Now()
+	rs.addSignalHeatLocked(k, weight, now)
+	// Keep the legacy total in step for tests that inspect or set it directly.
 	rs.score += weight
+	rs.scoreAt = now
 	return true
+}
+
+// addSignalHeatLocked decays one signal's bucket to now and adds weight.
+// Callers hold rs.mu.
+func (rs *raidState) addSignalHeatLocked(k SignalKind, weight int, now time.Time) {
+	rs.heat[k] = decayHeat(rs.heat[k], rs.heatAt[k], now, raidSignalHalfLife(k)) + float64(weight)
+	rs.heatAt[k] = now
+}
+
+// addModcallHeatLocked adds to the incremental modcall curve bucket.
+func (rs *raidState) addModcallHeatLocked(delta int, now time.Time) {
+	if delta == 0 {
+		return
+	}
+	rs.modcallHeat = decayHeat(rs.modcallHeat, rs.modcallHeatAt, now, raidGuardHeatHalfLife()) + float64(delta)
+	rs.modcallHeatAt = now
+	rs.score += delta
+	rs.scoreAt = now
+}
+
+// decayHeat returns value after exponential decay. A zero or negative half-life
+// means "no decay"; a zero timestamp means the value was never heat-tracked.
+func decayHeat(value float64, at, now time.Time, halfLife time.Duration) float64 {
+	if value == 0 || at.IsZero() || halfLife <= 0 {
+		return value
+	}
+	elapsed := now.Sub(at)
+	if elapsed <= 0 {
+		return value
+	}
+	return value * math.Exp2(-elapsed.Seconds()/halfLife.Seconds())
+}
+
+// currentScoreLocked returns the heat remaining at now. If the state has no
+// heat buckets (a test constructed it with an explicit score), the legacy total
+// decays uniformly so the old exact-weight tests still mean what they say.
+func (rs *raidState) currentScoreLocked(now time.Time) float64 {
+	var sum float64
+	hasHeat := false
+	if !rs.modcallHeatAt.IsZero() {
+		hasHeat = true
+		sum += decayHeat(rs.modcallHeat, rs.modcallHeatAt, now, raidGuardHeatHalfLife())
+	}
+	for k := SignalKind(0); k < numRaidSignals; k++ {
+		if rs.heatAt[k].IsZero() {
+			continue
+		}
+		hasHeat = true
+		sum += decayHeat(rs.heat[k], rs.heatAt[k], now, raidSignalHalfLife(k))
+	}
+	if hasHeat {
+		return sum
+	}
+	if rs.score <= 0 || rs.scoreAt.IsZero() {
+		return float64(rs.score)
+	}
+	halfLife := raidGuardHeatHalfLife()
+	if halfLife <= 0 {
+		return float64(rs.score)
+	}
+	elapsed := now.Sub(rs.scoreAt)
+	if elapsed <= 0 {
+		return float64(rs.score)
+	}
+	return float64(rs.score) * math.Exp2(-elapsed.Seconds()/halfLife.Seconds())
+}
+
+// raidSignalHalfLife gives protocol/protocol-adjacent evidence a longer memory
+// than weak content shape signals. The operator's raid_guard_heat_half_life is
+// the baseline: protocol signals last three times as long, severe content twice
+// as long. 0 still disables decay entirely.
+func raidSignalHalfLife(k SignalKind) time.Duration {
+	base := raidGuardHeatHalfLife()
+	if base <= 0 {
+		return 0
+	}
+	switch k {
+	case SigHandshakeAnomaly, SigHandshakeReplay, SigModcallOnJoin, SigModcallSpam:
+		return base * 3
+	case SigSlurSevere, SigSlurFlagged:
+		return base * 2
+	default:
+		return base
+	}
+}
+
+// raidGuardHeatHalfLife is how long it takes a score to halve. A false flag
+// therefore fades instead of staying on the connection's record forever; a
+// sustained burst re-adds heat faster than it decays and still reaches an
+// action. 0 disables decay for operators who want the old lifetime score.
+func raidGuardHeatHalfLife() time.Duration {
+	seconds := 300
+	if config != nil {
+		seconds = config.RaidGuardHeatHalfLife
+		if seconds < 0 {
+			seconds = 300
+		}
+	}
+	if seconds == 0 {
+		return 0
+	}
+	return time.Duration(seconds) * time.Second
 }
 
 // signalWeight is what markFired actually charges for a signal. It is a
@@ -643,7 +761,7 @@ func (rs *raidState) observe(obs Observation) (fired []SignalKind, score int) {
 		mark(SigGlobalSpam)
 	}
 
-	return fired, rs.score
+	return fired, int(math.Round(rs.currentScoreLocked(obs.Now)))
 }
 
 // noteCorrelated is called by the server-wide layer when this connection's text
@@ -811,7 +929,7 @@ func (rs *raidState) noteModcall(ev modcallEvidence) (fired []SignalKind, nuke b
 	threshold := raidGuardModcallMinAttempts()
 	weight := signalWeight(SigModcallSpam)
 	if target := raidModcallBurstScore(ev.Attempts, threshold, weight); target > rs.modcallScore {
-		rs.score += target - rs.modcallScore
+		rs.addModcallHeatLocked(target-rs.modcallScore, time.Now())
 		rs.modcallScore = target
 	}
 	if ev.Attempts >= threshold && rs.markFiredWeighted(SigModcallSpam, 0) {
@@ -844,11 +962,16 @@ func (rs *raidState) noteModcall(ev modcallEvidence) (fired []SignalKind, nuke b
 	return fired, false
 }
 
-// snapshot returns the current score and fired-signal names.
+// snapshot returns the current heat and fired-signal names.
 func (rs *raidState) snapshot() (score int, signals []string, acted Verdict) {
+	return rs.snapshotAt(time.Now())
+}
+
+// snapshotAt is snapshot with an explicit clock, for deterministic decay tests.
+func (rs *raidState) snapshotAt(now time.Time) (score int, signals []string, acted Verdict) {
 	rs.mu.Lock()
 	defer rs.mu.Unlock()
-	return rs.score, rs.firedSignals(), rs.acted
+	return int(math.Round(rs.currentScoreLocked(now))), rs.firedSignals(), rs.acted
 }
 
 // firedCount reports how many distinct signals have fired.
@@ -1012,7 +1135,7 @@ func raidGuardTier(client *Client) (scalePct int, punishable bool) {
 	if permissions.IsModerator(client.Perms()) {
 		return 0, false
 	}
-	secs, err := db.GetPlaytime(client.Ipid())
+	secs, err := cachedPlaytime(client.Ipid())
 	if err != nil {
 		return 0, false // fail open
 	}
@@ -1121,17 +1244,26 @@ func capsRatio(s string) float64 {
 }
 
 // hasRepeatedWord reports whether any word of 3+ characters appears twice.
+// A fixed small array replaces a per-message map allocation: this runs on every
+// IC/OOC line that survives the caps/length checks, and the early-exit bound is
+// all a spam heuristic needs.
 func hasRepeatedWord(s string) bool {
-	seen := make(map[string]struct{}, 8)
+	var seen [8]string
+	n := 0
 	for _, w := range strings.Fields(strings.ToLower(s)) {
 		w = strings.TrimFunc(w, func(r rune) bool { return !unicode.IsLetter(r) && !unicode.IsDigit(r) })
 		if len(w) < 3 {
 			continue
 		}
-		if _, dup := seen[w]; dup {
-			return true
+		for i := 0; i < n; i++ {
+			if seen[i] == w {
+				return true
+			}
 		}
-		seen[w] = struct{}{}
+		if n < len(seen) {
+			seen[n] = w
+			n++
+		}
 	}
 	return false
 }
@@ -1147,7 +1279,7 @@ func isGlobalCommand(s string) bool {
 // raidGuardEnforce applies a verdict, clamped to the operator's configured
 // ceiling and skipped entirely for exempt clients. Alerts staff on every
 // escalation so the guard can never act on a real player unnoticed.
-func raidGuardEnforce(client *Client, rs *raidState, want Verdict, trigger string) {
+func (g *raidGuardSystem) enforce(client *Client, rs *raidState, want Verdict, trigger string) {
 	if client == nil || rs == nil || want == VerdictClean {
 		return
 	}
@@ -1179,15 +1311,13 @@ func raidGuardEnforce(client *Client, rs *raidState, want Verdict, trigger strin
 	// the pending captcha, is as far as two signals can go.
 	want = clampDisconnect(want, rs.firedCount())
 
-	// The challenge rung borrows the join captcha's machinery, so it cannot work
-	// when the operator has turned that off. Degrade it to an alert rather than
-	// silently handing out captchas on a server whose owner disabled them --
-	// and specifically NOT to silence, which without a pending question the
-	// player could answer is harsher than the rung above it, not gentler. If the
-	// behaviour continues the score keeps climbing to kick or ban on its own.
-	if want == VerdictChallenge && !joinCaptchaEnabled() {
-		want = VerdictWatch
-	}
+	// The challenge rung must always do something. It used to degrade to
+	// VerdictWatch when join_captcha was off, which made a score of 60-79 a
+	// permanent no-op: the connection kept its session, kept sending, and the
+	// one-shot signals could never push it any higher. The guard now issues its
+	// own challenge through the same generator even when the global join gate is
+	// disabled (see raidGuardChallenge), and a challenge that times out or is
+	// ignored kicks the connection.
 
 	// Watch is only an alert, so it is safe for anyone; every punitive verdict is
 	// clamped to the operator's configured ceiling and to the connection's
@@ -1201,7 +1331,7 @@ func raidGuardEnforce(client *Client, rs *raidState, want Verdict, trigger strin
 			want = VerdictWatch
 		}
 	}
-	raidGuardAct(client, rs, want, trigger)
+	g.act(client, rs, want, trigger)
 }
 
 // raidGuardAct applies an already-decided verdict: the escalation latch, the
@@ -1215,7 +1345,7 @@ func raidGuardEnforce(client *Client, rs *raidState, want Verdict, trigger strin
 //
 // Reports whether an action was actually taken. A connection already acted on
 // at this rung or higher is left alone -- escalate only ever moves forward.
-func raidGuardAct(client *Client, rs *raidState, want Verdict, trigger string) bool {
+func (g *raidGuardSystem) act(client *Client, rs *raidState, want Verdict, trigger string) bool {
 	if client == nil || rs == nil || want == VerdictClean {
 		return false
 	}
@@ -1230,9 +1360,9 @@ func raidGuardAct(client *Client, rs *raidState, want Verdict, trigger string) b
 	case VerdictWatch:
 		// Alert only.
 	case VerdictChallenge:
-		raidGuardChallenge(client)
+		g.challenge(client)
 	case VerdictSilence:
-		raidGuardSilence(client)
+		g.silence(client)
 	case VerdictKick:
 		client.SendSync(&aolib.KK{Reason: "Disconnected by the raid guard. If you are a real player caught by " +
 			"this, reconnect and say so in OOC -- staff have been alerted and can clear it."})
@@ -1273,7 +1403,7 @@ func raidGuardBrandNew(client *Client, rs *raidState) bool {
 	known, secs := rs.playtimeKnown, rs.playtimeSecs
 	rs.mu.Unlock()
 	if !known {
-		read, err := db.GetPlaytime(client.Ipid())
+		read, err := cachedPlaytime(client.Ipid())
 		if err != nil {
 			return false // fail open
 		}
@@ -1336,7 +1466,7 @@ func raidGuardModcallNuke(client *Client, rs *raidState, trigger string) bool {
 		// fall through to the scored path, which will alert.
 		return false
 	}
-	return raidGuardAct(client, rs, want, trigger)
+	return raidSystem.act(client, rs, want, trigger)
 }
 
 // raidGuardSinceJoin is how long this connection has been in the game, for the
@@ -1364,12 +1494,20 @@ func (client *Client) raidGuard() *raidState {
 	if client == nil || !raidGuardActive.Load() {
 		return nil
 	}
+	// Fast path: once the state exists, every IC/OOC line can read it without
+	// taking client.mu. The pointer is published after the state is fully
+	// constructed; raidState is self-synchronised.
+	if state := client.raidFast.Load(); state != nil {
+		return state
+	}
 	client.mu.Lock()
-	defer client.mu.Unlock()
 	if client.raid == nil {
 		client.raid = newRaidState()
 	}
-	return client.raid
+	state := client.raid
+	client.mu.Unlock()
+	client.raidFast.Store(state)
+	return state
 }
 
 // resetRaidGuard clears a connection's accumulated evidence. Used by
@@ -1381,6 +1519,7 @@ func (client *Client) resetRaidGuard() {
 	client.mu.Lock()
 	client.raid = nil
 	client.mu.Unlock()
+	client.raidFast.Store(nil)
 }
 
 // minSignalsToDisconnect is how many distinct signals must fire before the guard
@@ -1410,19 +1549,21 @@ func raidBanAllowed(correlatedAcrossIPIDs, serverUnderAttack bool) bool {
 	return correlatedAcrossIPIDs && serverUnderAttack
 }
 
-// raidGuardChallenge forces a join captcha onto a connection the guard finds
-// suspicious, even one the captcha's own exemptions would have skipped.
+// raidGuardChallenge forces a verification question onto a connection the
+// guard finds suspicious, even one the join captcha's own exemptions would
+// have skipped and even when the global join captcha switch is off.
 //
-// issueJoinCaptcha re-checks those exemptions itself and so cannot be reused
-// here: the whole point is that this connection has *earned* a question through
-// its behaviour, which is a different judgement from "we have never seen this
-// IPID before". A client already awaiting or restricted by the captcha is left
-// alone rather than being handed a fresh question.
-func raidGuardChallenge(client *Client) {
-	// Also checked by raidGuardEnforce, which degrades the verdict before
-	// getting here; repeated so no future caller can hand out a captcha on a
-	// server that has the feature switched off.
-	if !joinCaptchaEnabled() {
+// issueJoinCaptcha re-checks the operator's join-gate policy and cannot be
+// reused here: the whole point is that this connection has *earned* a question
+// through its behaviour. A client already awaiting or restricted by the
+// captcha is left alone rather than being handed a fresh question.
+//
+// A guard-issued challenge is deliberately not silent: it must be resolvable
+// with /verify (cmdVerify consults guardChallenge) and it must terminate the
+// connection when it is not resolved. A challenge with no answer path is just a
+// longer-lived zombie.
+func (g *raidGuardSystem) challenge(client *Client) {
+	if client == nil || client.closed.Load() {
 		return
 	}
 	if client.awaitingCaptcha.Load() || client.captchaRestricted.Load() {
@@ -1432,15 +1573,23 @@ func raidGuardChallenge(client *Client) {
 	if !ok {
 		c = pickJoinChallenge(client.Ipid())
 	}
+	if strings.TrimSpace(c.Prompt) == "" {
+		// No question could be generated. Do not leave the connection in a
+		// state it cannot resolve; close it with an explanation instead.
+		client.SendSync(&aolib.KK{Reason: "Disconnected by the raid guard: verification could not be issued. Reconnect in a moment."})
+		client.markClosed()
+		return
+	}
 	client.mu.Lock()
 	client.pendingJoinChallenge = c
 	client.mu.Unlock()
 	client.captchaStrikes.Store(0)
+	client.guardChallenge.Store(true)
 	client.awaitingCaptcha.Store(true)
 
 	client.SendServerMessage(fmt.Sprintf(
-		"%s\n\n    %s\n\n%s\n\nSomething about this connection looked automated, so we need one answer before you can chat.",
-		captchaBanner, c.Prompt, c.Hint))
+		"%s\n\n    %s\n\n%s\n\nSomething about this connection looked automated, so we need one answer before you can chat. Answer with /verify %s.",
+		captchaBanner, c.Prompt, c.Hint, "<answer>"))
 	client.sendCaptchaPopup(c)
 	go client.joinCaptchaTimeoutWatch()
 }
@@ -1448,10 +1597,19 @@ func raidGuardChallenge(client *Client) {
 // raidGuardSilence quarantines a connection using the join captcha's own
 // restricted-delivery path: messages echo back to the sender so their client
 // looks normal, and reach nobody else. The pending challenge is left in place
-// so a real player caught here can still answer it and free themselves without
-// waiting for staff.
-func raidGuardSilence(client *Client) {
-	client.awaitingCaptcha.Store(false)
+// (and issued first if there is not one) so a real player caught here can answer
+// it and free themselves; the challenge timeout then closes a connection that
+// does not.
+func (g *raidGuardSystem) silence(client *Client) {
+	if client == nil || client.closed.Load() {
+		return
+	}
+	if !client.awaitingCaptcha.Load() {
+		g.challenge(client)
+		if client.closed.Load() {
+			return
+		}
+	}
 	if client.captchaRestricted.CompareAndSwap(false, true) {
 		activeCaptchaRestricted.Add(1)
 	}
