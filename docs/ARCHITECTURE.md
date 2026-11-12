@@ -131,10 +131,11 @@ the old per-player packet burst.
 
 Character changes are coalesced as well:
 
-- `CharsCheck` is one ~9 KB payload per area (one entry per character). A burst
-  of `CC`s marks the area dirty and the flusher sends at most one `CharsCheck`
-  per area every 250 ms (`charscheck_coalesce.go`), instead of one full-list
-  broadcast per character change.
+- `CharsCheck` is one ~9 KB payload per area (one entry per character). The
+  first change after an idle period is sent immediately, so ordinary character
+  changes and opening char select stay instant; rapid changes inside the 250 ms
+  window are coalesced into one trailing update (`charscheck_coalesce.go`).
+  This avoids one full-list broadcast per character change during a CC storm.
 - Char-name and showname `PU` updates keep only the latest value per
   `(client, field)` and publish on a 200 ms ticker
   (`playerdata_coalesce.go`). A 319-`CC` minute therefore produces a handful

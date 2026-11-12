@@ -17,16 +17,28 @@ package athena
 
 import "testing"
 
-// A burst of character changes must collapse into one CharsCheck per area.
-// Before coalescing, every CC broadcast the full ~5,000-entry list to every
-// area member; a 319-CC minute became thousands of full-list sends.
+// The first change is immediate, and a burst that follows within the debounce
+// window collapses into one trailing CharsCheck per area. Before coalescing,
+// every CC broadcast the full ~5,000-entry list to every area member; a 319-CC
+// minute became thousands of full-list sends.
 func TestRequestCharsCheckCoalescesBurst(t *testing.T) {
 	prev := clients
 	t.Cleanup(func() { clients = prev })
 	cl, a := benchClients(3)
 	clients = cl
 
-	for i := 0; i < 100; i++ {
+	// The leading edge must be immediate for ordinary single changes and for
+	// opening the character-select screen.
+	requestCharsCheck(a)
+	for c := range cl.list {
+		select {
+		case <-c.sendCh:
+		default:
+			t.Fatal("client received no immediate CharsCheck")
+		}
+	}
+
+	for i := 0; i < 99; i++ {
 		requestCharsCheck(a)
 	}
 	flushCharsCheck()
@@ -35,11 +47,11 @@ func TestRequestCharsCheckCoalescesBurst(t *testing.T) {
 		select {
 		case <-c.sendCh:
 		default:
-			t.Fatal("client received no coalesced CharsCheck")
+			t.Fatal("client received no trailing CharsCheck")
 		}
 		select {
 		case <-c.sendCh:
-			t.Fatal("client received more than one CharsCheck for one burst")
+			t.Fatal("client received more than one trailing CharsCheck for one burst")
 		default:
 		}
 	}
@@ -73,6 +85,11 @@ func TestRequestCharsCheckScopesPerArea(t *testing.T) {
 		case <-c.sendCh:
 		default:
 			t.Fatal("client received no CharsCheck after multi-area flush")
+		}
+		select {
+		case <-c.sendCh:
+			t.Fatal("client received an unexpected duplicate CharsCheck")
+		default:
 		}
 	}
 }

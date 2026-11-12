@@ -22,9 +22,11 @@
 // and a large amount of serialization/queue pressure.
 //
 // The client only needs the latest availability list, not every intermediate
-// one. Mark the area dirty and flush at most four times per second. A burst of
-// 319 CCs in one minute becomes at most 240 broadcasts per area instead of
-// 319 x area population.
+// one. The first change after an idle period is sent immediately, so normal
+// play and opening char select stay instant; changes that arrive within the
+// 250 ms window are coalesced into one trailing update. A burst of 319 CCs in
+// one minute therefore costs at most one immediate plus a handful of trailing
+// broadcasts per area, instead of 319 x area population.
 package athena
 
 import (
@@ -37,22 +39,48 @@ import (
 
 const charsCheckDebounce = 250 * time.Millisecond
 
+type charsCheckState struct {
+	mu    sync.Mutex
+	last  time.Time
+	dirty bool
+}
+
 var (
-	charsCheckDirty       sync.Map // map[*area.Area]struct{}
+	charsCheckStates      sync.Map // map[*area.Area]*charsCheckState
 	charsCheckFlusherOnce sync.Once
 )
 
-// requestCharsCheck marks an area's character availability list dirty and
-// ensures the flusher is running. Callers that previously broadcast CharsCheck
-// directly should use this instead.
+// requestCharsCheck broadcasts immediately when the area has not sent a
+// CharsCheck recently, otherwise marks it for the trailing flush. Callers that
+// previously broadcast CharsCheck directly should use this instead.
 func requestCharsCheck(a *area.Area) {
 	if a == nil {
 		return
 	}
-	charsCheckDirty.Store(a, struct{}{})
+	st := charsCheckStateFor(a)
+	st.mu.Lock()
+	now := time.Now()
+	if st.last.IsZero() || now.Sub(st.last) >= charsCheckDebounce {
+		st.last = now
+		st.dirty = false
+		st.mu.Unlock()
+		broadcastToAreaOnce(a, charsCheckPacket(a))
+		return
+	}
+	st.dirty = true
+	st.mu.Unlock()
+
 	charsCheckFlusherOnce.Do(func() {
 		go charsCheckFlusher()
 	})
+}
+
+func charsCheckStateFor(a *area.Area) *charsCheckState {
+	if v, ok := charsCheckStates.Load(a); ok {
+		return v.(*charsCheckState)
+	}
+	v, _ := charsCheckStates.LoadOrStore(a, &charsCheckState{})
+	return v.(*charsCheckState)
 }
 
 func charsCheckFlusher() {
@@ -63,20 +91,26 @@ func charsCheckFlusher() {
 	}
 }
 
-// flushCharsCheck sends one CharsCheck per dirty area. Split out so tests can
-// run it deterministically without sleeping.
+// flushCharsCheck sends one trailing CharsCheck per dirty area. Split out so
+// tests can run it deterministically without sleeping.
 func flushCharsCheck() {
-	var dirty []*area.Area
-	charsCheckDirty.Range(func(key, _ any) bool {
-		if a, ok := key.(*area.Area); ok {
-			dirty = append(dirty, a)
+	charsCheckStates.Range(func(key, value any) bool {
+		a, ok := key.(*area.Area)
+		st, ok2 := value.(*charsCheckState)
+		if !ok || !ok2 {
+			return true
 		}
-		charsCheckDirty.Delete(key)
+		st.mu.Lock()
+		if !st.dirty {
+			st.mu.Unlock()
+			return true
+		}
+		st.dirty = false
+		st.last = time.Now()
+		st.mu.Unlock()
+		broadcastToAreaOnce(a, charsCheckPacket(a))
 		return true
 	})
-	for _, a := range dirty {
-		broadcastToAreaOnce(a, charsCheckPacket(a))
-	}
 }
 
 // charsCheckPacket builds the full availability payload for one area.
