@@ -415,17 +415,6 @@ func (a *Area) SwitchChar(old int, new int) bool {
 	}
 }
 
-// ClearChar releases a character slot without changing the area's player
-// count. Used only to repair a stale "taken" bit when no connected client in
-// the area actually holds that slot.
-func (a *Area) ClearChar(char int) {
-	a.mu.Lock()
-	if char >= 0 && char < len(a.taken) {
-		a.taken[char] = false
-	}
-	a.mu.Unlock()
-}
-
 // RemoveChar removes a player from the area.
 func (a *Area) RemoveChar(char int) {
 	a.mu.Lock()

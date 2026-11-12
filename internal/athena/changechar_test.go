@@ -55,21 +55,6 @@ func TestChangeCharacterIdempotent(t *testing.T) {
 	}
 }
 
-// A slot marked taken by a connection that is no longer present must not lock
-// every player out of that character forever.
-func TestChangeCharacterRepairsStaleSlot(t *testing.T) {
-	a, c, _ := setupChangeCharTest(t)
-	a.AddChar(1) // stale occupancy: no connected client actually holds char 1
-
-	c.ChangeCharacter(1)
-	if got := c.CharID(); got != 1 {
-		t.Fatalf("stale slot was not repaired; char=%d, want 1", got)
-	}
-	if !a.IsTaken(1) {
-		t.Error("character 1 should be held by the client after repair")
-	}
-}
-
 // A genuinely taken slot must produce feedback so the client stops waiting at
 // spectator, rather than being silently ignored.
 func TestChangeCharacterTakenSlotResponds(t *testing.T) {

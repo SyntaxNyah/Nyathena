@@ -2378,20 +2378,12 @@ func (client *Client) ChangeCharacter(id int) {
 		return
 	}
 	if !a.SwitchChar(client.CharID(), id) {
-		// A stale taken bit can survive a crashed/aborted connection: no
-		// connected client in this area actually holds the slot. Repair it and
-		// retry once instead of leaving the player stuck at spectator.
-		if findCharHolder(a, id) == nil {
-			a.ClearChar(id)
-		}
-		if !a.SwitchChar(client.CharID(), id) {
-			// The slot really is taken. Re-send the availability list and
-			// explain why nothing moved; silently ignoring the CC leaves the
-			// client retrying forever at spectator.
-			client.Send(&aolib.CharsCheck{Taken: charAvailabilities(a.Taken())})
-			client.SendServerMessage("That character is already taken. Please pick another one.")
-			return
-		}
+		// The slot was taken between the client's CharsCheck and this request.
+		// Re-send the availability list and explain why nothing moved; silently
+		// ignoring the CC leaves the client retrying forever at spectator.
+		client.Send(&aolib.CharsCheck{Taken: charAvailabilities(a.Taken())})
+		client.SendServerMessage("That character is already taken. Please pick another one.")
+		return
 	}
 	client.SetCharID(id)
 	// Do not reset showname here; it is set from IC messages so the
