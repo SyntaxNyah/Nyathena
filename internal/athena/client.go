@@ -1519,11 +1519,16 @@ func (client *Client) KickForCensorTrip() {
 
 // CurrentCharacter returns the client's current character name.
 func (client *Client) CurrentCharacter() string {
-	if client.CharID() == -1 {
+	id := client.CharID()
+	chars := getCharacters()
+	if id < 0 || id >= len(chars) {
+		// -1 is the normal spectator state. An out-of-range id can also be
+		// observed briefly while a test or an append-only characters.txt reload
+		// clears the roster; reading it must never panic the caller (the PU
+		// coalescer re-reads this value from a background flusher).
 		return "Spectator"
-	} else {
-		return getCharacters()[client.CharID()]
 	}
+	return chars[id]
 }
 
 // timeout closes an unjoined client's connection after 1 minute.

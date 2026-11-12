@@ -125,8 +125,23 @@ func TestRequestPlayerDataDoesNotOverwriteNewerShowname(t *testing.T) {
 	}
 }
 
-// A player who disconnects before the flush must not have a queued PU applied
-// to a reused UID.
+// The PU flusher can run after a test (or a reload) has cleared the roster;
+// CurrentCharacter must report a safe spectator value rather than panic.
+func TestCurrentCharacterOutOfRange(t *testing.T) {
+	orig := getCharacters()
+	setCharacters(nil)
+	t.Cleanup(func() { setCharacters(orig) })
+
+	c := &Client{char: 1}
+	if got := c.CurrentCharacter(); got != "Spectator" {
+		t.Fatalf("CurrentCharacter with empty roster = %q, want Spectator", got)
+	}
+	c.char = -1
+	if got := c.CurrentCharacter(); got != "Spectator" {
+		t.Fatalf("CurrentCharacter for spectator = %q, want Spectator", got)
+	}
+}
+
 func TestRequestPlayerDataDropsClosedClient(t *testing.T) {
 	prev := clients
 	t.Cleanup(func() { clients = prev })
