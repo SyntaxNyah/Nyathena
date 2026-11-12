@@ -2366,34 +2366,17 @@ func (client *Client) CanAlterEvidence() bool {
 
 // ChangeCharacter changes the client's character to the given character.
 func (client *Client) ChangeCharacter(id int) {
-	a := client.Area()
-	if a == nil {
-		return
-	}
-	if client.CharID() == id {
-		// WebAO resends CC when it did not receive the PV quickly enough. If the
-		// slot is already ours, acknowledge the retry instead of treating our
-		// own character as "taken" and silently doing nothing.
+	if client.Area().SwitchChar(client.CharID(), id) {
+		client.SetCharID(id)
+		// Do not reset showname here; it is set from IC messages so the
+		// player's display name (e.g. "Adachi") persists across character
+		// changes.
 		client.Send(&aolib.PV{PlayerID: 0, CharID: id})
-		return
-	}
-	if !a.SwitchChar(client.CharID(), id) {
-		// The slot was taken between the client's CharsCheck and this request.
-		// Re-send the availability list and explain why nothing moved; silently
-		// ignoring the CC leaves the client retrying forever at spectator.
-		client.Send(&aolib.CharsCheck{Taken: charAvailabilities(a.Taken())})
-		client.SendServerMessage("That character is already taken. Please pick another one.")
-		return
-	}
-	client.SetCharID(id)
-	// Do not reset showname here; it is set from IC messages so the
-	// player's display name (e.g. "Adachi") persists across character
-	// changes.
-	client.Send(&aolib.PV{PlayerID: 0, CharID: id})
-	broadcastToAreaOnce(a, &aolib.CharsCheck{Taken: charAvailabilities(a.Taken())})
-	if client.Uid() != -1 {
-		broadcastToAll(&aolib.PU{ID: client.Uid(), Type: aolib.PlayerDataTypeCharName, Data: client.CurrentCharacter()})
-		broadcastToAll(&aolib.PU{ID: client.Uid(), Type: aolib.PlayerDataTypeShowname, Data: decode(client.Showname())})
+		broadcastToAreaOnce(client.Area(), &aolib.CharsCheck{Taken: charAvailabilities(client.Area().Taken())})
+		if client.Uid() != -1 {
+			broadcastToAll(&aolib.PU{ID: client.Uid(), Type: aolib.PlayerDataTypeCharName, Data: client.CurrentCharacter()})
+			broadcastToAll(&aolib.PU{ID: client.Uid(), Type: aolib.PlayerDataTypeShowname, Data: decode(client.Showname())})
+		}
 	}
 }
 

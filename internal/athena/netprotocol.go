@@ -386,10 +386,11 @@ func getRandomFreeChar(client *Client) int {
 
 // Handles CC#%
 func pktChangeChar(client *Client, p *aolib.Packet) {
-	// Character selection is not chat. The shared message limiter used to kick
-	// players who clicked through several characters, or whose client retried
-	// a CC after a missed PV. Rapid CC abuse is handled by the raid guard's
-	// char-churn signal and the raw packet rate limiter instead.
+	// Check rate limit first
+	if client.CheckRateLimit() {
+		client.KickForRateLimit()
+		return
+	}
 	cc, err := aolib.ParseCC(p.Body)
 	if err != nil {
 		return
