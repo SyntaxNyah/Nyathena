@@ -1657,11 +1657,11 @@ func alertRaidGuard(client *Client, v Verdict, score int, signals []string) {
 		areaName = a.Name()
 	}
 	selfService := ""
-	if v == VerdictSilence && !joinCaptchaEnabled() {
-		// Normally a quarantined player frees themselves by answering the
-		// pending captcha. With the captcha switched off there is no question to
-		// answer, so staff are the only way out and need to know that.
-		selfService = "\nThe join captcha is off, so they CANNOT free themselves — this needs staff."
+	if v == VerdictSilence && !client.awaitingCaptcha.Load() {
+		// silence issues a guard challenge even when the join captcha is off,
+		// so a pending challenge means the player can still free themselves.
+		// Only warn staff when no challenge is pending.
+		selfService = "\nNo verification challenge is pending on this connection, so it may need staff."
 	}
 	msg := fmt.Sprintf("%s (UID %d, IPID %s) in %s — raid guard: %s (score %d).\nSignals: %s%s\n"+
 		"If this is a real player, clear them with /raidguard clear %d.",

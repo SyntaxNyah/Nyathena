@@ -2161,7 +2161,7 @@ func (client *Client) ChangeArea(a *area.Area) bool {
 		// mirrors pktReqDone's ordering and matches Akashi's behaviour.
 		client.Send(&aolib.DONE{})
 	} else {
-		broadcastToAreaOnce(a, &aolib.CharsCheck{Taken: charAvailabilities(a.Taken())})
+		requestCharsCheck(a)
 	}
 	// BN always last — after any DONE — so desk-overlay images never load
 	// against an unrendered viewport on WebAO (same fix as initial join).
@@ -2368,10 +2368,11 @@ func (client *Client) ChangeCharacter(id int) {
 		// player's display name (e.g. "Adachi") persists across character
 		// changes.
 		client.Send(&aolib.PV{PlayerID: 0, CharID: id})
-		broadcastToAreaOnce(client.Area(), &aolib.CharsCheck{Taken: charAvailabilities(client.Area().Taken())})
+		a := client.Area()
+		requestCharsCheck(a)
 		if client.Uid() != -1 {
-			broadcastToAll(&aolib.PU{ID: client.Uid(), Type: aolib.PlayerDataTypeCharName, Data: client.CurrentCharacter()})
-			broadcastToAll(&aolib.PU{ID: client.Uid(), Type: aolib.PlayerDataTypeShowname, Data: decode(client.Showname())})
+			requestPlayerData(client, aolib.PlayerDataTypeCharName, client.CurrentCharacter())
+			requestPlayerData(client, aolib.PlayerDataTypeShowname, decode(client.Showname()))
 		}
 	}
 }
@@ -2676,7 +2677,7 @@ func (client *Client) forceChangeArea(a *area.Area) {
 		// must initialize the viewport before desk-overlay images load.
 		client.Send(&aolib.DONE{})
 	} else {
-		broadcastToAreaOnce(a, &aolib.CharsCheck{Taken: charAvailabilities(a.Taken())})
+		requestCharsCheck(a)
 	}
 	// BN always after any DONE so desk overlays load correctly on WebAO.
 	client.Send(&aolib.BN{Background: a.Background()})

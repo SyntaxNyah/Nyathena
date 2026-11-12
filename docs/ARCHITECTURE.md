@@ -129,6 +129,19 @@ broadcast likewise uses one client-list sweep and concatenates Fanta frames per
 recipient. `PU` types 1–3 (character name, showname, area ID) were the bulk of
 the old per-player packet burst.
 
+Character changes are coalesced as well:
+
+- `CharsCheck` is one ~9 KB payload per area (one entry per character). A burst
+  of `CC`s marks the area dirty and the flusher sends at most one `CharsCheck`
+  per area every 250 ms (`charscheck_coalesce.go`), instead of one full-list
+  broadcast per character change.
+- Char-name and showname `PU` updates keep only the latest value per
+  `(client, field)` and publish on a 200 ms ticker
+  (`playerdata_coalesce.go`). A 319-`CC` minute therefore produces a handful
+  of updates per player rather than two full-server broadcasts per change.
+  Queued updates are dropped if the client disconnected, so a reused UID cannot
+  receive a stale character name.
+
 ## 6. Anti-raid surfaces
 
 | Surface | Where | Notes |
