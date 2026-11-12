@@ -78,9 +78,22 @@ func flushPlayerData() {
 		if !ok || k.client == nil || k.client.closed.Load() || k.client.Uid() != k.uid {
 			return true
 		}
-		if data, ok := value.(string); ok {
-			packets = append(packets, &aolib.PU{ID: k.uid, Type: k.typ, Data: data})
+		data, ok := value.(string)
+		if !ok {
+			return true
 		}
+		// A moderator command (e.g. /showname) may have published a newer
+		// value while this update was queued. Re-read char name/showname at
+		// flush time so the trailing batch can never overwrite it with the
+		// snapshot captured at request time. Other PU types keep the value
+		// supplied by the caller.
+		switch k.typ {
+		case aolib.PlayerDataTypeCharName:
+			data = k.client.CurrentCharacter()
+		case aolib.PlayerDataTypeShowname:
+			data = decode(k.client.Showname())
+		}
+		packets = append(packets, &aolib.PU{ID: k.uid, Type: k.typ, Data: data})
 		return true
 	})
 	if len(packets) > 0 {
