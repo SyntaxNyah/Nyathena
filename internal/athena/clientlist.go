@@ -28,6 +28,7 @@ type ClientList struct {
 	list       map[*Client]struct{}
 	uidIndex   map[int]*Client
 	ipidCounts map[string]int
+	hdidCounts map[string]int
 	mu         sync.RWMutex
 }
 
@@ -51,6 +52,23 @@ func (cl *ClientList) RegisterUID(c *Client) {
 	cl.mu.Unlock()
 }
 
+// RegisterHDID inserts c into the HDID count once its HI has supplied one.
+// Called from pktHdid; idempotent so a repeated call cannot double-count.
+func (cl *ClientList) RegisterHDID(c *Client) {
+	hdid := c.Hdid()
+	if hdid == "" {
+		return
+	}
+	cl.mu.Lock()
+	if cl.hdidCounts == nil {
+		cl.hdidCounts = make(map[string]int)
+	}
+	if c.hdidCounted.CompareAndSwap(false, true) {
+		cl.hdidCounts[hdid]++
+	}
+	cl.mu.Unlock()
+}
+
 // RemoveClient removes a client from the list.
 func (cl *ClientList) RemoveClient(c *Client) {
 	cl.mu.Lock()
@@ -62,6 +80,13 @@ func (cl *ClientList) RemoveClient(c *Client) {
 		delete(cl.ipidCounts, c.Ipid())
 	} else {
 		cl.ipidCounts[c.Ipid()] = n - 1
+	}
+	if hdid := c.Hdid(); hdid != "" && c.hdidCounted.CompareAndSwap(true, false) && cl.hdidCounts != nil {
+		if n := cl.hdidCounts[hdid]; n <= 1 {
+			delete(cl.hdidCounts, hdid)
+		} else {
+			cl.hdidCounts[hdid] = n - 1
+		}
 	}
 	cl.mu.Unlock()
 }
@@ -103,6 +128,18 @@ func (cl *ClientList) GetClientByUID(uid int) *Client {
 func (cl *ClientList) CountByIPID(ipid string) int {
 	cl.mu.RLock()
 	n := cl.ipidCounts[ipid]
+	cl.mu.RUnlock()
+	return n
+}
+
+// CountByHDID returns the number of connected clients with the given hashed
+// HDID. O(1) lookup; used by the per-device multiclient limit.
+func (cl *ClientList) CountByHDID(hdid string) int {
+	if hdid == "" {
+		return 0
+	}
+	cl.mu.RLock()
+	n := cl.hdidCounts[hdid]
 	cl.mu.RUnlock()
 	return n
 }

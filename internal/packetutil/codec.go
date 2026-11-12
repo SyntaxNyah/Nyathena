@@ -8,15 +8,60 @@ import (
 	aolib "github.com/AO-Underground/aolib/go/v2"
 )
 
-// customCodecs holds the registered codecs for Nyathena's nonstandard headers.
-// aolib keeps its own registry private and only dispatches custom packets via
-// the session API, so Nyathena tracks them here for its own wire dispatch.
-var customCodecs = map[string]aolib.Codec{}
+// Codec is a both-wire codec for a custom header. It is packetutil's own
+// type-erased shape (aolib 2.6.0's typed RegisterPacket is wrapped below), kept
+// so the outbound encode path can dispatch any payload without a type switch.
+type Codec struct {
+	EncodeFanta func(p any) ([]string, error)
+	DecodeFanta func(args []string) (any, error)
+	EncodeJSON  func(p any) ([]byte, error)
+	DecodeJSON  func(raw []byte) (any, error)
+}
 
-// RegisterCodec registers a both-wire codec for a custom header, both with
-// aolib and in Nyathena's dispatch table.
-func RegisterCodec(header string, c aolib.Codec) {
-	aolib.RegisterCodec(header, c)
+// customCodecs holds the registered codecs for Nyathena's nonstandard headers.
+// aolib keeps its own registry private, so Nyathena tracks them here for its
+// own outbound wire dispatch.
+var customCodecs = map[string]Codec{}
+
+// Register installs a both-wire codec for a custom header in aolib (typed, for
+// the session's inbound decode + OnCustom dispatch) and in packetutil's table
+// (type-erased, for the outbound encode path). T is the inbound payload type the
+// codec's Decode* functions return; for bidirectional headers (MS, VS_JOIN/…) the
+// outbound direction uses a different payload, which packetutil's own Encode
+// handles, so the aolib-registered Encode closures are simply unused.
+func Register[T any](header string, c Codec) {
+	customCodecs[header] = c
+	aolib.RegisterPacket(header, aolib.PacketOptions[T]{
+		Fanta: &aolib.Fanta[T]{
+			Encode: func(t T) ([]string, error) { return c.EncodeFanta(t) },
+			Decode: func(args []string) (T, error) {
+				v, err := c.DecodeFanta(args)
+				if err != nil {
+					var zero T
+					return zero, err
+				}
+				return v.(T), nil
+			},
+		},
+		JSON: &aolib.JSONForm[T]{
+			Encode: func(t T) ([]byte, error) { return c.EncodeJSON(t) },
+			Decode: func(raw []byte) (T, error) {
+				v, err := c.DecodeJSON(raw)
+				if err != nil {
+					var zero T
+					return zero, err
+				}
+				return v.(T), nil
+			},
+		},
+	})
+}
+
+// RegisterLocal registers a codec in packetutil's outbound dispatch table only,
+// without aolib.RegisterPacket. Used for headers aolib already models canonically
+// (MS) but whose Nyathena outbound shape carries extra fields (blips,
+// additional_chars) the canonical type can't represent.
+func RegisterLocal(header string, c Codec) {
 	customCodecs[header] = c
 }
 
@@ -54,61 +99,17 @@ func Decode(raw []byte, mode aolib.WireMode) (any, error) {
 		return aolib.Decode(raw, mode)
 	}
 
-	header, err := jsonHeader(raw)
+	header, err := aolib.ReadHeader(raw)
 	if err != nil {
 		return nil, err
 	}
 	if c, ok := customCodecs[header]; ok {
-		return c.DecodeJSON(string(raw))
+		return c.DecodeJSON(raw)
 	}
 	return aolib.Decode(raw, mode)
 }
 
-// DecodeToBody parses a raw wire frame into its header and positional body.
-// This is Nyathena's positional dispatch entry point: FantaCode is positional
-// already, and JSON is decoded to its typed form and folded back to positional
-// args (so every existing Parse* handler keeps working). Custom headers route
-// through their codec.
-func DecodeToBody(raw []byte, mode aolib.WireMode) (string, []string, error) {
-	if mode == aolib.WireFanta {
-		pkt, err := aolib.NewPacket(strings.TrimSuffix(string(raw), "%"))
-		if err != nil {
-			return "", nil, err
-		}
-		return pkt.Header, pkt.Body, nil
-	}
-
-	header, err := jsonHeader(raw)
-	if err != nil {
-		return "", nil, err
-	}
-	if c, ok := customCodecs[header]; ok {
-		p, err := c.DecodeJSON(string(raw))
-		if err != nil {
-			return "", nil, err
-		}
-		args, err := c.EncodeFanta(p)
-		if err != nil {
-			return "", nil, err
-		}
-		return header, args, nil
-	}
-
-	p, err := aolib.Decode(raw, aolib.WireJSON)
-	if err != nil {
-		return "", nil, err
-	}
-	switch v := p.(type) {
-	case aolib.Outgoing:
-		return header, v.Args(), nil
-	case *aolib.Packet:
-		return v.Header, v.Body, nil
-	default:
-		return header, nil, nil
-	}
-}
-
-func encodeCustom(header string, p any, c aolib.Codec, mode aolib.WireMode) ([]byte, error) {
+func encodeCustom(header string, p any, c Codec, mode aolib.WireMode) ([]byte, error) {
 	switch mode {
 	case aolib.WireFanta:
 		args, err := c.EncodeFanta(p)
@@ -121,7 +122,7 @@ func encodeCustom(header string, p any, c aolib.Codec, mode aolib.WireMode) ([]b
 		if err != nil {
 			return nil, err
 		}
-		return ensureHeader([]byte(raw), header)
+		return ensureHeader(raw, header)
 	default:
 		return nil, fmt.Errorf("packetutil: unknown wire mode %d", mode)
 	}
@@ -148,19 +149,53 @@ func ensureHeader(raw []byte, header string) ([]byte, error) {
 	return json.Marshal(obj)
 }
 
-func jsonHeader(raw []byte) (string, error) {
-	var obj map[string]json.RawMessage
-	if err := json.Unmarshal(raw, &obj); err != nil {
-		return "", err
+// escapeWireArgs escapes positional args for Fanta framing so aolib's decoder
+// can split on '#' without splitting the args' content. '&' is the sub-field
+// separator for LE/SC, so it is preserved there — mirroring the encoderNoAnd
+// Nyathena's own Fanta path uses for those two headers.
+func escapeWireArgs(header string, args []string) []string {
+	escapeAmp := header != "LE" && header != "SC"
+	out := make([]string, len(args))
+	for i, a := range args {
+		a = strings.ReplaceAll(a, "#", "<num>")
+		if escapeAmp {
+			a = strings.ReplaceAll(a, "&", "<and>")
+		}
+		a = strings.ReplaceAll(a, "%", "<percent>")
+		a = strings.ReplaceAll(a, "$", "<dollar>")
+		out[i] = a
 	}
-	for _, k := range []string{"$header", "header"} {
-		if v, ok := obj[k]; ok {
-			var h string
-			if err := json.Unmarshal(v, &h); err != nil {
-				return "", err
-			}
-			return h, nil
+	return out
+}
+
+// BuildJSONFromArgs encodes a type-erased (header, positional-args) packet to
+// its JSON wire form. Custom headers route through their codec; canonical
+// headers are decoded through aolib's public directional decoders (the single
+// source of truth for the positional→typed mapping) and re-encoded as JSON.
+// Unknown headers emit the bare envelope.
+func BuildJSONFromArgs(header string, args []string) ([]byte, error) {
+	if c, ok := customCodecs[header]; ok {
+		p, err := c.DecodeFanta(args)
+		if err != nil {
+			return nil, err
+		}
+		return encodeCustom(header, p, c, aolib.WireJSON)
+	}
+
+	frame := frameFanta(header, escapeWireArgs(header, args))
+	for _, decode := range []func([]byte, aolib.WireMode) (any, error){aolib.DecodeToClient, aolib.DecodeToServer} {
+		p, err := decode(frame, aolib.WireFanta)
+		if err != nil {
+			continue
+		}
+		if o, ok := p.(aolib.Outgoing); ok {
+			return aolib.Encode(o, aolib.WireJSON)
 		}
 	}
-	return "", fmt.Errorf("packetutil: JSON packet missing \"$header\"")
+
+	// Unknown/empty packet: emit the bare envelope.
+	obj := map[string]json.RawMessage{}
+	h, _ := json.Marshal(header)
+	obj["$header"] = h
+	return json.Marshal(obj)
 }

@@ -1,0 +1,324 @@
+package athena
+
+import (
+	"encoding/json"
+	"fmt"
+	"strconv"
+
+	aolib "github.com/AO-Underground/aolib/go/v2"
+
+	"github.com/MangosArentLiterature/Athena/internal/packetutil"
+)
+
+// GPMember is one ordered member of a group roster. Order is the z-order:
+// 0 front-most, increasing toward the back. Every accepted member (speaker
+// included) appears here, so the list position is the single source of truth
+// for on-screen ordering.
+type GPMember struct {
+	UID    int          `json:"uid"`
+	CharID int          `json:"char_id"`
+	Name   string       `json:"name"`
+	Emote  string       `json:"emote"`
+	Side   string       `json:"side"`
+	Offset aolib.Offset `json:"offset"`
+	Flip   aolib.Flip   `json:"flip"`
+	Order  int          `json:"order"`
+}
+
+// GP is the server→client group-pair roster announcement. JSON-only custom
+// packet (header "GP", registered via packetutil.RegisterLocal); it carries the
+// full ordered roster as an idempotent snapshot so clients just replace their
+// group state on every change.
+type GP struct {
+	GroupID string     `json:"group_id"`
+	Members []GPMember `json:"members"`
+}
+
+// Header returns the wire header "GP".
+func (p *GP) Header() string { return "GP" }
+
+// Args is unused: GP is JSON-only and never encoded as FantaCode.
+func (p *GP) Args() []string { return nil }
+
+// gpCodec registers GP's JSON-only outbound form. There is no FantaCode form —
+// group pairing requires JSON mode (supportsGroupPair gates on jsonMode), so
+// the EncodeFanta closure is intentionally left nil.
+func gpCodec() packetutil.Codec {
+	return packetutil.Codec{
+		EncodeJSON: func(p any) ([]byte, error) {
+			return json.Marshal(p.(*GP))
+		},
+	}
+}
+
+// sendGroupState pushes the group's current roster to every accepted member
+// that negotiated the grouppair feature.
+func sendGroupState(g *PairGroup) {
+	p := g.buildGP()
+	for _, m := range g.acceptedMembers() {
+		if m.supportsGroupPair() {
+			m.Send(p)
+		}
+	}
+}
+
+// pairGroupBlocksForce reports whether c is in a pairing group that force mode
+// must respect. A leash group is only the render mirror of the leash: force
+// mode breaks the leash (and therefore its group) below instead of refusing.
+func pairGroupBlocksForce(c *Client) bool {
+	g := c.PairGroup()
+	return g != nil && !(c.Leash() != nil && g.IsLeash())
+}
+
+// startGroupPair implements /grouppair and /forcegrouppair. For /grouppair the
+// initiator invites any number of other players and joins their own group;
+// force skips the accept flow and marks everyone accepted immediately. The
+// issuing moderator is not a member by default, but force mode lets them list
+// their own UID to join the group themselves.
+func startGroupPair(client *Client, args []string, force bool) {
+	if len(args) == 0 {
+		client.SendServerMessage("Usage: /grouppair <uid> [uid ...]")
+		return
+	}
+
+	// /grouppair joins the caller to the group, so they need a character and
+	// must not already be grouped. /forcegrouppair only groups the targets
+	// (unless the moderator lists themselves), so the moderator is exempt from
+	// these two checks up front.
+	if !force {
+		if client.CharID() < 0 {
+			client.SendServerMessage("You have not selected a character.")
+			return
+		}
+		if client.refuseIfLeashed() {
+			return
+		}
+		if client.PairGroup() != nil {
+			client.SendServerMessage("You are already in a pairing group.")
+			return
+		}
+	}
+
+	invitees := make([]*Client, 0, len(args))
+	for _, arg := range args {
+		uid, err := strconv.Atoi(arg)
+		if err != nil {
+			client.SendServerMessage("Invalid UID: " + arg)
+			return
+		}
+		t, err := getClientByUid(uid)
+		if err != nil {
+			client.SendServerMessage(fmt.Sprintf("Client with UID %d does not exist.", uid))
+			return
+		}
+		if t == client {
+			// /grouppair can't pair you with yourself; /forcegrouppair may,
+			// so a moderator can join their own forced group by listing their
+			// own UID.
+			if !force {
+				client.SendServerMessage("You cannot pair with yourself.")
+				return
+			}
+			if t.CharID() < 0 {
+				client.SendServerMessage("You have not selected a character.")
+				return
+			}
+			if pairGroupBlocksForce(t) {
+				client.SendServerMessage("You are already in a pairing group.")
+				return
+			}
+		} else {
+			if t.Area() != client.Area() {
+				client.SendServerMessage("That player is not in your area.")
+				return
+			}
+			if t.CharID() < 0 {
+				client.SendServerMessage("That player has not selected a character.")
+				return
+			}
+			if pairGroupBlocksForce(t) {
+				client.SendServerMessage(oocDisplayName(t) + " is already in a pairing group.")
+				return
+			}
+		}
+		// A consent group cannot steal a leashed player. Force mode is a
+		// moderator override, so it breaks the leash instead of refusing.
+		if force {
+			dissolveLeashForForce(t, nil)
+		} else if t.Leash() != nil {
+			client.SendServerMessage(oocDisplayName(t) + " is already part of a leash.")
+			return
+		}
+		for _, e := range invitees {
+			if e == t {
+				client.SendServerMessage("Duplicate player in request.")
+				return
+			}
+		}
+		invitees = append(invitees, t)
+	}
+
+	// Force mode pairs only the invitees; consent mode adds the initiator first.
+	members := invitees
+	accepted := make(map[int]bool, len(members))
+	if force {
+		for _, m := range members {
+			accepted[m.Uid()] = true
+		}
+	} else {
+		members = append([]*Client{client}, invitees...)
+		accepted[client.Uid()] = true
+	}
+
+	g := &PairGroup{
+		members:  members,
+		accepted: accepted,
+		groupID:  strconv.Itoa(client.Uid()),
+		forced:   force,
+	}
+	for _, m := range g.members {
+		m.SetPairGroup(g)
+	}
+
+	if force {
+		client.SendServerMessage(fmt.Sprintf("Force-formed a %d-player pairing group.", len(g.members)))
+		for _, t := range invitees {
+			if t == client {
+				continue
+			}
+			t.SendServerMessage(fmt.Sprintf("%v force-paired you into a group. Members: %s.", oocDisplayName(client), g.roster()))
+		}
+		sendGroupState(g)
+		return
+	}
+
+	client.SendServerMessage(fmt.Sprintf("Sent a group pairing request to %d player(s).", len(invitees)))
+	for _, t := range invitees {
+		t.SendServerMessage(fmt.Sprintf("%v wants to form a pairing group with you. Members: %s. Type /accept to accept or /deny to decline.", oocDisplayName(client), g.roster()))
+	}
+}
+
+// cmdGroupPair handles /grouppair.
+func cmdGroupPair(client *Client, args []string, _ string) {
+	startGroupPair(client, args, false)
+}
+
+// cmdForceGroupPair handles /forcegrouppair (mod-only).
+func cmdForceGroupPair(client *Client, args []string, _ string) {
+	startGroupPair(client, args, true)
+}
+
+// cmdUnforceGroupPair handles /unforcegrouppair (mod-only): it disbands every
+// force-paired group in the caller's area, undoing /forcegrouppair.
+func cmdUnforceGroupPair(client *Client, _ []string, _ string) {
+	area := client.Area()
+	seen := make(map[*PairGroup]struct{})
+	var groups []*PairGroup
+	clients.ForEach(func(c *Client) {
+		if c.Area() != area {
+			return
+		}
+		g := c.PairGroup()
+		if g == nil || !g.IsForced() || g.IsLeash() {
+			return
+		}
+		if _, ok := seen[g]; ok {
+			return
+		}
+		seen[g] = struct{}{}
+		groups = append(groups, g)
+	})
+	if len(groups) == 0 {
+		client.SendServerMessage("There are no force-paired groups in this area.")
+		return
+	}
+	for _, g := range groups {
+		g.dissolve("A moderator disbanded your force-paired group.")
+	}
+	client.SendServerMessage(fmt.Sprintf("Disbanded %d force-paired group(s) in this area.", len(groups)))
+	addToBuffer(client, "CMD", fmt.Sprintf("Disbanded %d force-paired group(s).", len(groups)), false)
+}
+
+// cmdLeaveGroup handles /leavegroup: the caller gracefully leaves their group.
+func cmdLeaveGroup(client *Client, _ []string, _ string) {
+	// The leash is the claim; its group is only a rendering mirror. Letting a
+	// dog leave the mirror would hide it without releasing the claim, so the
+	// usual leash refusal (popup for a dog, instruction for a master) applies.
+	if client.refuseIfLeashed() {
+		return
+	}
+	g := client.PairGroup()
+	if g == nil {
+		client.SendServerMessage("You are not in a pairing group.")
+		return
+	}
+	g.remove(client, oocDisplayName(client)+" left — the pairing group has been updated.")
+}
+
+// cmdPairOrder handles /pairorder: reorder the caller's group roster
+// (front→back). With no arguments it toggles the caller's own front/back
+// position; with "<uid> <front|back|up|down>" it moves a specific member.
+func cmdPairOrder(client *Client, args []string, _ string) {
+	g := client.PairGroup()
+	if g == nil {
+		client.SendServerMessage("You are not in a pairing group.")
+		return
+	}
+
+	var member *Client
+	var op string
+	switch len(args) {
+	case 0:
+		member, op = client, "toggle"
+	case 2:
+		uid, err := strconv.Atoi(args[0])
+		if err != nil {
+			client.SendServerMessage("Invalid UID: " + args[0])
+			return
+		}
+		m, err := getClientByUid(uid)
+		if err != nil {
+			client.SendServerMessage(fmt.Sprintf("Client with UID %d does not exist.", uid))
+			return
+		}
+		member, op = m, args[1]
+	default:
+		client.SendServerMessage("Usage: /pairorder [<uid> <front|back|up|down>]")
+		return
+	}
+
+	if member.PairGroup() != g {
+		client.SendServerMessage("That player is not in your pairing group.")
+		return
+	}
+
+	if op == "toggle" {
+		if g.isFrontmost(member) {
+			op = "back"
+		} else {
+			op = "front"
+		}
+	}
+
+	if op != "front" && op != "back" && op != "up" && op != "down" {
+		client.SendServerMessage("Usage: /pairorder [<uid> <front|back|up|down>]")
+		return
+	}
+
+	if _, _, changed := g.reorder(member, op); !changed {
+		client.SendServerMessage("No change — that member is already in that position.")
+		return
+	}
+
+	sendGroupState(g)
+	switch op {
+	case "front":
+		client.SendServerMessage(oocDisplayName(member) + " moved to the front.")
+	case "back":
+		client.SendServerMessage(oocDisplayName(member) + " moved to the back.")
+	case "up":
+		client.SendServerMessage(oocDisplayName(member) + " moved one step toward the front.")
+	case "down":
+		client.SendServerMessage(oocDisplayName(member) + " moved one step toward the back.")
+	}
+}

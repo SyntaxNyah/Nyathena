@@ -15,13 +15,19 @@ import (
 // aolib's generated MS types can't represent it. The codec bridges the two: the
 // FantaCode form uses Nyathena's Args()/Parse*, while the JSON form converts to
 // aolib's typed MSToClient/MSToServer so the wire is the canonical meta shape.
-func msCodec() aolib.Codec {
-	return aolib.Codec{
+func msCodec() packetutil.Codec {
+	return packetutil.Codec{
 		EncodeFanta: func(p any) ([]string, error) { return p.(*MSToClient).Args(), nil },
 		DecodeFanta: func(args []string) (any, error) { return ParseMSToServer(args), nil },
-		EncodeJSON:  func(p any) (string, error) { return encodeMSJSON(p.(*MSToClient)) },
-		DecodeJSON: func(raw string) (any, error) {
-			return aolib.Decode([]byte(raw), aolib.WireJSON)
+		EncodeJSON:  func(p any) ([]byte, error) { return encodeMSJSON(p.(*MSToClient)) },
+		DecodeJSON: func(raw []byte) (any, error) {
+			v, err := aolib.Decode(raw, aolib.WireJSON)
+			if err != nil {
+				return nil, err
+			}
+			// aolib.Decode yields aolib's typed MS; fold it back to Nyathena's
+			// MSToServer via the shared positional Args so the codec's T matches.
+			return ParseMSToServer(v.(aolib.Outgoing).Args()), nil
 		},
 	}
 }
@@ -30,15 +36,20 @@ func msCodec() aolib.Codec {
 // MSToClient and marshals it, then injects the JSON-only additional_chars list
 // when present. The custom-shout name and blips are FantaCode-only extensions
 // and are intentionally omitted from the JSON form.
-func encodeMSJSON(ms *MSToClient) (string, error) {
+func encodeMSJSON(ms *MSToClient) ([]byte, error) {
+	pid, pairOrder := splitPairedID(ms.PairedCharID)
+	// MSToClient stores its text fields in AO2-encoded (raw-wire) form — the
+	// FantaCode Args() path emits them verbatim and escapeOutgoing re-escapes.
+	// The JSON wire carries raw values, so decode the text fields here to match
+	// how the inbound JSON codec re-encodes them (see msCodec.DecodeJSON).
 	typed := aolib.MSToClient{
 		DeskModifier:           ms.DeskModifier,
-		Preanim:                ms.Preanim,
-		Character:              ms.Character,
-		Emote:                  ms.Emote,
-		Message:                ms.Message,
+		Preanim:                decode(ms.Preanim),
+		Character:              decode(ms.Character),
+		Emote:                  decode(ms.Emote),
+		Message:                decode(ms.Message),
 		Side:                   ms.Side,
-		SfxName:                ms.SfxName,
+		SfxName:                decode(ms.SfxName),
 		EmoteModifier:          ms.EmoteModifier,
 		CharID:                 packetutil.AtoiOrZero(ms.CharID),
 		SfxDelay:               packetutil.AtoiOrZero(ms.SfxDelay),
@@ -47,10 +58,11 @@ func encodeMSJSON(ms *MSToClient) (string, error) {
 		Flip:                   ms.Flip,
 		Realization:            packetutil.WireToBool(ms.Realization),
 		TextColor:              ms.TextColor,
-		Showname:               ms.Showname,
-		PairedCharID:           packetutil.AtoiOrZero(ms.PairedCharID),
-		PairedName:             ms.PairedName,
-		PairedEmote:            ms.PairedEmote,
+		Showname:               decode(ms.Showname),
+		PairedCharID:           pid,
+		PairedOrder:            pairOrder,
+		PairedName:             decode(ms.PairedName),
+		PairedEmote:            decode(ms.PairedEmote),
 		Offset:                 parseMSOffset(ms.Offset),
 		PairedOffset:           parseMSOffset(ms.PairedOffset),
 		PairedFlip:             ms.PairedFlip,
@@ -66,21 +78,21 @@ func encodeMSJSON(ms *MSToClient) (string, error) {
 
 	b, err := aolib.Encode(&typed, aolib.WireJSON)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 	if len(ms.AdditionalChars) > 0 {
 		var obj map[string]json.RawMessage
 		if err := json.Unmarshal(b, &obj); err != nil {
-			return "", err
+			return nil, err
 		}
 		ac, _ := json.Marshal(ms.AdditionalChars)
 		obj["additional_chars"] = ac
 		b, err = json.Marshal(obj)
 		if err != nil {
-			return "", err
+			return nil, err
 		}
 	}
-	return string(b), nil
+	return b, nil
 }
 
 // parseMSOffset converts Nyathena's "x&y" offset string into aolib's Offset.
@@ -92,6 +104,32 @@ func parseMSOffset(s string) aolib.Offset {
 		o.Y = packetutil.AtoiOrZero(parts[1])
 	}
 	return o
+}
+
+// splitPairedID parses the classic "pid^order" pair suffix into its two parts.
+// The FantaCode wire packs pair order onto paired_charid as a "^"-joined suffix
+// (4^1 = partner 4, speaker behind); on the JSON wire the two are separate
+// fields (paired_charid + paired_order), so this bridges them.
+func splitPairedID(raw string) (pid, order int) {
+	pidStr, orderStr, hasOrder := strings.Cut(raw, "^")
+	pid = packetutil.AtoiOrZero(pidStr)
+	if hasOrder {
+		order = packetutil.AtoiOrZero(orderStr)
+	}
+	return pid, order
+}
+
+// pairIDWithOrder returns partnerID carrying the classic pair-order suffix
+// from the client's sentID. Only "^1" (speaker behind) is meaningful; a bare
+// id and an explicit "^0" both mean the default (speaker in front), and any
+// other value is ignored rather than forwarded as arbitrary "^" text. A
+// sentID with no real partner (e.g. "-1^1") is treated as no order.
+func pairIDWithOrder(partnerID, sentID string) string {
+	pid, order := splitPairedID(sentID)
+	if pid >= 0 && order == 1 {
+		return partnerID + "^1"
+	}
+	return partnerID
 }
 
 // parseMSEffect converts Nyathena's "name|folder|sound" effect string into

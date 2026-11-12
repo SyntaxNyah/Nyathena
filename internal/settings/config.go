@@ -24,7 +24,6 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	"github.com/BurntSushi/toml"
 	"github.com/MangosArentLiterature/Athena/internal/area"
 	"github.com/MangosArentLiterature/Athena/internal/logger"
 	"github.com/MangosArentLiterature/Athena/internal/permissions"
@@ -42,135 +41,183 @@ type Config struct {
 }
 
 type ServerConfig struct {
-	Addr                                 string   `toml:"addr"`
-	Port                                 int      `toml:"port"`
-	AdvertiseHostname                    string   `toml:"advertise_hostname"`
-	Name                                 string   `toml:"name"`
-	Desc                                 string   `toml:"description"`
-	MaxPlayers                           int      `toml:"max_players"`
-	MaxMsg                               int      `toml:"max_message_length"`
-	BanLen                               string   `toml:"default_ban_duration"`
-	EnableWS                             bool     `toml:"enable_webao"`
-	WSPort                               int      `toml:"webao_port"`
-	EnableWSS                            bool     `toml:"enable_webao_secure"`
-	WSSPort                              int      `toml:"webao_secure_port"`
-	TLSCertPath                          string   `toml:"tls_cert_path"`
-	TLSKeyPath                           string   `toml:"tls_key_path"`
-	ReverseProxyMode                     bool     `toml:"reverse_proxy_mode"`
-	ReverseProxyHTTPPort                 int      `toml:"reverse_proxy_http_port"`
-	ReverseProxyHTTPSPort                int      `toml:"reverse_proxy_https_port"`
-	MCLimit                              int      `toml:"multiclient_limit"`
-	AssetURL                             string   `toml:"asset_url"`
-	WebhookURL                           string   `toml:"webhook_url"`
-	WebhookPingRoleID                    string   `toml:"webhook_ping_role_id"`
-	PunishmentWebhookURL                 string   `toml:"punishment_webhook_url"`
-	MaxDice                              int      `toml:"max_dice"`
-	MaxSide                              int      `toml:"max_side"`
-	Motd                                 string   `toml:"motd"`
-	MaxStatement                         int      `toml:"max_testimony"`
-	RateLimit                            int      `toml:"message_rate_limit"`
-	RateLimitWindow                      int      `toml:"message_rate_limit_window"`
-	RateLimitKickAutoban                 bool     `toml:"rate_limit_kick_autoban"`
-	RateLimitKickAutobanThreshold        int      `toml:"rate_limit_kick_autoban_threshold"`
-	RateLimitKickAutobanWindow           int      `toml:"rate_limit_kick_autoban_window"`
-	RateLimitKickAutobanDuration         string   `toml:"rate_limit_kick_autoban_duration"`
-	RateLimitKickAutobanMinPlaytime      int      `toml:"rate_limit_kick_autoban_min_playtime"`
-	RateLimitKickAutobanLenientPlaytime  int      `toml:"rate_limit_kick_autoban_lenient_playtime"`
-	RateLimitKickAutobanLenientThreshold int      `toml:"rate_limit_kick_autoban_lenient_threshold"`
-	RaidGuardEnabled                     bool     `toml:"raid_guard_enabled"`
-	RaidGuardMaxAction                   string   `toml:"raid_guard_max_action"`
-	RaidGuardMinPlaytime                 int      `toml:"raid_guard_min_playtime"`
-	RaidGuardLenientPlaytime             int      `toml:"raid_guard_lenient_playtime"`
-	RaidGuardLenientScale                int      `toml:"raid_guard_lenient_scale"`
-	RaidGuardStrictPlaytime              int      `toml:"raid_guard_strict_playtime"`
-	RaidGuardStrictScale                 int      `toml:"raid_guard_strict_scale"`
-	RaidGuardUnderAttackScale            int      `toml:"raid_guard_under_attack_scale"`
-	RaidGuardBanDuration                 string   `toml:"raid_guard_ban_duration"`
-	RaidGuardScoreWatch                  int      `toml:"raid_guard_score_watch"`
-	RaidGuardScoreChallenge              int      `toml:"raid_guard_score_challenge"`
-	RaidGuardScoreSilence                int      `toml:"raid_guard_score_silence"`
-	RaidGuardScoreKick                   int      `toml:"raid_guard_score_kick"`
-	RaidGuardScoreBan                    int      `toml:"raid_guard_score_ban"`
-	RaidGuardObjectionMinMsgs            int      `toml:"raid_guard_objection_min_msgs"`
-	RaidGuardObjectionFraction           float64  `toml:"raid_guard_objection_fraction"`
-	RaidGuardFastCharPickMs              int      `toml:"raid_guard_fast_charpick_ms"`
-	RaidGuardFastSpeechMs                int      `toml:"raid_guard_fast_speech_ms"`
-	RaidGuardCharChurnMs                 int      `toml:"raid_guard_char_churn_ms"`
-	RaidGuardNameChurnMax                int      `toml:"raid_guard_name_churn_max"`
-	RaidGuardCorrWindow                  int      `toml:"raid_guard_corr_window"`
-	RaidGuardCorrIPIDs                   int      `toml:"raid_guard_corr_ipids"`
-	RaidGuardCorrIPIDsWeak               int      `toml:"raid_guard_corr_ipids_weak"`
-	RaidGuardCorrBreadth                 int      `toml:"raid_guard_corr_breadth"`
-	RaidGuardCorrMinLen                  int      `toml:"raid_guard_corr_min_len"`
-	RaidGuardCorrMaxEntries              int      `toml:"raid_guard_corr_max_entries"`
-	RaidGuardArrivalBurst                int      `toml:"raid_guard_arrival_burst"`
-	RaidGuardAutoLockdown                bool     `toml:"raid_guard_auto_lockdown"`
-	RaidGuardSlurSevereWeight            int      `toml:"raid_guard_slur_severe_weight"`
-	RaidGuardSlurFlaggedWeight           int      `toml:"raid_guard_slur_flagged_weight"`
-	ModcallCooldown                      int      `toml:"modcall_cooldown"`
-	ConnRateLimit                        int      `toml:"connection_rate_limit"`
-	ConnRateLimitWindow                  int      `toml:"connection_rate_limit_window"`
-	ConnFloodAutoban                     bool     `toml:"conn_flood_autoban"`
-	ConnFloodAutobanThreshold            int      `toml:"conn_flood_autoban_threshold"`
-	PacketFloodAutoban                   bool     `toml:"packet_flood_autoban"`
-	RawPacketRateLimit                   int      `toml:"raw_packet_rate_limit"`
-	RawPacketRateLimitWindow             float64  `toml:"raw_packet_rate_limit_window"`
-	OOCRateLimit                         int      `toml:"ooc_rate_limit"`
-	OOCRateLimitWindow                   int      `toml:"ooc_rate_limit_window"`
-	PingRateLimit                        int      `toml:"ping_rate_limit"`
-	PingRateLimitWindow                  int      `toml:"ping_rate_limit_window"`
-	NewIPIDOOCCooldown                   int      `toml:"new_ipid_ooc_cooldown"`
-	NewIPIDICCooldown                    int      `toml:"new_ipid_ic_cooldown"`
-	NewIPIDModcallCooldown               int      `toml:"new_ipid_modcall_cooldown"`
-	GlobalNewIPRateLimit                 int      `toml:"global_new_ip_rate_limit"`
-	GlobalNewIPRateLimitWindow           int      `toml:"global_new_ip_rate_limit_window"`
-	IPRetentionDays                      int      `toml:"ip_retention_days"`
-	WebAOAllowedOrigin                   string   `toml:"webao_allowed_origin"`
-	AutoModEnabled                       bool     `toml:"automod_enabled"`
-	AutoModWordlist                      string   `toml:"automod_wordlist"`
-	AutoModAction                        string   `toml:"automod_action"`
-	AutoModNukeBanDuration               string   `toml:"automod_nuke_ban_duration"`
-	RandomSongCooldown                   int      `toml:"random_song_cooldown"`
-	RandomSongCooldownDJ                 int      `toml:"random_song_cooldown_dj"`
-	RandomSongCooldownMod                int      `toml:"random_song_cooldown_mod"`
-	BotBanPlaytimeThreshold              int      `toml:"botban_playtime_threshold"`
-	IPHubAPIKey                          string   `toml:"iphub_api_key"`
-	EnableTranslator                     bool     `toml:"enable_translator_punishment"`
-	TranslatorAPIURL                     string   `toml:"translator_api_url"`
-	TranslatorAPIKey                     string   `toml:"translator_api_key"`
-	TranslateCooldown                    int      `toml:"translate_cooldown"`
-	EnableCasino                         bool     `toml:"enable_casino"`
+	Addr                                 string  `toml:"addr"`
+	Port                                 int     `toml:"port"`
+	AdvertiseHostname                    string  `toml:"advertise_hostname"`
+	Name                                 string  `toml:"name"`
+	Desc                                 string  `toml:"description"`
+	MaxPlayers                           int     `toml:"max_players"`
+	MaxMsg                               int     `toml:"max_message_length"`
+	BanLen                               string  `toml:"default_ban_duration"`
+	EnableWS                             bool    `toml:"enable_webao"`
+	WSPort                               int     `toml:"webao_port"`
+	EnableWSS                            bool    `toml:"enable_webao_secure"`
+	WSSPort                              int     `toml:"webao_secure_port"`
+	TLSCertPath                          string  `toml:"tls_cert_path"`
+	TLSKeyPath                           string  `toml:"tls_key_path"`
+	ReverseProxyMode                     bool    `toml:"reverse_proxy_mode"`
+	ReverseProxyHTTPPort                 int     `toml:"reverse_proxy_http_port"`
+	ReverseProxyHTTPSPort                int     `toml:"reverse_proxy_https_port"`
+	MCLimit                              int     `toml:"multiclient_limit"`
+	MulticlientIPLimit                   int     `toml:"multiclient_ip_limit"`
+	AssetURL                             string  `toml:"asset_url"`
+	WebhookURL                           string  `toml:"webhook_url"`
+	WebhookPingRoleID                    string  `toml:"webhook_ping_role_id"`
+	PunishmentWebhookURL                 string  `toml:"punishment_webhook_url"`
+	MaxDice                              int     `toml:"max_dice"`
+	MaxSide                              int     `toml:"max_side"`
+	Motd                                 string  `toml:"motd"`
+	MaxStatement                         int     `toml:"max_testimony"`
+	RateLimit                            int     `toml:"message_rate_limit"`
+	RateLimitWindow                      int     `toml:"message_rate_limit_window"`
+	RateLimitKickAutoban                 bool    `toml:"rate_limit_kick_autoban"`
+	RateLimitKickAutobanThreshold        int     `toml:"rate_limit_kick_autoban_threshold"`
+	RateLimitKickAutobanWindow           int     `toml:"rate_limit_kick_autoban_window"`
+	RateLimitKickAutobanDuration         string  `toml:"rate_limit_kick_autoban_duration"`
+	RateLimitKickAutobanMinPlaytime      int     `toml:"rate_limit_kick_autoban_min_playtime"`
+	RateLimitKickAutobanLenientPlaytime  int     `toml:"rate_limit_kick_autoban_lenient_playtime"`
+	RateLimitKickAutobanLenientThreshold int     `toml:"rate_limit_kick_autoban_lenient_threshold"`
+	RaidGuardEnabled                     bool    `toml:"raid_guard_enabled"`
+	RaidGuardMaxAction                   string  `toml:"raid_guard_max_action"`
+	RaidGuardMinPlaytime                 int     `toml:"raid_guard_min_playtime"`
+	RaidGuardLenientPlaytime             int     `toml:"raid_guard_lenient_playtime"`
+	RaidGuardLenientScale                int     `toml:"raid_guard_lenient_scale"`
+	RaidGuardStrictPlaytime              int     `toml:"raid_guard_strict_playtime"`
+	RaidGuardStrictScale                 int     `toml:"raid_guard_strict_scale"`
+	RaidGuardUnderAttackScale            int     `toml:"raid_guard_under_attack_scale"`
+	RaidGuardBanDuration                 string  `toml:"raid_guard_ban_duration"`
+	RaidGuardScoreWatch                  int     `toml:"raid_guard_score_watch"`
+	RaidGuardScoreChallenge              int     `toml:"raid_guard_score_challenge"`
+	RaidGuardScoreSilence                int     `toml:"raid_guard_score_silence"`
+	RaidGuardScoreKick                   int     `toml:"raid_guard_score_kick"`
+	RaidGuardScoreBan                    int     `toml:"raid_guard_score_ban"`
+	RaidGuardHeatHalfLife                int     `toml:"raid_guard_heat_half_life"`
+	RaidGuardObjectionMinMsgs            int     `toml:"raid_guard_objection_min_msgs"`
+	RaidGuardObjectionFraction           float64 `toml:"raid_guard_objection_fraction"`
+	RaidGuardFastCharPickMs              int     `toml:"raid_guard_fast_charpick_ms"`
+	RaidGuardFastSpeechMs                int     `toml:"raid_guard_fast_speech_ms"`
+	RaidGuardCharChurnMs                 int     `toml:"raid_guard_char_churn_ms"`
+	RaidGuardNameChurnMax                int     `toml:"raid_guard_name_churn_max"`
+	RaidGuardCorrWindow                  int     `toml:"raid_guard_corr_window"`
+	RaidGuardCorrIPIDs                   int     `toml:"raid_guard_corr_ipids"`
+	RaidGuardCorrIPIDsWeak               int     `toml:"raid_guard_corr_ipids_weak"`
+	RaidGuardCorrBreadth                 int     `toml:"raid_guard_corr_breadth"`
+	RaidGuardCorrMinLen                  int     `toml:"raid_guard_corr_min_len"`
+	RaidGuardCorrMaxEntries              int     `toml:"raid_guard_corr_max_entries"`
+	RaidGuardArrivalBurst                int     `toml:"raid_guard_arrival_burst"`
+	RaidGuardAutoLockdown                bool    `toml:"raid_guard_auto_lockdown"`
+	RaidGuardSlurSevereWeight            int     `toml:"raid_guard_slur_severe_weight"`
+	RaidGuardSlurFlaggedWeight           int     `toml:"raid_guard_slur_flagged_weight"`
+	RaidGuardModcallJoinMs               int     `toml:"raid_guard_modcall_join_ms"`
+	RaidGuardModcallDwell                int     `toml:"raid_guard_modcall_dwell"`
+	RaidGuardModcallWindow               int     `toml:"raid_guard_modcall_window"`
+	RaidGuardModcallMinAttempts          int     `toml:"raid_guard_modcall_min_attempts"`
+	RaidGuardModcallFanout               int     `toml:"raid_guard_modcall_fanout"`
+	RaidGuardModcallNuke                 bool    `toml:"raid_guard_modcall_nuke"`
+	RaidGuardRerollWindow                int     `toml:"raid_guard_reroll_window"`
+	RaidGuardRerollLimit                 int     `toml:"raid_guard_reroll_limit"`
+	RaidGuardRerollMaxSession            int     `toml:"raid_guard_reroll_max_session"`
+	RaidGuardCCWindow                    int     `toml:"raid_guard_cc_window"`
+	RaidGuardCCFlagWindow                int     `toml:"raid_guard_cc_flag_window"`
+	RaidGuardCCFlagLimit                 int     `toml:"raid_guard_cc_flag_limit"`
+	RaidGuardChallengeStrikes            int     `toml:"raid_guard_challenge_strikes"`
+	RaidGuardChallengeTimeout            int     `toml:"raid_guard_challenge_timeout"`
+	ModcallCooldown                      int     `toml:"modcall_cooldown"`
+	ConnRateLimit                        int     `toml:"connection_rate_limit"`
+	ConnRateLimitWindow                  int     `toml:"connection_rate_limit_window"`
+	AdmissionNormalScale                 int     `toml:"admission_normal_scale"`
+	ConnFloodAutoban                     bool    `toml:"conn_flood_autoban"`
+	ConnFloodAutobanThreshold            int     `toml:"conn_flood_autoban_threshold"`
+	PacketFloodAutoban                   bool    `toml:"packet_flood_autoban"`
+	RawPacketRateLimit                   int     `toml:"raw_packet_rate_limit"`
+	RawPacketRateLimitWindow             float64 `toml:"raw_packet_rate_limit_window"`
+	OOCRateLimit                         int     `toml:"ooc_rate_limit"`
+	OOCRateLimitWindow                   int     `toml:"ooc_rate_limit_window"`
+	PingRateLimit                        int     `toml:"ping_rate_limit"`
+	PingRateLimitWindow                  int     `toml:"ping_rate_limit_window"`
+	NewIPIDOOCCooldown                   int     `toml:"new_ipid_ooc_cooldown"`
+	NewIPIDOOCCooldownNormal             int     `toml:"new_ipid_ooc_cooldown_normal"`
+	NewIPIDICCooldown                    int     `toml:"new_ipid_ic_cooldown"`
+	NewIPIDICCooldownNormal              int     `toml:"new_ipid_ic_cooldown_normal"`
+	NewIPIDModcallCooldown               int     `toml:"new_ipid_modcall_cooldown"`
+	NewIPIDModcallCooldownNormal         int     `toml:"new_ipid_modcall_cooldown_normal"`
+	GlobalNewIPRateLimit                 int     `toml:"global_new_ip_rate_limit"`
+	GlobalNewIPRateLimitWindow           int     `toml:"global_new_ip_rate_limit_window"`
+	IPRetentionDays                      int     `toml:"ip_retention_days"`
+	WebAOAllowedOrigin                   string  `toml:"webao_allowed_origin"`
+	AutoModEnabled                       bool    `toml:"automod_enabled"`
+	AutoModWordlist                      string  `toml:"automod_wordlist"`
+	AutoModAction                        string  `toml:"automod_action"`
+	AutoModNukeBanDuration               string  `toml:"automod_nuke_ban_duration"`
+	RandomSongCooldown                   int     `toml:"random_song_cooldown"`
+	RandomSongCooldownDJ                 int     `toml:"random_song_cooldown_dj"`
+	RandomSongCooldownMod                int     `toml:"random_song_cooldown_mod"`
+	BotBanPlaytimeThreshold              int     `toml:"botban_playtime_threshold"`
+	IPHubAPIKey                          string  `toml:"iphub_api_key"`
+	EnableTranslator                     bool    `toml:"enable_translator_punishment"`
+	TranslatorAPIURL                     string  `toml:"translator_api_url"`
+	TranslatorAPIKey                     string  `toml:"translator_api_key"`
+	TranslateCooldown                    int     `toml:"translate_cooldown"`
+	// EnableCasino is the legacy casino switch. It is kept for backwards
+	// compatibility; CasinoEnabled is the canonical replacement. Either one
+	// being true enables the legacy Nyathena Chips casino.
+	EnableCasino bool `toml:"enable_casino"`
+	// CasinoEnabled is the canonical legacy-casino switch.
+	CasinoEnabled bool `toml:"casino_enabled"`
+	// PebbleMode enables the no-stakes Pebble economy, casual mini-games,
+	// daily activities and world events. It is independent of the legacy
+	// casino: both can be enabled at once.
+	PebbleMode bool `toml:"pebble_mode"`
+	// PebbleEventChance is the "1 in N" daily chance for the Wrecked Ship
+	// world event. Values below 1 fall back to 5.
+	PebbleEventChance int `toml:"pebble_event_chance"`
+	// PebbleEventTimeoutMinutes is how long an unclaimed world event stays
+	// in the world before drifting away. Values below 1 fall back to 5.
+	PebbleEventTimeoutMinutes int `toml:"pebble_event_timeout_minutes"`
 	// EnableCustomCommands turns on the console-only custom command builder.
 	// Off by default: when false, no definition files are scanned at startup,
 	// the dispatch path never consults the custom-command registry, and the
 	// "customcmd" console menu refuses with a notice.
-	EnableCustomCommands                 bool     `toml:"enable_custom_commands"`
+	EnableCustomCommands bool `toml:"enable_custom_commands"`
 
-	EnableAccounts                       bool     `toml:"enable_accounts"`
-	RegisterCaptcha                      bool     `toml:"register_captcha"`
-	JoinCaptcha                          bool     `toml:"join_captcha"`
-	JoinCaptchaStrikes                   int      `toml:"join_captcha_strikes"`
-	JoinCaptchaTimeout                   int      `toml:"join_captcha_timeout"`
-	JoinCaptchaKinds                     []string `toml:"join_captcha_kinds"`
-	JoinCaptchaRemember                  bool     `toml:"join_captcha_remember"`
-	JoinCaptchaMinPlaytime               int      `toml:"join_captcha_min_playtime"`
-	JoinCaptchaAction                    string   `toml:"join_captcha_action"`
-	JoinCaptchaQuestions                 string   `toml:"join_captcha_questions"`
-	JoinCaptchaCustomOnly                bool     `toml:"join_captcha_custom_only"`
-	JoinCaptchaSecret                    string   `toml:"join_captcha_secret"`
-	JoinCaptchaRotate                    int      `toml:"join_captcha_rotate"`
-	CaptchaPlugin                        string   `toml:"captcha_plugin"`
-	CaptchaPluginTimeout                 int      `toml:"captcha_plugin_timeout"`
-	JoinCaptchaPopup                     bool     `toml:"join_captcha_popup"`
-	EnableCommunityVote                  bool     `toml:"enable_community_vote"`
-	VoteThreshold                        int      `toml:"vote_threshold"`
-	VoteDuration                         int      `toml:"vote_duration"`
-	VoteActions                          []string `toml:"vote_actions"`
-	VoteMuteDuration                     int      `toml:"vote_mute_duration"`
-	TypingRacePhrases                    []string `toml:"typing_race_phrases"`
-	EnableNewspaper                      bool     `toml:"enable_newspaper"`
-	NewspaperInterval                    string   `toml:"newspaper_interval"`
-	NewspaperSections                    []string `toml:"newspaper_sections"`
+	EnableAccounts         bool     `toml:"enable_accounts"`
+	RegisterCaptcha        bool     `toml:"register_captcha"`
+	JoinCaptcha            bool     `toml:"join_captcha"`
+	JoinCaptchaStrikes     int      `toml:"join_captcha_strikes"`
+	JoinCaptchaTimeout     int      `toml:"join_captcha_timeout"`
+	JoinCaptchaMuteTimeout int      `toml:"join_captcha_mute_timeout"`
+	JoinCaptchaKinds       []string `toml:"join_captcha_kinds"`
+	JoinCaptchaRemember    bool     `toml:"join_captcha_remember"`
+	JoinCaptchaMinPlaytime int      `toml:"join_captcha_min_playtime"`
+	JoinCaptchaAction      string   `toml:"join_captcha_action"`
+	JoinCaptchaQuestions   string   `toml:"join_captcha_questions"`
+	JoinCaptchaCustomOnly  bool     `toml:"join_captcha_custom_only"`
+	JoinCaptchaSecret      string   `toml:"join_captcha_secret"`
+	JoinCaptchaRotate      int      `toml:"join_captcha_rotate"`
+	CaptchaPlugin          string   `toml:"captcha_plugin"`
+	CaptchaPluginTimeout   int      `toml:"captcha_plugin_timeout"`
+	JoinCaptchaPopup       bool     `toml:"join_captcha_popup"`
+	Halloween              bool     `toml:"halloween"`
+	// JoinPopup and JoinPopupMessage are the join popup (see joinpopup.go):
+	// an operator-authored welcome message -- rules, a Discord invite, a
+	// website -- shown once to any HDID connecting to this server for the
+	// very first time ever. Independent of the join captcha above, though it
+	// reuses the same client-side AO2 BB dialog to make it unmissable.
+	// JoinPopupMessage supports multiple lines (a triple-quoted TOML string);
+	// a blank message disables the feature even if JoinPopup is true.
+	JoinPopup           bool     `toml:"join_popup"`
+	JoinPopupMessage    string   `toml:"join_popup_message"`
+	EnableCommunityVote bool     `toml:"enable_community_vote"`
+	VoteThreshold       int      `toml:"vote_threshold"`
+	VoteDuration        int      `toml:"vote_duration"`
+	VoteActions         []string `toml:"vote_actions"`
+	VoteMuteDuration    int      `toml:"vote_mute_duration"`
+	TypingRacePhrases   []string `toml:"typing_race_phrases"`
+	DailyQuote          bool     `toml:"dailyquote"`
+	DailyQuoteOffline   bool     `toml:"dailyquote_offline"`
+	EnableNewspaper     bool     `toml:"enable_newspaper"`
+	NewspaperInterval   string   `toml:"newspaper_interval"`
+	NewspaperSections   []string `toml:"newspaper_sections"`
 	// YouTubePlayPrefix, when non-empty and starting with "http", turns on the
 	// /play <youtube-link> integration. The prefix is the URL stem that
 	// clients fetch the downloaded MP3 from (e.g. "https://cdn.example.com/yt/").
@@ -214,6 +261,7 @@ type ServerConfig struct {
 	// 0 disables the purge (lockdown still only blocks new IPIDs, as before).
 	// Mods can change this at runtime with /setlockdownplaytime.
 	LockdownMinPlaytime int `toml:"lockdown_min_playtime"`
+	LockdownTTL         int `toml:"lockdown_ttl"`
 
 	// SecretSeed is a server-private key used to derive lockdown whitelist
 	// passkeys (HMAC-SHA256 of an IPID, keyed by this value) -- a per-IPID
@@ -257,8 +305,9 @@ type LogConfig struct {
 }
 
 type MSConfig struct {
-	Advertise bool   `toml:"advertise"`
-	MSAddr    string `toml:"addr"`
+	Advertise bool     `toml:"advertise"`
+	MSAddr    string   `toml:"addr"`  // legacy single endpoint; overrides addrs when set
+	Addrs     []string `toml:"addrs"` // one or more master server endpoints to advertise to
 }
 
 type DiscordConfig struct {
@@ -311,6 +360,8 @@ func DefaultConfig() *Config {
 			ReverseProxyHTTPPort:                 80,
 			ReverseProxyHTTPSPort:                443,
 			MCLimit:                              16,
+			MulticlientIPLimit:                   0,
+			LockdownTTL:                          300,
 			MaxDice:                              100,
 			MaxSide:                              100,
 			MaxStatement:                         10,
@@ -337,6 +388,7 @@ func DefaultConfig() *Config {
 			RaidGuardScoreSilence:                80,
 			RaidGuardScoreKick:                   100,
 			RaidGuardScoreBan:                    160,
+			RaidGuardHeatHalfLife:                300,
 			RaidGuardObjectionMinMsgs:            3,
 			RaidGuardObjectionFraction:           0.8,
 			RaidGuardFastCharPickMs:              250,
@@ -353,8 +405,23 @@ func DefaultConfig() *Config {
 			RaidGuardAutoLockdown:                false,
 			RaidGuardSlurSevereWeight:            40,
 			RaidGuardSlurFlaggedWeight:           20,
+			RaidGuardModcallJoinMs:               2500,
+			RaidGuardModcallDwell:                60,
+			RaidGuardModcallWindow:               2400,
+			RaidGuardModcallMinAttempts:          5,
+			RaidGuardModcallFanout:               3,
+			RaidGuardModcallNuke:                 true,
+			RaidGuardRerollWindow:                600,
+			RaidGuardRerollLimit:                 4,
+			RaidGuardRerollMaxSession:            300,
+			RaidGuardCCWindow:                    60,
+			RaidGuardCCFlagWindow:                1800,
+			RaidGuardCCFlagLimit:                 3,
+			RaidGuardChallengeStrikes:            2,
+			RaidGuardChallengeTimeout:            60,
 			ModcallCooldown:                      0,
 			ConnRateLimit:                        10,
+			AdmissionNormalScale:                 100,
 			ConnRateLimitWindow:                  10,
 			ConnFloodAutoban:                     true,
 			ConnFloodAutobanThreshold:            6,
@@ -385,11 +452,16 @@ func DefaultConfig() *Config {
 			TranslatorAPIKey:                     "",
 			TranslateCooldown:                    25,
 			EnableCasino:                         false,
+			CasinoEnabled:                        false,
+			PebbleMode:                           false,
+			PebbleEventChance:                    5,
+			PebbleEventTimeoutMinutes:            5,
 			EnableAccounts:                       true,
 			RegisterCaptcha:                      true,
 			JoinCaptcha:                          false,
 			JoinCaptchaStrikes:                   3,
 			JoinCaptchaTimeout:                   180,
+			JoinCaptchaMuteTimeout:               300,
 			JoinCaptchaKinds:                     nil,
 			JoinCaptchaRemember:                  true,
 			JoinCaptchaMinPlaytime:               300,
@@ -401,6 +473,9 @@ func DefaultConfig() *Config {
 			CaptchaPlugin:                        "",
 			CaptchaPluginTimeout:                 3000,
 			JoinCaptchaPopup:                     true,
+			Halloween:                            false,
+			JoinPopup:                            false,
+			JoinPopupMessage:                     "",
 			EnableCommunityVote:                  false,
 			VoteThreshold:                        3,
 			VoteDuration:                         120,
@@ -421,7 +496,8 @@ func DefaultConfig() *Config {
 		},
 		MSConfig{
 			Advertise: false,
-			MSAddr:    "https://servers.aceattorneyonline.com/servers",
+			MSAddr:    "",
+			Addrs:     []string{"https://servers.aceattorneyonline.com/servers", "https://servers.umineko.online/servers"},
 		},
 		DiscordConfig{
 			BotToken:  "",
@@ -443,9 +519,23 @@ func DefaultConfig() *Config {
 	}
 }
 
-// Load reads the server's main configuration file.
+// CasinoOn reports whether the legacy Nyathena Chips casino is enabled.
+// Either the canonical casino_enabled flag or the legacy enable_casino alias
+// turns it on. Safe to call on a nil receiver.
+func (conf *Config) CasinoOn() bool {
+	return conf != nil && (conf.EnableCasino || conf.CasinoEnabled)
+}
+
+// PebbleOn reports whether Pebble Mode is enabled. Safe to call on a nil
+// receiver.
+func (conf *Config) PebbleOn() bool {
+	return conf != nil && conf.PebbleMode
+}
+
+// Load reads the server's main configuration file. The file is repaired first
+// if it was saved with a BOM or as UTF-16 (see decodeTOMLFile).
 func (conf *Config) Load() error {
-	_, err := toml.DecodeFile(ConfigPath+"/config.toml", conf)
+	_, err := decodeTOMLFile(ConfigPath+"/config.toml", conf)
 	if err != nil {
 		return err
 	}
@@ -554,7 +644,7 @@ func LoadAreas() ([]area.AreaData, error) {
 	var conf struct {
 		Area []area.AreaData
 	}
-	_, err := toml.DecodeFile(ConfigPath+"/areas.toml", &conf)
+	_, err := decodeTOMLFile(ConfigPath+"/areas.toml", &conf)
 	if err != nil {
 		return conf.Area, err
 	}
@@ -569,7 +659,7 @@ func LoadRoles() ([]permissions.Role, error) {
 	var conf struct {
 		Role []permissions.Role
 	}
-	_, err := toml.DecodeFile(ConfigPath+"/roles.toml", &conf)
+	_, err := decodeTOMLFile(ConfigPath+"/roles.toml", &conf)
 	if err != nil {
 		return conf.Role, err
 	}

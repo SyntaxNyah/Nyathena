@@ -21,14 +21,50 @@ import (
 	"strings"
 )
 
-// setTextColorInServerString rewrites the TextColor slot (field 14) of a
-// server-format MS wire body. Nyathena stores testimony statements as raw MS
-// strings, so recolouring a replayed statement is a plain slot swap rather than
-// a full parse/re-encode.
-func setTextColorInServerString(s, color string) string {
+// setServerStringField rewrites one slot of a server-format MS wire body.
+// Nyathena stores testimony statements as raw MS strings, so editing one is a
+// plain slot swap rather than a full parse/re-encode.
+func setServerStringField(s string, field int, value string) string {
 	fields := strings.Split(s, "#")
-	if len(fields) > 14 {
-		fields[14] = color
+	if len(fields) > field {
+		fields[field] = value
+	}
+	return strings.Join(fields, "#")
+}
+
+// setTextColorInServerString rewrites the TextColor slot (field 14) of a
+// server-format MS wire body.
+func setTextColorInServerString(s, color string) string {
+	return setServerStringField(s, 14, color)
+}
+
+// tstPlaybackString rewrites a stored statement into the form it is broadcast
+// in during playback.
+//
+// A replayed statement belongs to nobody. Every client that receives an MS
+// whose char id (field 8) matches its own treats the message as the echo of a
+// message it just sent and resets its IC input: the AO2 desktop client calls
+// reset_ui() (clearing the text box, objection/realization/screenshake state
+// and the evidence spinner) and webAO calls resetICParams() (clearing the input
+// box, flash/shake, preanim/sfx and the selected shout). Replaying with the
+// recorded char id therefore wiped the input of whoever held that slot — almost
+// always the witness who was still typing. -1 belongs to no one and every
+// client accepts it, so the statement still animates as the right character
+// without being mistaken for anyone's own message.
+//
+// With no usable char id the clients fall back to the showname field (15) for
+// the name box, so an empty showname is filled from the character folder
+// (field 2) to keep the name readable.
+func tstPlaybackString(s string) string {
+	fields := strings.Split(s, "#")
+	if len(fields) <= 15 {
+		// Not a well-formed statement: there is no char id/showname pair to
+		// rewrite, so hand back exactly what was recorded.
+		return s
+	}
+	fields[8] = "-1"
+	if strings.TrimSpace(fields[15]) == "" {
+		fields[15] = fields[2]
 	}
 	return strings.Join(fields, "#")
 }
@@ -58,6 +94,22 @@ func (a *Area) CurrentTstStatement() string {
 		a.tr.Index = len(a.tr.Testimony) - 1
 	}
 	return a.tr.Testimony[a.tr.Index]
+}
+
+// CurrentTstPlaybackStatement returns the testimony recorder's current
+// statement in the form it is broadcast in during playback: char id -1, and an
+// empty showname filled from the character folder. See tstPlaybackString for
+// why a replayed statement must not carry the recorded char id.
+func (a *Area) CurrentTstPlaybackStatement() string {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if len(a.tr.Testimony) == 0 {
+		return ""
+	}
+	if a.tr.Index < 0 || a.tr.Index >= len(a.tr.Testimony) {
+		a.tr.Index = len(a.tr.Testimony) - 1
+	}
+	return tstPlaybackString(a.tr.Testimony[a.tr.Index])
 }
 
 // CurrentTstIndex returns the testimony recorder's current index.
@@ -167,6 +219,28 @@ func (a *Area) TstClear() {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	a.tr.Testimony = []string{}
+	a.tr.Index = 0
+}
+
+// TstStatements returns a copy of the recorder's stored statements, title
+// included. Used by /savetestimony, which needs the raw MS bodies rather than
+// the message text /testimony lists.
+func (a *Area) TstStatements() []string {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	out := make([]string, len(a.tr.Testimony))
+	copy(out, a.tr.Testimony)
+	return out
+}
+
+// TstReplaceAll replaces the whole testimony with statements and rewinds to the
+// title. The statements are stored exactly as given -- unlike TstAppend this
+// does not rewrite the statement text colour, so a loaded testimony keeps the
+// colours it was recorded with.
+func (a *Area) TstReplaceAll(statements []string) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	a.tr.Testimony = append([]string{}, statements...)
 	a.tr.Index = 0
 }
 

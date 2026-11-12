@@ -55,15 +55,15 @@ package athena
 
 import (
 	"fmt"
+	"math"
 	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
 	"unicode"
 
-	"github.com/MangosArentLiterature/Athena/internal/db"
-	"github.com/MangosArentLiterature/Athena/internal/logger"
 	aolib "github.com/AO-Underground/aolib/go/v2"
+	"github.com/MangosArentLiterature/Athena/internal/logger"
 	"github.com/MangosArentLiterature/Athena/internal/permissions"
 	"github.com/xhit/go-str2duration/v2"
 )
@@ -93,6 +93,13 @@ const (
 	SigGlobalSpam
 	SigSlurSevere
 	SigSlurFlagged
+	// Modcall behaviour. Added after the 2026-10-25 incident, where six fresh
+	// IPIDs re-ran the handshake and then called a moderator on joining. The
+	// guard saw the handshake replay (45, a watch) and nothing else: pktModcall
+	// had no hook at all, both modcall cooldowns return before anything
+	// observable, and the reason text never reached the correlator.
+	SigModcallOnJoin
+	SigModcallSpam
 	numRaidSignals
 )
 
@@ -260,6 +267,39 @@ var raidSignalWeight = [numRaidSignals]int{
 	// raidGuardOnWordHit (raidguard_wire.go), which no-ops on it before this
 	// file's scoring engine is ever reached.
 	SigSlurFlagged: 20,
+	// A modcall arriving while this connection is still brand new: the "Call
+	// Mod" dialog has to be opened and a reason typed, so a ZZ within a couple
+	// of seconds of joining is a script, not a person. Weighted at 60 for two
+	// reasons worth stating, because neither is obvious:
+	//
+	//   - It is the heaviest signal, above SigHandshakeAnomaly (50), because it
+	//     is the first one that is both protocol-shaped AND time-impossible for
+	//     a real client: modcall is a UI action with a text field in front of
+	//     it, unlike every other packet here.
+	//   - 60 is the ceiling, not a preference. TestBanNeedsThreeSignals requires
+	//     the two heaviest signals to stay under the ban threshold at the STRICT
+	//     tier, where 160 * 70% = 112: 60 + 50 = 110 clears it by two points.
+	//     Anything at 62 or above would let a pair of signals reach a ban on a
+	//     brand-new connection, which is the one arithmetic guarantee this file
+	//     makes. 60 also lands exactly on the baseline challenge rung, so a lone
+	//     misfire on an established connection is a self-service captcha.
+	//
+	// By itself this signal never bans and never disconnects (clampDisconnect
+	// needs three signals). The DETERMINISTIC nuke lives beside it, separate
+	// and explicitly gated -- see raidGuardModcallNuke.
+	SigModcallOnJoin: 60,
+	// Repeated modcalls from one IPID inside a long rolling window. This is the
+	// signal that makes "5 modcalls in 40 minutes" mean something, because the
+	// per-IPID cooldown used to hide exactly this pattern: every attempt after
+	// the first returned before the server recorded anything, so a script
+	// hammering ZZ looked like one quiet player.
+	//
+	// Its score is delivered by a curve rather than a lump (see
+	// raidModcallBurstScore), which is why markFiredWeighted records the bit
+	// without charging the weight again: a single modcall is worth 0, a second
+	// is worth 4, and only the fifth reaches this 45. A human who calls twice,
+	// or once every ten minutes, therefore never sees an alert.
+	SigModcallSpam: 45,
 }
 
 // raidSignalName labels a signal for staff alerts and the audit log.
@@ -278,6 +318,8 @@ var raidSignalName = [numRaidSignals]string{
 	SigGlobalSpam:        "global-channel spam while brand new",
 	SigSlurSevere:        "said something severely flagged",
 	SigSlurFlagged:       "said something flagged",
+	SigModcallOnJoin:     "called a moderator immediately after joining",
+	SigModcallSpam:       "modcall spam from a new connection",
 }
 
 // Verdict is the strongest action a score justifies. Ordered by severity; the
@@ -365,8 +407,35 @@ type raidState struct {
 
 	sawAskchaa bool
 
+	// Modcall evidence. modcallAttempts is how many ZZ packets THIS connection
+	// sent (refused ones included -- see raidGuardOnModcall), while modcallScore
+	// is the running total the curve in raidModcallBurstScore has charged so far,
+	// so each attempt only adds the difference.
+	modcallAttempts int
+	modcallScore    int
+
+	// playtimeSecs caches KNOWN_IPS.PLAYTIME for the modcall path only. A
+	// scripted ZZ flood can call noteModcall hundreds of times a second and
+	// db.GetPlaytime is a real query, so it is read once per connection and
+	// reused. The scored path keeps calling raidGuardTier directly; it only
+	// runs when something fired, which is rare by design.
+	playtimeSecs  int64
+	playtimeKnown bool
+
 	fired SignalKind // bitmask, not an index -- see markFired
 	score int
+	// scoreAt/score are the legacy total used as a fallback when a state was
+	// constructed directly by a test. Real signals populate the per-signal heat
+	// buckets below, so protocol evidence can outlive weak content evidence.
+	scoreAt time.Time
+	heat    [numRaidSignals]float64
+	heatAt  [numRaidSignals]time.Time
+
+	// modcallHeat carries the incremental raidModcallBurstScore curve, which is
+	// paid out before SigModcallSpam itself is declared.
+	modcallHeat   float64
+	modcallHeatAt time.Time
+
 	acted Verdict
 }
 
@@ -381,18 +450,140 @@ func newRaidState() *raidState {
 // bitmask markFired shifts into. rs.fired is a SignalKind (uint16), so index
 // numRaidSignals-1 must stay below 16 -- past that, `1 << k` silently wraps and
 // two different signals start sharing a bit.
+//
+// As of SigModcallOnJoin/SigModcallSpam the mask is FULL: all sixteen bits are
+// in use. A seventeenth signal must widen SignalKind (and this expression with
+// it) rather than simply being appended, otherwise the two signals sharing bit
+// 15 would let one mark the other as already fired.
 const _ = uint(15 - (numRaidSignals - 1))
 
 // markFired records a signal and adds its weight, exactly once. Returns false
 // if the signal had already fired, so callers can avoid re-alerting.
 func (rs *raidState) markFired(k SignalKind) bool {
+	return rs.markFiredWeighted(k, signalWeight(k))
+}
+
+// markFiredWeighted records a signal exactly once for an explicit weight.
+//
+// Only two callers want this. SigModcallSpam uses it with 0 because its score
+// is delivered incrementally by raidModcallBurstScore as attempts arrive, so
+// the curve has already paid out the signal's weight by the time the signal
+// itself is declared -- charging it again would double-count the fifth
+// modcall. Everything else goes through markFired.
+func (rs *raidState) markFiredWeighted(k SignalKind, weight int) bool {
 	bit := SignalKind(1) << k
 	if rs.fired&bit != 0 {
 		return false
 	}
 	rs.fired |= bit
-	rs.score += signalWeight(k)
+	now := time.Now()
+	rs.addSignalHeatLocked(k, weight, now)
+	// Keep the legacy total in step for tests that inspect or set it directly.
+	rs.score += weight
+	rs.scoreAt = now
 	return true
+}
+
+// addSignalHeatLocked decays one signal's bucket to now and adds weight.
+// Callers hold rs.mu.
+func (rs *raidState) addSignalHeatLocked(k SignalKind, weight int, now time.Time) {
+	rs.heat[k] = decayHeat(rs.heat[k], rs.heatAt[k], now, raidSignalHalfLife(k)) + float64(weight)
+	rs.heatAt[k] = now
+}
+
+// addModcallHeatLocked adds to the incremental modcall curve bucket.
+func (rs *raidState) addModcallHeatLocked(delta int, now time.Time) {
+	if delta == 0 {
+		return
+	}
+	rs.modcallHeat = decayHeat(rs.modcallHeat, rs.modcallHeatAt, now, raidGuardHeatHalfLife()) + float64(delta)
+	rs.modcallHeatAt = now
+	rs.score += delta
+	rs.scoreAt = now
+}
+
+// decayHeat returns value after exponential decay. A zero or negative half-life
+// means "no decay"; a zero timestamp means the value was never heat-tracked.
+func decayHeat(value float64, at, now time.Time, halfLife time.Duration) float64 {
+	if value == 0 || at.IsZero() || halfLife <= 0 {
+		return value
+	}
+	elapsed := now.Sub(at)
+	if elapsed <= 0 {
+		return value
+	}
+	return value * math.Exp2(-elapsed.Seconds()/halfLife.Seconds())
+}
+
+// currentScoreLocked returns the heat remaining at now. If the state has no
+// heat buckets (a test constructed it with an explicit score), the legacy total
+// decays uniformly so the old exact-weight tests still mean what they say.
+func (rs *raidState) currentScoreLocked(now time.Time) float64 {
+	var sum float64
+	hasHeat := false
+	if !rs.modcallHeatAt.IsZero() {
+		hasHeat = true
+		sum += decayHeat(rs.modcallHeat, rs.modcallHeatAt, now, raidGuardHeatHalfLife())
+	}
+	for k := SignalKind(0); k < numRaidSignals; k++ {
+		if rs.heatAt[k].IsZero() {
+			continue
+		}
+		hasHeat = true
+		sum += decayHeat(rs.heat[k], rs.heatAt[k], now, raidSignalHalfLife(k))
+	}
+	if hasHeat {
+		return sum
+	}
+	if rs.score <= 0 || rs.scoreAt.IsZero() {
+		return float64(rs.score)
+	}
+	halfLife := raidGuardHeatHalfLife()
+	if halfLife <= 0 {
+		return float64(rs.score)
+	}
+	elapsed := now.Sub(rs.scoreAt)
+	if elapsed <= 0 {
+		return float64(rs.score)
+	}
+	return float64(rs.score) * math.Exp2(-elapsed.Seconds()/halfLife.Seconds())
+}
+
+// raidSignalHalfLife gives protocol/protocol-adjacent evidence a longer memory
+// than weak content shape signals. The operator's raid_guard_heat_half_life is
+// the baseline: protocol signals last three times as long, severe content twice
+// as long. 0 still disables decay entirely.
+func raidSignalHalfLife(k SignalKind) time.Duration {
+	base := raidGuardHeatHalfLife()
+	if base <= 0 {
+		return 0
+	}
+	switch k {
+	case SigHandshakeAnomaly, SigHandshakeReplay, SigModcallOnJoin, SigModcallSpam:
+		return base * 3
+	case SigSlurSevere, SigSlurFlagged:
+		return base * 2
+	default:
+		return base
+	}
+}
+
+// raidGuardHeatHalfLife is how long it takes a score to halve. A false flag
+// therefore fades instead of staying on the connection's record forever; a
+// sustained burst re-adds heat faster than it decays and still reaches an
+// action. 0 disables decay for operators who want the old lifetime score.
+func raidGuardHeatHalfLife() time.Duration {
+	seconds := 300
+	if config != nil {
+		seconds = config.RaidGuardHeatHalfLife
+		if seconds < 0 {
+			seconds = 300
+		}
+	}
+	if seconds == 0 {
+		return 0
+	}
+	return time.Duration(seconds) * time.Second
 }
 
 // signalWeight is what markFired actually charges for a signal. It is a
@@ -570,7 +761,7 @@ func (rs *raidState) observe(obs Observation) (fired []SignalKind, score int) {
 		mark(SigGlobalSpam)
 	}
 
-	return fired, rs.score
+	return fired, int(math.Round(rs.currentScoreLocked(obs.Now)))
 }
 
 // noteCorrelated is called by the server-wide layer when this connection's text
@@ -612,11 +803,175 @@ func (rs *raidState) noteWordHit(sev WordSeverity) (fired []SignalKind) {
 	return fired
 }
 
-// snapshot returns the current score and fired-signal names.
-func (rs *raidState) snapshot() (score int, signals []string, acted Verdict) {
+// Modcall evidence, as the wire hook (raidGuardOnModcall) collects it. A plain
+// value like Observation, so the scoring engine and the nuke ladder can be
+// exercised in a test with a struct literal and no packet, DB or area.
+type modcallEvidence struct {
+	// Attempts is how many ZZ packets this IPID sent inside the rolling window,
+	// counting the one being scored and counting attempts the cooldowns refused.
+	Attempts int
+	// SinceJoin is how long this connection has been in the game; negative when
+	// it is not known yet.
+	SinceJoin time.Duration
+	// BrandNew is the hard gate on every deterministic action: playtime below
+	// raid_guard_strict_playtime, read once and cached on the connection.
+	BrandNew bool
+	// Smart factors -- independent script tells that let rule C below nuke a bot
+	// that paces itself instead of firing within the join window.
+	HandshakeReplay bool // SigHandshakeReplay already fired (protocol-impossible)
+	FastCharPick    bool // SigFastCharPick already fired
+	Spoke           bool // any IC/OOC line before this modcall
+	EchoedReason    bool // another IPID sent a near-identical reason
+}
+
+// raidModcallBurstScore is what a connection's nth modcall attempt inside the
+// window is worth, out of the signal's own weight.
+//
+// The shape matters more than the constants: a human who genuinely needs help
+// should be able to call once, and even twice, without the guard having an
+// opinion, while a loop that fires ZZ every 100ms should be at the ceiling
+// almost immediately. A straight linear ramp fails both ends (one call already
+// scores, and fifty calls score only fifty times one call). A quadratic does
+// not: with the shipped 5-per-40-minutes budget and weight 45,
+//
+//	n=1 -> 0, n=2 -> 4, n=3 -> 13, n=4 -> 27, n=5 -> 45, n=6 -> 67, ...
+//
+// so the first call is free, two calls sit below the strict tier's watch
+// threshold (40 * 70% = 28) and never alert, and the fifth lands exactly on
+// the signal's weight -- which is where SigModcallSpam is declared, hence the
+// markFiredWeighted(..., 0) in noteModcall. Past that it keeps climbing, capped
+// at raidModcallScoreCap times the weight so one connection's score stays in a
+// range staff can read rather than growing without bound.
+func raidModcallBurstScore(n, threshold, weight int) int {
+	if n <= 1 || threshold < 2 || weight <= 0 {
+		return 0
+	}
+	score := weight * n * (n - 1) / (threshold * (threshold - 1))
+	if max := weight * raidModcallScoreCap; score > max {
+		return max
+	}
+	return score
+}
+
+// raidModcallScoreCap bounds how much one IPID's modcall curve can contribute.
+const raidModcallScoreCap = 3
+
+// raidGuardModcallMinAttempts is the per-window attempt budget that declares
+// SigModcallSpam (raid_guard_modcall_min_attempts, default 5).
+func raidGuardModcallMinAttempts() int {
+	return raidGuardInt(config.RaidGuardModcallMinAttempts, 5)
+}
+
+// raidGuardModcallJoinMs is how soon after joining a modcall counts as
+// impossible for a person (raid_guard_modcall_join_ms, default 2500).
+func raidGuardModcallJoinMs() time.Duration {
+	return time.Duration(raidGuardInt(config.RaidGuardModcallJoinMs, 2500)) * time.Millisecond
+}
+
+// raidGuardModcallDwell is the window in which a second modcall makes a
+// brand-new connection a script (raid_guard_modcall_dwell, default 60s).
+func raidGuardModcallDwell() time.Duration {
+	return time.Duration(raidGuardInt(config.RaidGuardModcallDwell, 60)) * time.Second
+}
+
+// raidGuardModcallFanout is how many distinct IPIDs modcalling inside the
+// correlation window mark the server under attack (raid_guard_modcall_fanout,
+// default 3). This never scores anybody -- like an arrival burst it only
+// tightens thresholds for connections that already have evidence of their own.
+func raidGuardModcallFanout() int {
+	return raidGuardInt(config.RaidGuardModcallFanout, 3)
+}
+
+// raidGuardModcallNukeEnabled reports whether the deterministic modcall action
+// is switched on (raid_guard_modcall_nuke, default true).
+func raidGuardModcallNukeEnabled() bool {
+	if config == nil {
+		return true
+	}
+	return config.RaidGuardModcallNuke
+}
+
+// noteModcall folds one ZZ attempt into this connection's evidence and decides
+// whether the attempt is impossible enough to act on deterministically.
+//
+// Two things come out of it. The signals are ordinary scored evidence, handled
+// by the caller exactly like every other signal in this file. The second return
+// value is the nuke ladder, which is deliberately NOT scored evidence and is
+// the only place in this file where anything skips both the ban gate and the
+// three-signal floor -- so it is gated on the connection being brand new, and
+// on one of three things a human cannot produce:
+//
+//	A: the modcall arrived inside raid_guard_modcall_join_ms of joining. The
+//	   dialog has to be opened and a reason typed; no client UI gets there.
+//	B: a second attempt inside raid_guard_modcall_dwell of joining.
+//	C: a second attempt later, but with a script tell behind it (a replayed
+//	   handshake, an impossibly fast character pick, or a carbon-copy of another
+//	   IPID's reason). This is the "paces itself" case: a bot that waits between
+//	   sends still looks nothing like a person, while a person who calls again
+//	   ten minutes later looks exactly like one -- and is only ever scored (4
+//	   points). Never having spoken at all counts too, but only from the third
+//	   attempt: see the ladder below.
+//
+// Everything it might authorise is still clamped by raid_guard_max_action and
+// refused for anybody the playtime tiers exempt; see raidGuardModcallNuke.
+func (rs *raidState) noteModcall(ev modcallEvidence) (fired []SignalKind, nuke bool) {
 	rs.mu.Lock()
 	defer rs.mu.Unlock()
-	return rs.score, rs.firedSignals(), rs.acted
+
+	rs.modcallAttempts++
+	if ev.Attempts < 1 {
+		// The window count is authoritative (it spans reconnects); the
+		// per-connection tally is the fallback for a caller with no window.
+		ev.Attempts = rs.modcallAttempts
+	}
+
+	// The curve pays the signal's weight out in instalments.
+	threshold := raidGuardModcallMinAttempts()
+	weight := signalWeight(SigModcallSpam)
+	if target := raidModcallBurstScore(ev.Attempts, threshold, weight); target > rs.modcallScore {
+		rs.addModcallHeatLocked(target-rs.modcallScore, time.Now())
+		rs.modcallScore = target
+	}
+	if ev.Attempts >= threshold && rs.markFiredWeighted(SigModcallSpam, 0) {
+		fired = append(fired, SigModcallSpam)
+	}
+
+	joinMs := raidGuardModcallJoinMs()
+	withinJoinWindow := ev.SinceJoin >= 0 && ev.SinceJoin < joinMs
+	if withinJoinWindow && rs.markFired(SigModcallOnJoin) {
+		fired = append(fired, SigModcallOnJoin)
+	}
+
+	if !ev.BrandNew {
+		return fired, false
+	}
+	switch {
+	case withinJoinWindow:
+		return fired, true
+	case ev.Attempts >= 2 && ev.SinceJoin >= 0 && ev.SinceJoin < raidGuardModcallDwell():
+		return fired, true
+	case ev.Attempts >= 2 && (ev.HandshakeReplay || ev.FastCharPick || ev.EchoedReason):
+		return fired, true
+	case ev.Attempts >= 3 && !ev.Spoke:
+		// Silence is the weakest of the four tells, so it is the only one that
+		// needs a third attempt: a shy newcomer who calls twice about something
+		// they saw without typing a word is plausible, and is left to the score.
+		// Never speaking across three calls from a brand-new IPID is not.
+		return fired, true
+	}
+	return fired, false
+}
+
+// snapshot returns the current heat and fired-signal names.
+func (rs *raidState) snapshot() (score int, signals []string, acted Verdict) {
+	return rs.snapshotAt(time.Now())
+}
+
+// snapshotAt is snapshot with an explicit clock, for deterministic decay tests.
+func (rs *raidState) snapshotAt(now time.Time) (score int, signals []string, acted Verdict) {
+	rs.mu.Lock()
+	defer rs.mu.Unlock()
+	return int(math.Round(rs.currentScoreLocked(now))), rs.firedSignals(), rs.acted
 }
 
 // firedCount reports how many distinct signals have fired.
@@ -638,6 +993,15 @@ func (rs *raidState) firedSignal(k SignalKind) bool {
 	rs.mu.Lock()
 	defer rs.mu.Unlock()
 	return rs.hasFired(k)
+}
+
+// hasSpoken reports whether this connection has said anything at all, IC or
+// OOC. Used by the modcall rule-C ladder: a script calls moderators without
+// ever talking, while a person reporting something has usually typed first.
+func (rs *raidState) hasSpoken() bool {
+	rs.mu.Lock()
+	defer rs.mu.Unlock()
+	return rs.msgCount > 0
 }
 
 // escalate records that an action has been taken and reports whether it is a
@@ -771,7 +1135,7 @@ func raidGuardTier(client *Client) (scalePct int, punishable bool) {
 	if permissions.IsModerator(client.Perms()) {
 		return 0, false
 	}
-	secs, err := db.GetPlaytime(client.Ipid())
+	secs, err := cachedPlaytime(client.Ipid())
 	if err != nil {
 		return 0, false // fail open
 	}
@@ -880,17 +1244,26 @@ func capsRatio(s string) float64 {
 }
 
 // hasRepeatedWord reports whether any word of 3+ characters appears twice.
+// A fixed small array replaces a per-message map allocation: this runs on every
+// IC/OOC line that survives the caps/length checks, and the early-exit bound is
+// all a spam heuristic needs.
 func hasRepeatedWord(s string) bool {
-	seen := make(map[string]struct{}, 8)
+	var seen [8]string
+	n := 0
 	for _, w := range strings.Fields(strings.ToLower(s)) {
 		w = strings.TrimFunc(w, func(r rune) bool { return !unicode.IsLetter(r) && !unicode.IsDigit(r) })
 		if len(w) < 3 {
 			continue
 		}
-		if _, dup := seen[w]; dup {
-			return true
+		for i := 0; i < n; i++ {
+			if seen[i] == w {
+				return true
+			}
 		}
-		seen[w] = struct{}{}
+		if n < len(seen) {
+			seen[n] = w
+			n++
+		}
 	}
 	return false
 }
@@ -906,7 +1279,7 @@ func isGlobalCommand(s string) bool {
 // raidGuardEnforce applies a verdict, clamped to the operator's configured
 // ceiling and skipped entirely for exempt clients. Alerts staff on every
 // escalation so the guard can never act on a real player unnoticed.
-func raidGuardEnforce(client *Client, rs *raidState, want Verdict, trigger string) {
+func (g *raidGuardSystem) enforce(client *Client, rs *raidState, want Verdict, trigger string) {
 	if client == nil || rs == nil || want == VerdictClean {
 		return
 	}
@@ -938,15 +1311,13 @@ func raidGuardEnforce(client *Client, rs *raidState, want Verdict, trigger strin
 	// the pending captcha, is as far as two signals can go.
 	want = clampDisconnect(want, rs.firedCount())
 
-	// The challenge rung borrows the join captcha's machinery, so it cannot work
-	// when the operator has turned that off. Degrade it to an alert rather than
-	// silently handing out captchas on a server whose owner disabled them --
-	// and specifically NOT to silence, which without a pending question the
-	// player could answer is harsher than the rung above it, not gentler. If the
-	// behaviour continues the score keeps climbing to kick or ban on its own.
-	if want == VerdictChallenge && !joinCaptchaEnabled() {
-		want = VerdictWatch
-	}
+	// The challenge rung must always do something. It used to degrade to
+	// VerdictWatch when join_captcha was off, which made a score of 60-79 a
+	// permanent no-op: the connection kept its session, kept sending, and the
+	// one-shot signals could never push it any higher. The guard now issues its
+	// own challenge through the same generator even when the global join gate is
+	// disabled (see raidGuardChallenge), and a challenge that times out or is
+	// ignored kicks the connection.
 
 	// Watch is only an alert, so it is safe for anyone; every punitive verdict is
 	// clamped to the operator's configured ceiling and to the connection's
@@ -960,8 +1331,26 @@ func raidGuardEnforce(client *Client, rs *raidState, want Verdict, trigger strin
 			want = VerdictWatch
 		}
 	}
+	g.act(client, rs, want, trigger)
+}
+
+// raidGuardAct applies an already-decided verdict: the escalation latch, the
+// action itself, the audit trail and the staff alert.
+//
+// Split out of raidGuardEnforce so the deterministic modcall rule can reach the
+// same machinery without inheriting the gates it deliberately does not take
+// (see raidGuardModcallNuke). Everything above this function is a judgement
+// about what the evidence justifies; this is the only place that does
+// something to a connection, which is why both paths end here.
+//
+// Reports whether an action was actually taken. A connection already acted on
+// at this rung or higher is left alone -- escalate only ever moves forward.
+func (g *raidGuardSystem) act(client *Client, rs *raidState, want Verdict, trigger string) bool {
+	if client == nil || rs == nil || want == VerdictClean {
+		return false
+	}
 	if !rs.escalate(want) {
-		return
+		return false
 	}
 
 	score, signals, _ := rs.snapshot()
@@ -971,9 +1360,9 @@ func raidGuardEnforce(client *Client, rs *raidState, want Verdict, trigger strin
 	case VerdictWatch:
 		// Alert only.
 	case VerdictChallenge:
-		raidGuardChallenge(client)
+		g.challenge(client)
 	case VerdictSilence:
-		raidGuardSilence(client)
+		g.silence(client)
 	case VerdictKick:
 		client.SendSync(&aolib.KK{Reason: "Disconnected by the raid guard. If you are a real player caught by " +
 			"this, reconnect and say so in OOC -- staff have been alerted and can clear it."})
@@ -991,6 +1380,111 @@ func raidGuardEnforce(client *Client, rs *raidState, want Verdict, trigger strin
 	logger.WriteAudit(fmt.Sprintf("%v | RAID_GUARD | IPID:%v | UID:%v | action=%v | score=%d | signals=%v",
 		time.Now().UTC().Format("15:04:05"), client.Ipid(), client.Uid(), want, score, reason))
 	alertRaidGuard(client, want, score, signals)
+	return true
+}
+
+// raidGuardBrandNew reports whether this connection's IPID is brand new, in the
+// sense the playtime tiers already define: below raid_guard_strict_playtime of
+// accumulated KNOWN_IPS.PLAYTIME. It is the hard gate on every deterministic
+// modcall action, so an established player is never nuked however a modcall
+// looks.
+//
+// The read is cached on raidState rather than calling raidGuardTier: a scripted
+// ZZ flood can drive this hundreds of times a second and db.GetPlaytime is a
+// real query. A DB error returns false -- no nuke -- which is the same
+// fail-open rule the tiers themselves use. Playtime is cached for the life of
+// the connection, so a player who crosses the threshold mid-session keeps the
+// verdict they started with, which is the conservative direction.
+func raidGuardBrandNew(client *Client, rs *raidState) bool {
+	if client == nil || rs == nil || permissions.IsModerator(client.Perms()) {
+		return false
+	}
+	rs.mu.Lock()
+	known, secs := rs.playtimeKnown, rs.playtimeSecs
+	rs.mu.Unlock()
+	if !known {
+		read, err := cachedPlaytime(client.Ipid())
+		if err != nil {
+			return false // fail open
+		}
+		secs = read
+		rs.mu.Lock()
+		rs.playtimeSecs, rs.playtimeKnown = secs, true
+		rs.mu.Unlock()
+	}
+	strict := 15
+	if config != nil && config.RaidGuardStrictPlaytime > 0 {
+		strict = config.RaidGuardStrictPlaytime
+	}
+	if strict <= 0 {
+		return false
+	}
+	return lockdownPurgeEligible(secs, int64(strict)*60)
+}
+
+// raidGuardModcallNukeVerdict is the action a deterministic modcall nuke
+// resolves to. Always a ban, clamped to the operator's ceiling: the switch is
+// the operator's deliberate opt-in to acting without corroboration, but
+// raid_guard_max_action is still the switch that says what this server may do
+// automatically, and a nuke is not allowed to be the one thing that ignores it.
+func raidGuardModcallNukeVerdict() Verdict {
+	want := VerdictBan
+	if ceiling := raidGuardMaxAction(); want > ceiling {
+		want = ceiling
+	}
+	return want
+}
+
+// raidGuardModcallNuke is the one deterministic action in this file: a modcall
+// that no person could have sent, from an IPID with no history.
+//
+// It skips clampDisconnect and raidBanAllowed on purpose, and that is the only
+// place either is skipped. The justification is that its evidence is not
+// statistical at all -- it is time: a modcall packet is produced by a dialog
+// with a text field, so one arriving inside raid_guard_modcall_join_ms of the
+// connection joining is as impossible for a real client as a second askchaa.
+// That is the same standing AutoMod's nuke tier has (a deterministic action
+// beside a scored one, not folded into it), and the same reason it is kept
+// visibly separate here rather than being fitted into the score.
+//
+// What it does NOT skip: a moderator is never nuked, and neither is anybody the
+// playtime tiers exempt, because raidGuardTier is still consulted; the verdict
+// is still clamped by raid_guard_max_action; and it still goes through
+// raidGuardAct, so the action is audited and every holder of MOD_CHAT is told.
+func raidGuardModcallNuke(client *Client, rs *raidState, trigger string) bool {
+	if client == nil || rs == nil {
+		return false
+	}
+	if _, punishable := raidGuardTier(client); !punishable {
+		// Established, exempt or a database hiccup: alert only. The caller
+		// still runs the scored path, so staff see the signal.
+		return false
+	}
+	want := raidGuardModcallNukeVerdict()
+	if want <= VerdictWatch {
+		// The ceiling is "watch", so there is nothing deterministic to do;
+		// fall through to the scored path, which will alert.
+		return false
+	}
+	return raidSystem.act(client, rs, want, trigger)
+}
+
+// raidGuardSinceJoin is how long this connection has been in the game, for the
+// modcall timing rules. ConnectedAt is set when RD assigns a UID, which is the
+// moment a client can first send ZZ; AcceptedAt covers the case where a test or
+// an unusual client has no join timestamp yet. Negative means unknown, which
+// every caller treats as "do not act on timing".
+func raidGuardSinceJoin(client *Client, now time.Time) time.Duration {
+	if client == nil {
+		return -1
+	}
+	if joined := client.ConnectedAt(); !joined.IsZero() {
+		return now.Sub(joined)
+	}
+	if accepted := client.AcceptedAt(); !accepted.IsZero() {
+		return now.Sub(accepted)
+	}
+	return -1
 }
 
 // raidGuard returns this connection's raid-guard state, creating it on first
@@ -1000,12 +1494,20 @@ func (client *Client) raidGuard() *raidState {
 	if client == nil || !raidGuardActive.Load() {
 		return nil
 	}
+	// Fast path: once the state exists, every IC/OOC line can read it without
+	// taking client.mu. The pointer is published after the state is fully
+	// constructed; raidState is self-synchronised.
+	if state := client.raidFast.Load(); state != nil {
+		return state
+	}
 	client.mu.Lock()
-	defer client.mu.Unlock()
 	if client.raid == nil {
 		client.raid = newRaidState()
 	}
-	return client.raid
+	state := client.raid
+	client.mu.Unlock()
+	client.raidFast.Store(state)
+	return state
 }
 
 // resetRaidGuard clears a connection's accumulated evidence. Used by
@@ -1017,6 +1519,7 @@ func (client *Client) resetRaidGuard() {
 	client.mu.Lock()
 	client.raid = nil
 	client.mu.Unlock()
+	client.raidFast.Store(nil)
 }
 
 // minSignalsToDisconnect is how many distinct signals must fire before the guard
@@ -1046,19 +1549,21 @@ func raidBanAllowed(correlatedAcrossIPIDs, serverUnderAttack bool) bool {
 	return correlatedAcrossIPIDs && serverUnderAttack
 }
 
-// raidGuardChallenge forces a join captcha onto a connection the guard finds
-// suspicious, even one the captcha's own exemptions would have skipped.
+// raidGuardChallenge forces a verification question onto a connection the
+// guard finds suspicious, even one the join captcha's own exemptions would
+// have skipped and even when the global join captcha switch is off.
 //
-// issueJoinCaptcha re-checks those exemptions itself and so cannot be reused
-// here: the whole point is that this connection has *earned* a question through
-// its behaviour, which is a different judgement from "we have never seen this
-// IPID before". A client already awaiting or restricted by the captcha is left
-// alone rather than being handed a fresh question.
-func raidGuardChallenge(client *Client) {
-	// Also checked by raidGuardEnforce, which degrades the verdict before
-	// getting here; repeated so no future caller can hand out a captcha on a
-	// server that has the feature switched off.
-	if !joinCaptchaEnabled() {
+// issueJoinCaptcha re-checks the operator's join-gate policy and cannot be
+// reused here: the whole point is that this connection has *earned* a question
+// through its behaviour. A client already awaiting or restricted by the
+// captcha is left alone rather than being handed a fresh question.
+//
+// A guard-issued challenge is deliberately not silent: it must be resolvable
+// with /verify (cmdVerify consults guardChallenge) and it must terminate the
+// connection when it is not resolved. A challenge with no answer path is just a
+// longer-lived zombie.
+func (g *raidGuardSystem) challenge(client *Client) {
+	if client == nil || client.closed.Load() {
 		return
 	}
 	if client.awaitingCaptcha.Load() || client.captchaRestricted.Load() {
@@ -1068,15 +1573,23 @@ func raidGuardChallenge(client *Client) {
 	if !ok {
 		c = pickJoinChallenge(client.Ipid())
 	}
+	if strings.TrimSpace(c.Prompt) == "" {
+		// No question could be generated. Do not leave the connection in a
+		// state it cannot resolve; close it with an explanation instead.
+		client.SendSync(&aolib.KK{Reason: "Disconnected by the raid guard: verification could not be issued. Reconnect in a moment."})
+		client.markClosed()
+		return
+	}
 	client.mu.Lock()
 	client.pendingJoinChallenge = c
 	client.mu.Unlock()
 	client.captchaStrikes.Store(0)
+	client.guardChallenge.Store(true)
 	client.awaitingCaptcha.Store(true)
 
 	client.SendServerMessage(fmt.Sprintf(
-		"%s\n\n    %s\n\n%s\n\nSomething about this connection looked automated, so we need one answer before you can chat.",
-		captchaBanner, c.Prompt, c.Hint))
+		"%s\n\n    %s\n\n%s\n\nSomething about this connection looked automated, so we need one answer before you can chat. Answer with /verify %s.",
+		captchaBanner, c.Prompt, c.Hint, "<answer>"))
 	client.sendCaptchaPopup(c)
 	go client.joinCaptchaTimeoutWatch()
 }
@@ -1084,10 +1597,19 @@ func raidGuardChallenge(client *Client) {
 // raidGuardSilence quarantines a connection using the join captcha's own
 // restricted-delivery path: messages echo back to the sender so their client
 // looks normal, and reach nobody else. The pending challenge is left in place
-// so a real player caught here can still answer it and free themselves without
-// waiting for staff.
-func raidGuardSilence(client *Client) {
-	client.awaitingCaptcha.Store(false)
+// (and issued first if there is not one) so a real player caught here can answer
+// it and free themselves; the challenge timeout then closes a connection that
+// does not.
+func (g *raidGuardSystem) silence(client *Client) {
+	if client == nil || client.closed.Load() {
+		return
+	}
+	if !client.awaitingCaptcha.Load() {
+		g.challenge(client)
+		if client.closed.Load() {
+			return
+		}
+	}
 	if client.captchaRestricted.CompareAndSwap(false, true) {
 		activeCaptchaRestricted.Add(1)
 	}
@@ -1114,7 +1636,7 @@ func (c *Client) SetRaidAlertsDisabled(off bool) {
 // is appended here rather than by each caller so no alert can ever go out
 // without telling its reader how to turn it off.
 func sendRaidGuardAlert(msg string) {
-	out := &aolib.CTToClient{Name: "[RAIDGUARD]", Message: encode(msg + "\n" + raidAlertHint), IsFromServer: true}
+	out := &aolib.CTToClient{Name: "[RAIDGUARD]", Message: msg + "\n" + raidAlertHint, IsFromServer: true}
 	clients.ForEach(func(c *Client) {
 		if !permissions.HasPermission(c.Perms(), permissions.PermissionField["MOD_CHAT"]) {
 			return
@@ -1135,11 +1657,11 @@ func alertRaidGuard(client *Client, v Verdict, score int, signals []string) {
 		areaName = a.Name()
 	}
 	selfService := ""
-	if v == VerdictSilence && !joinCaptchaEnabled() {
-		// Normally a quarantined player frees themselves by answering the
-		// pending captcha. With the captcha switched off there is no question to
-		// answer, so staff are the only way out and need to know that.
-		selfService = "\nThe join captcha is off, so they CANNOT free themselves — this needs staff."
+	if v == VerdictSilence && !client.awaitingCaptcha.Load() {
+		// silence issues a guard challenge even when the join captcha is off,
+		// so a pending challenge means the player can still free themselves.
+		// Only warn staff when no challenge is pending.
+		selfService = "\nNo verification challenge is pending on this connection, so it may need staff."
 	}
 	msg := fmt.Sprintf("%s (UID %d, IPID %s) in %s — raid guard: %s (score %d).\nSignals: %s%s\n"+
 		"If this is a real player, clear them with /raidguard clear %d.",

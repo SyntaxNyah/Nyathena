@@ -241,6 +241,9 @@ func cmdContagious(client *Client, args []string, usage string) {
 	uidArg := flags.Arg(1)
 
 	apply := func(c *Client) {
+		if applyAntiPunishShieldIfActive(client, c, []PunishmentType{pType, PunishmentContagious}, duration, *reason) {
+			return
+		}
 		c.AddPunishmentBy(pType, duration, *reason, tier)
 		c.AddPunishmentWithData(PunishmentContagious, duration, *reason, pType.String())
 		c.setPunishmentTier(PunishmentContagious, tier)

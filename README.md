@@ -2,7 +2,7 @@
 
 # Nyathena
 
-**Nyathena** is a fork of [Athena](https://github.com/MangosArentLiterature/Athena) a lightweight AO2 (Attorney Online 2) server written in Go. It is maintained by [SyntaxNyah](https://github.com/syntaxnyah) with huge credits to [OmniTroid](https://github.com/OmniTroid) fur supporting this project with many bug fixes, improvements and code cleanup. Huge shoutouts to them for the support.  Full credit for the original server, its design, and everything it's built on goes to [MangosArentLiterature](https://github.com/MangosArentLiterature).
+**Nyathena** is a fork of [Athena](https://github.com/MangosArentLiterature/Athena) a lightweight AO2 (Attorney Online 2) server written in Go. It is maintained by [SyntaxNyah](https://github.com/syntaxnyah) with huge credits to [OmniTroid](https://github.com/OmniTroid) for supporting this project with many bug fixes, improvements and code cleanup — and for creating the [aolib-go](https://github.com/AO-Underground/aolib/tree/main/go) library and the JSON wire protocol it implements (co-authored with SyntaxNyah), which Nyathena now uses for all packet encoding. Huge shoutouts to them for the support.  Full credit for the original server, its design, and everything it's built on goes to [MangosArentLiterature](https://github.com/MangosArentLiterature).
 
 This started as a personal server project and kind of spiralled. One punishment command becoming ten, a casino system, tag system, account system, a bunch of mini games and the whole time it kept being *fun* to add things, which is not always how software development goes. That's entirely down to how well Athena is built. Adding a new feature rarely meant slow build times or having to debug for hours in the codebase. It usually just meant writing the thing.
 
@@ -16,9 +16,11 @@ This fork is a **120+ command punishment system** designed to give moderators a 
 
 This is the main thing Nyathena exists for. All punishment commands support `-d <duration>`, `-r <reason>`, `-h` (hidden — applies silently without notifying the target), and the `global` keyword (applies to every non-moderator in the area). They accept comma-separated UIDs, auto-expire, and stack freely. Check what's on a player (or yourself) anytime with `/punishments [uid]`.
 
+**Anti-Punishment Shield (`/antipunishshield`, ADMIN):** makes a player immune to punishment effects until the server restarts. The moderator who tried to punish them sees their messages spoofed as if it worked; `backfire` also applies the punishment to that moderator. The shielded player gets a sneaky popup telling them who tried and whether it backfired. A backfire shield also reverses `/leash`: the shielded player becomes the master and the moderator who tried to leash them becomes the dog. `/kick`, `/ban`, and `/mute` still work.
+
 **Text Effects (60):** `/whisper`, `/backward`, `/stutterstep`, `/elongate`, `/uppercase`, `/lowercase`, `/robotic`, `/alternating`, `/fancy`, `/uwu`, `/pirate`, `/shakespearean`, `/caveman`, `/censor`, `/fromsoftware`, `/confused`, `/paranoid`, `/drunk`, `/hiccup`, `/whistle`, `/mumble`, `/slang`, `/cherri`, `/albhed`, `/morse`, `/vowelhell`, `/upsidedown`, `/autospell`, `/thesaurusoverload`, `/valleygirl`, `/babytalk`, `/thirdperson`, `/unreliablenarrator`, `/uncannyvalley`, `/chef`, `/karen`, `/passiveaggressive`, `/nervous`, `/sarcasm`, `/academic`, `/philosopher`, `/poet`, `/quote`, `/spaghetti`, `/essay`, `/rng`, `/haiku`, `/dreamsequence`, `/timewarp`, `/zalgo`, `/leetspeak`, `/smallcaps`, `/piglatin`, `/vaporwave`, `/lisp`, `/spoonerism`, `/keysmash`, `/weeb` (350+ romaji corpus), `/politician`, `/clickbait`, `/markov` (babble brewed from the area's own chat history), `/alliteration`, `/cipher` (escalating ROT13 → BINARY → BASE64)
 
-**Themed Quote Replacers (10):** `/gordonramsay` (60+ kitchen tirades), `/biblebot`, `/grounded`, `/mime`, `/subtitles`, `/spotlight`, `/recipe`, `/rickroll`, `/pickup`, `/brainrot`
+**Themed Quote Replacers (11):** `/gordonramsay` (60+ kitchen tirades), `/biblebot`, `/grounded`, `/mime`, `/subtitles`, `/spotlight`, `/recipe`, `/rickroll`, `/pickup`, `/brainrot`, `/gold` (AO Gold / Skrapegropen Premium paywall)
 
 **Persona / Personality (5):** `/clown`, `/jester`, `/joker`, `/tourettes`, `/translator` (via DeepL API)
 
@@ -85,6 +87,24 @@ Virtual currency (**Nyathena Chips**) stored in SQLite. New players start with 5
 Economy: `/chips`, `/chips top`, `/chips give`, `/richest`. Earn passively via jobs (`/busker`, `/janitor`, `/paperboy`, `/clerk`, `/bailiffjob`) or win unscramble events that fire every 30 min–3 h.
 
 Shop (`/shop`): 30 cosmetic tags (1,000–10,000,000 chips), job cooldown reduction passes, job reward bonus passes.
+
+### Pebble Mode (`pebble_mode = true`)
+
+A separate, no-stakes economy for servers that want activities without gambling.
+
+- **Pebbles** are stored per IPID in SQLite. They are never wagered, lost, traded or awarded for playtime.
+- **Earning:** `/daily` (+3, 20h), `/explore` (+2, 2h), `/cast` (+1, 1h), jobs, unscramble events, and random world events.
+- **Casual mini-games:** `/minigame slots`, `/minigame blackjack`, `/minigame crash` — high scores and streaks only. They award no Pebbles and use no chips.
+- **Duck pond:** `/pond feed` is free and awards nothing. The ducks may hand you a deterministic fortune-cookie quote.
+- **Quiet activities:** `/cloudwatch`, `/stargaze`, `/nap` and `/fortune` are pure flavour. No rewards, no RNG outcomes.
+- **Shop:** existing non-gambling tags are free for everyone with `/settag`. Only a couple of cheap Pebble tags are sold: `/shop activity`, `/shop community`.
+- **World events:** once per day at 1-in-5 odds, a Wrecked Ship spawns in a random public area with players. `/claimwreck` or `/claim ship` wins. Smaller ambient events (lost satchel, wandering merchant, meteor shower, picnic basket) also spawn. All loot is a bonus; nothing is risked.
+- **Alerts:** `/events off` hides global event alerts for you; `/events on` restores them.
+- **Staff:** `/pebbleset minigames|events true|false` per area, `/grantpebbles <uid> <amount>`.
+- **Coexistence:** `casino_enabled` / `enable_casino` are independent. If both are on, the legacy Casino keeps its chips and bets while `/minigame` remains a separate no-stakes surface.
+
+Pebble Mode is enabled in every area by default. Staff can disable mini-games or world events in a specific area with `/pebbleset`.
+
 
 ### Discord Bot Integration
 
@@ -187,6 +207,8 @@ Daily-rotating log files per area under `logs/<AreaName>/`. Format: `[HH:MM:SS] 
 
 UID-based mutual pairing that survives area and character changes. Pair messages use each player's showname when set. `/unpair` does a full bidirectional reset — no stale pair state left on the peer. Flag yourself `/lfp` (Looking For Pair) and browse the area's flagged players with `/pairlist`.
 
+**`/leash <master uid> <dog uid>`** (`KICK`) claims a player as your dog: it force-pairs them to you, applies `/dog`, and drags them along on every area change — including through punishment-safe rooms. Claiming someone already paired pops `Your partner has been leashed` at their old partner. `/unpair` is refused for both ends — a dog gets `Dogs don't abandon their master` — so the claim is released with full `/unpunish`/`/unpunish all` or a moderator's `/forceunpair`. `/unpunish -t dog` removes only the barking and leaves the leash on. A dog carrying an `/antipunishshield ... backfire` bounces the command — the shielded player becomes the master and the moderator becomes the dog.
+
 ### Custom Command Builder (Console)
 
 A console-only way to author new slash commands **at runtime** — no restart, no `git pull`, no Go. An operator types `customcmd` in the server console to open a beginner-friendly menu (numbered options, a guided wizard, keyword shortcuts, and one-liners like `customcmd quick mute uwu 10m`), or drops a JSON definition in `config/custom_commands/` and runs `customcmd reload`. Commands are built from small actions — `message`, `punish`, `kick`, `ban`, `mute`, `move`, `run` (any existing built-in), `random`, and more — with targets (`@args`, `@global`, …) and `{caller.name}`-style templating. Every command is testable with `customcmd test <name>` against a fake player, and grantable to any account via `grantcmd <username> <name>`.
@@ -202,6 +224,7 @@ A console-only way to author new slash commands **at runtime** — no restart, n
 - **Doki Area Effect** — literature-club-themed chaos per area (`doki_area = true` in `areas.toml`)
 - **Persistent `/musicban`** — bans an IPID from playing music across sessions; bypassed in areas with fewer than 3 people. `/musicunban` and `/musicbans` round out the set
 - **Hot `/reload`** — atomic, race-free reload of `characters.txt` (append-only), `music.txt`, `cdns.txt`, `backgrounds.txt`, `parrot.txt`, `8ball.txt`, `banned_words.txt` and `config.toml` motd/desc without restarting; also bound to stdin `reload` and `SIGHUP`
+- **`/mods`** — every online moderator grouped by the area they are currently in, with UIDs, so players can tell at a glance whether staff is reachable and where. Public, but shadow mods and `/admin hide`'d admins stay hidden from non-admins exactly as in `/gas` (admins see them tagged `(shadow)`/`(hidden)`)
 - **Shadow Mod Visibility** — shadow mods are invisible in `/gas`/`/players` to non-admins
 - **`/charshuffle` / `/uncharshuffle`** — Sattolo-permutes everyone's character sprite; originals remembered
 - **`/reversename` / `/unreversename`** — flips showname rune order; stacks cleanly with `/forcename`
@@ -219,6 +242,7 @@ A console-only way to author new slash commands **at runtime** — no restart, n
 - **`/gas`** hides empty areas with a count at the bottom
 - Locked-room kick lockout bug fix (kicked players can no longer walk back in)
 - Hot Potato, Quick Draw, Chip Giveaway, Area Roulette minigames
+- **Deathroll** — `/deathroll host [limit]` opens a room-scoped lobby; players in that room join with `/deathroll join` and take turns rolling `1d<previous roll>`. A 1 loses and earns a `/maso` effect locked for 10 minutes. Hosts can change the limit with `/deathroll limit <n>`; anyone can mute broadcasts with `/deathroll hide`. See [docs/DEATHROLL_COMMANDS.md](docs/DEATHROLL_COMMANDS.md)
 - Wardrobe management, in-place server restart via `syscall.Exec`
 
 ### Removed
@@ -272,6 +296,10 @@ Key options beyond upstream defaults (`config/config.toml`):
 | `[Discord] bot_token` / `guild_id` | Discord bot credentials |
 
 See `CLAUDE.md` for the full configuration reference.
+
+### Configs that won't parse
+
+`config.toml`, `areas.toml` and `roles.toml` are sanitised before they are parsed, so the usual Windows-vs-Linux encoding traps cannot stop the server from booting. A UTF-8 byte-order mark, UTF-16 text (what PowerShell's `>` and `Out-File` write by default) and stray NUL bytes are repaired in place, with a warning naming the file and what was fixed; parsing then uses the repaired copy in memory, so a read-only `config/` still boots. A file that cannot be repaired mechanically (Latin-1, Shift-JIS, …) is left untouched and the parser's own error is reported.
 
 Setting up staff roles, or want to hand one player or moderator a single extra command (like `/ban`) without changing their role at all? See **[docs/PERMISSIONS_GUIDE.md](docs/PERMISSIONS_GUIDE.md)** — the full permission system reference, with copy-pasteable examples.
 
@@ -331,4 +359,4 @@ Genuine thanks and full credit to MangosArentLiterature for building something t
 
 ---
 
-**Nyathena** fork and most additions by [SyntaxNyah](https://github.com/syntaxnyah) with support, extra additions, bug fixes and cleanup from [OmniTroid](https://github.com/OmniTroid).
+**Nyathena** fork and most additions by [SyntaxNyah](https://github.com/syntaxnyah) with support, extra additions, bug fixes and cleanup from [OmniTroid](https://github.com/OmniTroid). The [aolib-go](https://github.com/AO-Underground/aolib/tree/main/go) library and the JSON wire protocol it implements were created by [OmniTroid](https://github.com/OmniTroid), co-authored with [SyntaxNyah](https://github.com/syntaxnyah).

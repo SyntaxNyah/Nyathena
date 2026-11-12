@@ -31,7 +31,9 @@ type Command struct {
 	usage      string
 	desc       string
 	reqPerms   uint64
-	casinoCmd  bool   // when true, command is hidden/disabled if EnableCasino is false
+	casinoCmd  bool   // when true, command requires the legacy casino (Chips)
+	pebbleCmd  bool   // when true, command requires Pebble Mode
+	economyCmd bool   // when true, command requires either casino or Pebble Mode
 	accountCmd bool   // when true, command requires the account system (works without EnableCasino so long as EnableAccounts is true)
 	voiceCmd   bool   // when true, command is hidden/disabled if EnableVoice is false
 	category   string // help category (e.g. "general", "casino", "punishment")
@@ -88,6 +90,14 @@ func initCommands() {
 			minArgs:  0,
 			usage:    "Usage: /about",
 			desc:     "Prints Nyathena version and credit information.",
+			reqPerms: permissions.PermissionField["NONE"],
+			category: "general",
+		},
+		"dailyquote": {
+			handler:  cmdDailyQuote,
+			minArgs:  0,
+			usage:    "Usage: /dailyquote",
+			desc:     "Display the daily quote as Kai-Bot-SG IC text.",
 			reqPerms: permissions.PermissionField["NONE"],
 			category: "general",
 		},
@@ -167,7 +177,7 @@ func initCommands() {
 			handler:  cmdBg,
 			minArgs:  1,
 			usage:    "Usage: /bg <background>",
-			desc:     "Sets the area's background. DJs may use this once per minute; CMs and MODIFY_AREA have no limit.",
+			desc:     "Sets the area's background. Any name is accepted, so clients with local background files can use custom art; DJs may use this once per minute, CMs and MODIFY_AREA have no limit.",
 			reqPerms: permissions.PermissionField["NONE"],
 			category: "area",
 		},
@@ -304,7 +314,7 @@ func initCommands() {
 			handler:  cmdForceBGList,
 			minArgs:  1,
 			usage:    "Usage: /forcebglist <true|false>",
-			desc:     "Toggles enforcing the server BG list on or off.",
+			desc:     "Toggles enforcing the server BG list for DJs on or off. CMs and MODIFY_AREA can always use a custom background name.",
 			reqPerms: permissions.PermissionField["MODIFY_AREA"],
 			category: "area",
 		},
@@ -407,8 +417,16 @@ func initCommands() {
 		"kickarea": {
 			handler:  cmdAreaKick,
 			minArgs:  1,
-			usage:    "Usage: /kickarea <uid1>,<uid2>...",
-			desc:     "Kicks user(s) from the current area.",
+			usage:    "Usage: /kickarea <uid1>,<uid2>... [reason]\nExample: /kickarea 42,43 Being too loud",
+			desc:     "Kicks user(s) from the current area. An optional reason is announced to the area and popped up to the kicked player.",
+			reqPerms: permissions.PermissionField["CM"],
+			category: "area",
+		},
+		"areakick": {
+			handler:  cmdAreaKick,
+			minArgs:  1,
+			usage:    "Usage: /areakick <uid1>,<uid2>... [reason]   (alias of /kickarea)",
+			desc:     "Alias of /kickarea: kicks user(s) from the current area.",
 			reqPerms: permissions.PermissionField["CM"],
 			category: "area",
 		},
@@ -596,6 +614,14 @@ func initCommands() {
 			reqPerms: permissions.PermissionField["MOD_SPEAK"],
 			category: "moderation",
 		},
+		"modcall": {
+			handler:  cmdModcall,
+			minArgs:  0,
+			usage:    "Usage: /modcall <enable|disable|status>\nBare /modcall reports the current state.",
+			desc:     "Enables, disables or reports server-wide modcalls. While disabled every modcall packet is refused and counted before any cooldown, buffer line, webhook or report runs. The switch is in-memory and comes back enabled when the server restarts.",
+			reqPerms: permissions.PermissionField["MOD_CHAT"],
+			category: "moderation",
+		},
 		"modchat": {
 			handler:  cmdModChat,
 			minArgs:  1,
@@ -643,6 +669,14 @@ func initCommands() {
 			desc:     "Manages per-IPID moderator notes.",
 			reqPerms: permissions.PermissionField["BAN_INFO"],
 			category: "moderation",
+		},
+		"mods": {
+			handler:  cmdMods,
+			minArgs:  0,
+			usage:    "Usage: /mods",
+			desc:     "Lists every online moderator and the area they are currently in.",
+			reqPerms: permissions.PermissionField["NONE"],
+			category: "general",
 		},
 		"mute": {
 			handler:  cmdMute,
@@ -817,27 +851,35 @@ func initCommands() {
 			reqPerms: permissions.PermissionField["NONE"],
 			category: "general",
 		},
-		"triple": {
-			handler:  cmdTriple,
+		"grouppair": {
+			handler:  cmdGroupPair,
+			minArgs:  1,
+			usage:    "Usage: /grouppair <uid> [uid ...]",
+			desc:     "Starts a pairing group request with the listed players.",
+			reqPerms: permissions.PermissionField["NONE"],
+			category: "general",
+		},
+		"forcegrouppair": {
+			handler:  cmdForceGroupPair,
 			minArgs:  2,
-			usage:    "Usage: /triple <uid> <uid>",
-			desc:     "Starts a 3-way pairing request with two players.",
-			reqPerms: permissions.PermissionField["NONE"],
-			category: "general",
+			usage:    "Usage: /forcegrouppair <uid1> <uid2> [uid ...]",
+			desc:     "Force-forms a pairing group of the listed players (you are not included).",
+			reqPerms: permissions.PermissionField["KICK"],
+			category: "moderation",
 		},
-		"quad": {
-			handler:  cmdQuad,
-			minArgs:  3,
-			usage:    "Usage: /quad <uid> <uid> <uid>",
-			desc:     "Starts a 4-way pairing request with three players.",
-			reqPerms: permissions.PermissionField["NONE"],
-			category: "general",
+		"unforcegrouppair": {
+			handler:  cmdUnforceGroupPair,
+			minArgs:  0,
+			usage:    "Usage: /unforcegrouppair",
+			desc:     "Disbands every force-paired group in your current area.",
+			reqPerms: permissions.PermissionField["KICK"],
+			category: "moderation",
 		},
-		"quint": {
-			handler:  cmdQuint,
-			minArgs:  4,
-			usage:    "Usage: /quint <uid> <uid> <uid> <uid>",
-			desc:     "Starts a 5-way pairing request with four players.",
+		"leavegroup": {
+			handler:  cmdLeaveGroup,
+			minArgs:  0,
+			usage:    "Usage: /leavegroup",
+			desc:     "Leaves your current pairing group.",
 			reqPerms: permissions.PermissionField["NONE"],
 			category: "general",
 		},
@@ -865,6 +907,14 @@ func initCommands() {
 			reqPerms: permissions.PermissionField["NONE"],
 			category: "general",
 		},
+		"pairorder": {
+			handler:  cmdPairOrder,
+			minArgs:  0,
+			usage:    "Usage: /pairorder [<uid> <front|back|up|down>]",
+			desc:     "Reorders your pairing group (front→back). With no args it toggles your own front/back position; with <uid> <front|back|up|down> it moves a specific member.",
+			reqPerms: permissions.PermissionField["NONE"],
+			category: "general",
+		},
 		"forcepair": {
 			handler:  cmdForcePair,
 			minArgs:  2,
@@ -872,6 +922,22 @@ func initCommands() {
 			desc:     "Forces two players to pair without requiring mutual consent.",
 			reqPerms: permissions.PermissionField["KICK"],
 			category: "moderation",
+		},
+		"leash": {
+			handler:  cmdLeash,
+			minArgs:  2,
+			usage:    "Usage: /leash [-d duration] [-r reason] [-h] <master uid> <dog uid> [dog uid ...]",
+			desc:     "Claims up to 6 players as your dogs: force-pairs the pack, applies /dog to every dog, drags them between areas (including punishment-safe rooms), and renders them together on multi-pair clients. Neither end can /unpair; full /unpunish or /forceunpair removes it. A backfire shield reverses a one-on-one claim onto the moderator.",
+			reqPerms: permissions.PermissionField["KICK"],
+			category: "punishment",
+		},
+		"antipunishshield": {
+			handler:  cmdAntiPunishShield,
+			minArgs:  1,
+			usage:    "Usage: /antipunishshield <uid> [backfire]\nSpoof mode (default): the target is immune to punishment effects; the issuing moderator sees their messages as if the punishment worked, while everyone else sees the normal message.\nbackfire: the same spoof, but the punishment is also applied to the issuing moderator.\nAdmin-only. Lasts until the server restarts; /kick, /ban and /mute still work.",
+			desc:     "Admin-only anti-punishment shield. Spoofs punishment effects back at the issuer, optionally backfiring them onto the issuer, until server restart.",
+			reqPerms: permissions.PermissionField["ADMIN"],
+			category: "punishment",
 		},
 		"forcename": {
 			handler:  cmdForceName,
@@ -1078,6 +1144,14 @@ func initCommands() {
 			reqPerms: permissions.PermissionField["ADMIN"],
 			category: "admin",
 		},
+		"resetemergencypass": {
+			handler:	cmdResetEmergencyPassword,
+			minArgs:	2,
+			usage:		"Usage: /resetemergencypass <username> <new_emergencypassword>",
+			desc:		"Resets the emergency password for the given account.",
+			reqPerms:	permissions.PermissionField["ADMIN"],
+			category:	"admin",
+		},
 		"roll": {
 			handler:  cmdRoll,
 			minArgs:  1,
@@ -1126,6 +1200,14 @@ func initCommands() {
 			reqPerms: permissions.PermissionField["NONE"],
 			category: "general",
 		},
+		"loadtestimony": {
+			handler:  cmdLoadTestimony,
+			minArgs:  0,
+			usage:    "Usage: /loadtestimony [name]\nWith no name, lists every saved testimony. Loading replaces the area's current testimony; /examine starts playback.",
+			desc:     "Loads a saved testimony for playback, or lists the saved testimonies (CM only).",
+			reqPerms: permissions.PermissionField["CM"],
+			category: "testimony",
+		},
 		"maso": {
 			handler:  cmdMaso,
 			minArgs:  0,
@@ -1156,6 +1238,14 @@ func initCommands() {
 			desc:     "Community moderation voting. Players vote to kick/mute/ban/warn/areakick; moderators have final say.",
 			reqPerms: permissions.PermissionField["NONE"],
 			category: "general",
+		},
+		"savetestimony": {
+			handler:  cmdSaveTestimony,
+			minArgs:  1,
+			usage:    "Usage: /savetestimony <name>\nSaves the area's recorded testimony to the server's testimony directory. Names accept letters, numbers, dashes and underscores.",
+			desc:     "Saves the current testimony to a file so it can be replayed later (CM only).",
+			reqPerms: permissions.PermissionField["CM"],
+			category: "testimony",
 		},
 		"setrole": {
 			handler:  cmdChangeRole,
@@ -1678,6 +1768,30 @@ func initCommands() {
 			reqPerms: permissions.PermissionField["MUTE"],
 			category: "punishment",
 		},
+		"gold": {
+			handler:  cmdGold,
+			minArgs:  1,
+			usage:    "Usage: /gold [-d duration] [-r reason] [-h] global | <uid1>,<uid2>...",
+			desc:     "AO Gold paywall: replaces every message with a fake 'you need a premium account to see this' notice. Rotates AO Gold and Skrapegropen Premium branding.",
+			reqPerms: permissions.PermissionField["MUTE"],
+			category: "punishment",
+		},
+		"premium": {
+			handler:  cmdGold,
+			minArgs:  1,
+			usage:    "Usage: /premium [-d duration] [-r reason] [-h] global | <uid1>,<uid2>...   (alias of /gold)",
+			desc:     "Alias of /gold — the AO Gold / Skrapegropen Premium paywall punishment.",
+			reqPerms: permissions.PermissionField["MUTE"],
+			category: "punishment",
+		},
+		"paywall": {
+			handler:  cmdGold,
+			minArgs:  1,
+			usage:    "Usage: /paywall [-d duration] [-r reason] [-h] global | <uid1>,<uid2>...   (alias of /gold)",
+			desc:     "Alias of /gold — replaces messages with a fake premium paywall notice.",
+			reqPerms: permissions.PermissionField["MUTE"],
+			category: "punishment",
+		},
 		"cat": {
 			handler:  cmdCat,
 			minArgs:  1,
@@ -2182,8 +2296,8 @@ func initCommands() {
 		"unpunish": {
 			handler:  cmdUnpunish,
 			minArgs:  1,
-			usage:    "Usage: /unpunish all\n       /unpunish [-t punishment_type] <uid1>,<uid2>...\n       /unpunish [-t punishment_type] <ipid>\nall: Remove all punishments from every client in your current area.\n-t: Specific punishment type to remove (omit to remove all).\nA non-numeric target is treated as a raw IPID, so offline players can be unpunished too.\nThe full-removal forms also clear the punishment_names.txt showname stain, stopping its per-minute random punishment drip.",
-			desc:     "Removes punishment(s) from user(s) by UID or IPID, or all punishments from the entire area with 'all'.",
+			usage:    "Usage: /unpunish all\n       /unpunish [-t punishment_type] <uid1>,<uid2>...\n       /unpunish [-t punishment_type] <ipid>\nall: Remove all punishments from every client in your current area.\n-t: Specific punishment type to remove (omit to remove all).\nA non-numeric target is treated as a raw IPID, so offline players can be unpunished too.\nThe full-removal forms also clear the punishment_names.txt showname stain, stopping its per-minute random punishment drip.\nFull removal also breaks any /leash claim; -t dog removes only the dog effect.",
+			desc:     "Removes punishment(s) from user(s) by UID or IPID, or all punishments from the entire area with 'all'. Full removal also breaks leashes.",
 			reqPerms: permissions.PermissionField["MUTE"],
 			category: "punishment",
 		},
@@ -2322,6 +2436,22 @@ func initCommands() {
 				"       /hangman status\n" +
 				"       /hangman stop",
 			desc:     "Play Hangman! Host starts a game with a themed or custom secret word. Players guess letters (and optionally the full word). Wrong-guessers are punished on failure.",
+			reqPerms: permissions.PermissionField["NONE"],
+			category: "minigames",
+		},
+		"deathroll": {
+			handler: cmdDeathroll,
+			minArgs: 0,
+			usage: "Usage: /deathroll <host [limit] | join | start | roll | cancel | limit <n> | status | hide>\n" +
+				"       /deathroll host [limit]  — open a lobby in YOUR ROOM (default 100; e.g. /deathroll host 5000)\n" +
+				"       /deathroll join          — join the open lobby in your room\n" +
+				"       /deathroll start         — host only: shuffle and begin (2+ players)\n" +
+				"       /deathroll roll          — current player rolls 1d<current limit>\n" +
+				"       /deathroll cancel        — host only, before the start\n" +
+				"       /deathroll limit <n>     — host only: change the starting limit before the start\n" +
+				"       /deathroll status        — show the lobby/game in your room\n" +
+				"       /deathroll hide          — toggle Deathroll broadcasts you are not part of",
+			desc:     "Host or join a room-scoped Deathroll game: take turns rolling 1d<previous roll>. Roll a 1 and lose the /maso effect for 10 minutes (locked). /deathroll hide mutes broadcasts you are not part of.",
 			reqPerms: permissions.PermissionField["NONE"],
 			category: "minigames",
 		},
@@ -2572,6 +2702,33 @@ func initCommands() {
 			accountCmd: true,
 			category:   "account",
 		},
+		"setemergencypassword": {
+			handler:	cmdSetEmergencyPassword,
+			minArgs:	2,
+			usage:		"Usage: /setemergencypassword <emergencypassword> <confirmemergencypassword>",
+			desc:		"Add an emergency backup password to an existing account. To change, use /resetemergencypassword. The emergency password can be used to override and change the default password. Use sparingly.",
+			reqPerms:	permissions.PermissionField["NONE"],
+			accountCmd: true,
+			category:	"account",
+		},
+		"resetemergencypassword": {
+			handler:	cmdUserResetEmergencyPassword,
+			minArgs:	3,
+			usage:		"Usage: /resetemergencypassword <oldemergencypassword> <newemergencypassword> <confirmemergencypassword>",
+			desc:		"Reset your emergency password. You need your original emergency password for this.",
+			reqPerms:	permissions.PermissionField["NONE"],
+			accountCmd: true,
+			category:	"account",
+		},
+		"resetpassword": {
+			handler:	cmdUserResetPassword,
+			minArgs:	3,
+			usage:		"Usage: /resetpassword <emergencypassword> <newpassword> <confirmpassword>",
+			desc:		"Reset your password. You need your emergency password for this.",
+			reqPerms:	permissions.PermissionField["NONE"],
+			accountCmd: true,
+			category:	"account",
+		},
 		"verify": {
 			handler:  cmdVerify,
 			minArgs:  1,
@@ -2618,7 +2775,7 @@ func initCommands() {
 			handler:  cmdPlaytimeTop,
 			minArgs:  0,
 			usage:    "Usage: /playtime [top] [page]\n       /playtime add <username> <duration>  (admin)\n       /playtime remove <username> <duration>  (admin)\n       /playtime set <username> <duration>  (admin — e.g. 1000h, 3d12h30m, 90m)",
-			desc:     "Show the playtime leaderboard. 25 entries per page; pass a page number to scroll. Includes player and moderator accounts. Admins can also use /playtime add|remove|set <username> <duration> to grant, deduct, or overwrite playtime.",
+			desc:     "Show the playtime leaderboard with the server-wide total and your own position. 25 entries per page; pass a page number to scroll. Includes player and moderator accounts. Admins can also use /playtime add|remove|set <username> <duration> to grant, deduct, or overwrite playtime.",
 			reqPerms: permissions.PermissionField["NONE"],
 			category: "general",
 		},
@@ -2631,93 +2788,95 @@ func initCommands() {
 			category: "admin",
 		},
 		"unscramble": {
-			handler:   cmdUnscramble,
-			minArgs:   0,
-			usage:     "Usage: /unscramble [top [n]]",
-			desc:      "Check your unscramble wins or view the unscramble leaderboard. Answer active puzzles in IC chat to win chips!",
-			reqPerms:  permissions.PermissionField["NONE"],
-			casinoCmd: true,
-			category:  "chips",
+			handler:    cmdUnscramble,
+			minArgs:    0,
+			usage:      "Usage: /unscramble [top [n]]",
+			desc:       "Check your unscramble wins or view the unscramble leaderboard. Answer active puzzles in IC chat to win Pebbles (or chips in casino mode).",
+			reqPerms:   permissions.PermissionField["NONE"],
+			economyCmd: true,
+			category:   "chips",
 		},
 		"jobs": {
-			handler:   cmdJobs,
-			minArgs:   0,
-			usage:     "Usage: /jobs",
-			desc:      "List all available jobs that earn small chip rewards.",
-			reqPerms:  permissions.PermissionField["NONE"],
-			casinoCmd: true,
-			category:  "jobs",
+			handler:    cmdJobs,
+			minArgs:    0,
+			usage:      "Usage: /jobs",
+			desc:       "List all available jobs that earn small Pebble (or chip) rewards.",
+			reqPerms:   permissions.PermissionField["NONE"],
+			economyCmd: true,
+			category:   "jobs",
 		},
 		"jobtop": {
-			handler:   cmdJobTop,
-			minArgs:   0,
-			usage:     "Usage: /jobtop [n]",
-			desc:      "Show the job earnings leaderboard (top chip earners from jobs).",
-			reqPerms:  permissions.PermissionField["NONE"],
-			casinoCmd: true,
-			category:  "chips",
+			handler:    cmdJobTop,
+			minArgs:    0,
+			usage:      "Usage: /jobtop [n]",
+			desc:       "Show the job earnings leaderboard.",
+			reqPerms:   permissions.PermissionField["NONE"],
+			economyCmd: true,
+			category:   "chips",
 		},
 		"janitor": {
-			handler:   cmdJanitor,
-			minArgs:   0,
-			usage:     "Usage: /janitor",
-			desc:      "Work as a janitor to earn chips (45-minute cooldown).",
-			reqPerms:  permissions.PermissionField["NONE"],
-			casinoCmd: true,
-			category:  "jobs",
+			handler:    cmdJanitor,
+			minArgs:    0,
+			usage:      "Usage: /janitor",
+			desc:       "Work as a janitor to earn Pebbles or chips (45-minute cooldown).",
+			reqPerms:   permissions.PermissionField["NONE"],
+			economyCmd: true,
+			category:   "jobs",
 		},
 		"busker": {
-			handler:   cmdBusker,
-			minArgs:   0,
-			usage:     "Usage: /busker",
-			desc:      "Busk for tips outside the courthouse to earn chips (30-minute cooldown).",
-			reqPerms:  permissions.PermissionField["NONE"],
-			casinoCmd: true,
-			category:  "jobs",
+			handler:    cmdBusker,
+			minArgs:    0,
+			usage:      "Usage: /busker",
+			desc:       "Busk for tips outside the courthouse to earn Pebbles or chips (30-minute cooldown).",
+			reqPerms:   permissions.PermissionField["NONE"],
+			economyCmd: true,
+			category:   "jobs",
 		},
 		"paperboy": {
-			handler:   cmdPaperboy,
-			minArgs:   0,
-			usage:     "Usage: /paperboy",
-			desc:      "Deliver newspapers and briefs to earn chips (60-minute cooldown).",
-			reqPerms:  permissions.PermissionField["NONE"],
-			casinoCmd: true,
-			category:  "jobs",
+			handler:    cmdPaperboy,
+			minArgs:    0,
+			usage:      "Usage: /paperboy",
+			desc:       "Deliver newspapers and briefs to earn Pebbles or chips (60-minute cooldown).",
+			reqPerms:   permissions.PermissionField["NONE"],
+			economyCmd: true,
+			category:   "jobs",
 		},
 		"bailiffjob": {
-			handler:   cmdBailiffJob,
-			minArgs:   0,
-			usage:     "Usage: /bailiffjob",
-			desc:      "Stand guard duty as a bailiff to earn chips (2-hour cooldown).",
-			reqPerms:  permissions.PermissionField["NONE"],
-			casinoCmd: true,
-			category:  "jobs",
+			handler:    cmdBailiffJob,
+			minArgs:    0,
+			usage:      "Usage: /bailiffjob",
+			desc:       "Stand guard duty as a bailiff to earn Pebbles or chips (2-hour cooldown).",
+			reqPerms:   permissions.PermissionField["NONE"],
+			economyCmd: true,
+			category:   "jobs",
 		},
 		"clerk": {
-			handler:   cmdClerk,
-			minArgs:   0,
-			usage:     "Usage: /clerk",
-			desc:      "File paperwork as a clerk to earn chips (90-minute cooldown).",
-			reqPerms:  permissions.PermissionField["NONE"],
-			casinoCmd: true,
-			category:  "jobs",
+			handler:    cmdClerk,
+			minArgs:    0,
+			usage:      "Usage: /clerk",
+			desc:       "File paperwork as a clerk to earn Pebbles or chips (90-minute cooldown).",
+			reqPerms:   permissions.PermissionField["NONE"],
+			economyCmd: true,
+			category:   "jobs",
 		},
 		"shop": {
 			handler:    cmdShop,
 			minArgs:    0,
-			usage:      "Usage: /shop | /shop <category> | /shop buy <item_id> | /shop items | /shop passes | /shop passive",
-			desc:       "Browse the Nyathena Shop: 115+ cosmetic tags, job passes, and passive income upgrades. When the casino is disabled, tags are free to equip via /settag. Categories: gambling attorney anime gamer girly meme prestige.",
+			usage:      "Usage: /shop | /shop <category> | /shop buy <item_id> | /shop items",
+			desc:       "Browse the shop. In Pebble Mode, /shop classic lists all existing non-gambling tags (free), and /shop activity|community lists the cheap Pebble tags.",
 			reqPerms:   permissions.PermissionField["NONE"],
 			accountCmd: true,
+			pebbleCmd:  true,
 			category:   "chips",
 		},
 		"settag": {
 			handler:    cmdSetTag,
 			minArgs:    1,
 			usage:      "Usage: /settag <tag_id> | /settag none",
-			desc:       "Equip or swap a cosmetic tag. Your active tag appears next to your name in /gas and /players. When the casino is disabled, any tag id is free to equip.",
+			desc:       "Equip or swap a cosmetic tag. Your active tag appears next to your name in /gas and /players.",
 			reqPerms:   permissions.PermissionField["NONE"],
 			accountCmd: true,
+			pebbleCmd:  true,
 			category:   "chips",
 		},
 		"mytags": {
@@ -2727,6 +2886,7 @@ func initCommands() {
 			desc:       "Lists every tag you own (built-in and custom) with its id and name, and marks your active one. Use the id with /settag.",
 			reqPerms:   permissions.PermissionField["NONE"],
 			accountCmd: true,
+			pebbleCmd:  true,
 			category:   "chips",
 		},
 		"favourite": {
@@ -3439,11 +3599,12 @@ func initCommands() {
 			handler:  cmdToggle,
 			minArgs:  1,
 			usage:    "Usage: /toggle global",
-			desc:     "Opt-in OOC-hide toggle: /toggle global stops area OOC chat and /global broadcasts from reaching YOU (run it again to bring them back). Direct messages and staff/system announcements still get through, and it never affects anyone else.",
+			desc:     "Opt-in hide toggle: /toggle global stops /global and /g broadcasts from reaching YOU (run it again to bring them back). Local OOC, direct messages and staff/system announcements still get through, and it never affects anyone else.",
 			reqPerms: permissions.PermissionField["NONE"],
 			category: "general",
 		},
 	}
+	registerPebbleCommands()
 }
 
 // helpCategory describes a top-level /help section visible to players.
@@ -3459,11 +3620,12 @@ var helpCategoryList = []helpCategory{
 	{"general", "🎮", "General", "Movement, chat, dice, info commands."},
 	{"area", "🏛️", "Area", "Area management — backgrounds, music, locks, polls."},
 	{"testimony", "📝", "Testimony", "Testimony recorder — record and replay witness statements."},
-	{"minigames", "🎲", "Mini-games", "Hangman, Hot Potato, Quick Draw, Russian Roulette, Typing Race, giveaways."},
+	{"minigames", "🎲", "Mini-games", "Deathroll, Hangman, Hot Potato, Quick Draw, Russian Roulette, Typing Race, giveaways."},
 	{"mafia", "🕵️", "Mafia / Werewolf", "Social-deduction minigame with roles, votes and night actions."},
-	{"casino", "🎰", "Casino", "Blackjack, Poker, Slots, Roulette, and more."},
-	{"chips", "💰", "Chips", "Chip balance, leaderboards, shop, and the bar."},
-	{"jobs", "💼", "Jobs", "Earn chips without gambling — cooldown-based jobs."},
+	{"pebble", "🪨", "Pebble Mode", "Casual mini-games, daily activities, the duck pond, and world events."},
+	{"casino", "🎰", "Casino", "Legacy casino — Blackjack, Poker, Slots, Roulette, Chips and stakes."},
+	{"chips", "💰", "Economy", "Pebble shop / legacy chip shop, tags, and balance commands."},
+	{"jobs", "💼", "Jobs", "Earn Pebbles (Pebble Mode) or chips (Casino) — cooldown-based jobs."},
 	{"account", "👤", "Account", "Register, login, wardrobe, and profile."},
 	{"moderation", "🔨", "Moderation", "Mute, kick, ban, jail, and other staff tools."},
 	{"voice", "🎙️", "Voice Chat", "Voice-chat moderation and per-area controls.  Requires a WebAO client with WebRTC support."},
@@ -3489,12 +3651,38 @@ func clientCanUseCommand(client *Client, name string, cmd Command) bool {
 		clientHasCommandGrant(client, name)
 }
 
+// commandModeAllowed applies the server-wide feature gates for a command.
+// Centralising the checks keeps runtime dispatch and /help visibility in sync.
+func commandModeAllowed(cmd Command, casinoOn, pebbleOn, accountsOn, voiceOn bool) bool {
+	if cmd.casinoCmd && !casinoOn {
+		return false
+	}
+	if cmd.pebbleCmd && !pebbleOn {
+		// A command that also belongs to the account system (shop/tags) is
+		// still available when accounts are enabled and Pebble Mode is off.
+		if !(cmd.accountCmd && accountsOn) {
+			return false
+		}
+	}
+	if cmd.economyCmd && !casinoOn && !pebbleOn {
+		return false
+	}
+	if cmd.accountCmd && !accountsOn && !(pebbleOn && cmd.pebbleCmd) {
+		return false
+	}
+	if cmd.voiceCmd && !voiceOn {
+		return false
+	}
+	return true
+}
+
 // ParseCommand calls the appropriate function for a given command.
 func ParseCommand(client *Client, command string, args []string) {
-	casinoEnabled := config != nil && config.EnableCasino
+	casinoEnabled := config != nil && config.CasinoOn()
+	pebbleEnabledNow := config != nil && config.PebbleOn()
 	// Account commands are available when either the casino (which uses accounts)
 	// or the standalone account system is enabled.
-	accountsEnabled := config != nil && (config.EnableCasino || config.EnableAccounts)
+	accountsEnabled := config != nil && (config.CasinoOn() || config.EnableAccounts)
 	voiceEnabledNow := config != nil && config.EnableVoice
 
 	if command == "help" {
@@ -3513,18 +3701,16 @@ func ParseCommand(client *Client, command string, args []string) {
 						client.SendServerMessage(renderPunishmentHelp(client, casinoEnabled, accountsEnabled, voiceEnabledNow))
 						return
 					}
+					if cat.name == "pebble" {
+						client.SendServerMessage(renderPebbleHelp(client, casinoEnabled, pebbleEnabledNow, accountsEnabled, voiceEnabledNow))
+						return
+					}
 					var lines []string
 					for name, cmd := range Commands {
 						if cmd.category != cat.name {
 							continue
 						}
-						if cmd.casinoCmd && !casinoEnabled {
-							continue
-						}
-						if cmd.accountCmd && !accountsEnabled {
-							continue
-						}
-						if cmd.voiceCmd && !voiceEnabledNow {
+						if !commandModeAllowed(cmd, casinoEnabled, pebbleEnabledNow, accountsEnabled, voiceEnabledNow) {
 							continue
 						}
 						if clientCanUseCommand(client, name, cmd) || cmd.publicHelp {
@@ -3544,7 +3730,7 @@ func ParseCommand(client *Client, command string, args []string) {
 
 			// Not a category — try to look up as a specific command
 			cmd, exists := Commands[cmdName]
-			if exists && !(cmd.casinoCmd && !casinoEnabled) && !(cmd.accountCmd && !accountsEnabled) && !(cmd.voiceCmd && !voiceEnabledNow) {
+			if exists && commandModeAllowed(cmd, casinoEnabled, pebbleEnabledNow, accountsEnabled, voiceEnabledNow) {
 				if clientCanUseCommand(client, cmdName, cmd) || cmd.publicHelp {
 					client.SendServerMessage(cmd.usage)
 				} else {
@@ -3588,13 +3774,7 @@ func ParseCommand(client *Client, command string, args []string) {
 				if cmd.category != cat.name {
 					continue
 				}
-				if cmd.casinoCmd && !casinoEnabled {
-					continue
-				}
-				if cmd.accountCmd && !accountsEnabled {
-					continue
-				}
-				if cmd.voiceCmd && !voiceEnabledNow {
+				if !commandModeAllowed(cmd, casinoEnabled, pebbleEnabledNow, accountsEnabled, voiceEnabledNow) {
 					continue
 				}
 				if clientCanUseCommand(client, name, cmd) || cmd.publicHelp {
@@ -3624,12 +3804,22 @@ func ParseCommand(client *Client, command string, args []string) {
 		client.SendServerMessage("Invalid command.")
 		return
 	}
-	// Block casino/account commands when the feature is disabled server-wide.
+	// Block commands whose feature gate is off server-wide.
 	if cmd.casinoCmd && !casinoEnabled {
-		client.SendServerMessage("The casino and player account system is not enabled on this server.")
+		client.SendServerMessage("The legacy casino is not enabled on this server.")
 		return
 	}
-	if cmd.accountCmd && !accountsEnabled {
+	if cmd.pebbleCmd && !pebbleEnabledNow {
+		if !(cmd.accountCmd && accountsEnabled) {
+			client.SendServerMessage("Pebble Mode is not enabled on this server.")
+			return
+		}
+	}
+	if cmd.economyCmd && !casinoEnabled && !pebbleEnabledNow {
+		client.SendServerMessage("The casino and Pebble Mode are both disabled on this server.")
+		return
+	}
+	if cmd.accountCmd && !accountsEnabled && !(pebbleEnabledNow && cmd.pebbleCmd) {
 		client.SendServerMessage("The player account system is not enabled on this server.")
 		return
 	}

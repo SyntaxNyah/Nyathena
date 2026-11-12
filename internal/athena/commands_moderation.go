@@ -28,10 +28,10 @@ import (
 	"strings"
 	"time"
 
+	aolib "github.com/AO-Underground/aolib/go/v2"
 	"github.com/MangosArentLiterature/Athena/internal/area"
 	"github.com/MangosArentLiterature/Athena/internal/db"
 	"github.com/MangosArentLiterature/Athena/internal/logger"
-	aolib "github.com/AO-Underground/aolib/go/v2"
 	"github.com/MangosArentLiterature/Athena/internal/permissions"
 	"github.com/MangosArentLiterature/Athena/internal/webhook"
 	"github.com/xhit/go-str2duration/v2"
@@ -177,7 +177,7 @@ func cmdBan(client *Client, args []string, usage string) {
 	}
 	report := reportBuilder.String()
 	client.SendServerMessage(fmt.Sprintf("Banned %v IPID(s).", count))
-	sendPlayerArup()
+	requestPlayerArup()
 	addToBuffer(client, "CMD", fmt.Sprintf("Banned %v from server for %v: %v.", report, *duration, reason), true)
 	alertBannedAccountLinks(seenIPIDs)
 }
@@ -202,7 +202,7 @@ func alertBannedAccountLinks(ipids map[string]struct{}) {
 		msg := fmt.Sprintf("[BAN] IPID %v is linked to registered account \"%v\".", ipid, username)
 		clients.ForEach(func(c *Client) {
 			if c.Uid() != -1 && permissions.IsModerator(c.Perms()) {
-				c.Send(&aolib.CTToClient{Name: "OOC", Message: encode(msg), IsFromServer: true})
+				c.Send(&aolib.CTToClient{Name: "OOC", Message: msg, IsFromServer: true})
 			}
 		})
 	}
@@ -348,8 +348,8 @@ func cmdGlobal(client *Client, args []string, _ string) {
 	// this is plain text and must not be decoded again.
 	msg := strings.Join(args, " ")
 	out := &aolib.CTToClient{
-		Name:         encode(fmt.Sprintf("[GLOBAL] [UID %d] %s%v", client.Uid(), tag, oocDisplayName(client))),
-		Message:      encode(msg),
+		Name:         fmt.Sprintf("[GLOBAL] [UID %d] %s%v", client.Uid(), tag, oocDisplayName(client)),
+		Message:      msg,
 		IsFromServer: true,
 	}
 	// The command branch in pktOOC returns before the content gate, so without
@@ -418,7 +418,7 @@ func cmdKick(client *Client, args []string, usage string) {
 	}
 	report := reportBuilder.String()
 	client.SendServerMessage(fmt.Sprintf("Kicked %v clients.", count))
-	sendPlayerArup()
+	requestPlayerArup()
 	addToBuffer(client, "CMD", fmt.Sprintf("Kicked %v from server for reason: %v.", report, reason), true)
 }
 
@@ -462,8 +462,15 @@ func cmdLogin(client *Client, args []string, _ string) {
 		if hide, err := db.GetGambleHide(args[0]); err == nil {
 			client.SetGambleHide(hide)
 		}
+		// Restore the account's world-event alert preference.
+		if hide, err := db.GetEventAlertsHide(args[0]); err == nil {
+			client.SetEventAlertsHide(hide)
+		}
 		// Restore the account's active cosmetic tag so it shows without re-equipping.
-		if tag := db.GetAccountActiveTag(args[0]); tag != "" {
+		// A valid temporary event tag currently equipped wins over the account's
+		// stored tag so logging in does not wipe it.
+		currentTag := db.GetActiveTag(client.Ipid())
+		if tag := db.GetAccountActiveTag(args[0]); tag != "" && !strings.HasPrefix(currentTag, pebbleTempTagPrefix) {
 			db.SetActiveTag(client.Ipid(), tag) //nolint:errcheck
 		}
 		// Playtime-based auto-trust: if the account has accumulated at least one
@@ -550,9 +557,9 @@ func cmdMod(client *Client, args []string, usage string) {
 	}
 	msg := strings.Join(flags.Args(), " ")
 	if *global {
-		broadcastToAll(&aolib.CTToClient{Name: encode(fmt.Sprintf("[MOD] [GLOBAL] %v", client.OOCName())), Message: encode(msg), IsFromServer: true})
+		broadcastToAll(&aolib.CTToClient{Name: fmt.Sprintf("[MOD] [GLOBAL] %v", client.OOCName()), Message: msg, IsFromServer: true})
 	} else {
-		broadcastToArea(client.Area(), &aolib.CTToClient{Name: encode(fmt.Sprintf("[MOD] %v", client.OOCName())), Message: encode(msg), IsFromServer: true})
+		broadcastToArea(client.Area(), &aolib.CTToClient{Name: fmt.Sprintf("[MOD] %v", client.OOCName()), Message: msg, IsFromServer: true})
 	}
 	addToBuffer(client, "OOC", msg, false)
 }
@@ -570,7 +577,7 @@ func cmdModChat(client *Client, args []string, _ string) {
 			if senderIsShadow && !permissions.IsAdmin(c.Perms()) {
 				senderLabel = "Moderator"
 			}
-			c.Send(&aolib.CTToClient{Name: encode(fmt.Sprintf("[MODCHAT] %v", senderLabel)), Message: encode(msg), IsFromServer: true})
+			c.Send(&aolib.CTToClient{Name: fmt.Sprintf("[MODCHAT] %v", senderLabel), Message: msg, IsFromServer: true})
 		}
 	})
 }
@@ -876,19 +883,19 @@ func cmdPM(client *Client, args []string, _ string) {
 	// -- unlike a global it is not a broadcast, and there is no capture data to
 	// calibrate correlating private messages against.
 	if !oocCommandAllowed(client, msg, "private message",
-		&aolib.CTToClient{Name: encode(fmt.Sprintf("[PM] [UID %d] %v", client.Uid(), oocDisplayName(client))),
-			Message: encode(msg), IsFromServer: true}) {
+		&aolib.CTToClient{Name: fmt.Sprintf("[PM] [UID %d] %v", client.Uid(), oocDisplayName(client)),
+			Message: msg, IsFromServer: true}) {
 		return
 	}
 	toPM := getUidList(strings.Split(args[0], ","))
 	var recipientNames []string
 	for _, c := range toPM {
-		c.Send(&aolib.CTToClient{Name: encode(fmt.Sprintf("[PM] [UID %d] %v", client.Uid(), oocDisplayName(client))), Message: encode(msg), IsFromServer: true})
+		c.Send(&aolib.CTToClient{Name: fmt.Sprintf("[PM] [UID %d] %v", client.Uid(), oocDisplayName(client)), Message: msg, IsFromServer: true})
 		recipientNames = append(recipientNames, fmt.Sprintf("[%d] %v", c.Uid(), oocDisplayName(c)))
 	}
 	// Echo the message back to the sender so they can see what they sent.
 	if len(recipientNames) > 0 {
-		client.Send(&aolib.CTToClient{Name: encode(fmt.Sprintf("[PM → %v] %v", strings.Join(recipientNames, ", "), oocDisplayName(client))), Message: encode(msg), IsFromServer: true})
+		client.Send(&aolib.CTToClient{Name: fmt.Sprintf("[PM → %v] %v", strings.Join(recipientNames, ", "), oocDisplayName(client)), Message: msg, IsFromServer: true})
 	}
 }
 
@@ -939,6 +946,38 @@ func cmdResetPassword(client *Client, args []string, _ string) {
 
 	client.SendServerMessage(fmt.Sprintf("Password for user %v has been reset.", username))
 	addToBuffer(client, "CMD", fmt.Sprintf("Reset password for user %v.", username), true)
+}
+
+// Handles /resetemergencypass
+func cmdResetEmergencyPassword(client *Client, args []string, _ string) {
+	if !client.Authenticated() {
+		client.SendServerMessage("You must be logged in to reset an emergency password. Use /login <username> <password> first.")
+		return
+	}
+	username, emergencyPassword := args[0], args[1]
+
+	if !db.UserExists(username) {
+		client.SendServerMessage("User does not exist.")
+		return
+	}
+
+	if len(emergencyPassword) < 12 {
+		client.SendServerMessage("Emergency password must be at least 12 characters.")
+		return
+	}
+	// change the old emergency password to the new one
+	// There's no captcha functionality for setting an emergency password,
+	// but you do have to already be logged in.
+	//if !config.RegisterCaptcha {
+		if err := db.UpdateEmergencyPassword(username, []byte(emergencyPassword)); err != nil {
+			logger.LogErrorf("Setting Emergency Password failed for %v to %v (IPID %v): %v", client.ModName(), username, client.Ipid(), err)
+			client.SendServerMessage("Setting emergency password failed. Please try again.")
+			return
+		}
+		client.SendServerMessage("Emergency password reset.")
+		addToBuffer(client, "CMD", fmt.Sprintf("Reset emergency password for user %v.", username), true)
+		return
+	//}
 }
 
 // Handles /roll
@@ -1148,6 +1187,33 @@ func cmdJail(client *Client, args []string, usage string) {
 			return
 		}
 		jailUntil = time.Now().UTC().Add(parsedDur)
+	}
+
+	// The anti-punishment shield covers the jail state too. The target is not
+	// moved or jailed; the moderator gets the normal success line, and backfire
+	// mode puts the jail on the moderator instead.
+	if mode := target.AntiPunishShieldMode(); mode != antiPunishShieldOff {
+		outcome := "It didn't stick"
+		if mode == antiPunishShieldBackfire && target != client {
+			outcome = "It backfired on them instead"
+			client.SetJailedUntil(jailUntil)
+			client.SetJailAreaID(jailAreaID)
+			if err := db.UpsertJail(client.Ipid(), jailUntil.Unix(), *reason, jailAreaID); err != nil {
+				logger.LogErrorf("Failed to persist anti-punishment backfire jail for %v: %v", client.Ipid(), err)
+			}
+			// Silent backfire: the moderator still gets the normal "Jailed ..."
+			// summary below, so they do not learn the jail landed on them.
+		}
+		target.SendPopup(fmt.Sprintf(
+			"🤫 shh! %v tried to jail you. %v — ur punishment protected. Act normal.",
+			oocDisplayName(client), outcome))
+		areaName := target.Area().Name()
+		if jailAreaID >= 0 {
+			areaName = areas[jailAreaID].Name()
+		}
+		client.SendServerMessage(fmt.Sprintf("Jailed [%v] %v in %v.", uid, target.OOCName(), areaName))
+		addToBuffer(client, "CMD", fmt.Sprintf("Jailed [%v] %v in %v (shielded).", uid, target.OOCName(), areaName), false)
+		return
 	}
 
 	// Force-move the target to the jail area first (before setting jailed state so
@@ -1641,6 +1707,85 @@ func cmdTormentList(client *Client, _ []string, _ string) {
 	client.SendServerMessage(b.String())
 }
 
+// cmdModcall is the server-wide modcall kill switch: /modcall <disable|enable>,
+// or /modcall (bare) / /modcall status to report it.
+//
+// It exists because a modcall flood cannot be answered by any per-caller limit.
+// Every IPID can only call once per modcall_cooldown, so a raid spends fresh
+// identities -- six calls from six throwaway connections are six separate
+// "first" calls, each one legal, none of them suppressible by waiting one
+// identity out. The only thing that stops that is switching the channel itself
+// off for a while.
+//
+// Deliberately in-memory, never persisted: "until the flag is turned back on or
+// the server restarts" is the contract, and a switch that survived a restart
+// could outlive the incident it was thrown for and leave a server where nobody
+// can reach a moderator.
+//
+// The registry gate is MOD_CHAT so everyone who *receives* modcalls can also
+// read the state; flipping it re-checks BAN inside the handler, the same split
+// /raidguard uses (see raidguard_cmd.go's header for why).
+func cmdModcall(client *Client, args []string, usage string) {
+	sub := "status"
+	if len(args) > 0 {
+		sub = strings.ToLower(strings.TrimSpace(args[0]))
+	}
+
+	if sub == "status" || sub == "state" {
+		state := "ENABLED"
+		if modcallsDisabled.Load() {
+			state = "DISABLED"
+		}
+		client.SendServerMessage(fmt.Sprintf(
+			"📬 Modcalls are currently %v.\n%v modcall attempt(s) refused since they were last disabled.\n"+
+				"This switch is in-memory: a server restart always comes back with modcalls ENABLED.",
+			state, modcallsSuppressed.Load()))
+		return
+	}
+
+	var disable bool
+	switch sub {
+	case "disable", "off":
+		disable = true
+	case "enable", "on":
+		disable = false
+	default:
+		client.SendServerMessage("Unknown subcommand:\n" + usage)
+		return
+	}
+
+	if !permissions.HasPermission(client.Perms(), permissions.PermissionField["BAN"]) && !clientHasCommandGrant(client, "modcall") {
+		client.SendServerMessage("You do not have permission to change modcall availability.")
+		return
+	}
+
+	if !modcallsDisabled.CompareAndSwap(!disable, disable) {
+		state := "ENABLED"
+		if disable {
+			state = "DISABLED"
+		}
+		client.SendServerMessage(fmt.Sprintf("Modcalls are already %v.", state))
+		return
+	}
+
+	if disable {
+		modcallsSuppressed.Store(0)
+		sendGlobalServerMessage("📭 Modcalls are now DISABLED server-wide. If you need a moderator, please ask in OOC.")
+		client.SendServerMessage("Modcalls DISABLED. Every modcall packet is refused and counted until /modcall enable, or until the server restarts.")
+		addToBuffer(client, "CMD", "Disabled modcalls server-wide.", true)
+		logger.WriteAudit(fmt.Sprintf("%v | MODCALL_SWITCH | disabled by=%v (UID %v, IPID %v)",
+			time.Now().UTC().Format("15:04:05"), clientDisplayName(client), client.Uid(), client.Ipid()))
+		return
+	}
+
+	refused := modcallsSuppressed.Swap(0)
+	sendGlobalServerMessage("📬 Modcalls are now ENABLED server-wide.")
+	client.SendServerMessage(fmt.Sprintf("Modcalls ENABLED. %v attempt(s) had been refused while they were off; the modcall cooldowns of those callers were not consumed.", refused))
+	addToBuffer(client, "CMD", fmt.Sprintf("Enabled modcalls server-wide (%v attempt(s) had been refused).", refused), true)
+	logger.WriteAudit(fmt.Sprintf("%v | MODCALL_SWITCH | enabled by=%v (UID %v, IPID %v) after %v refused attempt(s)",
+		time.Now().UTC().Format("15:04:05"), clientDisplayName(client), client.Uid(), client.Ipid(), refused))
+}
+
 // cmdLockdown toggles server lockdown mode, or manages the lockdown whitelist.
 // Subcommands:
 //
@@ -1721,7 +1866,11 @@ func cmdLockdown(client *Client, args []string, usage string) {
 
 	// Toggle lockdown.
 	active := !serverLockdown.Load()
-	serverLockdown.Store(active)
+	if active {
+		engageServerLockdown()
+	} else {
+		liftServerLockdown()
+	}
 	if active {
 		clients.ForEach(func(c *Client) {
 			if c.Uid() != -1 && permissions.IsModerator(c.Perms()) {
@@ -1841,7 +1990,7 @@ func cmdBotBan(client *Client, _ []string, _ string) {
 			logger.LogErrorf("while posting botban webhook: %v", err)
 		}
 	}
-	sendPlayerArup()
+	requestPlayerArup()
 }
 
 // cmdSetGlobalNewIPLimit updates the global new-IP rate limit at runtime.

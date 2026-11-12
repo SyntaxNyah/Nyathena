@@ -74,6 +74,11 @@ var punishmentHelpGroups = []punishmentSubcategory{
 			"horse", "lion", "trex", "fish", "zoo", "bunny"},
 	},
 	{
+		emoji: "🔗", title: "Pairing / claims",
+		desc: "Force a pair with a one-way claim. The dog follows its master between areas, through punishment-safe rooms too, and cannot /unpair itself.",
+		cmds: []string{"leash"},
+	},
+	{
 		emoji: "👁", title: "Visibility / cosmetic",
 		desc: "Hides the player or alters their visual presentation.",
 		cmds: []string{"emoji", "invisible", "shrink", "grow", "wide", "areainiswap",
@@ -99,6 +104,11 @@ var punishmentHelpGroups = []punishmentSubcategory{
 		cmds: []string{"contagious", "minefield", "silencebell", "stealthmute"},
 	},
 	{
+		emoji: "🛡", title: "Anti-punishment shield",
+		desc: "Admin-only, until server restart. The shielded player is immune to punishment effects; the moderator who applied one sees their messages spoofed as if it worked. 'backfire' also applies the punishment to that moderator and reverses a one-on-one /leash onto them. /kick, /ban and /mute still work.",
+		cmds: []string{"antipunishshield"},
+	},
+	{
 		emoji: "🔊", title: "Audio / SFX",
 		desc: "Forces audio side-effects on every IC line.",
 		cmds: []string{"sfxcurse", "unsfx"},
@@ -116,8 +126,13 @@ var punishmentHelpGroups = []punishmentSubcategory{
 			"randompunishall", "togglerandompunish", "tournament"},
 	},
 	{
+		emoji: "💳", title: "Premium paywall",
+		desc: "Replace every message with a fake AO Gold / Skrapegropen Premium paywall notice. Branding rotates randomly. Supports 'global'. Remove with /unpunish -t gold.",
+		cmds: []string{"gold", "premium", "paywall"},
+	},
+	{
 		emoji: "🧹", title: "Removal & control",
-		desc: "Inspect and lift active punishments. /punishments lists what's on a player; /unpunish removes ALL types including lag.",
+		desc: "Inspect and lift active punishments. /punishments lists what's on a player; /unpunish removes ALL types including lag and breaks leashes.",
 		cmds: []string{"punishments", "unpunish", "unlag", "unicwarp", "unlovebomb",
 			"un51", "unacademic", "unbabytalk", "undegrade",
 			"unphilosopher", "unpoet", "unquote", "unrecipe", "unsarcasm",

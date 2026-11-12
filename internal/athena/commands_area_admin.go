@@ -26,8 +26,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/MangosArentLiterature/Athena/internal/area"
 	aolib "github.com/AO-Underground/aolib/go/v2"
+	"github.com/MangosArentLiterature/Athena/internal/area"
 	"github.com/MangosArentLiterature/Athena/internal/permissions"
 	"github.com/MangosArentLiterature/Athena/internal/sliceutil"
 )
@@ -99,9 +99,12 @@ func cmdAreaInfo(client *Client, _ []string, _ string) {
 			casinoStatus += fmt.Sprintf(", jackpot pool: %d", a.CasinoJackpotPool())
 		}
 	}
-	out := fmt.Sprintf("\nBG: %v\nEvi mode: %v\nAllow iniswap: %v\nNon-interrupting pres: %v\nCMs allowed: %v\nForce BG list: %v\nBG locked: %v\nMusic locked (CM-only): %v\nMusic frozen (all blocked): %v\nSpectate mode: %v\nCasino: %v",
+	out := fmt.Sprintf("\nBG: %v\nEvi mode: %v\nAllow iniswap: %v\nNon-interrupting pres: %v\nCMs allowed: %v\nForce BG list: %v\nBG locked: %v\nMusic locked (CM-only): %v\nMusic frozen (all blocked): %v\nSpectate mode: %v\nCasino (legacy Chips): %v\nPebble Mode: %v\nPebble Mini-Games: %v\nPebble World Events: %v",
 		a.Background(), a.EvidenceMode().String(), a.IniswapAllowed(), a.NoInterrupt(),
-		a.CMsAllowed(), a.ForceBGList(), a.LockBG(), a.LockMusic(), a.MusicFrozen(), a.SpectateMode(), casinoStatus)
+		a.CMsAllowed(), a.ForceBGList(), a.LockBG(), a.LockMusic(), a.MusicFrozen(), a.SpectateMode(), casinoStatus,
+		boolStr(pebbleEnabled(), "enabled", "disabled"),
+		boolStr(a.PebbleMinigames(), "available", "disabled"),
+		boolStr(a.PebbleEvents(), "enabled", "disabled"))
 	client.SendServerMessage(out)
 }
 
@@ -145,9 +148,26 @@ func cmdBg(client *Client, args []string, _ string) {
 		}
 	}
 
-	arg := strings.Join(args, " ")
+	arg := strings.TrimSpace(strings.Join(args, " "))
 
-	if client.Area().ForceBGList() && !sliceutil.ContainsString(getBackgrounds(), arg) {
+	// The name no longer has to appear in backgrounds.txt: a client with local
+	// background files (or a private asset folder) can display art the server
+	// has never seen, which is what movie-studio and KFO-style areas rely on.
+	// The name is therefore player-controlled input that reaches every client
+	// in the area, so it is validated rather than looked up -- see
+	// backgroundNameProblem for what is refused and why.
+	if problem := backgroundNameProblem(arg); problem != "" {
+		client.SendServerMessage(problem)
+		return
+	}
+
+	// /forcebglist keeps its meaning for DJs, the tier that holds no area
+	// authority: in an area that enforces the list they may only pick from it.
+	// CMs, MODIFY_AREA and console "bg"-granted accounts keep the custom-name
+	// escape hatch, so an area can be locked to the list for ordinary DJs
+	// without locking its owner out of local art.
+	if client.Area().ForceBGList() && !isCM && !hasModifyArea &&
+		!sliceutil.ContainsString(getBackgrounds(), arg) {
 		client.SendServerMessage("Invalid background.")
 		return
 	}
@@ -560,7 +580,7 @@ func cmdInvite(client *Client, args []string, _ string) {
 	addToBuffer(client, "CMD", fmt.Sprintf("Invited %v to the area.", report), false)
 }
 
-// Handles /kick
+// Handles /kickarea (and its /areakick alias)
 
 func cmdAreaKick(client *Client, args []string, _ string) {
 	if client.Area() == areas[0] {
@@ -569,6 +589,11 @@ func cmdAreaKick(client *Client, args []string, _ string) {
 	}
 	toKick := getUidList(strings.Split(args[0], ","))
 	originArea := client.Area()
+
+	// Optional reason. When provided it is announced to the area as an OOC (CT)
+	// line and popped up to each kicked player (BB), so a CM can explain the
+	// kick. With no reason the kick stays silent — just the default move.
+	reason := strings.Join(args[1:], " ")
 
 	var count int
 	var report string
@@ -587,7 +612,12 @@ func cmdAreaKick(client *Client, args []string, _ string) {
 		// the area unlocked) before they can return.
 		originArea.RemoveInvited(c.Uid())
 		c.ChangeArea(areas[0])
-		c.SendServerMessage("You were kicked from the area!")
+		if reason != "" {
+			c.Send(&aolib.BB{Message: fmt.Sprintf("You were kicked from the area: %v", reason)})
+			sendAreaServerMessage(originArea, fmt.Sprintf("%v kicked %v from the area: %v", oocDisplayName(client), oocDisplayName(c), reason))
+		} else {
+			c.SendServerMessage("You were kicked from the area!")
+		}
 		count++
 		report += fmt.Sprintf("%v, ", c.Uid())
 	}
@@ -618,7 +648,7 @@ func cmdKickOther(client *Client, args []string, _ string) {
 		count++
 	})
 	client.SendServerMessage(fmt.Sprintf("Kicked %v ghost client(s).", count))
-	sendPlayerArup()
+	requestPlayerArup()
 }
 
 // Handles /lock
@@ -799,6 +829,12 @@ func cmdMove(client *Client, args []string, usage string) {
 		var skipped int
 		var skippedReport string
 		for _, c := range toMove {
+			// A dog moving itself through /move still can't abandon its
+			// master. Moving a dog by another UID is moderator-forced and
+			// deliberately allowed below.
+			if c == client && c.leashBlocksAreaChange(wantedArea) {
+				continue
+			}
 			// Never drag a player out of a punishment-free (safe) area into an
 			// area where punishment effects can still be applied — that would
 			// let a mod teleport someone from a shelter straight into a
@@ -824,6 +860,9 @@ func cmdMove(client *Client, args []string, usage string) {
 		client.SendServerMessage(summary)
 		addToBuffer(client, "CMD", fmt.Sprintf("Moved %v to %v.", report, wantedArea.Name()), false)
 	} else {
+		if client.leashBlocksAreaChange(wantedArea) {
+			return
+		}
 		if !client.ChangeArea(wantedArea) {
 			client.SendServerMessage("You are not invited to that area.")
 		}
@@ -1049,7 +1088,7 @@ func cmdExamine(client *Client, _ []string, _ string) {
 	client.Area().SetTstState(area.TRPlayback)
 	client.SendServerMessage("Starting cross-examination.")
 	broadcastToArea(client.Area(), &aolib.RTToClient{Animation: aolib.RTAnimationCrossExamination})
-	broadcastToArea(client.Area(), ParseMSToClientString(client.Area().CurrentTstStatement()))
+	broadcastTestimonyStatement(client.Area())
 }
 
 // Handles /update
@@ -1139,7 +1178,7 @@ func cmdTestimony(client *Client, args []string, _ string) {
 		client.Area().SetTstState(area.TRPlayback)
 		client.SendServerMessage("Playing testimony.")
 		broadcastToArea(client.Area(), &aolib.RTToClient{Animation: aolib.RTAnimationCrossExamination})
-		broadcastToArea(client.Area(), ParseMSToClientString(client.Area().CurrentTstStatement()))
+		broadcastTestimonyStatement(client.Area())
 	case "update":
 		if client.Area().TstState() != area.TRPlayback {
 			client.SendServerMessage("The recorder is not active.")
@@ -1164,6 +1203,77 @@ func cmdTestimony(client *Client, args []string, _ string) {
 			}
 		}
 	}
+}
+
+// Handles /savetestimony
+
+// cmdSaveTestimony writes the area's recorded testimony to
+// <config>/testimony/<name>.txt, one statement per line, in the same escaped
+// form Akashi's recorder saves with (see testimony_files.go).
+func cmdSaveTestimony(client *Client, args []string, _ string) {
+	if !client.HasCMPermission() && !clientHasCommandGrant(client, "savetestimony") {
+		client.SendServerMessage("You do not have permission to use that command.")
+		return
+	}
+	// A title alone is nothing to replay, so there is nothing worth saving.
+	if !client.Area().HasTestimony() {
+		client.SendServerMessage("Can't save an empty testimony.")
+		return
+	}
+	name, ok := sanitizeTestimonyName(args[0])
+	if !ok {
+		client.SendServerMessage("Invalid testimony name. Use only letters, numbers, dashes and underscores (max 64 characters).")
+		return
+	}
+	if testimonyFileExists(name) {
+		client.SendServerMessage("Unable to save testimony. Testimony name already exists.")
+		return
+	}
+	if err := saveTestimonyFile(name, client.Area().TstStatements()); err != nil {
+		client.SendServerMessage(fmt.Sprintf("Unable to save testimony: %v", err))
+		return
+	}
+	client.SendServerMessage(fmt.Sprintf("Testimony saved. To load it use /loadtestimony %v", name))
+	addToBuffer(client, "CMD", fmt.Sprintf("Saved the testimony as %v.", name), false)
+}
+
+// Handles /loadtestimony
+
+// cmdLoadTestimony loads a saved testimony into the area's recorder for
+// playback. With no argument it lists what has been saved. Loading stops any
+// active recording/playback so a stale state can never run over statements the
+// room never heard; /examine starts the cross-examination afterwards.
+func cmdLoadTestimony(client *Client, args []string, _ string) {
+	if !client.HasCMPermission() && !clientHasCommandGrant(client, "loadtestimony") {
+		client.SendServerMessage("You do not have permission to use that command.")
+		return
+	}
+	if len(args) == 0 {
+		names := listSavedTestimonies()
+		if len(names) == 0 {
+			client.SendServerMessage("No testimonies have been saved yet. Save one with /savetestimony <name>.")
+			return
+		}
+		client.SendServerMessage("Saved testimonies:\n" + strings.Join(names, "\n"))
+		return
+	}
+	name, ok := sanitizeTestimonyName(args[0])
+	if !ok {
+		client.SendServerMessage("Invalid testimony name. Use only letters, numbers, dashes and underscores (max 64 characters).")
+		return
+	}
+	// The recorder's own cap: the title plus max_testimony statements.
+	limit := config.MaxStatement + 1
+	statements, err := loadTestimonyFile(name, limit)
+	if err != nil {
+		client.SendServerMessage(fmt.Sprintf("Unable to load testimony: %v", err))
+		return
+	}
+	client.Area().TstReplaceAll(statements)
+	client.Area().SetTstState(area.TRIdle)
+	client.Area().TstJump(0)
+	client.SendServerMessage("Testimony loaded successfully. Use /examine to start playback.")
+	addToBuffer(client, "CMD", fmt.Sprintf("Loaded the testimony %v.", name), false)
 }
 
 // Handles /unban
@@ -1492,7 +1602,7 @@ func cmdRoomMotd(client *Client, args []string, _ string) {
 	// weaker standard than a single line of chat. Mirrors cmdAreaRename.
 	m, result, kickAfter := autoModCheckTiered(client, text, "room motd")
 	if m.Matched && m.Entry.Severity == SeverityNuke {
-		applyAutoModNuke(client, m, "room motd")
+		applyAutoModNuke(client, m, "room motd", text)
 		return
 	}
 	raidGuardOnWordHit(client, m)

@@ -95,7 +95,7 @@ VS_AUDIO#42#//8NBJpa9Aa...==#%
 
 ### Where This Is Implemented
 
-**File**: `internal/packet/aopacket.go`
+**File**: `github.com/AO-Underground/aolib/go/v2` (the `Packet`/`NewPacket` framing)
 
 Packets are parsed by splitting the raw text on `#`, reading the first element as the command, and passing remaining elements to the registered handler.
 
@@ -912,7 +912,7 @@ Client                          Nyathena                     Voice Room Peers
 | `internal/athena/voice_commands.go` | Moderator commands: `/vmute`, `/vban`, `/vkick`, `/voicearea`, `/vlist` |
 | `internal/athena/netprotocol.go` | Handshake handlers (`pktHi`, `pktId`, `pktReqDone`) and the `PacketMap` dispatch table |
 | `internal/athena/client.go` | Client struct, punishment flags, `activeVoicePunishments()` |
-| `internal/packet/types.go` | `VSCaps`, `VSPeers`, `VSJoinOut`, `VSLeaveOut`, `VSAudio`, `VSSpeakOut` packet structs |
+| `internal/athena/voice_packets.go` | `VS_CAPS`, `VS_PEERS`, `VS_JOIN*`, `VS_LEAVE*`, `VS_AUDIO`, `VS_SPEAK*` packet structs |
 | `internal/athena/server.go` | Server init, `ListenTCP()`, `ListenWS()`, `ListenWSS()` goroutines |
 | `internal/settings/config.go` | Config struct including the `Voice` section |
 

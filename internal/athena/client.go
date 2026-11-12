@@ -32,10 +32,10 @@ import (
 	"sync/atomic"
 	"time"
 
+	aolib "github.com/AO-Underground/aolib/go/v2"
 	"github.com/MangosArentLiterature/Athena/internal/area"
 	"github.com/MangosArentLiterature/Athena/internal/db"
 	"github.com/MangosArentLiterature/Athena/internal/logger"
-	aolib "github.com/AO-Underground/aolib/go/v2"
 	"github.com/MangosArentLiterature/Athena/internal/packetutil"
 	"github.com/MangosArentLiterature/Athena/internal/permissions"
 	"github.com/MangosArentLiterature/Athena/internal/webhook"
@@ -311,6 +311,11 @@ const (
 	// writing any Go. Appended last so existing persisted SUBTYPE values keep
 	// their meaning.
 	PunishmentCustomText
+	// Gold is the AO Gold / Skrapegropen Premium paywall. Every message is
+	// replaced with a fake "you need a premium account to see this" notice,
+	// rotating through the branded variants. Appended last so existing
+	// persisted SUBTYPE values keep their meaning.
+	PunishmentGold
 )
 
 // IssuerTier records the permission tier of the moderator who applied a
@@ -341,6 +346,12 @@ type PunishmentState struct {
 	customData     string     // For PunishmentTranslator: target language name or "random"
 	icWarpArea     *area.Area // For PunishmentICWarp: the area where the warp applies; nil = inert
 	issuerTier     IssuerTier // who issued this — protects shadow/admin punishments from self-removal
+	// lockedUntil pins this punishment against SELF-service removal until the
+	// deadline passes (zero = unlocked). It is checked by /unpunish when the
+	// caller targets themselves, by /maso's reroll path, and by /potion off.
+	// Other moderators targeting the client, normal expiry, and DB restores
+	// deliberately ignore it. Used by the Deathroll loser penalty.
+	lockedUntil time.Time
 }
 
 type ClientPairInfo struct {
@@ -359,17 +370,38 @@ const emergencyBypassWindow = 30 * time.Second
 type Client struct {
 	pair      ClientPairInfo
 	pairGroup *PairGroup
-	software  string        // client-advertised software from the ID handshake
-	version   string        // client-advertised version from the ID handshake
-	features  map[string]bool // client-advertised feature flags (client→server FL)
-	mu        sync.Mutex
-	conn net.Conn
+	// leash is the /leash claim this client is part of, or nil. It is a
+	// pointer shared by the master and the dog (see leash.go), so either side
+	// can find the other without a scan or a stale UID.
+	leash *Leash
+	// antiPunishShield is the /antipunishshield mode (off/spoof/backfire).
+	// antiPunishSpoofs records which moderators think they punished this
+	// client, so their IC/OOC view can be transformed while everyone else
+	// sees the normal message. The map is guarded by mu; the atomic count is
+	// the IC hot-path fast gate.
+	antiPunishShield     atomic.Int32
+	antiPunishSpoofs     map[*Client][]antiPunishSpoof
+	antiPunishSpoofCount atomic.Int32
+	software             string          // client-advertised software from the ID handshake
+	version              string          // client-advertised version from the ID handshake
+	features             map[string]bool // client-advertised feature flags (client→server FL)
+	mu                   sync.Mutex
+	conn                 net.Conn
 	// writeMu serializes inline socket writes with each other. Deliberately
 	// separate from mu: nothing that blocks on I/O may hold the mutex ordinary
 	// field accessors use -- see Client.write.
-	writeMu               sync.Mutex
-	joining               bool
+	writeMu sync.Mutex
+	joining bool
+	// isNewHDID is set once, during the HI handshake (pktHdid, from
+	// recordHDFirstSeen's return value), and only ever read afterwards
+	// (issueJoinPopup) -- so, like joining, it needs no lock: by the time
+	// anything reads it, the handshake goroutine that wrote it has already
+	// handed off via ordinary happens-before (the packet loop that calls
+	// issueJoinPopup is the same goroutine for TCP, and for WS the write
+	// happens before HandleClient's goroutine is created).
+	isNewHDID             bool
 	hdid                  string
+	hdidCounted           atomic.Bool
 	uid                   int
 	area                  *area.Area
 	char                  int
@@ -379,6 +411,8 @@ type Client struct {
 	lastmsg               string
 	lastTextColor         string
 	perms                 uint64
+	isModerator           atomic.Bool
+	permissionsKnown      atomic.Bool
 	authenticated         bool
 	mod_name              string
 	pos                   string
@@ -425,6 +459,8 @@ type Client struct {
 	dancing               bool           // Whether the client has dance mode active (flips sprite every message)
 	danceFlipped          bool           // Current flip state for dance mode; toggles each IC message
 	gambleHide            bool           // Whether the client has opted out of seeing gambling broadcast messages
+	deathrollHide         bool           // Whether the client has opted out of Deathroll broadcasts they are not participating in
+	eventAlertsHide       bool           // Whether the client has opted out of global world-event alerts
 	pendingRegUser        string         // Username from a pending /register that is awaiting captcha confirmation
 	pendingRegPass        []byte         // bcrypt hash from a pending /register that is awaiting captcha confirmation
 	pendingRegCaptcha     string         // Expected captcha token for the pending registration
@@ -459,12 +495,19 @@ type Client struct {
 	captchaRestricted    atomic.Bool
 	captchaStrikes       atomic.Int32
 	pendingJoinChallenge joinChallenge
+	// guardChallenge marks a challenge the RAID GUARD issued rather than the
+	// ordinary join gate. It keeps two behaviours independent of the global
+	// join_captcha switch: /verify can still resolve the question when the join
+	// captcha is off, and failing/timing out the question kicks the connection
+	// instead of leaving it muted forever.
+	guardChallenge atomic.Bool
 
 	// raid is this connection's accumulated raid-guard evidence, created lazily
 	// on first observation so a server with the guard disabled never allocates
 	// one. Guarded by client.mu; the raidState is itself self-synchronised, so
 	// callers only hold client.mu long enough to fetch the pointer.
-	raid *raidState
+	raid     *raidState
+	raidFast atomic.Pointer[raidState]
 
 	// censorAlertsOff mutes the staff censor-trip OOC alerts for this session
 	// (/censoralerts off). Only consulted for clients holding MOD_CHAT; every
@@ -481,15 +524,16 @@ type Client struct {
 	// fresh connection defaults back to alerts on. See punishment_audit.go.
 	punishAuditOff atomic.Bool
 
-	// oocHidden mutes regular OOC chat for this client's session (/toggle
-	// global): the area's local OOC and player-initiated /global broadcasts
-	// stop reaching them, for players who'd rather not see the spam. Direct
-	// messages (/pm) and staff/system broadcasts (/mod -g, /modchat,
-	// announcements, moderation alerts) are untouched -- this only ever
-	// suppresses delivery to THIS client, never affects what anyone else
-	// sees, and every fresh connection defaults back to OOC visible. See
+	// globalHidden mutes player-initiated /global broadcasts for this
+	// client's session (/toggle global): server-wide /global and /g OOC
+	// messages stop reaching them, for players who'd rather not see the
+	// cross-area spam. Local (area) OOC, direct messages (/pm) and
+	// staff/system broadcasts (/mod -g, /modchat, announcements, moderation
+	// alerts) are untouched -- this only ever suppresses delivery to THIS
+	// client, never affects what anyone else sees, and every fresh
+	// connection defaults back to /global messages visible. See
 	// commands_toggle.go.
-	oocHidden atomic.Bool
+	globalHidden atomic.Bool
 
 	// charProtectOn arms /charprotect for this moderator: if they change into
 	// an area where another player already holds their claimed character,
@@ -538,6 +582,11 @@ type Client struct {
 	done          chan struct{}
 	closeDoneOnce sync.Once
 	closed        atomic.Bool
+	// isWebSocket distinguishes a nhooyr WebSocket transport from plain TCP.
+	// A WebSocket write deadline closes the underlying connection outright, so
+	// a write error there must end the client instead of being ignored like a
+	// transient TCP error. Set once by HandleWS before HandleClient starts.
+	isWebSocket atomic.Bool
 
 	// jsonMode is set the first time this client sends a JSON-encoded packet
 	// (object starting with '{'). Once set, every subsequent inbound packet
@@ -547,15 +596,21 @@ type Client struct {
 	// Reads from the writer goroutine and the SendPacket fan-out are
 	// lock-free via atomic.Bool.
 	jsonMode atomic.Bool
+
+	// sess is the aolib session representing this remote client: it decodes
+	// inbound frames (Fanta/JSON auto-detected) and dispatches them to the
+	// typed On*/OnCustom handlers registered in registerInbound. Receive is
+	// called only from HandleClient's read loop.
+	sess *aolib.ClientSession
 }
 
-// sendQueueSize bounds the per-client outbound packet backlog. Sized to
-// comfortably absorb the worst legitimate burst: sendPlayerListToClient emits
-// up to ~5 packets per existing player on join, so even a 1000-player server
-// has headroom. At ~150 bytes/packet this is ~1.2 MiB per client in the worst
-// case — only reached transiently by a stuck consumer, after which packets
-// drop silently rather than disconnecting the client.
-const sendQueueSize = 8192
+// sendQueueSize bounds the per-client outbound packet backlog. Roster batching
+// makes a FantaCode join one queue entry; JSON/WebSocket joins still use one
+// frame per existing player (up to ~5 × 500 = 2500 on a full server), so 4096
+// covers the worst legitimate burst with headroom. The channel stores slice
+// headers, ~98 KiB at this size versus ~196 KiB at the old 8192; payloads are
+// separate and drop silently only for a stuck consumer.
+const sendQueueSize = 4096
 
 // NewClient returns a new client. The outbound writer goroutine is NOT
 // started here — HandleClient starts it once the connection has cleared the
@@ -563,7 +618,7 @@ const sendQueueSize = 8192
 // rejection packet (e.g. NewClient(...).SendPacketSync("BD",...) on lockdown)
 // never leaks a writer goroutine.
 func NewClient(conn net.Conn, ipid string) *Client {
-	return &Client{
+	client := &Client{
 		conn:               conn,
 		uid:                -1,
 		char:               -1,
@@ -578,6 +633,31 @@ func NewClient(conn net.Conn, ipid string) *Client {
 		sendCh:             make(chan []byte, sendQueueSize),
 		done:               make(chan struct{}),
 	}
+	// The default permission set is known (plain player, no moderator bit), so
+	// the hot-path exemption check can skip client.mu from the first packet.
+	client.permissionsKnown.Store(true)
+	// The aolib session decodes inbound frames and dispatches them to the typed
+	// On*/OnCustom handlers registered in registerInbound. It also owns the
+	// outbound Send callback (unused here — Client.Send keeps its own path).
+	client.sess = aolib.NewClient(aolib.SessionConfig{
+		Send:            func(wire []byte) { client.sendBytes(wire) },
+		OnUnknownHeader: func(header string, wire []byte) { client.handleUnknownHeader(header, wire) },
+		OnDecodeError: func(header string, err error, wire []byte) {
+			logger.LogWarningf("dropped %s packet from IPID:%v UID:%v — decode error: %v", header, client.Ipid(), client.Uid(), err)
+		},
+		OnMalformedFrame: func(err error, wire []byte) {
+			logger.LogWarningf("dropped malformed packet from IPID:%v UID:%v — %v", client.Ipid(), client.Uid(), err)
+		},
+		OnHandlerError: func(header string, err error, packet any) {
+			logger.LogErrorf("panic handling %q packet from IPID:%v UID:%v: %v\n%s",
+				header, client.Ipid(), client.Uid(), err, debug.Stack())
+			logger.WriteAudit(fmt.Sprintf("%v | PANIC | IPID:%v | UID:%v | header:%v | %v",
+				time.Now().UTC().Format("15:04:05"), client.Ipid(), client.Uid(), header, err))
+			client.markClosed()
+		},
+	})
+	client.registerInbound()
+	return client
 }
 
 // writeDeadlineNanos backs writeDeadline() below. An atomic, not a plain var:
@@ -657,15 +737,27 @@ func (client *Client) runWriter() {
 			if logger.EnableNetworkLogging {
 				logger.WriteNetworkLog(client.ipid, client.Hdid(), "SEND", string(buf))
 			}
-			if err != nil && errors.Is(err, net.ErrClosed) {
-				// The conn has been explicitly closed (cleanup, ping
-				// timeout, kick path, etc.). No more sends will succeed.
-				return
+			if err != nil {
+				if errors.Is(err, net.ErrClosed) {
+					// The conn has been explicitly closed (cleanup, ping
+					// timeout, kick path, etc.). No more sends will succeed.
+					return
+				}
+				if client.isWebSocket.Load() {
+					// nhooyr.io/websocket closes the whole connection when a
+					// write deadline is hit, so this error is terminal. The old
+					// code ignored it and kept looping forever with a dead
+					// socket; the read loop may not notice until its next
+					// packet, and a client that has stopped sending leaves a
+					// zombie holding RAM and a multiclient slot.
+					logger.LogInfof("WebSocket write failed for IPID:%v, closing: %v", client.ipid, err)
+					client.markClosed()
+					return
+				}
+				// Plain TCP: a transient timeout/broken pipe can be a Wi-Fi
+				// roam or a momentary rebuffer. The read loop remains the
+				// authoritative signal that the connection is gone.
 			}
-			// Any other error (timeout, transient I/O, broken pipe) is
-			// ignored. If the connection is truly dead the read loop will
-			// notice and trigger cleanup, which will close the conn and
-			// land us in the net.ErrClosed branch above.
 		case <-client.done:
 			return
 		}
@@ -778,7 +870,18 @@ func (client *Client) HandleClient() {
 		}
 	}
 
-	if config.MCLimit != 0 && clients.CountByIPID(client.Ipid()) >= config.MCLimit {
+	// Per-IP backstop. An explicit multiclient_ip_limit wins; otherwise, when
+	// per-device limiting is on, cap pre-HI connection floods at 4× the device
+	// limit (minimum 16). Joined clients still get their per-HDID allowance, so
+	// a household is not blocked by this.
+	ipLimit := config.MulticlientIPLimit
+	if ipLimit <= 0 && config.MCLimit > 0 {
+		ipLimit = config.MCLimit * 4
+		if ipLimit < 16 {
+			ipLimit = 16
+		}
+	}
+	if ipLimit > 0 && clients.CountByIPID(client.Ipid()) >= admissionLimit(ipLimit) {
 		client.SendSync(&aolib.BD{Reason: "Too many connections from your IP. Please disconnect your other clients. If you have no other clients open, wait 1-2 minutes and try again."})
 		client.conn.Close()
 		return
@@ -909,36 +1012,11 @@ func (client *Client) HandleClient() {
 			return
 		}
 
-		var pkt *aolib.Packet
-		if rawPacket[0] == '{' {
-			header, body, derr := packetutil.DecodeToBody([]byte(rawPacket), aolib.WireJSON)
-			if derr != nil {
-				err = derr
-			} else {
-				pkt = &aolib.Packet{Header: header, Body: body}
-			}
-		} else {
-			pkt, err = aolib.NewPacket(rawPacket)
-		}
-		if err != nil {
-			logger.LogWarningf("dropped packet from IPID:%v UID:%v — parse error: %v; raw=%q", client.Ipid(), client.Uid(), err, rawPacket)
-			continue
-		}
-		v, known := PacketMap[pkt.Header]
-		if !known || v.Func == nil {
-			logger.LogWarningf("dropped packet from IPID:%v UID:%v — unknown header %q; body=%v", client.Ipid(), client.Uid(), pkt.Header, pkt.Body)
-			continue
-		}
-		if len(pkt.Body) < v.Args {
-			logger.LogWarningf("dropped %s packet from IPID:%v UID:%v — %d body fields, need %d; body=%v", pkt.Header, client.Ipid(), client.Uid(), len(pkt.Body), v.Args, pkt.Body)
-			continue
-		}
-		if v.MustJoin && client.Uid() == -1 {
-			logger.LogWarningf("dropped %s packet from IPID:%v — client has not completed handshake (UID=-1)", pkt.Header, client.Ipid())
-			continue
-		}
-		lastHandledHeader = pkt.Header
-		v.Func(client, pkt)
+		// Decode + dispatch through aolib's typed session. The On*/OnCustom
+		// handlers (registerInbound) run the existing pktXxx handlers; decode
+		// errors and handler panics route to the session's hooks set in
+		// NewClient.
+		client.sess.Receive([]byte(rawPacket))
 	}
 }
 
@@ -1084,12 +1162,12 @@ func (client *Client) SendPacketSync(header string, contents ...string) {
 	b := packetBufPool.Get().(*bytes.Buffer)
 	b.Reset()
 	if client.jsonMode.Load() {
-	jb, jerr := packetutil.BuildJSONFromArgs(header, contents)
-	if jerr != nil {
-	packetBufPool.Put(b)
-	return
-	}
-	b.Write(jb)
+		jb, jerr := packetutil.BuildJSONFromArgs(header, contents)
+		if jerr != nil {
+			packetBufPool.Put(b)
+			return
+		}
+		b.Write(jb)
 	} else {
 		contents = escapeOutgoing(header, contents)
 		b.WriteString(header)
@@ -1138,17 +1216,19 @@ func (client *Client) SendPacketSync(header string, contents ...string) {
 // Send enqueues a typed Outgoing packet for asynchronous delivery. The
 // packet's Args() is invoked exactly once per Send call. This is the
 // canonical send path — SendPacket(header, args...) is now a low-level
-// escape hatch reserved for the FantaCrypt "decryptor" relic and the
-// hot-path MS broadcast helper.
+// escape hatch reserved for the mod-only PU type-4 IPID feed (aolib's
+// PlayerDataType enum only models 0-3) and the SendPacketSync kick/ban
+// rejection path.
 func (client *Client) Send(p aolib.Outgoing) {
+	halloweenHauntOutgoing(p)
 	if client.jsonMode.Load() {
-	b, err := packetutil.Encode(p, aolib.WireJSON)
-	if err != nil {
-	logger.LogWarningf("dropped outbound %v - JSON encode failed: %v", p.Header(), err)
-	return
-	}
-	client.sendBytes(b)
-	return
+		b, err := packetutil.Encode(p, aolib.WireJSON)
+		if err != nil {
+			logger.LogWarningf("dropped outbound %v - JSON encode failed: %v", p.Header(), err)
+			return
+		}
+		client.sendBytes(b)
+		return
 	}
 	client.SendPacket(p.Header(), p.Args()...)
 }
@@ -1225,6 +1305,9 @@ func (client *Client) logSnapshot() clientLogSnapshot {
 func (client *Client) clientCleanup() {
 	if client.Uid() != -1 {
 		logger.LogInfof("Client (IPID:%v UID:%v) left the server", client.ipid, client.Uid())
+		// Release the per-identity active-connection slot recorded at join so
+		// the next connection counts as a reroll only after this one is gone.
+		raidLedgerNoteDisconnect(client, time.Now())
 
 		// Accumulate session playtime and award 1 chip per newly-completed hour.
 		// AddPlaytimeReturning is a single atomic SQL operation, so concurrent
@@ -1240,9 +1323,13 @@ func (client *Client) clientCleanup() {
 						logger.LogErrorf("Failed to add playtime for %v: %v", ipid, err)
 						return
 					}
+					// The security paths cache playtime for five minutes; a
+					// session that just ended has changed the authoritative
+					// value, so drop the stale entry now.
+					invalidatePlaytime(ipid)
 					oldPt := newPt - sessionSecs
 					chipsEarned := (newPt / secondsPerHour) - (oldPt / secondsPerHour) - alreadyAwarded
-					if chipsEarned > 0 && config.EnableCasino {
+					if chipsEarned > 0 && config.CasinoOn() {
 						if err := db.EnsureChipBalance(ipid); err == nil {
 							if _, err := db.AddChips(ipid, chipsEarned); err != nil {
 								logger.LogErrorf("Failed to award playtime chips for %v: %v", ipid, err)
@@ -1298,10 +1385,13 @@ func (client *Client) clientCleanup() {
 		if !client.Hidden() {
 			client.Area().RemoveVisiblePlayer()
 		}
-		broadcastToAll(&aolib.PR{ID: client.Uid(), Type: aolib.PlayerListUpdateRemove})
-		sendPlayerArup()
+		broadcastToAllOnce(&aolib.PR{ID: client.Uid(), Type: aolib.PlayerListUpdateRemove})
+		requestPlayerArup()
 	}
 	handleCasinoDisconnect(client)
+	handleMinigameDisconnect(client)
+	handleDeathrollDisconnect(client)
+	cleanupSillyActivityState(client.Ipid())
 	handleMafiaDisconnect(client)
 	// Lower the /forcedisplay gate if this client was a pinned target, so the
 	// area stops rendering everyone as their character once they're gone.
@@ -1327,7 +1417,15 @@ func (client *Client) clientCleanup() {
 
 // SendServerMessage sends a server OOC message to the client.
 func (client *Client) SendServerMessage(message string) {
-	client.Send(&aolib.CTToClient{Name: encodedServerName, Message: encode(message), IsFromServer: true})
+	client.Send(&aolib.CTToClient{Name: serverName, Message: message, IsFromServer: true})
+}
+
+// SendPopup shows a client-side AO2 BB dialog. Desktop AO2 renders it as a
+// modal message box and WebAO as a notice. The message is passed raw: Send
+// escapes FantaCode content on the way out and JSON mode encodes the typed
+// field directly, so pre-encoding here would double-escape one of the wires.
+func (client *Client) SendPopup(message string) {
+	client.Send(&aolib.BB{Message: message})
 }
 
 // SendMotd sends the MOTD to the client as a single OOC message. Embedded
@@ -1421,11 +1519,15 @@ func (client *Client) KickForCensorTrip() {
 
 // CurrentCharacter returns the client's current character name.
 func (client *Client) CurrentCharacter() string {
-	if client.CharID() == -1 {
+	id := client.CharID()
+	chars := getCharacters()
+	if id < 0 || id >= len(chars) {
+		// -1 is the normal spectator state. An out-of-range id can also be
+		// observed briefly while a test or an append-only characters.txt reload
+		// clears the roster; reading it must never panic the caller.
 		return "Spectator"
-	} else {
-		return getCharacters()[client.CharID()]
 	}
+	return chars[id]
 }
 
 // timeout closes an unjoined client's connection after 1 minute.
@@ -1583,6 +1685,11 @@ func (client *Client) SetPerms(perms uint64) {
 	client.mu.Lock()
 	client.perms = perms
 	client.mu.Unlock()
+	// Cache the one permission bit the raid-guard hot path consults on every
+	// IC/OOC packet, so an ordinary player does not pay a mutex acquisition just
+	// to prove they are not a moderator.
+	client.isModerator.Store(permissions.IsModerator(perms))
+	client.permissionsKnown.Store(true)
 }
 
 // Authenticated returns whether the client is logged in to any account
@@ -1766,6 +1873,20 @@ func (client *Client) SetPairGroup(g *PairGroup) {
 	client.pairGroup = g
 }
 
+// Leash returns the /leash claim this client is part of, or nil.
+func (client *Client) Leash() *Leash {
+	client.mu.Lock()
+	defer client.mu.Unlock()
+	return client.leash
+}
+
+// SetLeash assigns (or clears, with nil) this client's /leash claim.
+func (client *Client) SetLeash(l *Leash) {
+	client.mu.Lock()
+	defer client.mu.Unlock()
+	client.leash = l
+}
+
 // Software returns the client-advertised software string (ID handshake).
 func (client *Client) Software() string {
 	client.mu.Lock()
@@ -1940,7 +2061,7 @@ func (client *Client) JoinArea(area *area.Area) {
 		client.SendServerMessage("📍 " + desc)
 	}
 	if motd := area.Motd(); motd != "" {
-		client.Send(&aolib.BB{Message: encode(motd)})
+		client.Send(&aolib.BB{Message: motd})
 	}
 	// Sync the joining client to the area's music state.
 	//
@@ -1961,7 +2082,7 @@ func (client *Client) JoinArea(area *area.Area) {
 		song = "~stop.mp3"
 	}
 	client.Send(&aolib.MCToClient{Name: song, CharID: client.CharID(), Showname: "Server", Looping: true, Channel: aolib.MusicChannelMusic, Effects: aolib.MusicEffects{}})
-	sendPlayerArup()
+	requestPlayerArup()
 }
 
 // ChangeArea changes the client's current area.
@@ -2050,6 +2171,11 @@ func (client *Client) ChangeArea(a *area.Area) bool {
 	// against an unrendered viewport on WebAO (same fix as initial join).
 	client.Send(&aolib.BN{Background: a.Background()})
 	addToBuffer(client, "AREA", "Joined area.", false)
+	// A leash drags its dog along. Run this last so the master is fully in the
+	// new area (music, roster, background) before the dog's own area change
+	// fans out. The punishment-safe area flag is deliberately not consulted:
+	// the dog follows its master through shelters too.
+	client.dragLeashedDogs()
 	return true
 }
 
@@ -2489,6 +2615,38 @@ func (client *Client) SetGambleHide(h bool) {
 	client.mu.Unlock()
 }
 
+// DeathrollHide returns whether the client has opted out of Deathroll
+// broadcasts they are not participating in.
+func (client *Client) DeathrollHide() bool {
+	client.mu.Lock()
+	defer client.mu.Unlock()
+	return client.deathrollHide
+}
+
+// SetDeathrollHide sets whether the client wants to suppress Deathroll
+// broadcasts they are not participating in.
+func (client *Client) SetDeathrollHide(h bool) {
+	client.mu.Lock()
+	client.deathrollHide = h
+	client.mu.Unlock()
+}
+
+// EventAlertsHide returns whether the client has opted out of global
+// world-event announcements.
+func (client *Client) EventAlertsHide() bool {
+	client.mu.Lock()
+	defer client.mu.Unlock()
+	return client.eventAlertsHide
+}
+
+// SetEventAlertsHide sets whether the client wants to suppress global
+// world-event announcements.
+func (client *Client) SetEventAlertsHide(h bool) {
+	client.mu.Lock()
+	client.eventAlertsHide = h
+	client.mu.Unlock()
+}
+
 // forceChangeArea moves the client to the given area unconditionally, bypassing
 // the jailed-player area-lock and area invitation checks that ChangeArea enforces.
 // Used to place a jailed player into their designated cell (both at jail time and on reconnect).
@@ -2722,15 +2880,50 @@ func (client *Client) AddPunishment(pType PunishmentType, duration time.Duration
 // /unpunish can block anyone below ADMIN from silently lifting a punishment
 // that an admin applied to them.
 func (client *Client) AddPunishmentBy(pType PunishmentType, duration time.Duration, reason string, tier IssuerTier) {
+	client.addPunishmentBy(pType, duration, reason, tier, false)
+}
+
+// addPunishmentBy performs the actual insert. ignoreShield is only for the
+// anti-punishment shield's own backfire, which must be able to land on a
+// moderator who is themselves shielded.
+func (client *Client) addPunishmentBy(pType PunishmentType, duration time.Duration, reason string, tier IssuerTier, ignoreShield bool) {
+	if !ignoreShield && client.AntiPunishShieldMode() != antiPunishShieldOff {
+		return
+	}
 	client.mu.Lock()
 	defer client.mu.Unlock()
+	client.addPunishmentLocked(pType, duration, reason, tier, time.Time{})
+}
 
+// AddPunishmentLocked adds a punishment and pins it against self-service
+// removal for lockDuration. It is used by the Deathroll loser penalty so the
+// loser cannot clear or reroll the effect during the lock window.
+func (client *Client) AddPunishmentLocked(pType PunishmentType, duration, lockDuration time.Duration, reason string) {
+	lockUntil := time.Time{}
+	if lockDuration > 0 {
+		lockUntil = time.Now().UTC().Add(lockDuration)
+	}
+	client.mu.Lock()
+	defer client.mu.Unlock()
+	client.addPunishmentLocked(pType, duration, reason, IssuerSystem, lockUntil)
+}
+
+// addPunishmentLocked is the shared append path for punishments that carry no
+// custom data. client.mu must be held.
+//
+// A same-type re-application replaces the old entry (as before) but carries
+// over a still-live lock: otherwise /maso, /megamaso or a potion could shed a
+// Deathroll lock by re-applying the same effect.
+func (client *Client) addPunishmentLocked(pType PunishmentType, duration time.Duration, reason string, tier IssuerTier, lockUntil time.Time) {
 	// Remove existing punishment of the same type (prevent duplicate same-type punishments)
 	// Different punishment types can coexist and stack their effects
 	existed := false
 	for i := len(client.punishments) - 1; i >= 0; i-- {
 		if client.punishments[i].punishmentType == pType {
 			existed = true
+			if client.punishments[i].lockedUntil.After(lockUntil) {
+				lockUntil = client.punishments[i].lockedUntil
+			}
 			client.punishments = append(client.punishments[:i], client.punishments[i+1:]...)
 			break
 		}
@@ -2751,6 +2944,7 @@ func (client *Client) AddPunishmentBy(pType PunishmentType, duration time.Durati
 		lastEffect:     0,
 		targetUID:      -1,
 		issuerTier:     tier,
+		lockedUntil:    lockUntil,
 	})
 	// Maintain the /forcedisplay hot-path gate. A forcedisplay that wasn't
 	// already present — a fresh application or a DB restore on reconnect — raises
@@ -2760,6 +2954,20 @@ func (client *Client) AddPunishmentBy(pType PunishmentType, duration time.Durati
 	if pType == PunishmentForceDisplay && !existed {
 		activeForceDisplay.Add(1)
 	}
+}
+
+// PunishmentLockedUntil returns the self-service removal lock deadline for
+// pType, or the zero time if the punishment is absent or unlocked. A returned
+// time in the past means the lock has expired.
+func (client *Client) PunishmentLockedUntil(pType PunishmentType) time.Time {
+	client.mu.Lock()
+	defer client.mu.Unlock()
+	for _, p := range client.punishments {
+		if p.punishmentType == pType {
+			return p.lockedUntil
+		}
+	}
+	return time.Time{}
 }
 
 // PunishmentIssuerTier returns the tier of the moderator who applied the given
@@ -2809,6 +3017,14 @@ func (client *Client) setPunishmentTier(pType PunishmentType, tier IssuerTier) {
 // metadata (customData), e.g. the target language for PunishmentTranslator.
 // Same same-type-deduplication as AddPunishment.
 func (client *Client) AddPunishmentWithData(pType PunishmentType, duration time.Duration, reason, customData string) {
+	client.addPunishmentWithData(pType, duration, reason, customData, false)
+}
+
+// addPunishmentWithData is the shield-aware insert behind AddPunishmentWithData.
+func (client *Client) addPunishmentWithData(pType PunishmentType, duration time.Duration, reason, customData string, ignoreShield bool) {
+	if !ignoreShield && client.AntiPunishShieldMode() != antiPunishShieldOff {
+		return
+	}
 	client.mu.Lock()
 	defer client.mu.Unlock()
 
@@ -2852,6 +3068,14 @@ func (client *Client) RemovePunishment(pType PunishmentType) {
 // AddLovebombPunishment adds a lovebomb punishment with an optional specific target UID.
 // Use targetUID=-1 for a random area target on each message.
 func (client *Client) AddLovebombPunishment(targetUID int, duration time.Duration, reason string) {
+	client.addLovebombPunishment(targetUID, duration, reason, false)
+}
+
+// addLovebombPunishment is the shield-aware insert behind AddLovebombPunishment.
+func (client *Client) addLovebombPunishment(targetUID int, duration time.Duration, reason string, ignoreShield bool) {
+	if !ignoreShield && client.AntiPunishShieldMode() != antiPunishShieldOff {
+		return
+	}
 	client.mu.Lock()
 	defer client.mu.Unlock()
 
@@ -2879,6 +3103,14 @@ func (client *Client) AddLovebombPunishment(targetUID int, duration time.Duratio
 // AddICWarpPunishment adds an icwarp punishment tied to a specific area.
 // The warp only activates while the client is in that particular area.
 func (client *Client) AddICWarpPunishment(warpArea *area.Area, duration time.Duration, reason string) {
+	client.addICWarpPunishment(warpArea, duration, reason, false)
+}
+
+// addICWarpPunishment is the shield-aware insert behind AddICWarpPunishment.
+func (client *Client) addICWarpPunishment(warpArea *area.Area, duration time.Duration, reason string, ignoreShield bool) {
+	if !ignoreShield && client.AntiPunishShieldMode() != antiPunishShieldOff {
+		return
+	}
 	client.mu.Lock()
 	defer client.mu.Unlock()
 
@@ -2915,6 +3147,37 @@ func (client *Client) RemoveAllPunishments() {
 		}
 	}
 	client.punishments = []PunishmentState{}
+	// Full removal also drops any /antipunishshield spoofs, so the moderators
+	// who thought their punishments landed stop seeing the fake effect. The
+	// shield itself is a separate restart-persistent flag and stays on.
+	client.antiPunishSpoofs = nil
+	client.antiPunishSpoofCount.Store(0)
+}
+
+// RemoveAllUnlockedPunishments removes every punishment whose self-service lock
+// is absent or expired, and keeps the rest. It returns the types that were kept
+// so the caller can tell the player exactly what is still pinned. Used by
+// /unpunish when the caller targets themselves; targeting another player still
+// uses RemoveAllPunishments, because the lock only stops the loser opting out.
+func (client *Client) RemoveAllUnlockedPunishments() (locked []PunishmentType) {
+	client.mu.Lock()
+	defer client.mu.Unlock()
+
+	now := time.Now().UTC()
+	kept := client.punishments[:0]
+	for i := range client.punishments {
+		p := client.punishments[i]
+		if !p.lockedUntil.IsZero() && now.Before(p.lockedUntil) {
+			kept = append(kept, p)
+			locked = append(locked, p.punishmentType)
+			continue
+		}
+		if p.punishmentType == PunishmentForceDisplay {
+			activeForceDisplay.Add(-1)
+		}
+	}
+	client.punishments = kept
+	return locked
 }
 
 // HasPunishment checks if the client has a specific punishment type.
@@ -3382,6 +3645,8 @@ func (p PunishmentType) String() string {
 		return "fish"
 	case PunishmentCustomText:
 		return "texteffect"
+	case PunishmentGold:
+		return "gold"
 	default:
 		return "none"
 	}
@@ -3427,7 +3692,7 @@ func (client *Client) CheckRateLimit() bool {
 	}
 
 	// Check if rate limit is exceeded
-	if len(client.msgTimestamps) >= config.RateLimit {
+	if len(client.msgTimestamps) >= admissionLimit(config.RateLimit) {
 		return true
 	}
 
@@ -3469,7 +3734,7 @@ func (client *Client) CheckOOCRateLimit() bool {
 		client.oocMsgTimestamps = client.oocMsgTimestamps[validIdx:]
 	}
 
-	if len(client.oocMsgTimestamps) >= config.OOCRateLimit {
+	if len(client.oocMsgTimestamps) >= admissionLimit(config.OOCRateLimit) {
 		return true
 	}
 
@@ -3489,16 +3754,30 @@ func (client *Client) CheckOOCRateLimit() bool {
 // (VS_CAPS, VS_PEERS, VS_AUDIO) are server→client only and are never sent by a
 // legitimate client, so they are deliberately NOT exempted.
 func isVoicePacket(raw string) bool {
-	if raw == "" || raw[0] == '{' {
-		// Empty packets are handled earlier in the read loop; JSON-encoded
-		// voice chat is not supported.
+	if raw == "" {
+		// Empty packets are handled earlier in the read loop.
 		return false
 	}
-	// The header is everything before the first '#' separator (see NewPacket).
-	if idx := strings.IndexByte(raw, '#'); idx >= 0 {
-		raw = raw[:idx]
+	header := raw
+	if raw[0] == '{' {
+		// JSON-encoded packets discriminate on the $header field. Decode just
+		// that field — clients may reorder keys, so a positional prefix check
+		// is unreliable, and JSON voice chat IS supported (the VS_* codecs
+		// register both-wire), so a JSON-mode client streaming VS_FRAME must be
+		// exempted exactly like its FantaCode counterpart.
+		var env struct {
+			Header string `json:"$header"`
+		}
+		if err := json.Unmarshal([]byte(raw), &env); err != nil {
+			return false
+		}
+		header = env.Header
+	} else if idx := strings.IndexByte(raw, '#'); idx >= 0 {
+		// FantaCode: the header is everything before the first '#' separator
+		// (see NewPacket).
+		header = raw[:idx]
 	}
-	switch raw {
+	switch header {
 	case "VS_JOIN", "VS_LEAVE", "VS_FRAME", "VS_SPEAK":
 		return true
 	}

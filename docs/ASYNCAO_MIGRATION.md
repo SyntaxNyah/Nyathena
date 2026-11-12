@@ -1,8 +1,9 @@
 # AsyncAO → `aolib-go` Migration Roadmap
 
-**Status:** Plan (not yet started). Companion to this repo's own `aolib-go`
-adoption — see `internal/packet` (strict standard) vs `internal/athena`
-(server extensions).
+**Status:** Plan (not yet started). Companion to Nyathena's own `aolib-go`
+adoption, which is complete: Nyathena now depends on
+`github.com/AO-Underground/aolib/go/v2` (v2.4.3) and registers its server
+extensions via `RegisterCodec`.
 
 **Goal.** Replace AsyncAO's hand-rolled wire layer — `internal/protocol` plus the
 `switch p.Header` dispatcher in `internal/courtroom/session.go` / `voice.go` —
@@ -327,7 +328,7 @@ connect-and-chat smoke test against Nyathena.
 - **Module path.** The authoritative import is
   `github.com/AO-Underground/aolib/go/v2` (the `go/` subdirectory of the
   `AO-Underground/aolib` supermodule). `go/go.mod` already declares this
-  path (finalized at v2.4.0), so import it directly — no `replace` directive needed.
+  path (finalized at v2.4.0; latest v2.4.3), so import it directly — no `replace` directive needed.
 - **`SessionConfig.Send` is a raw write hook**, not a per-packet method — wire it
   to the WebSocket `Write` once, not per packet.
 
@@ -337,7 +338,7 @@ connect-and-chat smoke test against Nyathena.
 
 1. `cd go && go test ./...` (codegen determinism + conformance vectors).
 2. `cd AsyncAO && go build ./... && go test ./...`.
-3. Wire round-trip: AsyncAO-encoded frames decode in Nyathena (`internal/packet`)
+3. Wire round-trip: AsyncAO-encoded frames decode in Nyathena (aolib-go)
    and back, for `HI/ID/PN/SI/SC/CharsCheck/SM/FL/DONE/CT/MS/MC/…` (plus the
    Nyathena `VS_*` voice extension, which is non-canonical).
 4. Live smoke test: connect to a local Nyathena, complete the handshake, send an

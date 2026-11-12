@@ -17,6 +17,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>. */
 package logger
 
 import (
+	"bufio"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -98,6 +99,7 @@ var (
 
 	networkLogMu       sync.Mutex
 	networkLogFile     *os.File
+	networkLogWriter   *bufio.Writer
 	networkLogFilePath string
 
 	// areaLogFiles stores the open file handle for each area, keyed by
@@ -280,6 +282,10 @@ func WriteNetworkLog(ipid, hdid, direction, content string) {
 
 	target := LogPath + "/network.log"
 	if networkLogFile == nil || networkLogFilePath != target {
+		if networkLogWriter != nil {
+			networkLogWriter.Flush() //nolint:errcheck
+			networkLogWriter = nil
+		}
 		if networkLogFile != nil {
 			networkLogFile.Close()
 		}
@@ -289,14 +295,31 @@ func WriteNetworkLog(ipid, hdid, direction, content string) {
 			return
 		}
 		networkLogFile = f
+		// Network logging writes one line per packet. An unbuffered
+		// fmt.Fprintf per packet turns the logger into a syscall-per-packet
+		// choke point shared by every writer goroutine. Buffer 64 KiB and flush
+		// in bulk; a crash can lose at most the current buffer.
+		networkLogWriter = bufio.NewWriterSize(f, 64*1024)
 		networkLogFilePath = target
 	}
 
 	timestamp := time.Now().UTC().Format("2006-01-02T15:04:05.000Z")
-	if _, err := fmt.Fprintf(networkLogFile, "[%v] %v | IPID:%v | HDID:%v | %v\n", timestamp, direction, ipid, hdid, content); err != nil {
+	if _, err := fmt.Fprintf(networkLogWriter, "[%v] %v | IPID:%v | HDID:%v | %v\n", timestamp, direction, ipid, hdid, content); err != nil {
 		LogError(err.Error())
+		networkLogWriter = nil
 		networkLogFile.Close()
 		networkLogFile = nil
+		networkLogFilePath = ""
+		return
+	}
+	if networkLogWriter.Buffered() >= 32*1024 {
+		if err := networkLogWriter.Flush(); err != nil {
+			LogError(err.Error())
+			networkLogWriter = nil
+			networkLogFile.Close()
+			networkLogFile = nil
+			networkLogFilePath = ""
+		}
 	}
 }
 
@@ -376,6 +399,10 @@ func CloseLogFiles() {
 	auditLogMu.Unlock()
 
 	networkLogMu.Lock()
+	if networkLogWriter != nil {
+		networkLogWriter.Flush() //nolint:errcheck
+		networkLogWriter = nil
+	}
 	if networkLogFile != nil {
 		networkLogFile.Close()
 		networkLogFile = nil

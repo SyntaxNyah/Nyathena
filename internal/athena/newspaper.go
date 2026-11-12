@@ -270,7 +270,7 @@ func buildSectionWordOfTheDay() string {
 }
 
 func buildSectionCasino() string {
-	if config == nil || !config.EnableCasino {
+	if config == nil || !config.CasinoOn() {
 		return ""
 	}
 	entries, err := db.GetTopChipBalances(3)

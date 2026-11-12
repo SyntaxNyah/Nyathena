@@ -39,7 +39,18 @@ import (
 // never so much as touches a raidState or the cross-IPID correlation window.
 // Every hook below checks this first, before client.raidGuard().
 func raidGuardExempt(client *Client) bool {
-	return client == nil || permissions.IsModerator(client.Perms())
+	if client == nil {
+		return true
+	}
+	if client.isModerator.Load() {
+		return true
+	}
+	if client.permissionsKnown.Load() {
+		return false
+	}
+	// Struct-literal test clients and a client whose permissions have not been
+	// set yet fall back to the authoritative field.
+	return permissions.IsModerator(client.Perms())
 }
 
 // raidGuardEvaluate is the canonical "something fired" tail: snapshot the
@@ -53,7 +64,7 @@ func raidGuardEvaluate(client *Client, rs *raidState, trigger string) {
 	}
 	score, _, _ := rs.snapshot()
 	scale, _ := raidGuardTier(client)
-	raidGuardEnforce(client, rs, verdictForTier(score, scale), trigger)
+	raidSystem.enforce(client, rs, verdictForTier(score, scale), trigger)
 }
 
 // raidGuardTimings returns how long ago this connection was accepted and how
@@ -102,8 +113,23 @@ func raidGuardOnAskchaa(client *Client) {
 	// PN once a UID exists, and every client implementation sends askchaa only in
 	// reply to PN, so nothing the server said can have prompted it. See
 	// SigHandshakeReplay for the per-client evidence.
-	if client.Uid() != -1 && rs.noteAskchaaPostJoin() {
-		raidGuardEvaluate(client, rs, "handshake replay")
+	if client.Uid() != -1 {
+		if client.guardChallengeActivity() {
+			return
+		}
+		now := time.Now()
+		if rs.noteAskchaaPostJoin() {
+			raidGuardEvaluate(client, rs, "handshake replay")
+		}
+		// The connection-scoped signal fires once, so a reconnect used to clear
+		// it completely. The ledger remembers the behaviour across sockets; a
+		// second protocol-impossible replay from the same identity is a repeat
+		// offence rather than another first warning.
+		if !client.closed.Load() {
+			if count := raidLedgerNoteReplay(client, now); count >= raidGuardRerollLimit() {
+				raidSystem.repeatOffence(client, "handshake rerolls", count)
+			}
+		}
 	}
 }
 
@@ -142,6 +168,9 @@ func raidGuardOnCharPick(client *Client) {
 	if rs == nil {
 		return
 	}
+	if client.guardChallengeActivity() {
+		return
+	}
 	now := time.Now()
 	if client.CharPickedAt().IsZero() {
 		client.SetCharPickedAt(now)
@@ -150,8 +179,31 @@ func raidGuardOnCharPick(client *Client) {
 	if accepted := client.AcceptedAt(); !accepted.IsZero() {
 		sinceAccept = now.Sub(accepted)
 	}
-	if fired := rs.noteCharPick(sinceAccept, now); len(fired) > 0 {
+	fired := rs.noteCharPick(sinceAccept, now)
+	// Rapid re-rolling is counted across reconnects, not just inside this
+	// connection. Three fast CCs make one churn flag; enough flags from the same
+	// IPID+HDID are a repeat offence even if every session looked clean alone.
+	if count := raidLedgerNoteCharChange(client, now); count >= raidGuardCCFlagLimit() {
+		raidSystem.repeatOffence(client, "rapid character changes", count)
+	}
+	if len(fired) > 0 && !client.closed.Load() {
 		raidGuardEvaluate(client, rs, "character pick")
+	}
+}
+
+// raidGuardOnJoinComplete records one completed handshake in the per-identity
+// ledger. It is called at the end of pktReqDone, after the UID exists, so the
+// first ordinary join scores zero and only an actual reroll loop accumulates.
+func raidGuardOnJoinComplete(client *Client) {
+	if raidGuardExempt(client) {
+		return
+	}
+	if rs := client.raidGuard(); rs == nil {
+		return
+	}
+	now := time.Now()
+	if count := raidLedgerNoteJoin(client, now); count >= raidGuardRerollLimit() {
+		raidSystem.repeatOffence(client, "handshake rerolls", count)
 	}
 }
 
@@ -192,7 +244,8 @@ func raidGuardOnIC(client *Client, ms *MSToClient, text string) {
 		SinceCharPick: sinceCharPick,
 		Now:           now,
 	})
-	fired = append(fired, raidGuardCorrelate(rs, client.Ipid(), text, now)...)
+	correlated, _ := raidGuardCorrelate(rs, client.Ipid(), text, now)
+	fired = append(fired, correlated...)
 	if len(fired) > 0 {
 		raidGuardEvaluate(client, rs, "IC message")
 	}
@@ -200,10 +253,13 @@ func raidGuardOnIC(client *Client, ms *MSToClient, text string) {
 
 // raidGuardCorrelate feeds one message to the server-wide layer and folds
 // whatever it says back into this connection's evidence. Written once and shared
-// by the IC and OOC hooks so the two channels can never drift apart on which
-// half of the graded corroboration they record -- the fan-out being detected
-// does not care which channel it arrived on, and neither should this.
-func raidGuardCorrelate(rs *raidState, ipid, text string, now time.Time) (fired []SignalKind) {
+// by the IC, OOC and modcall hooks so the three channels can never drift apart on
+// which half of the graded corroboration they record -- the fan-out being
+// detected does not care which channel it arrived on, and neither should this.
+//
+// Returns whether anybody else is saying the same thing, because the modcall
+// nuke ladder treats a carbon-copied reason as one of its script factors.
+func raidGuardCorrelate(rs *raidState, ipid, text string, now time.Time) (fired []SignalKind, echoed bool) {
 	echoed, corroborated := raidObserveContent(ipid, text, now)
 	if corroborated && rs.noteCorrelated() {
 		fired = append(fired, SigDupeAcrossIPIDs)
@@ -214,7 +270,7 @@ func raidGuardCorrelate(rs *raidState, ipid, text string, now time.Time) (fired 
 	if echoed && rs.noteEchoed() {
 		fired = append(fired, SigEchoedAcrossIPIDs)
 	}
-	return fired
+	return fired, echoed
 }
 
 // raidGuardOnWordHit folds a word-list match into this connection's evidence.
@@ -269,8 +325,71 @@ func raidGuardOnOOC(client *Client, oocName, text string) {
 		SinceCharPick: sinceCharPick,
 		Now:           now,
 	})
-	fired = append(fired, raidGuardCorrelate(rs, client.Ipid(), text, now)...)
+	correlatedOOC, _ := raidGuardCorrelate(rs, client.Ipid(), text, now)
+	fired = append(fired, correlatedOOC...)
 	if len(fired) > 0 {
 		raidGuardEvaluate(client, rs, "OOC message")
 	}
+}
+
+// raidGuardOnModcall folds one ZZ packet into the guard and reports whether the
+// connection must not go on to deliver it.
+//
+// Called from pktModcall ABOVE both of its cooldown gates, deliberately. Those
+// gates return before the packet is logged, buffered or scored, so a script
+// firing ZZ in a loop used to leave no trace at all beyond the single delivery
+// a 40-minute cooldown lets through -- which is why six fresh IPIDs calling a
+// moderator on joining produced nothing but the handshake-replay watch they
+// also happened to earn. Counting the ATTEMPTS, refused ones included, is the
+// whole point of this hook.
+//
+// Three things happen here:
+//
+//  1. The attempt is counted against its IPID over raid_guard_modcall_window,
+//     and enough distinct IPIDs calling at once marks the server under attack.
+//  2. The reason is fed to the same cross-IPID correlator IC and OOC use, so a
+//     canned reason repeated by fresh connections fires SigDupeAcrossIPIDs and
+//     satisfies the ban gate honestly -- no gate is bypassed for this.
+//  3. The scored signals and the deterministic nuke ladder are evaluated; see
+//     noteModcall for the three rules and their gates.
+//
+// Returns true when the guard acted in a way that must stop the message: the
+// connection was silenced, kicked, banned, or nuked. That mirrors
+// oocGuardVerdictSuppresses and the ordering pktIC documents -- the verdict
+// stops the packet that earned it, rather than the next one.
+func raidGuardOnModcall(client *Client, reason string) (acted bool) {
+	if raidGuardExempt(client) {
+		return false
+	}
+	rs := client.raidGuard()
+	if rs == nil {
+		return false
+	}
+	if client.guardChallengeActivity() {
+		return true
+	}
+	now := time.Now()
+	attempts := raidObserveModcall(client.Ipid(), now)
+	correlated, echoed := raidGuardCorrelate(rs, client.Ipid(), reason, now)
+
+	fired, nuke := rs.noteModcall(modcallEvidence{
+		Attempts:        attempts,
+		SinceJoin:       raidGuardSinceJoin(client, now),
+		BrandNew:        raidGuardBrandNew(client, rs),
+		HandshakeReplay: rs.firedSignal(SigHandshakeReplay),
+		FastCharPick:    rs.firedSignal(SigFastCharPick),
+		Spoke:           rs.hasSpoken(),
+		EchoedReason:    echoed,
+	})
+	if nuke && raidGuardModcallNukeEnabled() {
+		if raidGuardModcallNuke(client, rs, "modcall on join") {
+			return true
+		}
+	}
+	fired = append(fired, correlated...)
+	if len(fired) > 0 {
+		raidGuardEvaluate(client, rs, "modcall")
+	}
+	_, _, verdict := rs.snapshot()
+	return verdict >= VerdictSilence
 }

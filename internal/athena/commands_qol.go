@@ -107,6 +107,20 @@ func cmdPunishments(client *Client, args []string, usage string) {
 	client.SendServerMessage(fmt.Sprintf("⛓️ Active punishments for %v (%d):\n%v", who, len(lines), strings.Join(lines, "\n")))
 }
 
+// clientAreaName returns a display name for a client's area without assuming
+// the area pointer is set. A client can briefly have a UID while its area is
+// nil (UID assignment happens before JoinArea, and cleanup clears the area
+// separately), and /clients iterates connections concurrently.
+func clientAreaName(c *Client) string {
+	if c == nil {
+		return "unknown"
+	}
+	if a := c.Area(); a != nil {
+		return a.Name()
+	}
+	return "unknown"
+}
+
 // cmdClients lists every connection sharing the target's IPID.
 func cmdClients(client *Client, args []string, usage string) {
 	uid, err := strconv.Atoi(strings.TrimSpace(args[0]))
@@ -130,7 +144,7 @@ func cmdClients(client *Client, args []string, usage string) {
 		if id := c.CharID(); id >= 0 && id < len(getCharacters()) {
 			charName = getCharacters()[id]
 		}
-		line := fmt.Sprintf("  [%v] %v — area: %v", c.Uid(), charName, c.Area().Name())
+		line := fmt.Sprintf("  [%v] %v — area: %v", c.Uid(), charName, clientAreaName(c))
 		if name := c.OOCName(); name != "" {
 			line += ", OOC: " + name
 		}

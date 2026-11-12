@@ -23,6 +23,7 @@ import (
 	"strings"
 	"time"
 
+	aolib "github.com/AO-Underground/aolib/go/v2"
 	"github.com/MangosArentLiterature/Athena/internal/db"
 	"github.com/MangosArentLiterature/Athena/internal/logger"
 )
@@ -53,7 +54,7 @@ func cmdTournament(client *Client, args []string, usage string) {
 		tournamentParticipants = make(map[int]*TournamentParticipant)
 
 		client.SendServerMessage("Tournament started! Users can now join with /join-tournament")
-		writeToAllClients("CT", "OOC", "🏆 TOURNAMENT STARTED! Join with /join-tournament to compete! Random punishments will be applied.")
+		broadcastToAll(&aolib.CTToClient{Name: "OOC", Message: "🏆 TOURNAMENT STARTED! Join with /join-tournament to compete! Random punishments will be applied.", IsFromServer: false})
 		addToBuffer(client, "CMD", "Started punishment tournament", false)
 
 	case "stop":
@@ -81,7 +82,7 @@ func cmdTournament(client *Client, args []string, usage string) {
 			duration := time.Since(tournamentStartTime).Round(time.Second)
 			announcement := fmt.Sprintf("🏆 TOURNAMENT ENDED! Winner: UID %d with %d messages over %v! Congratulations!",
 				winner.uid, winner.messageCount, duration)
-			writeToAllClients("CT", "OOC", announcement)
+			broadcastToAll(&aolib.CTToClient{Name: "OOC", Message: announcement, IsFromServer: false})
 
 			// Remove all punishments from winner (memory and DB).
 			winnerClient.RemoveAllPunishments()
@@ -90,7 +91,7 @@ func cmdTournament(client *Client, args []string, usage string) {
 			}
 			winnerClient.SendServerMessage("Congratulations! Your tournament punishments have been removed.")
 		} else {
-			writeToAllClients("CT", "OOC", "🏆 TOURNAMENT ENDED! No participants.")
+			broadcastToAll(&aolib.CTToClient{Name: "OOC", Message: "🏆 TOURNAMENT ENDED! No participants.", IsFromServer: false})
 		}
 
 		tournamentParticipants = make(map[int]*TournamentParticipant)
@@ -197,6 +198,6 @@ func cmdJoinTournament(client *Client, args []string, usage string) {
 	}
 
 	client.SendServerMessage(fmt.Sprintf("🏆 Joined tournament! You've been given: %s", strings.Join(punishmentNames, ", ")))
-	writeToAllClients("CT", "OOC", fmt.Sprintf("🏆 UID %d joined the tournament!", uid))
+	broadcastToAll(&aolib.CTToClient{Name: "OOC", Message: fmt.Sprintf("🏆 UID %d joined the tournament!", uid), IsFromServer: false})
 	addToBuffer(client, "TOURNAMENT", "Joined tournament", false)
 }

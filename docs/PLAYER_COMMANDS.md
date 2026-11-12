@@ -28,6 +28,7 @@ For moderator-only commands, see [`MOD_COMMANDS.md`](MOD_COMMANDS.md). For casin
 | `/ga` | List players in your current area |
 | `/gas` | List players in **all** areas (empty areas are hidden) |
 | `/players` | Same as /ga |
+| `/mods` | List online moderators and the area each one is in (shadow mods are hidden) |
 | `/find <name>` | Find which area a player is in |
 | `/pos [pos]` | Show or set your IC position (def, pro, wit, jud, hld, hlp) |
 | `/charselect` | Return to character select |
@@ -83,6 +84,8 @@ For moderator-only commands, see [`MOD_COMMANDS.md`](MOD_COMMANDS.md). For casin
 | `/bglist` | List every available background |
 | `/swapevi <id1> <id2>` | Swap two pieces of evidence |
 | `/testimony <record\|stop\|play\|update\|insert\|delete>` | Drive the area's testimony recorder. Witnesses must be in `/pos wit` for their lines to be captured. |
+| `/savetestimony <name>` | Save the area's recorded testimony under a name so it can be replayed later (CM only) |
+| `/loadtestimony [name]` | Load a saved testimony for playback, or list the saved ones (CM only) |
 | `/examine` | Start cross-examination playback |
 | `/vote <option>` | Vote on the area's active poll |
 | `/cvote <action> <uid> [reason]` | Community moderation vote (kick/mute/ban/warn/areakick). Moderators have the final say. |
@@ -145,7 +148,7 @@ So you never have to remember to undo one, and a restart returns every area to i
 | `/logout` | Sign out |
 | `/account` | View your account info |
 | `/profile [uid]` | Show a profile card. DJs get a 💿 vinyl badge. |
-| `/playtime` | Show the playtime leaderboard (page 1, 25 entries) |
+| `/playtime` | Show the playtime leaderboard (page 1, 25 entries) with the server-wide total and your own position |
 | `/playtime top <page>` | Browse subsequent pages of 25 |
 | `/resetusername <new>` | Rename your account (keeps playtime/chips/wardrobe). Capped at **3 renames per account**. |
 
@@ -166,6 +169,7 @@ So you never have to remember to undo one, and a restart returns every area to i
 | `/roulette join` | Area roulette |
 | `/typingrace [join]` | First to type the phrase wins chips |
 | `/hangman start [theme\|custom <word>]` | Hangman with themed or custom words; wrong guessers are punished on a loss |
+| `/deathroll host [limit]` / `/deathroll join` / `/deathroll roll` | Room-scoped Deathroll: take turns rolling `1d<previous roll>`; roll a 1 and lose the `/maso` effect, locked for 10 minutes. `/deathroll limit <n>` changes the limit; `/deathroll hide` mutes broadcasts you are not part of. |
 | `/giveaway start <item>` / `/giveaway enter` | Run or enter a giveaway |
 | `/unscramble [top [n]]` | Your unscramble wins, or the leaderboard. Answer live puzzles in IC to win chips. |
 

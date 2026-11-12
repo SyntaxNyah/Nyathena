@@ -35,20 +35,28 @@ type Advertisement struct {
 	Desc    string `json:"description"`
 }
 
-// Advertise begins the server's advertising routine.
-func Advertise(msUrl string, advert Advertisement, updatePlayers chan (int), done chan (struct{})) {
-	postServer(msUrl, advert)
+// Advertise begins the server's advertising routine, posting to every
+// configured master server endpoint.
+func Advertise(msUrls []string, advert Advertisement, updatePlayers chan (int), done chan (struct{})) {
+	postServers(msUrls, advert)
 	ticker := time.NewTicker(5 * time.Minute)
 	for {
 		select {
 		case <-ticker.C:
-			postServer(msUrl, advert)
+			postServers(msUrls, advert)
 		case advert.Players = <-updatePlayers:
-			postServer(msUrl, advert)
+			postServers(msUrls, advert)
 		case <-done:
 			ticker.Stop()
 			return
 		}
+	}
+}
+
+// postServers sends an advertisement to every master server endpoint.
+func postServers(msUrls []string, advert Advertisement) {
+	for _, msUrl := range msUrls {
+		postServer(msUrl, advert)
 	}
 }
 
@@ -62,8 +70,13 @@ func postServer(msUrl string, advert Advertisement) {
 
 	resp, err := http.Post(msUrl, "application/json", bytes.NewBuffer(data))
 	if err != nil {
-		logger.LogErrorf("Failed to post advertisement: %v", err)
+		logger.LogErrorf("Failed to post advertisement to %s: %v", msUrl, err)
 		return
 	}
-	resp.Body.Close()
+	defer resp.Body.Close()
+	if resp.StatusCode >= 300 {
+		logger.LogErrorf("Master server %s returned HTTP %d", msUrl, resp.StatusCode)
+		return
+	}
+	logger.LogInfof("Posted advertisement to %s (HTTP %d)", msUrl, resp.StatusCode)
 }

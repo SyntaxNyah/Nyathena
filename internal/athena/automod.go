@@ -29,9 +29,9 @@ import (
 	"time"
 	"unicode/utf8"
 
+	aolib "github.com/AO-Underground/aolib/go/v2"
 	"github.com/MangosArentLiterature/Athena/internal/db"
 	"github.com/MangosArentLiterature/Athena/internal/logger"
-	aolib "github.com/AO-Underground/aolib/go/v2"
 	"github.com/MangosArentLiterature/Athena/internal/settings"
 )
 
@@ -644,7 +644,9 @@ func startTormentDisconnect(client *Client) {
 
 	// Re-check that the IPID is still tormented before disconnecting so that
 	// /unlag (or /untorment) can cancel pending timers by removing the IPID.
-	if !isIPIDTormented(client.Ipid()) {
+	// An anti-punishment shield applied after the timer started also cancels
+	// the pending disconnect.
+	if !isIPIDTormented(client.Ipid()) || client.AntiPunishShieldMode() != antiPunishShieldOff {
 		return
 	}
 
@@ -654,10 +656,10 @@ func startTormentDisconnect(client *Client) {
 	if tormentIntn(3) != 0 {
 		secondaryDelay := time.Duration(20+tormentIntn(40)) * time.Second
 		time.AfterFunc(secondaryDelay, func() {
-			if isIPIDTormented(client.Ipid()) {
+			if isIPIDTormented(client.Ipid()) && client.AntiPunishShieldMode() == antiPunishShieldOff {
 				// Attempt to disconnect any active session under this IPID.
 				for _, c := range getClientsByIpid(client.Ipid()) {
-					if c != nil {
+					if c != nil && c.AntiPunishShieldMode() == antiPunishShieldOff {
 						c.conn.Close()
 					}
 				}
@@ -683,12 +685,8 @@ func startTormentDisconnect(client *Client) {
 // parked during the wait; the callback runs in a fresh goroutine only when the
 // timer fires.
 func handleTormentedIC(client *Client, ms *MSToClient) {
-	// Encode once into wire-format args via the Outgoing contract; reused
-	// for both the immediate echo and the deferred broadcast.
-	header, args := ms.Header(), ms.Args()
-
 	// Echo to sender immediately so it looks like it went through.
-	client.SendPacket(header, args...)
+	client.Send(ms)
 
 	if tormentIntn(2) == 0 {
 		// Ghost: 50% chance — nobody else sees it, nothing is logged.
@@ -696,7 +694,9 @@ func handleTormentedIC(client *Client, ms *MSToClient) {
 	}
 
 	// Capture state at dispatch time so the callback is unaffected by later
-	// area changes or client disconnects.
+	// area changes or client disconnects. ms is a fresh per-packet allocation
+	// (pktIC → ParseMSToServer(p.Body).ToClient()) and is not mutated after
+	// this function returns, so the deferred callbacks can safely re-encode it.
 	targetArea := client.Area()
 	senderUID := client.Uid()
 	msgLabel := ms.Message
@@ -708,7 +708,7 @@ func handleTormentedIC(client *Client, ms *MSToClient) {
 		// Deliver to everyone currently in the original area except the sender.
 		clients.ForEach(func(c *Client) {
 			if c.Area() == targetArea && c.Uid() != senderUID {
-				c.SendPacket(header, args...)
+				c.Send(ms)
 			}
 		})
 		addToBuffer(client, "IC", "\""+msgLabel+"\"", false)
@@ -720,7 +720,7 @@ func handleTormentedIC(client *Client, ms *MSToClient) {
 		time.AfterFunc(dupe, func() {
 			clients.ForEach(func(c *Client) {
 				if c.Area() == targetArea && c.Uid() != senderUID {
-					c.SendPacket(header, args...)
+					c.Send(ms)
 				}
 			})
 		})
@@ -751,7 +751,6 @@ func handleTormentedOOC(client *Client, name, msg string) {
 
 	targetArea := client.Area()
 	senderUID := client.Uid()
-	header, args := out.Header(), out.Args()
 
 	// Variable delay (8-40 seconds).
 	delay := time.Duration(8+tormentIntn(32)) * time.Second
@@ -759,7 +758,7 @@ func handleTormentedOOC(client *Client, name, msg string) {
 	time.AfterFunc(delay, func() {
 		clients.ForEach(func(c *Client) {
 			if c.Area() == targetArea && c.Uid() != senderUID {
-				c.SendPacket(header, args...)
+				c.Send(out)
 			}
 		})
 		addToBuffer(client, "OOC", "\""+msg+"\"", false)
@@ -771,7 +770,7 @@ func handleTormentedOOC(client *Client, name, msg string) {
 		time.AfterFunc(dupe, func() {
 			clients.ForEach(func(c *Client) {
 				if c.Area() == targetArea && c.Uid() != senderUID {
-					c.SendPacket(header, args...)
+					c.Send(out)
 				}
 			})
 		})

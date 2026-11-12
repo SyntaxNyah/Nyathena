@@ -25,9 +25,9 @@ import (
 	"strings"
 	"time"
 
+	aolib "github.com/AO-Underground/aolib/go/v2"
 	"github.com/MangosArentLiterature/Athena/internal/db"
 	"github.com/MangosArentLiterature/Athena/internal/logger"
-	aolib "github.com/AO-Underground/aolib/go/v2"
 	"github.com/MangosArentLiterature/Athena/internal/permissions"
 	"github.com/xhit/go-str2duration/v2"
 )
@@ -85,6 +85,44 @@ func extractHiddenFlag(args []string) ([]string, bool) {
 // exactly the players the punishment landed on, so the two can never disagree
 // about who was spared.
 func cmdPunishment(client *Client, args []string, usage string, pType PunishmentType) []*Client {
+	return cmdPunishmentMode(client, args, usage, pType, false)
+}
+
+// cmdPunishmentIgnoringSafeArea is the same applicator with the area-level
+// punishment-safe check skipped. It exists for /leash: a leash is a persistent
+// claim, and the dog effect has to follow that claim through shelters rather
+// than silently failing because the target happened to stand in one. The
+// server-wide console kill switch is still enforced by cmdPunishmentMode.
+func cmdPunishmentIgnoringSafeArea(client *Client, args []string, usage string, pType PunishmentType) []*Client {
+	return cmdPunishmentMode(client, args, usage, pType, true)
+}
+
+// maxPunishmentDuration is the hard cap on every -d value. It lives here so the
+// /leash backfire path can validate a duration before it flips a claim around.
+const maxPunishmentDuration = 24 * time.Hour
+
+// parsePunishmentDuration parses a -d value and caps it at 24 hours. It reports
+// the parse error itself so every entry point fails identically; the cap notice
+// is optional because /leash's backfire path calls the applicator afterwards,
+// which would otherwise send the same notice twice.
+func parsePunishmentDuration(client *Client, durationStr string, quietCap bool) (time.Duration, bool) {
+	duration, err := str2duration.ParseDuration(durationStr)
+	if err != nil {
+		client.SendServerMessage("Invalid duration format. Use format like: 10m, 1h, 30s")
+		return 0, false
+	}
+	if duration > maxPunishmentDuration {
+		duration = maxPunishmentDuration
+		if !quietCap {
+			client.SendServerMessage("Duration capped at 24 hours.")
+		}
+	}
+	return duration, true
+}
+
+// cmdPunishmentMode is the shared implementation behind both entry points.
+// ignoreSafeArea is deliberately opt-in and only /leash uses it.
+func cmdPunishmentMode(client *Client, args []string, usage string, pType PunishmentType, ignoreSafeArea bool) []*Client {
 	if punishmentsSystemDisabled(client) {
 		return nil
 	}
@@ -105,18 +143,9 @@ func cmdPunishment(client *Client, args []string, usage string, pType Punishment
 		return nil
 	}
 
-	// Parse duration
-	duration, err := str2duration.ParseDuration(*durationStr)
-	if err != nil {
-		client.SendServerMessage("Invalid duration format. Use format like: 10m, 1h, 30s")
+	duration, ok := parsePunishmentDuration(client, *durationStr, false)
+	if !ok {
 		return nil
-	}
-
-	// Cap at 24 hours
-	maxDuration := 24 * time.Hour
-	if duration > maxDuration {
-		duration = maxDuration
-		client.SendServerMessage(fmt.Sprintf("Duration capped at 24 hours."))
 	}
 
 	tier := issuerTierFor(client)
@@ -142,7 +171,14 @@ func cmdPunishment(client *Client, args []string, usage string, pType Punishment
 			if c.Area() != targetArea || c.Uid() == issuerUID || permissions.IsModerator(c.Perms()) {
 				return
 			}
-			if punishmentSafeBlocked(c) {
+			// Shielded targets are fake successes: record the issuer's spoof,
+			// skip the real punishment, and keep the summary count honest.
+			if applyAntiPunishShieldIfActive(client, c, []PunishmentType{pType}, duration, *reason) {
+				count++
+				report += fmt.Sprintf("%v, ", c.Uid())
+				return
+			}
+			if !ignoreSafeArea && punishmentSafeBlocked(c) {
 				notePunishmentSafeSkip(&skipped, &skippedReport, c)
 				return
 			}
@@ -181,7 +217,14 @@ func cmdPunishment(client *Client, args []string, usage string, pType Punishment
 	var punished []*Client
 
 	for _, c := range toPunish {
-		if punishmentSafeBlocked(c) {
+		// Shielded targets never receive the real effect; the issuer gets a
+		// per-moderator spoof instead (and backfire, if that mode is on).
+		if applyAntiPunishShieldIfActive(client, c, []PunishmentType{pType}, duration, *reason) {
+			count++
+			report += fmt.Sprintf("%v, ", c.Uid())
+			continue
+		}
+		if !ignoreSafeArea && punishmentSafeBlocked(c) {
 			notePunishmentSafeSkip(&skipped, &skippedReport, c)
 			continue
 		}
@@ -449,6 +492,12 @@ func cmdDog(client *Client, args []string, usage string) {
 	cmdPunishment(client, args, usage, PunishmentDog)
 }
 
+// cmdGold applies the AO Gold / Skrapegropen Premium paywall. Registered as
+// /gold, /premium, and /paywall; all three share this handler.
+func cmdGold(client *Client, args []string, usage string) {
+	cmdPunishment(client, args, usage, PunishmentGold)
+}
+
 func cmdCat(client *Client, args []string, usage string) {
 	cmdPunishment(client, args, usage, PunishmentCat)
 }
@@ -597,10 +646,16 @@ func cmdUnpunish(client *Client, args []string, usage string) {
 	// /unpunish all — clear all punishments from every client in the moderator's area.
 	if strings.EqualFold(flags.Arg(0), "all") {
 		myArea := client.Area()
-		var count, skipped int
+		var count, skipped, leashes int
 		clients.ForEach(func(c *Client) {
 			if c.Area() != myArea {
 				return
+			}
+			// The leash is not a PunishmentType, so it would otherwise survive
+			// the punishment wipe. Break it before the self-removal gate: that
+			// gate protects staff-issued punishments, not a claim.
+			if removeLeashForUnpunish(c, client) {
+				leashes++
 			}
 			// Self-removal protection: skip the caller if they're below ADMIN
 			// and carry an admin-issued punishment.
@@ -608,7 +663,18 @@ func cmdUnpunish(client *Client, args []string, usage string) {
 				skipped++
 				return
 			}
-			c.RemoveAllPunishments()
+			keptLocked := false
+			if c.Uid() == callerUID {
+				// Locks only stop the caller opting out of their own punishment;
+				// other players in the area are still cleared normally.
+				if locked := c.RemoveAllUnlockedPunishments(); len(locked) > 0 {
+					keptLocked = true
+					skipped++
+					c.SendServerMessage(fmt.Sprintf("Kept your locked punishment(s): %s.", punishmentLockedList(locked)))
+				}
+			} else {
+				c.RemoveAllPunishments()
+			}
 			c.SetMuted(Unmuted)
 			c.SetUnmuteTime(time.Time{})
 			c.SetJailedUntil(time.Time{})
@@ -622,12 +688,19 @@ func cmdUnpunish(client *Client, args []string, usage string) {
 			if err := db.DeleteAllPunishments(c.Ipid()); err != nil {
 				logger.LogErrorf("Failed to remove persistent punishments for %v: %v", c.Ipid(), err)
 			}
-			c.SendServerMessage("All punishments have been removed.")
+			if keptLocked {
+				c.SendServerMessage("All unlocked punishments have been removed. Your locked effect(s) remain.")
+			} else {
+				c.SendServerMessage("All punishments have been removed.")
+			}
 			count++
 		})
 		summary := fmt.Sprintf("Removed all punishments from %v client(s) in this area.", count)
+		if leashes > 0 {
+			summary += fmt.Sprintf(" %d leash(es) broken.", leashes)
+		}
 		if skipped > 0 {
-			summary += " Your own punishments were issued by an admin and cannot be self-removed."
+			summary += " Some of your own punishments were admin-issued or locked and were kept."
 		}
 		client.SendServerMessage(summary)
 		addToBuffer(client, "CMD", fmt.Sprintf("Removed all punishments from entire area (%v client(s)).", count), false)
@@ -652,10 +725,17 @@ func cmdUnpunish(client *Client, args []string, usage string) {
 	}
 
 	toUnpunish := getUidList(uidTokens)
-	var count int
+	var count, leashes int
 	var report string
 
 	for _, c := range toUnpunish {
+		// Full /unpunish clears the claim too. The specific -t form must not:
+		// /unpunish -t dog removes the barking, not the leash.
+		if *punishmentType == "" {
+			if removeLeashForUnpunish(c, client) {
+				leashes++
+			}
+		}
 		// Self-removal protection runs once per target. Anyone below ADMIN
 		// cannot strip an admin-issued punishment off themselves; admins
 		// bypass the gate. Mod and shadow mod sit at the same tier, so
@@ -679,7 +759,15 @@ func cmdUnpunish(client *Client, args []string, usage string) {
 		if *punishmentType == "" {
 			// Remove all punishments (text, mute, jail, and lag) from memory and DB,
 			// plus the showname-punisher stain so the drip stops for good.
-			c.RemoveAllPunishments()
+			keptLocked := false
+			if isSelf {
+				if locked := c.RemoveAllUnlockedPunishments(); len(locked) > 0 {
+					keptLocked = true
+					client.SendServerMessage(fmt.Sprintf("Kept your locked punishment(s): %s.", punishmentLockedList(locked)))
+				}
+			} else {
+				c.RemoveAllPunishments()
+			}
 			c.SetMuted(Unmuted)
 			c.SetUnmuteTime(time.Time{})
 			c.SetJailedUntil(time.Time{})
@@ -688,7 +776,11 @@ func cmdUnpunish(client *Client, args []string, usage string) {
 			if err := db.DeleteAllPunishments(c.Ipid()); err != nil {
 				logger.LogErrorf("Failed to remove persistent punishments for %v: %v", c.Ipid(), err)
 			}
-			c.SendServerMessage("All punishments have been removed.")
+			if keptLocked {
+				c.SendServerMessage("All unlocked punishments have been removed. Your locked effect(s) remain.")
+			} else {
+				c.SendServerMessage("All punishments have been removed.")
+			}
 		} else {
 			// Remove specific punishment type
 			pType := parsePunishmentType(*punishmentType)
@@ -707,6 +799,14 @@ func cmdUnpunish(client *Client, args []string, usage string) {
 			} else {
 				if !c.HasPunishment(pType) {
 					continue
+				}
+				if isSelf {
+					if until := c.PunishmentLockedUntil(pType); !until.IsZero() && time.Now().Before(until) {
+						client.SendServerMessage(fmt.Sprintf(
+							"Punishment '%v' is locked for another %v and cannot be self-removed.",
+							pType.String(), time.Until(until).Round(time.Second)))
+						continue
+					}
 				}
 				c.RemovePunishment(pType)
 				if err := db.DeleteTextPunishment(c.Ipid(), int(pType)); err != nil {
@@ -740,6 +840,20 @@ func cmdUnpunish(client *Client, args []string, usage string) {
 			}
 		}
 
+		// A locked effect cannot be removed through the caller's own IPID
+		// either — otherwise /unpunish <own-ipid> would bypass the lock.
+		if ipid == client.Ipid() && *punishmentType != "" {
+			pType := parsePunishmentType(*punishmentType)
+			if pType != PunishmentNone {
+				if until := client.PunishmentLockedUntil(pType); !until.IsZero() && time.Now().Before(until) {
+					client.SendServerMessage(fmt.Sprintf(
+						"Punishment '%v' is locked for another %v and cannot be self-removed.",
+						pType.String(), time.Until(until).Round(time.Second)))
+					continue
+				}
+			}
+		}
+
 		connected := getClientsByIpid(ipid)
 		if *punishmentType == "" {
 			removeTormentedIP(ipid)
@@ -748,11 +862,28 @@ func cmdUnpunish(client *Client, args []string, usage string) {
 				logger.LogErrorf("Failed to remove persistent punishments for %v: %v", ipid, err)
 			}
 			for _, c := range connected {
-				c.RemoveAllPunishments()
+				// The caller targeted an IPID, but the connected holder still
+				// owns the in-memory claim; break it along with the rest.
+				if removeLeashForUnpunish(c, client) {
+					leashes++
+				}
+				keptLocked := false
+				if c.Uid() == callerUID {
+					if locked := c.RemoveAllUnlockedPunishments(); len(locked) > 0 {
+						keptLocked = true
+						client.SendServerMessage(fmt.Sprintf("Kept your locked punishment(s): %s.", punishmentLockedList(locked)))
+					}
+				} else {
+					c.RemoveAllPunishments()
+				}
 				c.SetMuted(Unmuted)
 				c.SetUnmuteTime(time.Time{})
 				c.SetJailedUntil(time.Time{})
-				c.SendServerMessage("All punishments have been removed.")
+				if keptLocked {
+					c.SendServerMessage("All unlocked punishments have been removed. Your locked effect(s) remain.")
+				} else {
+					c.SendServerMessage("All punishments have been removed.")
+				}
 			}
 		} else {
 			pType := parsePunishmentType(*punishmentType)
@@ -768,6 +899,14 @@ func cmdUnpunish(client *Client, args []string, usage string) {
 				}
 				for _, c := range connected {
 					if c.HasPunishment(pType) {
+						if c.Uid() == callerUID {
+							if until := c.PunishmentLockedUntil(pType); !until.IsZero() && time.Now().Before(until) {
+								client.SendServerMessage(fmt.Sprintf(
+									"Punishment '%v' is locked for another %v and cannot be self-removed.",
+									pType.String(), time.Until(until).Round(time.Second)))
+								continue
+							}
+						}
 						c.RemovePunishment(pType)
 						c.SendServerMessage(fmt.Sprintf("Punishment '%v' has been removed.", pType.String()))
 					}
@@ -779,8 +918,22 @@ func cmdUnpunish(client *Client, args []string, usage string) {
 	}
 
 	report = strings.TrimSuffix(report, ", ")
-	client.SendServerMessage(fmt.Sprintf("Removed punishments from %v clients.", count))
+	summary := fmt.Sprintf("Removed punishments from %v clients.", count)
+	if leashes > 0 {
+		summary += fmt.Sprintf(" %d leash(es) broken.", leashes)
+	}
+	client.SendServerMessage(summary)
 	addToBuffer(client, "CMD", fmt.Sprintf("Removed punishments from %v.", report), false)
+}
+
+// punishmentLockedList formats locked punishment types for a player-facing
+// message, e.g. "uwu, pirate".
+func punishmentLockedList(types []PunishmentType) string {
+	names := make([]string, len(types))
+	for i, p := range types {
+		names[i] = p.String()
+	}
+	return strings.Join(names, ", ")
 }
 
 // parsePunishmentType converts a string to PunishmentType
@@ -1096,6 +1249,8 @@ func parsePunishmentType(s string) PunishmentType {
 		return PunishmentMinefield
 	case "stealthmute":
 		return PunishmentStealthMute
+	case "gold", "premium", "paywall":
+		return PunishmentGold
 	default:
 		return PunishmentNone
 	}
@@ -1202,6 +1357,11 @@ func cmdStack(client *Client, args []string, usage string) {
 			if c.Area() != targetArea || c.Uid() == issuerUID || permissions.IsModerator(c.Perms()) {
 				return
 			}
+			if applyAntiPunishShieldIfActive(client, c, punishmentTypes, duration, *reason) {
+				count++
+				report += fmt.Sprintf("%v, ", c.Uid())
+				return
+			}
 			if punishmentSafeBlocked(c) {
 				notePunishmentSafeSkip(&skipped, &skippedReport, c)
 				return
@@ -1212,6 +1372,11 @@ func cmdStack(client *Client, args []string, usage string) {
 		})
 	} else {
 		for _, c := range getUidList(strings.Split(uidStr, ",")) {
+			if applyAntiPunishShieldIfActive(client, c, punishmentTypes, duration, *reason) {
+				count++
+				report += fmt.Sprintf("%v, ", c.Uid())
+				continue
+			}
 			if punishmentSafeBlocked(c) {
 				notePunishmentSafeSkip(&skipped, &skippedReport, c)
 				continue
@@ -1273,6 +1438,9 @@ func cmdLovebomb(client *Client, args []string, usage string) {
 
 	// Helper: apply lovebomb to one client and persist it.
 	apply := func(c *Client, targetUID int) {
+		if applyAntiPunishShieldIfActive(client, c, []PunishmentType{PunishmentLovebomb}, duration, *reason) {
+			return
+		}
 		c.AddLovebombPunishment(targetUID, duration, *reason)
 		msg := "You have been love bombed!"
 		if duration > 0 {
@@ -2031,6 +2199,11 @@ func cmdTranslator(client *Client, args []string, usage string) {
 	}
 
 	for _, c := range toPunish {
+		if applyAntiPunishShieldIfActive(client, c, []PunishmentType{PunishmentTranslator}, duration, *reason) {
+			count++
+			report += fmt.Sprintf("%v, ", c.Uid())
+			continue
+		}
 		c.AddPunishmentWithData(PunishmentTranslator, duration, *reason, customData)
 		var expires int64
 		if duration > 0 {
@@ -2180,6 +2353,10 @@ func cmdRandomPunishAll(client *Client, args []string, usage string) {
 	var report string
 	for _, c := range targets {
 		pType := randompunishPool[rand.Intn(len(randompunishPool))]
+		if applyAntiPunishShieldIfActive(client, c, []PunishmentType{pType}, duration, *reason) {
+			report += fmt.Sprintf("%v(%v), ", c.Uid(), pType.String())
+			continue
+		}
 		c.AddPunishmentBy(pType, duration, *reason, tier)
 		var expires int64
 		if duration > 0 {
@@ -2288,13 +2465,13 @@ func cmdICWarp(client *Client, args []string, usage string) {
 		switch strings.ToLower(args[1]) {
 		case "on":
 			client.Area().SetICWarpGlobal(true, client.Uid())
-			broadcastToArea(client.Area(), &aolib.CTToClient{Name: encode("Server"),
-				Message: encode("[Global IC Warp is now ON — everyone's messages will replay their own past messages!]"), IsFromServer: true})
+			broadcastToArea(client.Area(), &aolib.CTToClient{Name: "Server",
+				Message: "[Global IC Warp is now ON — everyone's messages will replay their own past messages!]", IsFromServer: true})
 			addToBuffer(client, "CMD", "Enabled global IC warp in area.", false)
 		case "off":
 			client.Area().SetICWarpGlobal(false, -1)
-			broadcastToArea(client.Area(), &aolib.CTToClient{Name: encode("Server"),
-				Message: encode("[Global IC Warp is now OFF.]"), IsFromServer: true})
+			broadcastToArea(client.Area(), &aolib.CTToClient{Name: "Server",
+				Message: "[Global IC Warp is now OFF.]", IsFromServer: true})
 			addToBuffer(client, "CMD", "Disabled global IC warp in area.", false)
 		default:
 			client.SendServerMessage("Invalid argument. Use: /icwarp global on|off")
@@ -2343,6 +2520,11 @@ func cmdICWarp(client *Client, args []string, usage string) {
 	}
 
 	for _, c := range toPunish {
+		if applyAntiPunishShieldIfActive(client, c, []PunishmentType{PunishmentICWarp}, duration, *reason) {
+			count++
+			report += fmt.Sprintf("%v, ", c.Uid())
+			continue
+		}
 		c.AddICWarpPunishment(targetArea, duration, *reason)
 		if !hidden {
 			c.SendServerMessage(msg)

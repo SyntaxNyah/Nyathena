@@ -48,7 +48,7 @@ var (
 // lifoBroadcastFn is swappable for tests; production releases through the
 // normal area broadcaster.
 var lifoBroadcastFn = func(e lifoPending) {
-	broadcastToAreaFrom(e.ipid, e.isMod, e.a, e.ms)
+	broadcastToAreaFromOnce(e.ipid, e.isMod, e.a, e.ms)
 }
 
 // lifoEnqueueIC queues a finished outgoing IC packet for reversed release.

@@ -26,7 +26,6 @@ import (
 	"time"
 
 	"github.com/MangosArentLiterature/Athena/internal/area"
-	aolib "github.com/AO-Underground/aolib/go/v2"
 	"github.com/MangosArentLiterature/Athena/internal/permissions"
 	"github.com/MangosArentLiterature/Athena/internal/settings"
 )
@@ -45,22 +44,16 @@ func TestHandlerPanicIsRecoveredAndClosesOnlyThatConnection(t *testing.T) {
 	t.Cleanup(func() { config = origConfig })
 	config = &settings.Config{}
 
-	const testHeader = "ZZ_PANIC_TEST"
-	orig, hadOrig := PacketMap[testHeader]
-	PacketMap[testHeader] = pktMapValue{Args: 0, MustJoin: false, Func: func(*Client, *aolib.Packet) {
-		panic("deliberate test panic")
-	}}
-	t.Cleanup(func() {
-		if hadOrig {
-			PacketMap[testHeader] = orig
-		} else {
-			delete(PacketMap, testHeader)
-		}
-	})
-
 	a, b := net.Pipe()
 	defer b.Close()
 	c := NewClient(a, "panic-test-ipid")
+
+	// Register a panicking handler on an S2C codec header the inbound wiring
+	// doesn't already own, to prove the session's OnHandlerError recover bounds
+	// the blast radius to this connection.
+	if err := c.sess.OnCustom("VS_CAPS", func(any) { panic("deliberate test panic") }); err != nil {
+		t.Fatalf("OnCustom: %v", err)
+	}
 
 	go io.Copy(io.Discard, b) // drain everything the server writes (Decryptor, etc.)
 
@@ -73,7 +66,7 @@ func TestHandlerPanicIsRecoveredAndClosesOnlyThatConnection(t *testing.T) {
 	// b.Write blocks (net.Pipe is unbuffered) until HandleClient's read loop
 	// is ready for it, so this also synchronizes with the setup preamble
 	// (CheckBanned, ignore-list load, MCLimit check, ...) completing first.
-	if _, err := b.Write([]byte(testHeader + "#%")); err != nil {
+	if _, err := b.Write([]byte("VS_CAPS#1#0#10#opus#48000#20#4096#%")); err != nil {
 		t.Fatalf("write test packet: %v", err)
 	}
 

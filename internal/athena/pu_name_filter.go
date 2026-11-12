@@ -97,13 +97,13 @@ func nameAllowedInPU(pu *aolib.PU) bool {
 		// broadcast fan-out never waits on a database write and a socket close,
 		// and so this cannot re-enter the client list from inside a caller that
 		// is already walking it.
-		go banPUNameOwner(pu.ID, m, field)
+		go banPUNameOwner(pu.ID, m, field, pu.Data)
 	}
 	return false
 }
 
 // banPUNameOwner nukes the player a filtered name belongs to.
-func banPUNameOwner(uid int, m WordListMatch, field string) {
+func banPUNameOwner(uid int, m WordListMatch, field, text string) {
 	owner, err := getClientByUid(uid)
 	if err != nil || owner == nil {
 		// The name outlived its owner's connection -- the drop above already did
@@ -114,7 +114,7 @@ func banPUNameOwner(uid int, m WordListMatch, field string) {
 		logger.LogWarningf("name filter: uid %d matched %s in their %s but is a moderator; not banned", uid, m.Entry.String(), field)
 		return
 	}
-	applyAutoModNuke(owner, m, "PU "+field)
+	applyAutoModNuke(owner, m, "PU "+field, text)
 }
 
 // puAllowed is the choke point callers use: it reports whether an outgoing

@@ -71,7 +71,7 @@ at the cost of visible tags in old clients.
 - **Length caps**: count the *visible* text, not the SGR bytes, when enforcing a
   motd length cap.
 - **JSON mode**: `ESC` must be emitted as `\u001b` by the JSON encoder and parsed
-  back by the client; `packet.BuildJSON` / the schema validator must not reject
+  back by the client; the aolib-go JSON encoder / schema validator must not reject
   control characters in those fields.
 
 ## 5. Client implementation guide

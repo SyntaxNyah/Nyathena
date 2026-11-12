@@ -63,7 +63,7 @@ func autoModNukeBanDuration() (time.Duration, bool) {
 	}
 	raw := config.AutoModNukeBanDuration
 	switch raw {
-	case "", "permanent", "forever", "perma":
+	case "", "permanent", "forever", "perma", "∞", "infinity", "infinite":
 		return 0, false
 	}
 	d, err := str2duration.ParseDuration(raw)
@@ -112,19 +112,21 @@ func nukeFieldsOrNothing(client *Client, fields ...[2]string) bool {
 			continue
 		}
 		if m := matchWordEntries(entries, text); m.Matched && m.Entry.Severity == SeverityNuke {
-			return applyAutoModNuke(client, m, source)
+			return applyAutoModNuke(client, m, source, text)
 		}
 	}
 	return false
 }
 
-// applyAutoModNuke destroys the message and bans the sender.
+// applyAutoModNuke destroys the message and bans the sender. text is the
+// offending decoded text, quoted in the staff alert so moderators can see
+// exactly what was said before it was destroyed.
 //
 // Returns true when the caller must abandon the packet immediately and return
 // without echoing, broadcasting, logging to the area buffer, or touching any
 // client state. It returns true even when the ban itself fails: a nuke-tier word
 // must never reach the room, and a database error is not a reason to deliver it.
-func applyAutoModNuke(client *Client, m WordListMatch, source string) bool {
+func applyAutoModNuke(client *Client, m WordListMatch, source, text string) bool {
 	if client == nil || !m.Matched || m.Entry.Severity != SeverityNuke {
 		return false
 	}
@@ -152,7 +154,7 @@ func applyAutoModNuke(client *Client, m WordListMatch, source string) bool {
 		logger.LogErrorf("automod nuke: failed to ban %v after matching %q: %v — message destroyed anyway",
 			client.Ipid(), m.Entry.Raw, err)
 		client.conn.Close()
-		alertCensorTrip(client, source, m.Entry.Raw, "",
+		alertCensorTrip(client, source, m.Entry.Raw, text,
 			"NUKE tier: the message was destroyed, but the ban FAILED — ban them by hand.")
 		return true
 	}
@@ -161,7 +163,7 @@ func applyAutoModNuke(client *Client, m WordListMatch, source string) bool {
 	client.SendSync(&aolib.KB{Reason: fmt.Sprintf("Banned for prohibited language.\nUntil: %s\nID: %d", untilText, id)})
 	client.conn.Close()
 
-	alertCensorTrip(client, source, m.Entry.Raw, "",
+	alertCensorTrip(client, source, m.Entry.Raw, text,
 		fmt.Sprintf("NUKE tier: the message was destroyed before anyone saw it (not even them) and they were banned until %s (ID %d).", untilText, id))
 	logger.LogInfof("automod nuke: banned %v (uid %d) until %s — matched %q in %s",
 		client.Ipid(), client.Uid(), untilText, m.Entry.Raw, source)

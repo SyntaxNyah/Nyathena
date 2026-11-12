@@ -23,8 +23,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/MangosArentLiterature/Athena/internal/area"
 	aolib "github.com/AO-Underground/aolib/go/v2"
+	"github.com/MangosArentLiterature/Athena/internal/area"
 	"github.com/MangosArentLiterature/Athena/internal/permissions"
 )
 
@@ -216,7 +216,7 @@ func TestRaidGuardVerdictSuppressesTheGlobalThatEarnedIt(t *testing.T) {
 			t.Fatal("suppressed a global with no verdict against it")
 		}
 		// Exactly what a Silence verdict does.
-		raidGuardSilence(c)
+		raidSystem.silence(c)
 		if !oocGuardVerdictSuppresses(c, "hello", echo) {
 			t.Error("a global was broadcast after the guard silenced the sender over it")
 		}
@@ -252,10 +252,10 @@ func TestGlobalsHeldFromSuspiciousConnectionsDuringAnAttack(t *testing.T) {
 	room := area.NewArea(area.AreaData{Name: "Courtroom"}, 5, 10, area.EviAny)
 	echo := &aolib.CTToClient{Name: "[GLOBAL] [UID 1] tester", Message: "x", IsFromServer: true}
 
-	prevAttack := raidAttackUntil.Load()
+	prevAttack := raidSystem.corr.attackUntil.Load()
 	prevActive := raidGuardActive.Load()
 	t.Cleanup(func() {
-		raidAttackUntil.Store(prevAttack)
+		raidSystem.corr.attackUntil.Store(prevAttack)
 		raidGuardActive.Store(prevActive)
 		resetRaidGuardState()
 	})
@@ -277,9 +277,9 @@ func TestGlobalsHeldFromSuspiciousConnectionsDuringAnAttack(t *testing.T) {
 
 	underAttack := func(on bool) {
 		if on {
-			raidAttackUntil.Store(time.Now().Add(time.Minute).UnixNano())
+			raidSystem.corr.attackUntil.Store(time.Now().Add(time.Minute).UnixNano())
 		} else {
-			raidAttackUntil.Store(0)
+			raidSystem.corr.attackUntil.Store(0)
 		}
 	}
 

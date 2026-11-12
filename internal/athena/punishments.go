@@ -1599,6 +1599,8 @@ func ApplyPunishmentToText(text string, pType PunishmentType) string {
 		return applyTrex(text)
 	case PunishmentFish:
 		return applyFish(text)
+	case PunishmentGold:
+		return goldPaywallLine()
 	default:
 		return text
 	}

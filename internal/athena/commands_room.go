@@ -137,6 +137,13 @@ func roomInviteAccept(client *Client) {
 		return
 	}
 
+	// A leashed dog cannot accept its way out of the master's area. The usual
+	// abandonment popup is sent by the helper; the invite stays pending so it
+	// can be accepted after the leash is released.
+	if client.leashBlocksAreaChange(inviteArea) {
+		return
+	}
+
 	// Grant lock entry when the area is locked, then move. Admin-locked areas are
 	// still refused by ChangeArea (an absolute seal).
 	if inviteArea.Lock() == area.LockLocked {

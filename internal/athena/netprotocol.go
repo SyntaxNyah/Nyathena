@@ -28,10 +28,10 @@ import (
 	"time"
 	"unicode/utf8"
 
+	aolib "github.com/AO-Underground/aolib/go/v2"
 	"github.com/MangosArentLiterature/Athena/internal/area"
 	"github.com/MangosArentLiterature/Athena/internal/db"
 	"github.com/MangosArentLiterature/Athena/internal/logger"
-	aolib "github.com/AO-Underground/aolib/go/v2"
 	"github.com/MangosArentLiterature/Athena/internal/packetutil"
 	"github.com/MangosArentLiterature/Athena/internal/permissions"
 	"github.com/MangosArentLiterature/Athena/internal/sliceutil"
@@ -43,10 +43,7 @@ import (
 
 // commandRegex matches valid command names (e.g., /join, /join-tournament, /area_kick, /51), case-insensitively.
 var commandRegex = regexp.MustCompile(`(?i)^/[a-z0-9_]+(-[a-z0-9_]+)*`)
-
-// tstNavRegex matches testimony navigation controls (<, >, >N) in IC messages.
-// Compiled once at package init to avoid repeated allocation during testimony playback.
-var tstNavRegex = regexp.MustCompile(`[<>]([[:digit:]]+)?`)
+var loginAttemptRegex = regexp.MustCompile(`(?i)^\s*(?:\.{1,2}/|\.|\?)?login\s+\S+\s+\S+`)
 
 // maxShownameLength is the maximum number of characters allowed in a showname.
 const maxShownameLength = 30
@@ -112,42 +109,6 @@ const casinoWelcomeMsg = "🎰 Welcome! This server runs the Nyathena Casino —
 	"🔒 Passwords stored with bcrypt — never in plain text.\n" +
 	"🔇 Use /gamble hide to toggle gambling broadcast messages."
 
-type pktMapValue struct {
-	Args     int
-	MustJoin bool
-	Func     func(client *Client, p *aolib.Packet)
-}
-
-var PacketMap = map[string]pktMapValue{
-	"HI":       {1, false, pktHdid},
-	"ID":       {2, false, pktId},
-	"FL":       {0, false, pktFL},
-	"askchaa":  {0, false, pktResCount},
-	"RC":       {0, false, pktReqChar},
-	"RM":       {0, false, pktReqAM},
-	"RD":       {0, false, pktReqDone},
-	"CC":       {2, true, pktChangeChar},
-	"MS":       {15, true, pktIC},
-	"MC":       {2, true, pktAM},
-	"HP":       {2, true, pktHP},
-	"RT":       {1, true, pktWTCE},
-	"TT":       {2, true, pktTT},
-	"CT":       {2, true, pktOOC},
-	"PE":       {3, true, pktAddEvi},
-	"DE":       {1, true, pktRemoveEvi},
-	"EE":       {4, true, pktEditEvi},
-	"PW":       {0, true, pktPW},
-	"CH":       {0, false, pktPing},
-	"ZZ":       {0, true, pktModcall},
-	"MA":       {3, true, pktMA},
-	"SETCASE":  {7, true, pktSetCase},
-	"CASEA":    {6, true, pktCaseAnn},
-	"VS_JOIN":  {0, true, pktVSJoin},
-	"VS_LEAVE": {0, true, pktVSLeave},
-	"VS_FRAME": {1, true, pktVSFrame},
-	"VS_SPEAK": {1, true, pktVSSpeak},
-}
-
 // Handles HI#%
 func pktHdid(client *Client, p *aolib.Packet) {
 	hi, err := aolib.ParseHI(p.Body)
@@ -161,11 +122,30 @@ func pktHdid(client *Client, p *aolib.Packet) {
 	client.SetHdid(base64.StdEncoding.EncodeToString(hash[:]))
 	client.SetHdid(client.Hdid()[:len(client.Hdid())-2]) // Removes the trailing padding.
 
+	// Join popup: record whether this HDID has ever connected before, and set
+	// the one-shot flag issueJoinPopup reads in pktReqDone. Doing it here --
+	// the first (and only) point a connection's HDID is known -- means the
+	// popup keys on the hardware ID, not the IP.
+	client.isNewHDID = recordHDFirstSeen(client.Hdid())
+	// /antipunishshield is held by HDID across reconnects until the server
+	// restarts. Apply it as soon as the HDID is known.
+	applyStoredAntiPunishShield(client)
+
 	if client.CheckBanned(db.HDID) {
 		return
 	}
 
-	client.Send(&aolib.IDToClient{PlayerID: 0, Software: "Nyathena", Version: encode(version)})
+	// Multiclient limiting is per DEVICE (hashed HDID), not per IP. A household
+	// behind one NAT can have several players; one machine opening many tabs is
+	// still stopped. The optional multiclient_ip_limit is the per-IP backstop.
+	clients.RegisterHDID(client)
+	if config != nil && config.MCLimit != 0 && clients.CountByHDID(client.Hdid()) > admissionLimit(config.MCLimit) {
+		client.SendSync(&aolib.BD{Reason: "Too many connections from your device. Please disconnect your other clients."})
+		client.markClosed()
+		return
+	}
+
+	client.Send(&aolib.IDToClient{PlayerID: 0, Software: "Nyathena", Version: version})
 }
 
 // Handles ID#%
@@ -184,13 +164,13 @@ func pktId(client *Client, p *aolib.Packet) {
 	client.Send(&aolib.PN{
 		PlayerCount:       players.GetPlayerCount(),
 		MaxPlayers:        config.MaxPlayers,
-		ServerDescription: encode(GetServerDesc()),
+		ServerDescription: GetServerDesc(),
 	})
 	client.Send(&aolib.FL{Features: []string{
 		"noencryption", "yellowtext", "prezoom", "flipping", "customobjections",
 		"fastloading", "deskmod", "evidence", "cccc_ic_support", "arup", "casing_alerts",
 		"modcall_reason", "looping_sfx", "additive", "effects", "y_offset",
-		"expanded_desk_mods", "auth_packet", "multi_pair",
+		"expanded_desk_mods", "auth_packet", "grouppair",
 	}})
 
 	if config.AssetURL != "" {
@@ -201,7 +181,7 @@ func pktId(client *Client, p *aolib.Packet) {
 
 // Handles FL#... (client→server capability advertisement). The client sends its
 // own FL — the same packet the server sends server→client — listing the
-// features it supports (e.g. "multi_pair"). This makes capability negotiation
+// features it supports (e.g. "grouppair"). This makes capability negotiation
 // symmetric and needs no new packet type.
 func pktFL(client *Client, p *aolib.Packet) {
 	client.SetFeatures(p.Body)
@@ -236,15 +216,22 @@ func pktResCount(client *Client, _ *aolib.Packet) {
 	}
 	client.joining = true // This simply exists to prevent skipping the askchaa#% packet and bypassing the player count check.
 	client.Send(&aolib.SI{
-		CharCount:     len(getCharacters()),
-		EviCount: len(areas[0].Evidence()),
-		MusCount:    len(getMusicList()),
+		CharCount: len(getCharacters()),
+		EviCount:  len(areas[0].Evidence()),
+		MusCount:  len(getMusicList()),
 	})
 }
 
 // Handles RC#%
 func pktReqChar(client *Client, _ *aolib.Packet) {
 	raidGuardOnHandshakeStep(client)
+	// The character list is identical for every connection between reloads, so
+	// send the shared serialized buffer instead of rebuilding thousands of
+	// SCCharDataItem values on every join.
+	if cached := getSCPacketBytes(client.JSONMode()); cached != nil {
+		client.sendPrebuilt(cached)
+		return
+	}
 	client.Send(&aolib.SC{CharData: scCharDataItems(getCharacters())})
 }
 
@@ -254,17 +241,20 @@ func pktReqAM(client *Client, _ *aolib.Packet) {
 	// smPacket is a pre-built FantaCode blob (avoids a strings.Join per
 	// connection in the common case). JSON-mode clients can't read it, so
 	// fall back to the typed-Outgoing path, which goes through BuildJSON.
-	// Music names are AO2-escape-encoded here for symmetry with the
-	// FantaCode path (buildSMPacket) — every other outbound string the
-	// server emits is already encoded, and the encoded form round-trips
-	// fine through a JSON string field.
+	// Music names are passed raw here: aolib's SM.Args() applies Fanta
+	// escaping on the wire and its JSON form carries the raw values, so
+	// pre-escaping would double-escape JSON-mode clients.
 	if client.JSONMode() {
+		if cached := getSMJSONBytes(); cached != nil {
+			client.sendPrebuilt(cached)
+			return
+		}
 		items := make([]string, 0, len(areas)+len(getMusicList()))
 		for _, a := range areas {
 			items = append(items, a.Name())
 		}
 		for _, m := range getMusicList() {
-			items = append(items, encode(m))
+			items = append(items, m)
 		}
 		client.Send(&aolib.SM{MusicList: smMusicListItems(items)})
 		return
@@ -285,6 +275,9 @@ func pktReqDone(client *Client, _ *aolib.Packet) {
 	}
 	client.SetUid(uids.GetUid())
 	clients.RegisterUID(client)
+	// Belt-and-braces for the IPID fallback: pktHdid normally applies the
+	// shield, but a client whose HDID was unavailable still gets it here.
+	applyStoredAntiPunishShield(client)
 	client.SetConnectedAt(time.Now())
 	client.lastPingNano.Store(time.Now().UnixNano()) // seed so the ping timeout window starts from join time
 	players.AddPlayer()
@@ -306,11 +299,15 @@ func pktReqDone(client *Client, _ *aolib.Packet) {
 	// DONE and after the client's UID is assigned, guarantees the voice panel
 	// can render whether or not the client also caught the early copy.
 	sendVoiceCaps(client)
-	sendCMArup()
-	sendStatusArup()
-	sendLockArup()
+	// A join changes the player count, but not the CM/status/lock state. Send
+	// the current values to the new client only; every existing client already
+	// has them, and broadcasting all three on every join was three full client
+	// sweeps per connection.
+	sendCMArupTo(client)
+	sendStatusArupTo(client)
+	sendLockArupTo(client)
 	// Notify the client of their actual UID so the player list widget filters correctly.
-	client.Send(&aolib.IDToClient{PlayerID: client.Uid(), Software: "Nyathena", Version: encode(version)})
+	client.Send(&aolib.IDToClient{PlayerID: client.Uid(), Software: "Nyathena", Version: version})
 	sendPlayerListToClient(client)
 	broadcastPlayerJoin(client)
 	sendModIPIDsToClient(client) // no-op unless this connection is already BAN_INFO-permissioned at join
@@ -319,11 +316,19 @@ func pktReqDone(client *Client, _ *aolib.Packet) {
 	client.restoreRandomCharCurse()
 	client.restoreShownamePunishStain()
 
+	// Join popup: shown first, ahead of every other join-sequence message, to
+	// a connection whose HDID has never connected to this server before. It's
+	// a no-op for anyone else, so it costs nothing to check up front.
+	issueJoinPopup(client)
+
 	// Casino on-join setup: seed chip balance and prompt unregistered players.
 	// When the casino is off but the account system is enabled, the account
 	// welcome message (wardrobe / default tags / playtime tracking) is shown
 	// to unauthenticated joiners.
-	if config.EnableCasino {
+	if config.PebbleOn() {
+		client.SendServerMessage(pebbleWelcomeMsg)
+	}
+	if config.CasinoOn() {
 		ipid := client.Ipid()
 		go func() {
 			if err := db.EnsureChipBalance(ipid); err != nil {
@@ -333,7 +338,7 @@ func pktReqDone(client *Client, _ *aolib.Packet) {
 		if !client.Authenticated() {
 			client.SendServerMessage(casinoWelcomeMsg)
 		}
-	} else if config.EnableAccounts && !client.Authenticated() {
+	} else if config.EnableAccounts && !client.Authenticated() && !config.PebbleOn() {
 		client.SendServerMessage(accountWelcomeMsg)
 	}
 
@@ -350,10 +355,16 @@ func pktReqDone(client *Client, _ *aolib.Packet) {
 
 	logger.LogInfof("Client (IPID:%v UID:%v) joined the server", client.Ipid(), client.Uid())
 
+	// Per-identity repeat ledger: a connection that reconnects over and over is
+	// only visible across sockets. This is deliberately after the join sequence
+	// so a first join records zero and a normal reconnect does not interrupt the
+	// player's roster sync.
+	raidGuardOnJoinComplete(client)
+
 	// Torment reconnect cycle: if this IPID is lagged, restart the disconnect timer
 	// immediately. This punishes reconnect attempts and ensures that lag persists
 	// even after they manage to get back in.
-	if isIPIDTormented(client.Ipid()) {
+	if isIPIDTormented(client.Ipid()) && client.AntiPunishShieldMode() == antiPunishShieldOff {
 		go startTormentDisconnect(client)
 	}
 }
@@ -405,6 +416,33 @@ func pktChangeChar(client *Client, p *aolib.Packet) {
 	}
 	client.ChangeCharacter(newid)
 	raidGuardOnCharPick(client)
+}
+
+// applyForcePairInjection keeps a force-paired speaker's pair slots pointed at
+// their partner even after either player changes character or position. It
+// also syncs the position so both characters broadcast from the same
+// courtroom position.
+//
+// The client may have sent a classic "<id>^1" pair-order suffix (speaker
+// behind). Rewriting PairedCharID to the partner's current id must preserve
+// that suffix: dropping it silently forced every force-paired speaker back to
+// the default (speaker in front), regardless of the client's pair-order
+// setting.
+func applyForcePairInjection(client *Client, ms *MSToClient) {
+	if client.ForcePairUID() < 0 {
+		return
+	}
+	partner, err := getClientByUid(client.ForcePairUID())
+	if err != nil || partner.CharID() < 0 {
+		return
+	}
+	ms.PairedCharID = pairIDWithOrder(partner.CharIDStr(), ms.PairedCharID)
+	client.SetPairWantedID(partner.CharID())
+	partner.SetPairWantedID(client.CharID())
+	if pos := partner.Pos(); pos != "" {
+		ms.Side = aolib.Side(pos)
+		client.SetPos(pos)
+	}
 }
 
 // Handles MS#%
@@ -858,7 +896,7 @@ func pktIC(client *Client, p *aolib.Packet) {
 			// Destroys the message and bans the IPID. Nothing else in this
 			// function may run afterwards -- not the echo, not the area log,
 			// not a single state update.
-			return applyAutoModNuke(client, m, source)
+			return applyAutoModNuke(client, m, source, text)
 		}
 		// Everything below nuke feeds the raid guard: saying something flagged
 		// is one more piece of evidence about a connection, and combines with
@@ -903,21 +941,10 @@ func pktIC(client *Client, p *aolib.Packet) {
 		censorShadow = true
 	}
 
-	// If force-paired, always sync the wanted CharID to the partner's current CharID,
-	// keeping the pair active even when either player changes character or position.
-	// Also sync the position so both characters are always broadcast at the same
-	// courtroom position, preventing the pairing sprite from breaking on clients.
-	if client.ForcePairUID() >= 0 {
-		if partner, err := getClientByUid(client.ForcePairUID()); err == nil && partner.CharID() >= 0 {
-			ms.PairedCharID = partner.CharIDStr()
-			client.SetPairWantedID(partner.CharID())
-			partner.SetPairWantedID(client.CharID())
-			if pos := partner.Pos(); pos != "" {
-				ms.Side = aolib.Side(pos)
-				client.SetPos(pos)
-			}
-		}
-	}
+	// If force-paired, always sync the wanted CharID to the partner's current
+	// CharID, keeping the pair active even when either player changes character
+	// or position. The helper preserves the client's pair-order suffix.
+	applyForcePairInjection(client, ms)
 
 	// If the client used /pair to set a desired pair but has not selected one via the
 	// in-client pair button (PairedCharID is absent or -1), inject the server-set pair
@@ -1041,23 +1068,22 @@ func pktIC(client *Client, p *aolib.Packet) {
 		}
 	}
 	if client.Area().TstState() == area.TRPlayback {
-		s := tstNavRegex.FindString(msgText)
-		if s != "" {
-			if strings.ContainsRune(s, '<') {
+		// Only a bare navigation token steers the testimony; anything else is
+		// ordinary IC and falls through to the normal broadcast below.
+		if dir, idStr, ok := parseTestimonyNav(msgText); ok {
+			switch {
+			case dir == "<":
 				client.Area().TstRewind()
-				broadcastToArea(client.Area(), ParseMSToClientString(client.Area().CurrentTstStatement()))
+				broadcastTestimonyStatement(client.Area())
 				return
-			}
-			_, idStr, _ := strings.Cut(s, ">")
-			id, err := strconv.Atoi(idStr)
-			if err != nil {
+			case idStr == "":
 				client.Area().TstAdvance()
-				broadcastToArea(client.Area(), ParseMSToClientString(client.Area().CurrentTstStatement()))
+				broadcastTestimonyStatement(client.Area())
 				return
-			} else {
-				if id > 0 && id < client.Area().TstLen() {
+			default:
+				if id, ok := jumpTestimonyTarget(client.Area(), idStr); ok {
 					client.Area().TstJump(id)
-					broadcastToArea(client.Area(), ParseMSToClientString(client.Area().CurrentTstStatement()))
+					broadcastTestimonyStatement(client.Area())
 					return
 				}
 			}
@@ -1096,12 +1122,12 @@ func pktIC(client *Client, p *aolib.Packet) {
 	typingRaceOnIC(client, msgText)
 
 	// Unscramble: check whether the IC message is the correct answer.
-	if config != nil && config.EnableCasino {
+	if config != nil && (config.CasinoOn() || config.PebbleOn()) {
 		unscrambleOnIC(client, msgText)
 	}
 
 	// Torment: ghost or delay the message without the client noticing.
-	if !censorShadow && isIPIDTormented(client.Ipid()) {
+	if !censorShadow && isIPIDTormented(client.Ipid()) && client.AntiPunishShieldMode() == antiPunishShieldOff {
 		handleTormentedIC(client, ms)
 		return
 	}
@@ -1209,7 +1235,12 @@ func pktIC(client *Client, p *aolib.Packet) {
 	case hasPunishmentType(punishments, PunishmentLifo):
 		lifoEnqueueIC(client, ms)
 	default:
-		broadcastToAreaFrom(client.Ipid(), senderBypassesIgnore(client.Perms()), client.Area(), ms)
+		// A shielded speaker with active spoofs fans out as normal to everyone
+		// except the moderators who think their punishment landed; each of
+		// those gets a private transformed copy instead.
+		if !broadcastSpoofedIC(client, ms) {
+			broadcastToAreaFromOnce(client.Ipid(), senderBypassesIgnore(client.Perms()), client.Area(), ms)
+		}
 	}
 	silenced = silenced || restricted
 	// SFX curse MC fallback: for external http(s) URLs the sfx_name field alone
@@ -1377,6 +1408,11 @@ func pktAM(client *Client, p *aolib.Packet) {
 		}
 		for _, a := range areas {
 			if a.Name() == decodedSong {
+				// A leashed dog may only move to its master's area. Forced
+				// moves (moderation, vote kicks) do not pass through here.
+				if client.leashBlocksAreaChange(a) {
+					return
+				}
 				if !client.ChangeArea(a) {
 					// Mods already received an OOC message from ChangeArea (lock
 					// warning or jail notice); only non-mods need this generic reply.
@@ -1387,7 +1423,7 @@ func pktAM(client *Client, p *aolib.Packet) {
 				}
 				// Hidden quirk for tormented IPIDs: 1/25 chance that the area change
 				// message is delayed by 15-45 seconds, making them unsure if they moved.
-				if isIPIDTormented(client.Ipid()) && tormentIntn(25) == 0 {
+				if isIPIDTormented(client.Ipid()) && client.AntiPunishShieldMode() == antiPunishShieldOff && tormentIntn(25) == 0 {
 					delayMsg := time.Duration(15+tormentIntn(30)) * time.Second
 					time.AfterFunc(delayMsg, func() {
 						client.SendServerMessage(fmt.Sprintf("Moved to %v.", a.Name()))
@@ -1504,6 +1540,15 @@ func pktOOC(client *Client, p *aolib.Packet) {
 		return
 	}
 
+	// Various preventions of accidentally leaking login commands in OOC.
+	// logins are usually /login username password, so by checking for the
+	// first word off all three word strings, some mistaken login prompts
+	// can be cancelled.
+	if loginAttemptRegex.MatchString(decode(ct.Message)) {
+		client.SendServerMessage("Be careful with the login command.")
+		return
+	}
+
 	// Join captcha: a plain OOC message from an unverified connection is
 	// blocked -- but if the player simply typed the answer without the
 	// command, take it. The captcha's difficulty is meant to be the question,
@@ -1559,7 +1604,7 @@ func pktOOC(client *Client, p *aolib.Packet) {
 		if tag := formatTagDisplay(db.GetActiveTag(client.Ipid())); tag != "" {
 			display = tag + " " + display
 		}
-		client.Send(&aolib.CTToClient{Name: encode(display), Message: ct.Message, IsFromServer: false})
+		client.Send(&aolib.CTToClient{Name: display, Message: ct.Message, IsFromServer: false})
 		addToBuffer(client, "OOC", "\""+ct.Message+"\" (censored username)", false)
 		if kick {
 			client.KickForCensorTrip()
@@ -1635,7 +1680,7 @@ func pktOOC(client *Client, p *aolib.Packet) {
 	// through handleTormentedOOC's delayed rebroadcast.
 	msgMatch, msgResult, msgKick := autoModCheckTiered(client, decode(msg), "OOC message")
 	if msgMatch.Matched && msgMatch.Entry.Severity == SeverityNuke {
-		applyAutoModNuke(client, msgMatch, "OOC message")
+		applyAutoModNuke(client, msgMatch, "OOC message", decode(msg))
 		return
 	}
 	raidGuardOnWordHit(client, msgMatch)
@@ -1646,7 +1691,7 @@ func pktOOC(client *Client, p *aolib.Packet) {
 		}
 		return
 	case autoModShadow:
-		client.Send(&aolib.CTToClient{Name: encode(displayUsername), Message: msg, IsFromServer: false})
+		client.Send(&aolib.CTToClient{Name: displayUsername, Message: msg, IsFromServer: false})
 		addToBuffer(client, "OOC", "\""+msg+"\" (censored)", false)
 		if kick {
 			client.KickForCensorTrip()
@@ -1654,22 +1699,25 @@ func pktOOC(client *Client, p *aolib.Packet) {
 		return
 	}
 	// Torment: ghost or delay the OOC message without the client noticing.
-	if isIPIDTormented(client.Ipid()) {
-		handleTormentedOOC(client, encode(displayUsername), msg)
+	// Pass the RAW display name — handleTormentedOOC builds a typed CTToClient,
+	// whose Args() applies Fanta escaping; pre-escaping here would double-escape
+	// JSON-mode clients.
+	if isIPIDTormented(client.Ipid()) && client.AntiPunishShieldMode() == antiPunishShieldOff {
+		handleTormentedOOC(client, displayUsername, msg)
 		return
 	}
 	// Stealthmute: echo the message back to only the sender so they never
 	// notice the room can't hear them. The buffer entry is marked so mods
 	// reviewing logs can tell the message was suppressed.
 	if client.HasActivePunishment(PunishmentStealthMute) {
-		client.Send(&aolib.CTToClient{Name: encode(displayUsername), Message: msg, IsFromServer: false})
+		client.Send(&aolib.CTToClient{Name: displayUsername, Message: msg, IsFromServer: false})
 		addToBuffer(client, "OOC", "\""+msg+"\" (stealthmuted)", false)
 		return
 	}
 	// Captcha restriction: same routing the IC path uses.
 	if activeCaptchaRestricted.Load() > 0 && client.captchaRestricted.Load() {
 		deliverRestricted(client, client.Area(),
-			&aolib.CTToClient{Name: encode(displayUsername), Message: msg, IsFromServer: false})
+			&aolib.CTToClient{Name: displayUsername, Message: msg, IsFromServer: false})
 		addToBuffer(client, "OOC", "\""+msg+"\" (captcha-muted)", false)
 		return
 	}
@@ -1680,8 +1728,18 @@ func pktOOC(client *Client, p *aolib.Packet) {
 	// needed.
 	raidGuardOnOOC(client, ct.Name, decode(msg))
 
-	broadcastOOCToArea(client.Ipid(), senderBypassesIgnore(client.Perms()), client.Area(),
-		&aolib.CTToClient{Name: encode(displayUsername), Message: msg, IsFromServer: false})
+	// AO Gold paywall: the punished speaker's OOC line is replaced at the
+	// very last moment, after moderation/content gates have seen the real
+	// text and after raid-guard has scored it. The log records the paywall
+	// the room actually saw, matching how IC text punishments are logged.
+	msg = applyGoldPaywall(client, msg)
+
+	// Shield spoofing is per-moderator, so it needs the same private-copy
+	// treatment as IC. If no moderator is owed a spoof, fan out normally.
+	if !broadcastSpoofedOOC(client, displayUsername, msg) {
+		broadcastToAreaFromOnce(client.Ipid(), senderBypassesIgnore(client.Perms()), client.Area(),
+			&aolib.CTToClient{Name: displayUsername, Message: msg, IsFromServer: false})
+	}
 	addToBuffer(client, "OOC", "\""+msg+"\"", false)
 }
 
@@ -1744,6 +1802,41 @@ func pktPing(client *Client, _ *aolib.Packet) {
 
 // Handles ZZ#%
 func pktModcall(client *Client, p *aolib.Packet) {
+	// Parsed first so the raid guard and the kill switch below can both see the
+	// reason. ParseZZToServer always returns a usable value (it fills defaults
+	// for a short body rather than failing), so the ignored error is safe here
+	// and was already being ignored further down.
+	zz, _ := aolib.ParseZZToServer(p.Body)
+
+	// Scored BEFORE any cooldown gate, deliberately. Both gates below return
+	// before the packet is logged, buffered or delivered, so a script that
+	// hammers ZZ is invisible to every other detector on this server: with a
+	// 40-minute modcall_cooldown it looks exactly like a player who called once.
+	// The guard has to see the refusals, not just the one delivery that gets
+	// through. A true result means it acted (silence, kick, ban or nuke) and the
+	// message that earned the verdict must not be delivered.
+	if raidGuardOnModcall(client, zz.Reason) {
+		return
+	}
+
+	// A quarantine the guard placed is captchaRestricted, and pktIC and pktOOC
+	// both drop packets for a restricted connection while this path never
+	// checked -- so a silenced spammer kept reaching staff with every modcall.
+	// Same fast-path counter guard as pktIC uses.
+	if activeCaptchaRestricted.Load() > 0 && client.captchaRestricted.Load() {
+		return
+	}
+
+	// /modcall disable. Refused before the cooldowns on purpose: a suppressed
+	// attempt must not burn the sender's own 40-minute modcall_cooldown, so that
+	// re-enabling modcalls cannot lock out someone who happened to call while
+	// the switch was off.
+	if modcallsDisabled.Load() {
+		modcallsSuppressed.Add(1)
+		client.SendServerMessage("Modcalls are currently disabled by staff. Please report it in OOC instead.")
+		return
+	}
+
 	if limited, remaining := checkNewIPIDModcallCooldown(client.Ipid()); limited {
 		unit := "seconds"
 		if remaining == 1 {
@@ -1761,7 +1854,6 @@ func pktModcall(client *Client, p *aolib.Packet) {
 		return
 	}
 	setIPModcallTime(client.Ipid())
-	zz, _ := aolib.ParseZZToServer(p.Body)
 	addToBuffer(client, "MOD", fmt.Sprintf("Called moderator for reason: %v", zz.Reason), false)
 	if client.Area().LogSilenced() {
 		return
@@ -1784,24 +1876,16 @@ func pktModcall(client *Client, p *aolib.Packet) {
 }
 
 // Handles SETCASE#%
-func pktSetCase(client *Client, p *aolib.Packet) {
-	sc, err := ParseSETCASE(p.Body)
-	if err != nil {
-		return
-	}
+func pktSetCase(client *Client, p *aolib.SETCASE) {
 	// Existing behaviour: only def/pro/judge/jury feed SetRoleAlert; cm and
 	// steno are intentionally ignored. The role indices are 0..3 in that order.
-	for i, r := range [4]string{sc.Def, sc.Pro, sc.Judge, sc.Jury} {
-		b, err := strconv.ParseBool(r)
-		if err != nil {
-			return
-		}
+	for i, b := range [4]bool{p.WillDef, p.WillPro, p.WillJudge, p.WillJury} {
 		client.SetRoleAlert(i, b)
 	}
 }
 
 // Handles CASEA#%
-func pktCaseAnn(client *Client, p *aolib.Packet) {
+func pktCaseAnn(client *Client, p *aolib.CASEAToServer) {
 	// Let future generations know I spent far too long trying to make this work.
 	// Partially because of my own stupidity, and partially because this is the worst packet in AO2.
 
@@ -1809,34 +1893,21 @@ func pktCaseAnn(client *Client, p *aolib.Packet) {
 		client.SendServerMessage("You are not allowed to send case alerts in this area.")
 		return
 	}
-	ca, err := ParseCASEA(p.Body)
-	if err != nil {
-		return
-	}
 	// Build the announcement title; the needs fields are forwarded verbatim.
-	// The trailing "1" in the FantaCode form preserves the old-client extra-
-	// arg workaround. JSON-mode clients don't need that workaround and
-	// receive the typed-Outgoing form (which encodes the 6 documented
-	// CASEA fields via BuildJSON).
+	// aolib.CASEAToClient emits the trailing "1" legacy slot on both wires
+	// (the FantaCode 7th field and the JSON `_legacy` const), matching the
+	// old-client workaround.
 	title := fmt.Sprintf("CASE ANNOUNCEMENT: %v in %v needs players for %v",
-		client.CurrentCharacter(), client.Area().Name(), ca.CaseTitle)
-	needs := strings.Join(escapeOutgoing("CASEA", []string{ca.NeedDef, ca.NeedPro, ca.NeedJudge, ca.NeedJury, ca.NeedSteno}), "#")
-	fantaCodePacket := fmt.Sprintf("CASEA#%v#%v#1#%%", encode(title), needs)
-	typedPacket := &CASEA{
-		CaseTitle: title,
-		NeedDef:   ca.NeedDef, NeedPro: ca.NeedPro,
-		NeedJudge: ca.NeedJudge, NeedJury: ca.NeedJury, NeedSteno: ca.NeedSteno,
+		client.CurrentCharacter(), client.Area().Name(), p.Title)
+	out := &aolib.CASEAToClient{
+		Message:   title,
+		NeedDef:   p.NeedDef,
+		NeedPro:   p.NeedPro,
+		NeedJudge: p.NeedJudge,
+		NeedJury:  p.NeedJury,
+		NeedSteno: p.NeedSteno,
 	}
-
-	// Pre-parse the requested role flags once so we don't re-parse per recipient.
-	var alertRoles [4]bool
-	for i, r := range [4]string{ca.NeedDef, ca.NeedPro, ca.NeedJudge, ca.NeedJury} {
-		b, err := strconv.ParseBool(r)
-		if err != nil {
-			return
-		}
-		alertRoles[i] = b
-	}
+	alertRoles := [4]bool{p.NeedDef, p.NeedPro, p.NeedJudge, p.NeedJury}
 
 	clients.ForEach(func(c *Client) {
 		if c == client {
@@ -1844,11 +1915,7 @@ func pktCaseAnn(client *Client, p *aolib.Packet) {
 		}
 		for i := 0; i < 4; i++ {
 			if alertRoles[i] && c.AlertRole(i) {
-				if c.JSONMode() {
-					c.Send(typedPacket)
-				} else {
-					c.write(fantaCodePacket)
-				}
+				c.Send(out)
 				break
 			}
 		}
@@ -1912,7 +1979,7 @@ func pktMA(client *Client, p *aolib.Packet) {
 			}
 		}
 		client.SendServerMessage(fmt.Sprintf("Kicked %d client(s).", len(targets)))
-		sendPlayerArup()
+		requestPlayerArup()
 		addToBuffer(client, "CMD", fmt.Sprintf("Kicked %v from server for reason: %v.", targetIPID, reason), true)
 		return
 	}
@@ -1954,7 +2021,7 @@ func pktMA(client *Client, p *aolib.Packet) {
 		c.conn.Close()
 	}
 	client.SendServerMessage(fmt.Sprintf("Banned %d client(s).", len(targets)))
-	sendPlayerArup()
+	requestPlayerArup()
 	addToBuffer(client, "CMD", fmt.Sprintf("Banned %v from server for %v: %v.", targetIPID, durationStr, reason), true)
 }
 

@@ -47,6 +47,8 @@ The universal removal command. Clears **all** punishment types including lag.
 
 `/unpunish all` also clears the torment list (`lag`). `/unpunish -t lag <uid>` removes it from a specific target. Nothing in game *adds* to that list any more — `/lag` was removed; the AutoMod censor arms it automatically, and the server console keeps `torment <ipid>`.
 
+Full removal (`/unpunish <uid>` and `/unpunish all`) **also breaks any `/leash` claim** the target is part of. Unpunishing a dog detaches just that dog and leaves the rest of the pack; unpunishing the master releases every dog. `/unpunish -t dog` deliberately removes only the barking effect and leaves the leash intact.
+
 **Examples:**
 ```
 /unpunish 123                    # Remove everything from UID 123
@@ -181,7 +183,7 @@ Rewrite the target's IC text — light to heavy transformations. All support `gl
 
 ---
 
-## Themed Quote Replacers (8)
+## Themed Quote Replacers (11)
 
 Discard the player's text and substitute a themed line per message. All support `global` and `-h`.
 
@@ -197,6 +199,22 @@ Discard the player's text and substitute a themed line per message. All support 
 | `/rickroll` | Meme-styled lyric-adjacent stand-in lines |
 | `/pickup` | Catastrophically cheesy pickup lines |
 | `/brainrot` | Maximum skibidi sigma brainrot energy |
+| `/gold` (aliases `/premium`, `/paywall`) | AO Gold / Skrapegropen Premium paywall. Every IC **and OOC** message becomes a fake premium notice; branding rotates randomly. Removed with `/unpunish -t gold`. |
+
+### `/gold` — AO Gold / Skrapegropen Premium paywall
+
+The target's messages are replaced with one of these notices:
+
+```
+[You require AO gold/premium to see this message]
+This message requires SkrapeGOLD account to be seen.
+If you have not purchased a GOLD account, you may not view this message.
+You need AO Premium subscription to see this message.
+This message is only visible to users with SkrapeGolden account.
+OOPS! This message requires a Premium Skrapegropen Account.
+```
+
+The OOC replacement happens after AutoMod, torment, and raid-guard have seen the original text, so the punishment cannot be used to bypass moderation. Like every other text punishment it supports `-d`, `-r`, `-h`, comma-separated UIDs, `global`, `/stack`, persistence, and `/unpunish -t gold`.
 
 ---
 
@@ -505,6 +523,21 @@ These manipulate frame *flow* only (no Opus decode), so they're CGO-free.
 |---------|-------------|
 | `/blockpunishment <uid>` | Prevent a player from using `/maso`, `/megamaso`, `/potion`, `/coinflip` |
 | `/unblockpunishment <uid>` | Restore access |
+
+---
+
+## Anti-Punishment Shield (ADMIN)
+
+`/antipunishshield <uid> [backfire]` makes a player immune to punishment-system effects until the server restarts. The shield is held in memory by HDID (IPID fallback), so it survives reconnects but not a restart. `/kick`, `/ban`, and `/mute` are real moderation and are not affected.
+
+| Mode | Behaviour |
+|------|-----------|
+| `/antipunishshield <uid>` | **Spoof (default).** The punishment does not land. The issuing moderator is recorded as a spoof viewer: everyone else, including the target, sees the target's normal IC/OOC lines, but that moderator sees a transformed copy as if the punishment worked. |
+| `/antipunishshield <uid> backfire` | The same spoof, plus the punishment is applied to the issuing moderator for real. |
+
+Every attempt also sends the shielded player a sneaky popup naming the moderator and punishment, e.g. `🤫 shh! Mod tried to punish you with 'dog'. It didn't stick — ur punishment protected. Act normal.` In backfire mode the popup says it backfired on the moderator instead. The backfire itself is silent: the moderator only sees the normal success summary, never a backfire announcement. They see the spoof and think it worked, so the target acting normal is the joke.
+
+Full `/unpunish` clears the target's spoof records as well as any real punishments; the shield itself remains until restart. Every punishment insert is guarded centrally, so direct/mechanical effects cannot bypass it; `/stack`, `/lovebomb`, `/randompunishall`, `/translator`, `/sfxcurse`, `/shrink`, `/grow`, `/wide`, `/forcecolor`, `/icwarp`, and `/contagious` call the same gate. `/jail` and the torment (lag) branch are covered too.
 
 ---
 

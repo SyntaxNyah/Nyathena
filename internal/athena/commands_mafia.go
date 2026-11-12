@@ -498,7 +498,7 @@ func mafiaSubWill(client *Client, args []string) {
 	// later at a moment nothing is gating.
 	m, result, kickAfter := autoModCheckTiered(client, will, "mafia will")
 	if m.Matched && m.Entry.Severity == SeverityNuke {
-		applyAutoModNuke(client, m, "mafia will")
+		applyAutoModNuke(client, m, "mafia will", will)
 		return
 	}
 	raidGuardOnWordHit(client, m)
@@ -582,8 +582,8 @@ func mafiaSubWhisper(client *Client, args []string) {
 	// raid-guard scored, matching /pm's own precedent: a whisper is not a
 	// broadcast and there's no correlation data to calibrate against.
 	echo := &aolib.CTToClient{
-		Name:         encodedServerName,
-		Message:      encode(fmt.Sprintf("🎭 [Mafia/Private] 💬 [Whisper from %v]: %v", sender.Name(), message)),
+		Name:         serverName,
+		Message:      fmt.Sprintf("🎭 [Mafia/Private] 💬 [Whisper from %v]: %v", sender.Name(), message),
 		IsFromServer: true,
 	}
 	if !oocCommandAllowed(client, message, "mafia whisper", echo) {

@@ -388,7 +388,7 @@ func TestChallengeRungRespectsCaptchaToggle(t *testing.T) {
 	rs.score = config.RaidGuardScoreChallenge
 	rs.mu.Unlock()
 
-	raidGuardEnforce(c, rs, VerdictChallenge, "test")
+	raidSystem.enforce(c, rs, VerdictChallenge, "test")
 	if _, _, acted := rs.snapshot(); acted != VerdictWatch {
 		t.Errorf("with the captcha off, a challenge verdict acted as %v; want watch", acted)
 	}

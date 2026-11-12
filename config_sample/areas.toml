@@ -31,6 +31,12 @@ lock_bg = true
 # Sets whether non-CM users are prevented from playing music in this area.
 lock_music = false
 
+# Pebble Mode area toggles. When the server has pebble_mode = true, both are
+# enabled in every area by default. Set either to false to disable it here.
+# Mods can change these at runtime with /pebbleset minigames|events true|false.
+# pebble_minigames = true
+# pebble_events = true
+
 # Mirror mode: when true, every IC message broadcast in this area is reversed
 # server-side. The effect clears the instant the speaker leaves the area.
 # Staff can also toggle this at runtime. Default false (off).
@@ -38,25 +44,25 @@ lock_music = false
 
 # Punishment area: when true, every IC message sent in this area has a random,
 # one-shot punishment effect applied to it (uwu, pirate, morse, dreamsequence,
-# monkey sounds, etc.). Nothing is persisted — the effect clears the instant
+# monkey sounds, etc.). Nothing is persisted - the effect clears the instant
 # the speaker leaves the area. If the translator punishment is configured
 # server-wide (enable_translator_punishment + translator_api_key in config.toml),
 # it is also included in the random pool. Staff can toggle at runtime.
 # punishment_area = false
 
 # Doki area: Doki Doki Literature Club style chaos. Each IC message rolls:
-#   1/300  — replace text with a Haschen-themed Monika-style quote
-#   1/100  — replace text with one of 130+ original Haschen-themed poems (cute / wholesome / devotional / unhinged / gore / horror / scrambled-horror; ≤256 chars)
-#   1/200  — replace text with a dark Haschen anagram (no hint shown — players unscramble for themselves)
-#   1/150  — replace text with a zalgo-corrupted Haschen catchphrase
-#   1/100  — zalgo-scramble the player's actual text
-#   1/250  — surprise-swap the area background to a random one
+#   1/300  - replace text with a Haschen-themed Monika-style quote
+#   1/100  - replace text with one of 130+ original Haschen-themed poems (cute / wholesome / devotional / unhinged / gore / horror / scrambled-horror; <=256 chars)
+#   1/200  - replace text with a dark Haschen anagram (no hint shown - players unscramble for themselves)
+#   1/150  - replace text with a zalgo-corrupted Haschen catchphrase
+#   1/100  - zalgo-scramble the player's actual text
+#   1/250  - surprise-swap the area background to a random one
 # Effects roll independently (multiple can land on the same message).
 # Stacks freely with mirror_area / punishment_area on the same area.
 # doki_area = false
 
 # Antipunish (punishment-safe area): when true, shields every player currently
-# in this area from moderator-issued punishment-system effects — text effects,
+# in this area from moderator-issued punishment-system effects - text effects,
 # dere archetypes, protocol/voice curses, traps, /stack, /charcurse, and every
 # other punishment-list command are refused against a target standing here.
 # Real moderation enforcement (/ban, /mute, /kick) is unaffected and still
@@ -65,7 +71,7 @@ lock_music = false
 # antipunish = false
 
 # Judge buttons: controls whether the WT/CE judge buttons (Witness Testimony,
-# Cross Examination and the verdict gavels — the RT packet) work in this area.
+# Cross Examination and the verdict gavels - the RT packet) work in this area.
 # Omit the line or set true to keep them enabled (the default). Set false to
 # disable them so they can't be spammed. Staff with MODIFY_AREA can also flip
 # this at runtime with /judge <true|false>.

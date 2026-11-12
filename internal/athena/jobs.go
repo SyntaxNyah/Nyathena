@@ -30,7 +30,7 @@ import (
 // and the cooldown in seconds.  Small rewards + long delays keep inflation low.
 type jobDef struct {
 	key      string // stored in JOB_COOLDOWNS; must be stable
-	reward   int64  // base chips awarded per use
+	reward   int64  // base amount of the active currency awarded per use
 	cooldown int64  // seconds between uses
 	emoji    string
 }
@@ -85,7 +85,7 @@ func doJobJanitor(client *Client) {
 		reward++
 		msg = "You swept the courthouse floors and found a lost coin on the way out!"
 	}
-	awardJobChips(client, j, reward, msg)
+	awardJobReward(client, j, reward, msg)
 }
 
 // doJobBusker handles the busker job: tips are randomised 2–6 chips and the
@@ -123,7 +123,7 @@ func doJobBusker(client *Client) {
 	default:
 		tipMsg = fmt.Sprintf("You played %s to a sparse audience. A couple of coins clinked into your case.", song)
 	}
-	awardJobChips(client, j, reward, tipMsg)
+	awardJobReward(client, j, reward, tipMsg)
 }
 
 // doJobPaperboy handles the paperboy job: flat 3-chip reward with a 15% chance
@@ -140,7 +140,7 @@ func doJobPaperboy(client *Client) {
 		reward += 2
 		msg = "You delivered papers and a grateful attorney handed you a generous tip!"
 	}
-	awardJobChips(client, j, reward, msg)
+	awardJobReward(client, j, reward, msg)
 }
 
 // doJobBailiff handles the bailiff job: flat 5-chip reward with a 10% chance
@@ -162,7 +162,7 @@ func doJobBailiff(client *Client) {
 		}
 		msg = incidents[rand.Intn(len(incidents))]
 	}
-	awardJobChips(client, j, reward, msg)
+	awardJobReward(client, j, reward, msg)
 }
 
 // doJobClerk handles the clerk job: flat 4-chip reward with a 15% chance for
@@ -179,7 +179,7 @@ func doJobClerk(client *Client) {
 		reward += 2
 		msg = "Overtime rush at the records desk! You powered through a mountain of filings."
 	}
-	awardJobChips(client, j, reward, msg)
+	awardJobReward(client, j, reward, msg)
 }
 
 // ── Shared helpers ────────────────────────────────────────────────────────────
@@ -219,26 +219,26 @@ func sendJobCooldownMsg(client *Client, j jobDef, remaining int64) {
 	}
 }
 
-// awardJobChips credits the reward, sends the player their result, and logs it.
-// Any job-bonus passes owned by the player are applied on top of the base reward.
-func awardJobChips(client *Client, j jobDef, reward int64, flavour string) {
-	bonus := getPlayerJobBonus(client.Ipid())
-	if bonus > 0 {
+// awardJobReward credits the reward in the active currency, sends the player
+// their result, and logs it. Legacy job-bonus passes apply only in casino
+// mode; Pebble Mode intentionally has no upgrades.
+func awardJobReward(client *Client, j jobDef, reward int64, flavour string) {
+	if bonus := getPlayerJobBonus(client.Ipid()); bonus > 0 {
 		reward += bonus
 		flavour = fmt.Sprintf("%s (Pass bonus: +%d)", flavour, bonus)
 	}
-	newBal, chipErr := db.AddChips(client.Ipid(), reward)
-	if chipErr != nil {
-		logger.LogErrorf("jobs: AddChips failed for ipid=%v job=%v: %v", client.Ipid(), j.key, chipErr)
-		client.SendServerMessage("Something went wrong awarding chips. Please try again later.")
+	newBal, currency, err := awardActivityReward(client.Ipid(), reward)
+	if err != nil {
+		logger.LogErrorf("jobs: reward failed for ipid=%v job=%v: %v", client.Ipid(), j.key, err)
+		client.SendServerMessage(fmt.Sprintf("Something went wrong awarding %s. Please try again later.", currency))
 		return
 	}
 	if err := db.AddJobEarnings(client.Ipid(), reward); err != nil {
 		logger.LogErrorf("jobs: AddJobEarnings failed for ipid=%v job=%v: %v", client.Ipid(), j.key, err)
 	}
 	client.SendServerMessage(fmt.Sprintf(
-		"%s %s +%d chips | Balance: %d chips",
-		j.emoji, flavour, reward, newBal,
+		"%s %s +%d %s | Balance: %d %s",
+		j.emoji, flavour, reward, currency, newBal, currency,
 	))
 }
 
@@ -252,22 +252,26 @@ func cmdClerk(client *Client, _ []string, _ string)      { doJobClerk(client) }
 
 // cmdJobs lists all available jobs and their rewards/cooldowns.
 func cmdJobs(client *Client, _ []string, _ string) {
+	currency := pebbleCurrencyName()
 	var sb strings.Builder
-	sb.WriteString("\n💼 Available Jobs (earn chips with a cooldown per job)\n")
+	sb.WriteString(fmt.Sprintf("\n💼 Available Jobs (earn %s with a cooldown per job)\n", currency))
 	sb.WriteString(fmt.Sprintf("  %-12s  %-10s  %-8s  %s\n", "Command", "Base", "Cooldown", "Notes"))
 	sb.WriteString("  " + strings.Repeat("─", 56) + "\n")
 	type row struct{ name, base, cd, note string }
 	rows := []row{
-		{"busker", "2–6 chips", "30 min", "Random tips; performs in area chat!"},
-		{"janitor", "3 chips", "45 min", "25% chance to find a coin (+1 bonus)"},
-		{"paperboy", "3 chips", "60 min", "15% chance for a generous tip (+2 bonus)"},
-		{"clerk", "4 chips", "90 min", "15% overtime rush chance (+2 bonus)"},
-		{"bailiffjob", "5 chips", "2 hours", "10% chance to catch something (+2 bonus)"},
+		{"busker", "2–6 " + currency, "30 min", "Random tips; performs in area chat!"},
+		{"janitor", "3 " + currency, "45 min", "25% chance to find a coin (+1 bonus)"},
+		{"paperboy", "3 " + currency, "60 min", "15% chance for a generous tip (+2 bonus)"},
+		{"clerk", "4 " + currency, "90 min", "15% overtime rush chance (+2 bonus)"},
+		{"bailiffjob", "5 " + currency, "2 hours", "10% chance to catch something (+2 bonus)"},
 	}
 	for _, r := range rows {
 		sb.WriteString(fmt.Sprintf("  /%-12s %-10s %-8s %s\n", r.name, r.base, r.cd, r.note))
 	}
-	sb.WriteString("\nType any of the commands above to get to work and earn chips!")
+	sb.WriteString(fmt.Sprintf("\nType any of the commands above to get to work and earn %s!", currency))
+	if pebbleEnabled() {
+		sb.WriteString("\nPebble Mode has no job passes or cooldown upgrades — just work when you feel like it.")
+	}
 	sb.WriteString("\n💡 Use /jobtop to see who has earned the most from jobs.")
 	client.SendServerMessage(sb.String())
 }
@@ -296,7 +300,7 @@ func cmdJobTop(client *Client, args []string, usage string) {
 		if name == "" {
 			name = e.IPID
 		}
-		sb.WriteString(fmt.Sprintf("  %2d. %-20v  %d chips earned\n", i+1, name, e.Total))
+		sb.WriteString(fmt.Sprintf("  %2d. %-20v  %d %s earned\n", i+1, name, e.Total, pebbleCurrencyName()))
 	}
 	client.SendServerMessage(sb.String())
 }

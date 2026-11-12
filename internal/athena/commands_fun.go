@@ -27,8 +27,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/MangosArentLiterature/Athena/internal/area"
 	aolib "github.com/AO-Underground/aolib/go/v2"
+	"github.com/MangosArentLiterature/Athena/internal/area"
 	str2duration "github.com/xhit/go-str2duration/v2"
 )
 
@@ -70,6 +70,9 @@ func cmdPair(client *Client, args []string, _ string) {
 		client.SendServerMessage("You have not selected a character.")
 		return
 	}
+	if client.refuseIfLeashed() {
+		return
+	}
 
 	uid, err := strconv.Atoi(args[0])
 	if err != nil {
@@ -85,6 +88,11 @@ func cmdPair(client *Client, args []string, _ string) {
 
 	if target == client {
 		client.SendServerMessage("You cannot pair with yourself.")
+		return
+	}
+
+	if target.Leash() != nil {
+		client.SendServerMessage(fmt.Sprintf("%v is already part of a leash.", oocDisplayName(target)))
 		return
 	}
 
@@ -159,6 +167,12 @@ func cmdForcePair(client *Client, args []string, _ string) {
 		return
 	}
 
+	// A moderator force-pair overrides any leash either target was in. Clear
+	// both claims (and their pair state) before installing the new pair so no
+	// stale master/dog pointer survives and drags the old dog around later.
+	dissolveLeashForForce(target1, target2)
+	dissolveLeashForForce(target2, target1)
+
 	target1.SetPairWantedID(target2.CharID())
 	target2.SetPairWantedID(target1.CharID())
 	target1.SetForcePairUID(target2.Uid())
@@ -179,9 +193,24 @@ func cmdForcePair(client *Client, args []string, _ string) {
 // the entire client list and clear PairWantedID + ForcePairUID on anyone who
 // references us by UID OR by current/historical CharID, then clear our own.
 func cmdUnpair(client *Client, _ []string, _ string) {
+	// A leash owns the pair. Neither end can release it with /unpair: the dog
+	// would be abandoning its master, and the master releasing it would turn
+	// /unpair into a one-command escape hatch. Full /unpunish and a
+	// moderator's /forceunpair are the removal paths. This runs before the
+	// group check so a dog that somehow still has a group pointer cannot slip
+	// out through /leavegroup's path either.
+	if l := client.Leash(); l != nil {
+		if l.IsDog(client) {
+			client.SendPopup(leashAbandonPopup)
+			return
+		}
+		client.SendServerMessage("You cannot unpair while holding a leash. Ask a moderator to /forceunpair or /unpunish you.")
+		return
+	}
+
 	// Leaving a multi-pair group dissolves the whole group (decided behavior).
 	if g := client.PairGroup(); g != nil {
-		g.dissolve(oocDisplayName(client) + " left — the pairing group was dissolved.")
+		g.remove(client, oocDisplayName(client)+" left — the pairing group has been updated.")
 		return
 	}
 
@@ -245,7 +274,13 @@ func clearPairLinksOnDisconnect(client *Client) {
 	// behind lets it auto-complete against a recycled UID/CharID later — the
 	// desync this cleanup exists to prevent. Disconnects are infrequent, so the
 	// O(n) walk is cheap.
-	dissolvePairGroupOnDisconnect(client)
+	//
+	// A leash is dissolved first: it clears both sides' pair fields and pops
+	// the survivor the right message (abandonment for a departing dog, release
+	// for a departing master), so the scan below does not also send a generic
+	// pair-cancelled line.
+	clearLeashOnDisconnect(client)
+	removeGroupMemberOnDisconnect(client)
 	clientUID := client.Uid()
 	clientCharID := client.CharID()
 	leaverName := oocDisplayName(client)
@@ -287,9 +322,39 @@ func cmdForceUnpair(client *Client, args []string, _ string) {
 		return
 	}
 
-	if target.PairWantedID() == -1 && target.ForcePairUID() == -1 {
+	if target.PairWantedID() == -1 && target.ForcePairUID() == -1 && target.Leash() == nil {
 		client.SendServerMessage("That player is not paired.")
 		return
+	}
+
+	// A forced unpair also breaks any leash the target is part of, whichever
+	// end of it they are on. A dog is detached from the pack; a master's whole
+	// pack is released. Survivors are told before the pair fields are cleared
+	// so the messages can still name the target.
+	if l := target.Leash(); l != nil {
+		if l.Master() == target {
+			members := l.AllMembers()
+			dissolveLeash(l)
+			for _, m := range members {
+				if m == target {
+					continue
+				}
+				m.SendServerMessage(fmt.Sprintf("Your leash with %v was broken by %v.",
+					oocDisplayName(target), client.OOCName()))
+			}
+		} else {
+			master, remaining, _ := l.removeDog(target)
+			target.SetForcePairUID(-1)
+			target.SetPairWantedID(-1)
+			if master != nil {
+				master.SendServerMessage(fmt.Sprintf("Your leash with %v was broken by %v.",
+					oocDisplayName(target), client.OOCName()))
+			}
+			for _, dog := range remaining {
+				dog.SendServerMessage(fmt.Sprintf("%v was released from the leash by %v.",
+					oocDisplayName(target), client.OOCName()))
+			}
+		}
 	}
 
 	// Clear the partner's pair state.
@@ -631,7 +696,7 @@ func cmdPoll(client *Client, args []string, usage string) {
 	// created, before any area state is touched, so a blocked poll never
 	// leaves a dangling "active poll" that nobody was ever shown.
 	checkText := question + "\n" + strings.Join(options, "\n")
-	echo := &aolib.CTToClient{Name: encodedServerName, Message: encode(pollMsg), IsFromServer: true}
+	echo := &aolib.CTToClient{Name: serverName, Message: pollMsg, IsFromServer: true}
 	if !oocCommandAllowed(client, checkText, "poll", echo) {
 		return
 	}
@@ -754,6 +819,20 @@ func cmdErp(client *Client, _ []string, _ string) {
 	client.conn.Close()
 }
 
+// randomMasoPunishment picks a random effect from the same stateless pool
+// /maso uses. When avoid is not PunishmentNone it is skipped, so a reroll
+// always produces a different effect as long as the pool has alternatives.
+// Extracted so Deathroll's loser penalty is literally the /maso effect.
+func randomMasoPunishment(avoid PunishmentType) PunishmentType {
+	pick := areaRandomPunishments[rand.Intn(len(areaRandomPunishments))]
+	if avoid != PunishmentNone && len(areaRandomPunishments) > 1 {
+		for pick == avoid {
+			pick = areaRandomPunishments[rand.Intn(len(areaRandomPunishments))]
+		}
+	}
+	return pick
+}
+
 // cmdMaso lets any user self-apply a random punishment for a configurable
 // duration (default 10 m, max 24 h). Calling it again while a maso punishment
 // is active removes the old one and applies a new (different) random
@@ -781,18 +860,23 @@ func cmdMaso(client *Client, args []string, _ string) {
 	prev := client.masoPunishment
 	client.mu.Unlock()
 
+	// A Deathroll-locked effect is not a self-applied roll the player may reroll
+	// away; treat the lock as part of the punishment.
+	if prev != PunishmentNone {
+		if until := client.PunishmentLockedUntil(prev); !until.IsZero() && time.Now().Before(until) {
+			client.SendServerMessage(fmt.Sprintf(
+				"Your active maso punishment '%v' is locked for another %v and cannot be rerolled yet.",
+				prev, time.Until(until).Round(time.Second)))
+			return
+		}
+	}
+
 	// Remove the previously maso-applied punishment (no-op if it already expired).
 	if prev != PunishmentNone {
 		client.RemovePunishment(prev)
 	}
 
-	// Pick a random punishment; if rerolling, ensure it differs from the previous one.
-	newType := areaRandomPunishments[rand.Intn(len(areaRandomPunishments))]
-	if prev != PunishmentNone && len(areaRandomPunishments) > 1 {
-		for newType == prev {
-			newType = areaRandomPunishments[rand.Intn(len(areaRandomPunishments))]
-		}
-	}
+	newType := randomMasoPunishment(prev)
 
 	client.AddPunishment(newType, duration, "maso")
 
@@ -874,7 +958,7 @@ func cmd8Ball(client *Client, args []string, _ string) {
 	answer := pool[rand.Intn(len(pool))]
 	fullMsg := fmt.Sprintf("%v asked: %s\n🎱 The Magic 8-Ball says: %s",
 		oocDisplayName(client), question, answer)
-	echo := &aolib.CTToClient{Name: encodedServerName, Message: encode(fullMsg), IsFromServer: true}
+	echo := &aolib.CTToClient{Name: serverName, Message: fullMsg, IsFromServer: true}
 	// /8ball is reqPerms:NONE and broadcasts free player text area-wide, so it
 	// must pass the same content/punishment gate /global does -- see
 	// oocCommandAllowed. Gated on the player-supplied question only; the

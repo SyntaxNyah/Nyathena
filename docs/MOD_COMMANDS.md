@@ -17,7 +17,7 @@ For player-facing commands, see [`PLAYER_COMMANDS.md`](PLAYER_COMMANDS.md).
 | `MODIFY_AREA` | Override area settings | BG/music locks, force CMs |
 | `BAN_INFO` | View ban records | /getban, /listbans |
 | `ADMIN` | Server runtime configuration | /arealog, /reloadplaytime, /grantchips |
-| `SHADOW` | Stealth moderator | Hidden from /gas/players for non-admins |
+| `SHADOW` | Stealth moderator | Hidden from /gas/players/mods for non-admins |
 
 Permission bits are configured in `config/roles.toml`. Multiple bits are granted as a bitfield — see the role definitions for combinations.
 
@@ -78,6 +78,7 @@ Censor trips (AutoMod banned words and `censored_names.txt` shownames) alert eve
 | `/announce <message>` | MUTE | Broadcasts a `[Announcement] <message>` server OOC message to every connected player. In-game equivalent of the Discord bot's `/announce` slash command — use it without needing the Discord bridge configured. |
 | `/useralert <uid> <message>` | MUTE | Sends a **popup** (BB packet) to a specific player by UID. Moderators only. |
 | `/useralert global <message>` | MUTE | Sends a **popup** (BB packet) to **every** connected player. Moderators only. |
+| `/modcall <enable\|disable\|status>` | MOD_CHAT to read, BAN to change | Server-wide modcall kill switch. While disabled every modcall packet is refused before any cooldown or log line, and the sender is told to report in OOC instead. Bare `/modcall` (or `/modcall status`) reports the state and how many attempts have been refused since it was switched off. **In-memory only** — a server restart always restores modcalls, which is deliberate: a switch that survived a restart could outlive the incident it was thrown for. A suppressed attempt does **not** consume the sender's `modcall_cooldown`, so re-enabling does not lock out anyone who called while it was off. |
 
 ---
 
@@ -168,8 +169,10 @@ A name a moderator set in a room that had no CM at all is kept until the room em
 |---------|-----------|-------------|
 | `/charstuck [-d duration] <uid>` | MUTE | Lock to current character |
 | `/charcurse <uid> <charname>` | KICK | Force a one-time character swap (target may change afterward) |
-| `/forcepair <uid1> <uid2>` | MUTE | Force two players into a UID-tracked pair |
-| `/forceunpair <uid>` | MUTE | Break a forced pair |
+| `/forcepair <uid1> <uid2>` | KICK | Force two players into a UID-tracked pair |
+| `/forceunpair <uid>` | KICK | Break a forced pair or leash |
+| `/leash [-d duration] [-r reason] [-h] <master uid> <dog uid> [dog uid ...]` | KICK | Claim up to 6 players as your dogs: force-pairs the pack, applies `/dog` to every dog, drags them between areas (including punishment-safe rooms), and renders the full pack together on multi-pair/JSON clients. Re-issue the command with the same master to add more dogs. Neither end can `/unpair`; full `/unpunish` or `/forceunpair` removes it. Unpunishing one dog detaches only that dog. Previous partners get a `Your partner has been leashed` popup |
+| `/antipunishshield <uid> [backfire]` | ADMIN | Make a player immune to punishment effects until restart. The issuing moderator sees their messages spoofed as if the punishment worked; `backfire` also applies it to the moderator. `/kick`, `/ban`, and `/mute` are unaffected |
 | `/setrole <uid> <role>` | ADMIN | Set a player's role (permission tier) |
 | `/clearpos <uid>` | MOVE_USERS | Clear forced position |
 | `/showname <uid> <name>` | MUTE | Force a showname |
@@ -203,7 +206,7 @@ Two things deliberately remain:
 | Group | Commands |
 |-------|----------|
 | Text effects (60) | `/whisper /backward /stutterstep /elongate /uppercase /lowercase /robotic /alternating /fancy /uwu /pirate /shakespearean /caveman /censor /fromsoftware /confused /paranoid /drunk /hiccup /whistle /mumble /slang /cherri /albhed /morse /vowelhell /upsidedown /autospell /thesaurusoverload /valleygirl /babytalk /thirdperson /unreliablenarrator /uncannyvalley /chef /karen /passiveaggressive /nervous /sarcasm /academic /philosopher /poet /quote /spaghetti /essay /rng /haiku /dreamsequence /timewarp /zalgo /leetspeak /smallcaps /piglatin /vaporwave /lisp /spoonerism /keysmash /weeb /politician /clickbait /markov /alliteration /cipher` |
-| Themed quote replacers | `/gordonramsay /biblebot /grounded /mime /subtitles /spotlight /recipe /rickroll /pickup /brainrot` |
+| Themed quote replacers (11) | `/gordonramsay /biblebot /grounded /mime /subtitles /spotlight /recipe /rickroll /pickup /brainrot /gold` — `/gold` is the AO Gold / Skrapegropen Premium paywall (`/premium` and `/paywall` aliases; affects IC and OOC) |
 | Persona / personality | `/clown /jester /joker /tourettes /translator` |
 | Dere archetypes (26) | `/tsundere /yandere /kuudere /dandere /deredere /himedere /kamidere /undere /bakadere /mayadere /smugdere /deretsun /bokodere /thugdere /teasedere /dorodere /hinedere /hajidere /rindere /utsudere /darudere /butsudere /sdere /mdere /tsuyodere /omnidere` |
 | Animal filters (14) | `/monkey /snake /dog /cat /bird /cow /frog /duck /horse /lion /trex /fish /zoo /bunny` — `/trex` roars RAAASRFH, `/fish` blubs, and `/horse` also swaps the target onto a random uma character |

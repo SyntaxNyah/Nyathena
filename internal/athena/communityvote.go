@@ -23,9 +23,9 @@ import (
 	"sync"
 	"time"
 
+	aolib "github.com/AO-Underground/aolib/go/v2"
 	"github.com/MangosArentLiterature/Athena/internal/db"
 	"github.com/MangosArentLiterature/Athena/internal/logger"
-	aolib "github.com/AO-Underground/aolib/go/v2"
 	"github.com/MangosArentLiterature/Athena/internal/permissions"
 	"github.com/MangosArentLiterature/Athena/internal/settings"
 	"github.com/MangosArentLiterature/Athena/internal/webhook"
@@ -452,7 +452,7 @@ func cvoteAccept(client *Client, args []string) {
 		} else {
 			target.SendSync(&aolib.KK{Reason: communityReason})
 			target.conn.Close()
-			sendPlayerArup()
+			requestPlayerArup()
 			if err := webhook.PostKick(target.CurrentCharacter(), target.Showname(), target.OOCName(),
 				target.Ipid(), communityReason, modName, target.Uid()); err != nil {
 				logger.LogErrorf("while posting community vote kick webhook: %v", err)
@@ -517,7 +517,7 @@ func cvoteAccept(client *Client, args []string) {
 				communityReason, untilS, id)})
 			target.conn.Close()
 			forgetIP(target.Ipid())
-			sendPlayerArup()
+			requestPlayerArup()
 			if err := webhook.PostBan(target.CurrentCharacter(), target.Showname(), target.OOCName(),
 				target.Ipid(), target.Uid(), id, config.BanLen, communityReason, modName); err != nil {
 				logger.LogErrorf("while posting community vote ban webhook: %v", err)

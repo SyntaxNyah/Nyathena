@@ -19,6 +19,7 @@ package athena
 import (
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/MangosArentLiterature/Athena/internal/db"
 	"github.com/MangosArentLiterature/Athena/internal/logger"
@@ -425,6 +426,9 @@ func lookupTag(id string) (string, bool) {
 	if id == "" {
 		return "", false
 	}
+	if name, ok := lookupPebbleTagName(id); ok {
+		return name, true
+	}
 	if it, ok := shopItemIndex[id]; ok {
 		if it.kind != shopKindTag {
 			return "", false
@@ -449,6 +453,11 @@ func formatTagDisplay(tagID string) string {
 // single database round-trip: total cooldown reduction (seconds), total job
 // bonus (chips/job), and total hourly bonus (chips/hr).
 func getPlayerPassBonuses(ipid string) (cooldown, job, hourly int64) {
+	if pebbleEnabled() {
+		// Pebble Mode intentionally has no upgrades. Legacy passes never
+		// affect Pebble activity rewards.
+		return 0, 0, 0
+	}
 	items, err := db.GetPlayerShopItems(ipid)
 	if err != nil {
 		logger.LogErrorf("shop: GetPlayerShopItems failed for ipid=%v: %v", ipid, err)
@@ -498,6 +507,10 @@ func getPlayerHourlyBonus(ipid string) int64 {
 // a read-only tag catalog — prices and passes are still listed for reference, but
 // /shop buy is blocked and any tag id can be equipped for free with /settag.
 func cmdShop(client *Client, args []string, _ string) {
+	if pebbleEnabled() {
+		cmdPebbleShop(client, args)
+		return
+	}
 	if len(args) == 0 {
 		printShopOverview(client)
 		return
@@ -519,7 +532,7 @@ func cmdShop(client *Client, args []string, _ string) {
 	case "passive":
 		printShopPassive(client)
 	case "buy":
-		if !config.EnableCasino {
+		if !config.CasinoOn() {
 			client.SendServerMessage(
 				"The chip economy is disabled on this server, so /shop buy is off.\n" +
 					"Good news: every tag in /shop can be equipped for free with /settag <tag_id>.\n" +
@@ -548,7 +561,7 @@ func cmdShop(client *Client, args []string, _ string) {
 }
 
 func printShopOverview(client *Client) {
-	casinoOn := config.EnableCasino
+	casinoOn := config.CasinoOn()
 	activeTag := db.GetActiveTag(client.Ipid())
 	activeDisplay := "(none)"
 	if t := formatTagDisplay(activeTag); t != "" {
@@ -884,7 +897,11 @@ func cmdMyTags(client *Client, _ []string, _ string) {
 	}
 
 	if len(lines) == 0 {
-		client.SendServerMessage("You don't own any tags yet. Browse /shop <category>, or ask staff about /listcustomtags.")
+		msg := "You don't own any tags yet. Browse /shop <category>, or ask staff about /listcustomtags."
+		if pebbleEnabled() {
+			msg = "You don't own any Pebble tags yet. All existing non-gambling tags are free: /shop classic — or buy a cheap Pebble tag with /shop activity."
+		}
+		client.SendServerMessage(msg)
 		return
 	}
 
@@ -896,6 +913,9 @@ func cmdMyTags(client *Client, _ []string, _ string) {
 	if activeTag == "" {
 		sb.WriteString("  (no active tag — use /settag <id> to equip one)\n")
 	}
+	if pebbleEnabled() {
+		sb.WriteString("  Reminder: all existing non-gambling tags are free. Browse /shop classic.\n")
+	}
 	client.SendServerMessage(sb.String())
 }
 
@@ -904,10 +924,10 @@ func cmdMyTags(client *Client, _ []string, _ string) {
 // cmdSetTag handles /settag <tag_id> or /settag none.
 // Swaps the player's active cosmetic tag.
 //
-// When the casino is enabled, tags must be purchased in /shop before they can
-// be equipped. When the casino is disabled but the account system is enabled,
-// ownership checks are waived and any tag id can be equipped for free — the
-// server-wide chip economy is off so there is nothing to "buy".
+// In Pebble Mode all existing non-gambling tags are free to equip, gambling-
+// themed legacy tags are unavailable, and the two Pebble-priced tags require
+// ownership. In casino mode tags must be purchased in /shop first. When the
+// casino is disabled but accounts are enabled, ownership checks are waived.
 func cmdSetTag(client *Client, args []string, _ string) {
 	tagID := args[0]
 
@@ -923,6 +943,64 @@ func cmdSetTag(client *Client, args []string, _ string) {
 		return
 	}
 
+	// Temporary event tags are only equippable while they are valid.
+	if strings.HasPrefix(tagID, pebbleTempTagPrefix) {
+		name, known := pebbleTempTagNames[tagID]
+		if !known {
+			client.SendServerMessage("Unknown temporary tag.")
+			return
+		}
+		exp, ok, err := db.GetTempTagExpiry(client.Ipid(), tagID)
+		if err != nil || !ok || exp.Before(time.Now().UTC()) {
+			client.SendServerMessage("That temporary tag has expired.")
+			return
+		}
+		if err := db.SetActiveTag(client.Ipid(), tagID); err != nil {
+			client.SendServerMessage("Failed to set tag: " + err.Error())
+			return
+		}
+		client.SendServerMessage(fmt.Sprintf("🏷️ Active tag set to [%v]. It expires %v.",
+			name, exp.Format("2006-01-02 15:04 MST")))
+		return
+	}
+
+	// Pebble Mode uses its own cosmetic catalog. Gambling-themed legacy tags
+	// are intentionally unavailable.
+	if pebbleEnabled() {
+		if isGamblingLegacyTag(tagID) {
+			client.SendServerMessage("That tag isn't part of Pebble Mode. Try /shop to browse the cosmetic tags.")
+			return
+		}
+		if it, ok := pebbleShopItemByID(tagID); ok {
+			if !db.HasShopItem(client.Ipid(), tagID) {
+				client.SendServerMessage(fmt.Sprintf("You don't own [%v]. Purchase it with: /shop buy %v", it.name, tagID))
+				return
+			}
+			if err := db.SetActiveTag(client.Ipid(), tagID); err != nil {
+				client.SendServerMessage("Failed to set tag: " + err.Error())
+				return
+			}
+			if client.Authenticated() {
+				db.SetAccountActiveTag(client.ModName(), tagID) //nolint:errcheck
+			}
+			client.SendServerMessage(fmt.Sprintf("🏷️ Active tag set to [%v].", it.name))
+			return
+		}
+		// Every existing non-gambling tag is free for every player in Pebble
+		// Mode. No purchase or ownership check.
+		if it, ok := shopItemByID(tagID); ok && it.kind == shopKindTag {
+			if err := db.SetActiveTag(client.Ipid(), tagID); err != nil {
+				client.SendServerMessage("Failed to set tag: " + err.Error())
+				return
+			}
+			if client.Authenticated() {
+				db.SetAccountActiveTag(client.ModName(), tagID) //nolint:errcheck
+			}
+			client.SendServerMessage(fmt.Sprintf("🏷️ Active tag set to [%v] — free in Pebble Mode.", it.name))
+			return
+		}
+	}
+
 	// Built-in catalog: kind/category is known so we can give richer errors
 	// and respect the casino-disabled "tags are free" rule.
 	if it, ok := shopItemByID(tagID); ok {
@@ -930,7 +1008,7 @@ func cmdSetTag(client *Client, args []string, _ string) {
 			client.SendServerMessage(fmt.Sprintf("'%v' is not a tag — it's a pass. Tags are the cosmetic items shown in /gas.", it.name))
 			return
 		}
-		if config.EnableCasino && !db.HasShopItem(client.Ipid(), tagID) {
+		if config.CasinoOn() && !db.HasShopItem(client.Ipid(), tagID) {
 			client.SendServerMessage(fmt.Sprintf("You don't own [%v]. Purchase it first with: /shop buy %v", it.name, tagID))
 			return
 		}

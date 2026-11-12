@@ -261,6 +261,41 @@ func TestRecordIPFirstSeenIdempotent(t *testing.T) {
 	}
 }
 
+// resetHDFirstSeenTracker clears the hdidFirstSeenTracker for a clean test.
+func resetHDFirstSeenTracker() {
+	hdidFirstSeenTracker.mu.Lock()
+	hdidFirstSeenTracker.times = make(map[string]time.Time)
+	hdidFirstSeenTracker.mu.Unlock()
+}
+
+// TestRecordHDFirstSeenReturnsWhetherGenuinelyNew pins the return value the
+// join popup (joinpopup.go) relies on: true exactly once, for the call that
+// actually creates the entry, and false for every call after that, including
+// every reconnect this session.
+func TestRecordHDFirstSeenReturnsWhetherGenuinelyNew(t *testing.T) {
+	resetHDFirstSeenTracker()
+
+	hdid := "testRecordReturnsNew"
+	if !recordHDFirstSeen(hdid) {
+		t.Error("first call for a never-seen HDID should report true")
+	}
+	for i := 0; i < 3; i++ {
+		if recordHDFirstSeen(hdid) {
+			t.Errorf("call %d for an already-seen HDID should report false", i)
+		}
+	}
+
+	// A pre-seeded HDID behaves exactly like one that has already connected
+	// this session, so it must never report new either.
+	seeded := "testRecordSeeded"
+	hdidFirstSeenTracker.mu.Lock()
+	hdidFirstSeenTracker.times[seeded] = time.Unix(0, 0)
+	hdidFirstSeenTracker.mu.Unlock()
+	if recordHDFirstSeen(seeded) {
+		t.Error("a pre-seeded HDID should not report new")
+	}
+}
+
 // TestNewIPIDUnseenIsNotBlocked tests that an IPID never passed to recordIPFirstSeen
 // is not blocked (e.g., if the tracker is empty for some reason).
 func TestNewIPIDUnseenIsNotBlocked(t *testing.T) {

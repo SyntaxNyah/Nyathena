@@ -86,6 +86,8 @@ make release      # goreleaser (requires goreleaser installed)
 
 Copy `config_sample/` to `config/` before first run.
 
+Every TOML load (`config.toml`, `areas.toml`, `roles.toml`) goes through `decodeTOMLFile` in `internal/settings/tomlfile.go`, which repairs a UTF-8 BOM, UTF-16 text (PowerShell's default redirect encoding) and stray NUL bytes in place before parsing, then parses the cleaned bytes so a read-only `config/` still boots. See "Configs that won't parse" in `README.md`.
+
 ### config/config.toml — [Server]
 
 | Key | Default | Description |
@@ -134,8 +136,18 @@ Copy `config_sample/` to `config/` before first run.
 | `raid_guard_under_attack_scale` | `70` | Threshold multiplier applied while the server is under coordinated attack (100 = off) |
 | `raid_guard_slur_severe_weight` | `40` | Raid-guard points for a `severe`-tier word hit |
 | `raid_guard_slur_flagged_weight` | `20` | Raid-guard points for a `default`/`watch`-tier word hit |
+| `raid_guard_modcall_window` | `2400` | Seconds a modcall attempt stays counted against an IPID (set to match `modcall_cooldown`) |
+| `raid_guard_modcall_min_attempts` | `5` | Attempts in that window before the modcall-spam signal fires (score curve: 0/4/13/27/45) |
+| `raid_guard_modcall_join_ms` | `2500` | A modcall this soon after joining is a script, not a person |
+| `raid_guard_modcall_dwell` | `60` | Seconds after joining in which a second modcall is acted on immediately |
+| `raid_guard_modcall_fanout` | `3` | Distinct IPIDs modcalling at once that mark the server under attack |
+| `raid_guard_modcall_nuke` | `true` | Deterministic action for the impossible-join modcall (still clamped by `raid_guard_max_action`) |
 | `iphub_api_key` | `""` | IPHub API key for VPN/proxy detection |
-| `enable_casino` | `false` | Enable casino and player account system |
+| `enable_casino` | `false` | Legacy alias for `casino_enabled` |
+| `casino_enabled` | `false` | Enable the legacy Nyathena Chips casino |
+| `pebble_mode` | `false` | Enable Pebble Mode: no-stakes activities, mini-games, duck pond and world events |
+| `pebble_event_chance` | `5` | Daily Wrecked Ship chance is 1 in N |
+| `pebble_event_timeout_minutes` | `5` | Minutes before an unclaimed world event disappears |
 | `register_captcha` | `true` | Require captcha on `/register` |
 | `join_captcha` | `false` | Require a new IPID to answer a question before it can speak (see "Join Captcha" below) |
 | `join_captcha_strikes` | `3` | Failures (blocked messages *and* wrong answers, one shared budget) before the action fires |
@@ -151,6 +163,8 @@ Copy `config_sample/` to `config/` before first run.
 | `join_captcha_custom_only` | `false` | Serve only the operator's questions, never the built-in ones |
 | `captcha_plugin` | `""` | Path to an external captcha plugin program (see `docs/CAPTCHA_PLUGIN.md`) |
 | `captcha_plugin_timeout` | `3000` | Milliseconds to wait for a plugin reply before falling back |
+| `join_popup` | `false` | Show a one-time welcome popup to any HDID connecting for the first time ever (see "Join Popup" below) |
+| `join_popup_message` | `""` | The welcome message (rules, links, etc.); blank disables the popup even if `join_popup` is true |
 
 ### config/config.toml — [Discord]
 
@@ -187,7 +201,7 @@ Copy `config_sample/` to `config/` before first run.
 
 ### Punishment System (120+ Commands)
 
-All punishment commands require `MUTE` permission unless noted. They support `-d <duration>` (max 24 h), `-r <reason>`, `-h` (hidden — suppresses the per-target OOC notification so the punishment applies silently; the issuer summary appends `(hidden)` so the mod can confirm), comma-separated UIDs, and the `global` keyword (applies to every non-moderator in the issuer's area). Multiple types stack on a single player.
+All punishment commands require `MUTE` permission unless noted (`/leash` is the exception: it is a pairing claim and requires `KICK`). They support `-d <duration>` (max 24 h), `-r <reason>`, `-h` (hidden — suppresses the per-target OOC notification so the punishment applies silently; the issuer summary appends `(hidden)` so the mod can confirm), comma-separated UIDs, and the `global` keyword (applies to every non-moderator in the issuer's area). Multiple types stack on a single player.
 
 The `-h` flag works on every applicator: single-effect commands (`/tsundere 7 -h`, `/tsundere global -h`), `/stack`, `/lovebomb`, `/sfxcurse`, `/shrink` / `/grow` / `/wide`, `/randompunishall` (also suppresses the area-wide "unleashed random chaos" announcement), `/translator curse`, and `/icwarp <uid>`. Self-applied effects (`/megamaso`, `/maso`) and the PvP `/coinflip` mini-game are unaffected since they aren't moderator-issued.
 
@@ -195,7 +209,7 @@ The `-h` flag works on every applicator: single-effect commands (`/tsundere 7 -h
 
 **Inspect:** `/punishments` lists your own active punishments with remaining durations (includes lag, mute, jail). Moderators run `/punishments <uid>` to inspect any player — entries show custom data, reason, and issuer tier.
 
-**Remove:** `/unpunish <uid>` (all including lag) or `/unpunish -t <type> <uid>` (specific — works with `/unpunish -t lag <uid>`). `/unpunish all` clears every player in the area including lag. A non-numeric target is treated as a raw IPID (`/unpunish <ipid>`), clearing persisted punishments for offline players too. Full-removal forms also clear the `punishment_names.txt` showname stain (see "Punished Showname Random-Punishment Drip" below). Self-removal is gated for staff-issued punishments — see "/unpunish Self-Removal Protection" below.
+**Remove:** `/unpunish <uid>` (all including lag) or `/unpunish -t <type> <uid>` (specific — works with `/unpunish -t lag <uid>`). Full removal also breaks any `/leash` claim held by the target (`/unpunish -t dog` removes only the barking, not the leash). `/unpunish all` clears every player in the area including lag and breaks every leash touching that area. A non-numeric target is treated as a raw IPID (`/unpunish <ipid>`), clearing persisted punishments for offline players too. Full-removal forms also clear the `punishment_names.txt` showname stain (see "Punished Showname Random-Punishment Drip" below). Self-removal is gated for staff-issued punishments — see "/unpunish Self-Removal Protection" below.
 
 #### Text Effects (60)
 `/whisper`, `/backward`, `/stutterstep`, `/elongate`, `/uppercase`, `/lowercase`, `/robotic`, `/alternating`, `/fancy`, `/uwu`, `/pirate`, `/shakespearean`, `/caveman`, `/censor`, `/fromsoftware`, `/confused`, `/paranoid`, `/drunk`, `/hiccup`, `/whistle`, `/mumble`, `/slang`, `/cherri`, `/albhed`, `/morse`, `/vowelhell`, `/upsidedown`, `/autospell`, `/thesaurusoverload`, `/valleygirl`, `/babytalk`, `/thirdperson`, `/unreliablenarrator`, `/uncannyvalley`, `/chef`, `/karen`, `/passiveaggressive`, `/nervous`, `/sarcasm`, `/academic`, `/philosopher`, `/poet`, `/quote`, `/spaghetti`, `/essay`, `/rng`, `/haiku`, `/dreamsequence`, `/timewarp`
@@ -208,6 +222,18 @@ Wave-2 additions (14): `/zalgo` (combining-mark corruption), `/leetspeak`, `/sma
 `/gordonramsay`, `/biblebot`, `/grounded`, `/mime`, `/subtitles`, `/spotlight`, `/recipe`, `/rickroll`, `/pickup`, `/brainrot`, `/cheese`
 
 `/cheese` discards the target's text entirely and replaces every message with one of **100+ "statements about cheese"** (facts, puns, varieties, and the running gag that cheese is, technically, a sauce). Same shared punishment plumbing as the others (`-d`/`-r`/`-h`, comma UID lists, `global`, `/stack`, persistence, `/unpunish -t cheese`). Corpus size is pinned by `cheeseLineCount` in tests so it can't silently shrink. Like `/medieval` it requires `MUTE` (mod-only) and is **not** in the self-applied `/maso`/`/megamaso` pool.
+
+#### Premium Paywall (`/gold`)
+`/gold` (aliases `/premium`, `/paywall`) is the AO Gold / Skrapegropen Premium joke punishment. Every IC and OOC message the target sends is replaced with one of six branded fake-paywall notices: `[You require AO gold/premium to see this message]`, `This message requires SkrapeGOLD account to be seen.`, `If you have not purchased a GOLD account, you may not view this message.`, `You need AO Premium subscription to see this message.`, `This message is only visible to users with SkrapeGolden account.`, and `OOPS! This message requires a Premium Skrapegropen Account.` (the misspelling in the original copy is fixed). IC replacement runs through `ApplyPunishmentToText`; OOC replacement is `applyGoldPaywall` in `pktOOC`, applied after AutoMod/torment/raid-guard have seen the real text. It is a normal `MUTE` punishment (supports `-d`/`-r`/`-h`/`global`, persists, stacks), removed with `/unpunish -t gold`. Implemented in `internal/athena/punishments_premium.go`, command in `commands_punishment.go` (`cmdGold`), registered under all three names.
+
+#### Anti-Punishment Shield (`/antipunishshield`)
+`/antipunishshield <uid> [backfire]` (`ADMIN`) makes a player immune to punishment-system effects until the server restarts. The shield is an in-memory registry keyed by **HDID** (IPID fallback), so it survives reconnects but deliberately not a restart. It does not touch `/kick`, `/ban`, or `/mute` — those are real moderation, not punishment effects.
+
+Default **spoof mode** records the issuing moderator against the target. When the target speaks, everyone else (including the target) sees the normal IC/OOC line, but that moderator gets a private transformed copy as if the punishment had landed. `backfire` does the same and additionally applies the punishment to the issuing moderator for real, **silently** — they only see the normal success summary, never a backfire announcement. Every attempt also sends the shielded player a sneaky `BB` popup naming the moderator and effect (`shh! <mod> tried to punish you with 'dog'... ur punishment protected. Act normal.`), with a different line when it backfired — the mod sees the spoof and thinks it worked, so the target acting normal is what gaslights them. Full `/unpunish` clears the spoof records (the shield itself remains until restart).
+
+The leash follows the same backfire rule. A backfire-shielded player cannot be leashed, because the `/dog` effect already landed on the issuing moderator, so `/leash` reverses the claim instead: the shielded player becomes the master and the moderator becomes the dog (same pair links, same "dogs don't abandon their master" restriction — the mod now has to be released by a third party or `/unpunish` themselves). This is the one backfire the moderator is told about, since they are wearing the claim. The reversal is deliberately limited to a one-on-one leash the moderator holds themselves: a mixed pack or a leash issued for somebody else's master is refused before any `/dog` lands.
+
+Wired into `cmdPunishmentMode`, `/stack`, `/lovebomb`, `/randompunishall`, `/translator`, `/sfxcurse`, `/shrink`, `/grow`, `/wide`, `/forcecolor`, `/icwarp`, and `/contagious` through `applyAntiPunishShieldIfActive` (`internal/athena/antipunishshield.go`). Every `AddPunishmentBy` / `AddPunishmentWithData` / `AddLovebombPunishment` / `AddICWarpPunishment` insert is also guarded centrally, so direct/mechanical inserts cannot bypass the shield. `/jail` and the torment (lag) branch are covered as separate states. IC and OOC fan-out use `broadcastSpoofedIC` / `broadcastSpoofedOOC`, which exclude the spoofed issuer from the normal broadcast and send them their own copy. The shield blocks the real effect; non-text effects are immune but only text changes can be faked for the issuer.
 
 #### Animal Filters (15)
 `/monkey`, `/snake`, `/dog`, `/cat`, `/bird`, `/cow`, `/frog`, `/duck`, `/horse`, `/lion`, `/bunny`, `/zoo` (a random one of the others per message), plus:
@@ -350,10 +376,13 @@ A pending pair request never blocks speech: while waiting for the partner to acc
 
 `/unpair` is a full bidirectional reset: it clears `PairWantedID` and `ForcePairUID` on every client that references the canceller (by UID or by current/historical CharID), preventing the desync where a stale pair-wanted-id lingered on a peer after the canceller's character changed.
 
+**`/leash <master uid> <dog uid>`** (`KICK`) is a one-way claim built on the same UID pair. It force-pairs the two players, applies `/dog` to the **dog only**, and stores a shared `Leash` pointer on both clients (`internal/athena/leash.go`) rather than a pair of raw UIDs, so neither side can be left pointing at a departed or recycled connection. Claiming over an existing pair/leash clears the old links first, and each previous partner receives a `BB` popup: `Your partner has been leashed`. The leash is deliberately allowed to **cross punishment-safe areas**: `/leash` uses `cmdPunishmentIgnoringSafeArea`, and the dog follows the master through shelters. A master's `ChangeArea` drags the dog into the new area (normal join side effects, music, roster, background all run); locks, admin-locks, and jail still apply to the dog. A leashed dog trying to move anywhere other than its master's area gets a `BB` popup: `Dogs don't abandon their master`. **`/unpair` is refused for both ends** — a dog gets that popup, the master gets a message pointing at the removal paths — so it cannot be used as an escape hatch. Full `/unpunish <uid>` and `/unpunish all` break the claim, as do a moderator's `/forceunpair` and `/forcepair`/`/forcegrouppair`. `/unpunish -t dog` removes only the barking effect and deliberately leaves the leash in place. `/pair` and `/grouppair` refuse to steal a leashed player. On disconnect, the survivor is popped: a departing dog triggers the abandonment line at the master, while a departing master releases the dog. The `/dog` effect itself is not removed when the leash is released; `/unpunish -t dog` lifts it. A dog carrying an `/antipunishshield ... backfire` bounces the command: the shielded player becomes the master and the issuing moderator becomes the dog (the backfire already put `/dog` on them), and the mod gets `🦴 <name>'s anti-punishment shield bounced the leash — you are the dog now.` Only a one-on-one claim held by the issuer reverses; a mixed pack or a leash issued for another master is refused before any `/dog` lands.
+
 **Discoverability:** `/lfp` toggles a Looking-For-Pair flag; `/pairlist` lists every flagged player in the area with UID, display name and character.
 ```
 /pair <uid>
 /unpair
+/leash [-d duration] [-r reason] [-h] <master uid> <dog uid>
 /lfp
 /pairlist
 ```
@@ -632,6 +661,17 @@ If a plugin is missing, down or slow, the built-in questions are used instead �
 
 Implemented in `internal/athena/joincaptcha.go` (state, gating, commands), `joincaptcha_challenge.go` (the generators and the leak invariant), `joincaptcha_keyed.go` (the HMAC-derived source), `joincaptcha_custom.go` (operator questions), `joincaptcha_plugin.go` (the plugin bridge) and `internal/plugin` (the subprocess host).
 
+### Join Popup (First-Time Welcome Message)
+`join_popup = true` shows an operator-authored welcome message to any HDID connecting to the server for the very first time ever — via the same client-side AO2 `BB` dialog the join captcha above uses to make its question unmissable, here repurposed for a static message instead of a generated one. Unlike the captcha, this is not a gate: nothing is blocked, there are no strikes, and it never stands between a player and speaking. It exists so an operator can put rules, a Discord invite, or a website link in front of a brand-new player before anything else happens.
+
+"First time ever" is keyed on the hardware ID (`recordHDFirstSeen`) rather than the IP, so a returning player on a new IP is never shown it again, while a genuinely new machine is shown it once this server session. It is issued first in the join sequence, ahead of the casino/account welcome message and the MOTD, so it's the first thing a genuinely new connection sees.
+
+`join_popup_message` holds the text, written as a triple-quoted TOML string so it can span several lines. It is sent two ways, like the captcha's question: an OOC copy that stays in the log, and the same text as the `BB` popup. Links are plain text — AO2 has no clickable-link support — but a player can select and copy them. A blank message disables the popup even when `join_popup` is true, so leaving it unwritten is a silent no-op rather than an empty dialog. The message is operator-authored config content, not player input, so — like the MOTD — it is shown exactly as written, with no filtering.
+
+Independent of `join_captcha`: both read their own "genuinely new" signal, but neither depends on the other being enabled, so a new connection can see the welcome popup, the captcha challenge, both, or neither.
+
+Implemented in `internal/athena/joinpopup.go` (`joinPopupMessage`, `issueJoinPopup`), with the underlying "is this HDID new" signal in `recordHDFirstSeen` (`internal/athena/server.go`) and the one-shot flag it sets, `Client.isNewHDID`.
+
 ### Censored Showname Shadow-Send
 `config/censored_names.txt` lists shownames (or substrings of them, case-insensitive) that nobody is allowed to speak under — independent of `automod_enabled`/`banned_words.txt`. Matching goes through the same `normalizeForFilter` Unicode-bypass normalization as AutoMod. Every IC message a player sends while their showname matches an entry is:
 - **shadow-dropped** — echoed back to only the sender (their client shows it as sent) while no other client ever receives it, including the very message that tripped the check.
@@ -687,12 +727,12 @@ The WT/CE judge buttons (Witness Testimony, Cross Examination and the verdict ga
 - moderators — `random_song_cooldown_mod` (default 0 s, unlimited)
 
 ### Shadow Mod Visibility
-Shadow moderators (`SHADOW` perm bit, no `ADMIN`) are completely hidden from `/gas`/`/players` for non-admin viewers — no "Mod:" line is shown at all. Only admins see them, labelled as `Mod: <name> (shadow)`. Previously the line still rendered as `Mod: Moderator`, which let other moderators infer staff status.
+Shadow moderators (`SHADOW` perm bit, no `ADMIN`) are completely hidden from `/gas`/`/players` for non-admin viewers — no "Mod:" line is shown at all. Only admins see them, labelled as `Mod: <name> (shadow)`. Previously the line still rendered as `Mod: Moderator`, which let other moderators infer staff status. `/mods` applies the same rule to its per-area moderator listing: shadow mods are omitted for non-admin viewers and tagged `(shadow)` for admins (`cmdMods`, `internal/athena/commands_mods.go`).
 
 **Shadow mods are `/ignore`-able.** Real moderators and admins can never be silenced with `/ignore` (the command refuses, and their IC/OOC messages bypass every recipient's ignore list). Shadow mods are deliberately exempt from that protection: an un-ignorable sender betrays staff status, so to anyone who ignores them a shadow mod must disappear exactly like a normal player. The single source of truth is `senderBypassesIgnore(perm)` (`internal/athena/client.go`) — `IsModerator(perm) && !IsShadow(perm)` — applied at the `/ignore` guard (`cmdIgnore`) and at all three ignore-list bypass sites (IC broadcast, OOC broadcast, and the buffered `/lifo` release). Pinned by `TestSenderBypassesIgnore`.
 
 ### Admin Role Hiding (`/admin hide`)
-`/admin hide` (`ADMIN`) lets an admin hide their `ADMIN` role from `/players`/`/gas` for non-admin viewers — their UID, showname, character and IPID are completely unaffected; only the `Mod: <name>` line is suppressed, exactly like a shadow mod is hidden from non-admin viewers. Unlike shadow-mod hiding, other **admins** still see the line, tagged `Mod: <name> (hidden)` so staff oversight is never lost.
+`/admin hide` (`ADMIN`) lets an admin hide their `ADMIN` role from `/players`/`/gas` for non-admin viewers — their UID, showname, character and IPID are completely unaffected; only the `Mod: <name>` line is suppressed, exactly like a shadow mod is hidden from non-admin viewers. Unlike shadow-mod hiding, other **admins** still see the line, tagged `Mod: <name> (hidden)` so staff oversight is never lost. `/mods` honours the same switch: a hidden admin is omitted from a non-admin's moderator listing and tagged `(hidden)` for admins.
 
 ```
 /admin hide      # ADMIN — hide your ADMIN role from other moderators
@@ -816,7 +856,7 @@ So the fan-out never came close to saturating a core at real raid rates, and the
 
 Two things it was *not*, both already fixed earlier and confirmed still correct here: `SendPacket` is asynchronous (it buffers and pushes to `sendCh`, dropping on overflow rather than blocking a broadcaster on one slow consumer), and `ClientList.ForEach` releases its read lock after snapshotting, before any send. Neither a stuck socket nor lock contention was involved.
 
-`broadcastToAreaOnce` (`internal/athena/broadcast_prebuilt.go`) serializes the packet **once per wire format** and hands every recipient the same immutable buffer via `Client.sendPrebuilt`. Safe because `runWriter` only reads the slice (`conn.Write(buf)`, and `string(buf)` for the network log) and never mutates it, so one buffer can back any number of queued sends. It keeps `SendPacket`'s contract exactly: non-blocking, and a full queue drops rather than blocking or disconnecting. JSON-mode clients get their own single `BuildJSON` blob, and the MS broadcast schema is validated once per packet rather than once per recipient, since the bytes are identical.
+`broadcastToAreaOnce` (`internal/athena/broadcast_prebuilt.go`) serializes the packet **once per wire format** and hands every recipient the same immutable buffer via `Client.sendPrebuilt`. Safe because `runWriter` only reads the slice (`conn.Write(buf)`, and `string(buf)` for the network log) and never mutates it, so one buffer can back any number of queued sends. It keeps `SendPacket`'s contract exactly: non-blocking, and a full queue drops rather than blocking or disconnecting. JSON-mode clients get their own single `packetutil.Encode` blob, since the bytes are identical.
 
 Applied to all five `CharsCheck` broadcasts and deliberately nowhere else: ARUP (126 bytes) and PU (15 bytes) are three orders of magnitude smaller per packet, so rebuilding those per recipient costs little and the indirection would not pay for itself. Pinned by `broadcast_prebuilt_test.go`, which asserts the emitted bytes are identical to what the per-recipient path produced, that all recipients genuinely share one backing array, that area scoping still holds, and that a client which is not reading gets its packet dropped instead of stalling the fan-out.
 
@@ -826,6 +866,8 @@ Every rate limit the server had before this feature — `message_rate_limit`, `o
 **Two layers.** Layer 1 (`internal/athena/raidguard.go`) scores what one connection did: did it pick a character in under a second, is every one of its messages an objection shout, is it wearing a different OOC name on every line. Layer 2 (`internal/athena/raidguard_corr.go`) scores what the server as a whole is seeing: the same text arriving from many *different* IPIDs inside a few seconds, and bursts of brand-new IPIDs arriving per second. Layer 1 is necessary but cannot see a fan-out — one connection looks the same whether it's alone or one of sixty; layer 2 is the layer that actually sees the shape of a raid, and it's the reason this feature exists rather than just tightening the existing per-IPID limits further.
 
 **Signals, and roughly why each earned its weight** (`raidSignalWeight` in `raidguard.go`, highest first):
+- **Modcall immediately after joining (60)** — a `ZZ` arriving inside `raid_guard_modcall_join_ms` (default **2500 ms**) of the connection joining. It is the first signal here that is both protocol-shaped *and* time-impossible for a real client: "Call Mod" is a dialog with a reason field in front of it, so nobody opens it, types, and sends inside two and a half seconds of the character select closing. Weighted at 60 for two arithmetic reasons rather than taste: it is the ceiling `TestBanNeedsThreeSignals` allows (60 + 50 = 110 against the strict tier's ban threshold of 160 × 70% = **112**), and 60 lands exactly on the baseline captcha rung, so a lone misfire on an established connection is a self-service question rather than a kick. Added after the 2026-10-25 incident in which six fresh IPIDs re-ran the handshake and called a moderator on joining; the guard saw only the handshake replay (45, a watch) because `pktModcall` had no hook, both of its cooldowns returned before anything was recorded, and the reason text never reached the correlator.
+- **Modcall spam from a new connection (45)** — repeated `ZZ` attempts by one IPID inside `raid_guard_modcall_window` (default 2400 s, the same span as `modcall_cooldown`), counting attempts the cooldowns *refused*. Its score is delivered by a quadratic curve rather than a lump (`raidModcallBurstScore`): 1 attempt = 0, 2 = 4, 3 = 13, 4 = 27, 5 = 45, capped at 135. A real player who calls once — or twice — therefore never alerts on it, while a loop that fires every 100 ms is at the cap immediately (`raid_guard_modcall_min_attempts`, default 5).
 - **Handshake anomaly (50)** — an RC/RM/RD (character list, music list, area list requests) arriving before the connection's own `askchaa`. No real client implementation does this; a bot that skips straight to requesting data skips the step that precedes it in every real handshake. Measured in **67% of raid connections vs 0% of baseline**.
 - **Handshake replay (45)** — an `askchaa` arriving on a connection that has *already joined*. Alone among these signals it is not a judgement about behaviour but a protocol impossibility: `askchaa` is only ever sent in reply to `PN`, `pktId` is the only place `PN` is emitted, and it returns early once the connection has a UID — which `pktReqDone` (RD) assigns. After RD the server therefore never sends another `PN`, so a client whose `askchaa` is driven by `PN` can never send a second one. A connection that sends one anyway is replaying a canned handshake script instead of reacting to what the server actually said.
 
@@ -841,6 +883,12 @@ Every rate limit the server had before this feature — `message_rate_limit`, `o
 - **Fast first speech (20)** — speaking implausibly soon after picking a character. Weakest of the timing signals on purpose: a returning player with a saved character can legitimately be fast, so this is a nudge, never an accusation on its own.
 - **Shouty spam (10)** and **global spam while brand new (10)** — content-shape signals, weighted lowest because AO2 is a courtroom game where dramatic capslock is ordinary (`isShoutySpam` requires 25+ characters, ≥80% caps, *and* a repeated word, all three, before it fires at all). Present so they can tip a borderline case, never enough to matter alone.
 
+**Modcalls: attempts are counted, the join case is deterministic, and there is a kill switch.** Modcalls were the one channel that bypassed the guard completely, and it is worth spelling out because the hole was structural rather than a missed weight. `pktModcall` had no raid-guard hook at all; `checkNewIPIDModcallCooldown` and `checkIPModcallCooldown` both return *before* the packet is logged, buffered or delivered, so with a 40-minute `modcall_cooldown` a script's five hundred attempts are indistinguishable from one quiet player calling once; the reason text never reached `raidObserveContent`, so the same canned string from six fresh IPIDs produced no correlation, no `SigDupeAcrossIPIDs` and no under-attack flag; and the handler never checked `captchaRestricted`, so a raid-guard *silence* did not even stop the next modcall. Three changes close all of it. First, `raidGuardOnModcall` is called from the top of `pktModcall`, **above** both cooldowns, and counts the attempt in a per-IPID rolling window (`modcallWindow` in `raidguard_corr.go`) — refusals included, because a refused attempt is the most script-shaped packet the path can receive. Second, the reason is fed through the same shingled cross-IPID correlator IC and OOC use, so a repeated canned reason is ordinary fan-out evidence and reaches a ban through the ordinary gate rather than around it. Third, `pktModcall` now drops for a `captchaRestricted` connection exactly as `pktIC` and `pktOOC` do.
+
+On top of the scoring there is one **deterministic action**, `raidGuardModcallNuke`: a brand-new IPID whose modcall arrives inside `raid_guard_modcall_join_ms` of joining is acted on immediately, without waiting for a score — the same standing AutoMod's `nuke` tier has, and the only place besides it where a single observation decides an outcome. It deliberately skips `clampDisconnect` and `raidBanAllowed`. What it does **not** skip is what makes that defensible: the playtime tiers (moderators and every exempt IPID are never acted on, and `raidGuardTier` is still consulted), the operator ceiling (`raid_guard_max_action` still clamps it, so a server set to `captcha` gets a captcha), and the audit/alert path (`raidGuardAct`, extracted from `raidGuardEnforce` so both routes share one implementation). The ladder has three rules, and only the first two stand alone: **A** a call inside the join window; **B** a second call inside `raid_guard_modcall_dwell` (default 60 s) of joining; **C** a second call later in the session *with* a script tell behind it — a replayed handshake, an impossibly fast character pick, or a carbon-copy of another IPID's reason (never having spoken at all also counts, but only from the third attempt, because a shy newcomer calling twice is plausible). Rule C is deliberately conservative: a player who calls, talks, and calls again ten minutes later is a person, gets no action, and earns 4 points from the curve.
+
+**`/modcall <enable|disable|status>`** (`cmdModcall`, `commands_moderation.go`) is the operational counterpart, because a modcall flood cannot be answered by any per-caller limit — six calls from six throwaway connections are six legal "first" calls. The switch is an `atomic.Bool` in `server.go` and is **in-memory only, never persisted**: a restart always restores modcalls, since a switch that outlived the raid it was thrown for would leave a server with no way to reach a moderator. While it is off, `pktModcall` refuses the packet *before* the cooldowns (so a suppressed attempt does not burn the sender's `modcall_cooldown`, and re-enabling cannot lock anyone out) and before the buffer line, the staff fan-out, the Discord webhook and `logger.WriteReport` — the last of which writes a file per delivered modcall, so the switch is also what stops ZZ spam from being a disk-amplification vector. Registry gate is `MOD_CHAT` so every mod who receives modcalls can read the state, with `BAN` re-checked inside the handler for the toggles, the same split `/raidguard` uses. `raidGuardOnModcall` deliberately stays *above* the switch: turning modcalls off must not blind the guard to the bot still firing them.
+
 **Signals that were measured and deliberately rejected — this matters as much as the ones kept**, because a plausible-sounding signal that doesn't actually separate the populations is just a way to false-positive real players:
 - **Multiple HDIDs sharing one IPID.** Sounds like multi-accounting, but occurred at statistically identical rates in raid and clean traffic — **4.7% vs 5.0%**. Two people behind the same NAT is exactly as common during a raid as on an ordinary evening.
 - **CT:MS ratio** (OOC-to-IC packet ratio). *Inverts* — it did not merely fail to separate the populations, it pointed the wrong way, so using it would have penalized normal chatty players over quiet raiders.
@@ -848,7 +896,7 @@ Every rate limit the server had before this feature — `message_rate_limit`, `o
 - **Evidence / flip / realization / text_color field misuse.** No signal in either dataset. Included in the initial hypothesis because they're all fields a naive bot script might mishandle; in practice neither raiders nor real players misuse them measurably, so scoring on them would have added noise with no separating power.
 
 **Safety design — this is the part that matters most, because the one thing this feature must never do is ban a legitimate player:**
-1. **No single signal can ban.** The ban threshold (`raid_guard_score_ban`, default **160**) sits above any one signal's weight (the highest is 50) *and* above any pair of them, so reaching it requires at least three independent things having been true about the same connection at once (`verdictForTier` in `raidguard.go`). With the two word-list signals there are thirteen signals totalling 365; the lenient tier's threshold is 320, so a player with 2h+ playtime remains unbannable by this system on arithmetic rather than on policy.
+1. **No single signal can ban.** The ban threshold (`raid_guard_score_ban`, default **160**) sits above any one signal's weight (the highest is **60**, the modcall-after-joining signal) *and* above any pair of them, so reaching it requires at least three independent things having been true about the same connection at once (`verdictForTier` in `raidguard.go`). With the word-list and modcall signals there are sixteen, totalling 470. Note what that total means: it is above the lenient tier's threshold of 320, so the old "unbannable on arithmetic" shortcut no longer holds for a 2h+ player and the guarantee now rests entirely on rule 2 below — which is the rule that was always load-bearing anyway, since a score alone was never sufficient. `TestBanNeedsThreeSignals` pins the part that still is arithmetic: the two heaviest signals (60 + 50 = 110) stay under the strict tier's ban threshold (160 × 70% = 112), so a pair can never ban even at the tier a raid arrives in. The one deterministic exception is the modcall-after-joining action, which bypasses the score entirely and is documented under "Modcalls" above; it is clamped by the same ceiling and refused for the same exempt players.
 2. **A ban additionally requires cross-IPID corroboration and a concurrently-detected server-wide raid.** Even a connection that has racked up a ban-level score is only ever banned if `SigDupeAcrossIPIDs` has fired (its *own* text was corroborated from other IPIDs) **and** `raidGuardUnderAttack()` is true (the server is *currently* seeing raid-shaped correlation or arrival-burst evidence, held for 2 minutes after the last piece of it). Neither condition is reachable by one person acting alone, however oddly they behave — so a lone unusual player is **structurally unbannable** by this system no matter what they do. A connection that earns a ban-level score without that corroboration is quarantined (silenced) instead, which is self-service: a real player can free themselves by answering the pending join-captcha question, without needing staff at all. This is enforced in `raidGuardEnforce` (`raidguard.go`), not left to be true by convention.
 3. **Four playtime tiers**, read from the exact same `KNOWN_IPS.PLAYTIME` figure `/playtime`, the Lockdown Playtime Purge, and the Repeat-Offender Autoban above all use — so "an established player" means one thing everywhere on this server:
    - **Strict** — under `raid_guard_strict_playtime` minutes (default 15): thresholds scaled to `raid_guard_strict_scale` (default **70%**, i.e. 30% less evidence needed to act). This is the population a raid is actually made of — brand-new connections with no history — so it's the one tier the guard leans *into* rather than away from.
@@ -1134,6 +1182,10 @@ Demotes a user to a default player account **without deleting it**. Sits between
 ### `/playtime` Pagination
 `/playtime top` lists 25 entries per page; pass a page number for the next 25 (`/playtime top 2` = positions 26–50). Both player accounts and moderator accounts (including shadow mods) are eligible — there's no permission filter.
 
+**Ranks are computed on the live board, not per page (bug fix).** The command fetches every leaderboard row (`db.GetAllPlaytimeEntries`), adds each connected player's current session time (summed across multiclient connections, from `ConnectedAt`), sorts the whole board, and only then slices the requested page. The old implementation merged live time into the requested page after SQL pagination and re-sorted just that slice, so a player whose live session moved them up several ranks kept a stale DB rank — the board could show someone at 4h listed below players at 2h. Sorting globally also means every page agrees with every other page at the moment the command runs, and username-ascending breaks ties deterministically. The cost is one query over one row per registered account (hundreds on a busy server), a map lookup per row, and an O(n log n) sort on that row count — all computed on demand inside the command, with no background timer, polling loop or database writes.
+
+A `🕒 Server total playtime:` line heads the list (the sum of every entry, day-formatted via `formatPlaytimeLong`), and the caller's own standing is appended below a `---` separator — e.g. `📌 Your position: #226 of 252 — Pokke (605h 43m)` — so it never counts as one of the paginated 25 entries. The viewer is matched by the account they are logged in as (`client.ModName()`, and `/login` links that account to the current IPID), falling back to the connection's IPID link, so a logged-in player always sees their place. Guests whose IPID has no linked account see `📌 You are not on the leaderboard yet.` `/account` and `/profile` reuse the same `livePlaytimeSeconds` helper, so all three surfaces always quote the same figure instead of each summing session time its own way. Pinned by `TestMergePlaytimeEntriesMergesLiveTimeGlobally`, `TestMergePlaytimeEntriesTieBreak`, `TestPlaytimePosition`, `TestSumPlaytimeSeconds`, `TestFormatPlaytimeLong`, `TestPlaytimeTotalPages` and `TestRenderPlaytimePage` (`internal/athena/account_test.go`), plus `TestGetAllPlaytimeEntries` (`internal/db/db_accounts_test.go`).
+
 Admins can adjust an account's stored playtime directly: `/playtime add <username> <duration>` grants time, `/playtime remove <username> <duration>` deducts it (clamped at 0), and `/playtime set <username> <duration>` overwrites the total outright. Duration accepts any combination of `ns`/`us`/`ms`/`s`/`m`/`h`/`d`/`w` units (e.g. `1000h`, `3d12h30m`). The target account must have logged in at least once (so its IPID is linked); the change applies immediately to the leaderboard, and the player is notified live if online.
 
 `/reloadplaytime` (admin) re-links every registered account to its IPID and merges any orphaned playtime — fixes the bug where an account created on a long-running anonymous IPID didn't show pre-existing hours on the leaderboard until the server restarted.
@@ -1204,12 +1256,15 @@ Both the `/play <url>` command and a client-sent **MC** packet carrying a raw `h
 
 The outgoing `MC` packet's numeric fields (`looping`/`channel`/`effects`) always default to `"0"` at the single serialization point (`packet.MCToClient.Args`). This fixes the regression where `/play` and `/randomsong` emitted an empty effects field (`…##%`), which AO2 clients fail to parse as a number and drop silently.
 
-### MS JSON-Schema Validation
-JSON-mode connections have their **MS** (in-character) packets validated against draft-07 JSON schemas vendored in the top-level `schemas/` folder (from [OmniTroid/aolib-schemas](https://github.com/OmniTroid/aolib-schemas)):
-- **Inbound** MS is validated against `MSRequest.schema.json` in `packet.ParseJSON`; an invalid packet is rejected and dropped (logged).
-- **Outbound** MS is validated against `MSBroadcast.schema.json` in `Client.SendPacket`; a packet that fails the schema is dropped (logged) before reaching a JSON-mode client.
+### MS JSON Encoding (typed, aolib-go)
 
-To satisfy the schemas, the JSON-mode MS encoder emits proper types (numbers, booleans, and `{x,y}` offset objects) rather than strings. Schemas are embedded via `//go:embed` in `athena.go` and compiled once at startup (`packet.CompileMSSchemas`). FantaCode (classic desktop AO2) traffic is never validated and is unaffected; if the schemas fail to load, validation is silently disabled. Library: `github.com/santhosh-tekuri/jsonschema/v5`.
+JSON-mode **MS** (in-character) packets are encoded/decoded by aolib-go's typed
+`MSToClient`/`MSToServer`, which carry enum names, JSON numbers, booleans and
+`{x,y}` offset objects (never strings). Nyathena's own string-shaped MS types are
+bridged to that typed form by `msCodec()` (`internal/athena/ms_codec.go`), which
+also injects the JSON-only `additional_chars` multi-pair list. Every packet is
+validated against its aolib-go schema on `Encode`/`Decode`; a failure is dropped
+and logged. FantaCode (classic desktop AO2) traffic is unaffected.
 
 ### `/punishments` Inspection & `/clients` Multiclient Listing
 - `/punishments [uid]` — lists active punishments with remaining durations, custom data, reasons, and (for mod viewers) issuer tiers. Covers the out-of-slice effects too: lag (torment list), mute, jail. No permission needed for self-inspection; the `<uid>` form requires `MUTE`. Implemented in `internal/athena/commands_qol.go`.
@@ -1232,26 +1287,50 @@ Lets **any** player opt into being automatically disconnected after a chosen str
 
 `/dc` is a plain alias of `/dctime`. A single watcher goroutine is spawned lazily on first enable (CAS-gated) and lives for the rest of the connection, no-opping while disabled and exiting on `client.done`, so re-enabling never respawns it and there is no start/stop race. The watcher re-checks every 10 s, so the disconnect lands within ~10 s of the deadline — plenty precise for an AFK timer. Documented in `/help` via the command's registry `desc`/`usage`.
 
-### Self-Service OOC-Hide Toggle (`/toggle global`)
-Lets **any** player mute regular OOC chat for themselves — area OOC and `/global` broadcasts alike — for those who find the constant OOC spam distracting. No permission required (`general` category); implemented in `internal/athena/commands_toggle.go`.
+### Self-Service /global-Hide Toggle (`/toggle global`)
+Lets **any** player mute server-wide `/global` (and `/g`) broadcasts for themselves — local (area) OOC stays visible — for those who find the constant cross-area OOC spam distracting. No permission required (`general` category); implemented in `internal/athena/commands_toggle.go`.
 
 ```
-/toggle global   # hide area OOC + /global for yourself; run again to show it
+/toggle global   # hide /global + /g for yourself; run again to show them
 ```
 
-- **Opt-in and self-only:** OFF by default, and it never changes what anyone else sees — it is a delivery filter applied at the two broadcast points that fan regular OOC chat out (`broadcastOOCToArea`/`broadcastOOCToAll`, `internal/athena/server.go`), gated on a per-session `atomic.Bool` (`Client.OOCHidden`/`SetOOCHidden`). Every fresh connection defaults back to OOC visible, the same session-only shape as `/censoralerts`, `/raidguard alert` and `/punishaudit`.
-- **Scoped to "spam", not to every OOC-shaped packet.** Direct messages (`/pm`) and staff/system broadcasts — `/mod -g`, `/modchat`, `/announce`, moderation alerts (`[CENSOR]`, `[RAIDGUARD]`, `[BAN]`, `[AUDIT]`, ...) — go through `broadcastToArea`/`broadcastToAll` directly and are never affected by this toggle, since those are either addressed specifically to the player or something staff need seen regardless of a player's OOC preference.
-- Toggling back off restores area OOC and `/global` immediately; there is nothing to miss in between since nothing is buffered — messages sent while hidden are simply never delivered to that client.
+- **Opt-in and self-only:** OFF by default, and it never changes what anyone else sees — it is a delivery filter applied at the single broadcast point that fans player-initiated `/global` chat out (`broadcastOOCToAll`, `internal/athena/server.go`), gated on a per-session `atomic.Bool` (`Client.GlobalHidden`/`SetGlobalHidden`). Every fresh connection defaults back to `/global` messages visible, the same session-only shape as `/censoralerts`, `/raidguard alert` and `/punishaudit`.
+- **Scoped to cross-area broadcasts, not to every OOC-shaped packet.** Local (area) OOC (`broadcastToAreaFrom`), direct messages (`/pm`) and staff/system broadcasts — `/mod -g`, `/modchat`, `/announce`, moderation alerts (`[CENSOR]`, `[RAIDGUARD]`, `[BAN]`, `[AUDIT]`, ...) — are never affected by this toggle, since those are either local, addressed specifically to the player, or something staff need seen regardless of a player's OOC preference.
+- Toggling back off restores `/global` broadcasts immediately; there is nothing to miss in between since nothing is buffered — messages sent while hidden are simply never delivered to that client.
+
+### Testimony Recorder: Playback Belongs to Nobody (Bug Fix)
+
+Testimony playback used to re-broadcast each recorded statement with the char id it was recorded with. Every AO2 client treats an `MS` whose char id matches its own as the echo of a message it just sent and resets its IC input panel — the desktop client calls `reset_ui()` (input box, objection/realization/screenshake state, evidence spinner) and webAO calls `resetICParams()` (input box, flash/shake, preanim/sfx, selected shout). Since a recorded statement carries the witness's char id, replaying it wiped the input of whoever held that slot — almost always the witness, still typing — which is why the feature looked like it "hijacked" people.
+
+Playback now goes through `Area.CurrentTstPlaybackStatement()` (`internal/area/testimony.go`), which mirrors Akashi's `Statement::playbackFields()`: the char id slot (field 8) becomes **-1**, a value that belongs to no one, and an empty showname (field 15) is filled from the character folder (field 2) because clients fall back to the showname for the name box once there is no usable char id. The character folder, emote, message, text colour, sfx and pair block all survive, so the statement still renders and animates as the witness who recorded it. Recording itself is untouched: stored statements keep the real char id, and only the playback copy is anonymised. Every replay site (`/examine`, `/testimony play`, and the `<`/`>`/`>N` navigation) calls `broadcastTestimonyStatement` (`internal/athena/testimony_playback.go`), so no future call site can forget the rewrite.
+
+**Navigation only fires on a bare token (bug fix).** The navigation matcher used to search for `<`, `>` or `>N` *anywhere* in an IC message, so an ordinary line like "I <3 that" was swallowed — never reaching the room — and rewound the testimony instead. `parseTestimonyNav` now anchors on the whole trimmed message (`^([<>])([0-9]*)$`), the same rule Akashi uses, so only a message that is exactly `<`, `>` or `>N` navigates.
+
+**`HasTestimony` counts a single statement (bug fix).** It required `len > 2` (title plus two statements), so a testimony with one statement could be recorded but never examined — including one loaded from a file. It is now `len > 1`, matching Akashi's `statementCount()-1 > 0`.
+
+### `/savetestimony` and `/loadtestimony`
+
+Testimonies can be persisted and replayed later, Akashi-style (`internal/athena/testimony_files.go`):
+
+| Command | Behaviour |
+|---------|-----------|
+| `/savetestimony <name>` | Saves the area's recorded testimony to `<config>/testimony/<name>.txt`. Refuses an existing name. |
+| `/loadtestimony <name>` | Replaces the area's testimony with the saved one, stops any active recording/playback and rewinds to the title; `/examine` starts playback. |
+| `/loadtestimony` | Lists the saved testimony names. |
+
+Both are `CM` commands in the 📝 Testimony help category, and are grantable to a player with `grantcmd` like the rest of the recorder. Names are validated against `^[a-z0-9_-]{1,64}$` (lower-cased), so a name can never contain a separator, `.`/`..` or a drive letter and can never leave the testimony directory. The file format is one statement per line, each statement's MS fields wire-escaped and joined with `#` — Akashi's `toSavedLine`/`fromSavedLine` — which keeps a message containing `#`, `%`, `$` or `&` from splitting into extra fields. Loading unescapes each field, re-escapes it for the in-memory form and clears the char id to `-1` (a saved id would name whoever holds that slot in the current session), rejects a file over 256 KiB or past `max_testimony` + 1 statements, and rejects the whole file if any line is not a statement rather than loading it partially.
 
 ### Other Features
+
 - Hot Potato area minigame
 - Quick Draw area minigame
+- Deathroll room-scoped minigame (`/deathroll host [limit]`, `join`, `start`, `roll`, `cancel`, `limit <n>`, `status`, `hide`) — only the host's room sees its OOC; the loser gets a locked 10-minute `/maso` effect
 - Chip Giveaway system
 - Area Roulette
 - Wardrobe/character management commands
 - `/randomchar`
 - In-place server restart via `syscall.Exec`
-- Testimony recorder (inherited from upstream Athena)
+- Testimony recorder (`/testify`, `/testimony`, `/examine`, `/savetestimony`, `/loadtestimony`) — playback packets carry char id -1 so a replay never clears a live player's input
 - `/about` credits SyntaxNyah's fork and full credit to MangosArentLiterature's upstream Athena.
 
 ## Testing

@@ -149,9 +149,13 @@ func setCharacters(chars []string) {
 	charIndexPtr.Store(&idx)
 	umaCharIDsPtr.Store(&uma)
 	storeStrSlice(&charactersPtr, chars)
+	rebuildSCPacketCache(chars)
 }
 
-func setMusicList(m []string) { storeStrSlice(&musicPtr, m) }
+func setMusicList(m []string) {
+	storeStrSlice(&musicPtr, m)
+	invalidateSMJSONCache()
+}
 
 func setBackgrounds(bg []string) {
 	s := buildBgListStr(bg)
@@ -169,6 +173,7 @@ func setSMPacket(s string) {
 	smPacketPtr.Store(&s)
 	b := []byte(s)
 	smPacketBytes.Store(&b)
+	invalidateSMJSONCache()
 }
 
 // getSMPacketBytes returns the pre-built SM blob ready to enqueue. The slice is
