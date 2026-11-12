@@ -52,12 +52,14 @@ const (
 type raidLedgerEntry struct {
 	mu sync.Mutex
 
-	active   int         // joined connections currently alive for this key
-	joins    []time.Time // completed handshakes that started a session
-	lastCC   time.Time
-	rapidCC  []time.Time // CCs closer together than raid_guard_char_churn_ms
-	ccFlags  []time.Time // rapid-CC clusters inside the flag window
-	lastSeen time.Time   // guarded by raidSystem.ledger.mu
+	active       int           // joined connections currently alive for this key
+	sessionStart time.Time     // start of the current active session
+	lastSession  time.Duration // duration of the previous completed session
+	joins        []time.Time   // completed handshakes that started a session
+	lastCC       time.Time
+	rapidCC      []time.Time // CCs closer together than raid_guard_char_churn_ms
+	ccFlags      []time.Time // rapid-CC clusters inside the flag window
+	lastSeen     time.Time   // guarded by raidSystem.ledger.mu
 }
 
 type raidLedgerStore struct {
@@ -143,6 +145,14 @@ func raidLedgerNoteJoin(client *Client, now time.Time) int {
 		return len(entry.joins) - 1
 	}
 	entry.active = 1
+	// A session that lasted a meaningful amount of time is not a reroll loop.
+	// Clear the tally so a real player whose connection eventually drops starts
+	// clean; a script that reconnects every few seconds never reaches this.
+	if maxSession := raidGuardRerollMaxSession(); maxSession > 0 && entry.lastSession >= maxSession {
+		entry.joins = nil
+	}
+	entry.sessionStart = now
+	entry.lastSession = 0
 	entry.joins = pruneBefore(entry.joins, now.Add(-raidGuardRerollWindow()))
 	entry.joins = append(entry.joins, now)
 	if len(entry.joins) > raidLedgerMaxJoins {
@@ -161,6 +171,10 @@ func raidLedgerNoteDisconnect(client *Client, now time.Time) {
 	entry.mu.Lock()
 	if entry.active > 0 {
 		entry.active--
+	}
+	if entry.active == 0 && !entry.sessionStart.IsZero() {
+		entry.lastSession = now.Sub(entry.sessionStart)
+		entry.sessionStart = time.Time{}
 	}
 	entry.mu.Unlock()
 }
@@ -255,9 +269,23 @@ func raidGuardRerollWindow() time.Duration {
 // raidGuardRerollLimit is the reroll count that triggers the repeat action.
 func raidGuardRerollLimit() int {
 	if config == nil {
-		return 3
+		return 4
 	}
-	return raidGuardInt(config.RaidGuardRerollLimit, 3)
+	return raidGuardInt(config.RaidGuardRerollLimit, 4)
+}
+
+// raidGuardRerollMaxSession is how long a completed session must last before it
+// clears the reroll tally. A player who reconnects after several minutes of
+// stable play starts clean; a fast reconnect loop never reaches this.
+func raidGuardRerollMaxSession() time.Duration {
+	seconds := 300
+	if config != nil {
+		seconds = raidGuardInt(config.RaidGuardRerollMaxSession, seconds)
+	}
+	if seconds <= 0 {
+		return 0
+	}
+	return time.Duration(seconds) * time.Second
 }
 
 // raidGuardCCWindow is the span in which three fast CCs make one churn flag.

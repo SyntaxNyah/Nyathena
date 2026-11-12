@@ -116,6 +116,7 @@ type ServerConfig struct {
 	RaidGuardModcallNuke                 bool    `toml:"raid_guard_modcall_nuke"`
 	RaidGuardRerollWindow                int     `toml:"raid_guard_reroll_window"`
 	RaidGuardRerollLimit                 int     `toml:"raid_guard_reroll_limit"`
+	RaidGuardRerollMaxSession            int     `toml:"raid_guard_reroll_max_session"`
 	RaidGuardCCWindow                    int     `toml:"raid_guard_cc_window"`
 	RaidGuardCCFlagWindow                int     `toml:"raid_guard_cc_flag_window"`
 	RaidGuardCCFlagLimit                 int     `toml:"raid_guard_cc_flag_limit"`
@@ -411,7 +412,8 @@ func DefaultConfig() *Config {
 			RaidGuardModcallFanout:               3,
 			RaidGuardModcallNuke:                 true,
 			RaidGuardRerollWindow:                600,
-			RaidGuardRerollLimit:                 3,
+			RaidGuardRerollLimit:                 4,
+			RaidGuardRerollMaxSession:            300,
 			RaidGuardCCWindow:                    60,
 			RaidGuardCCFlagWindow:                1800,
 			RaidGuardCCFlagLimit:                 3,

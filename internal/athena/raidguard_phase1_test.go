@@ -206,3 +206,28 @@ func TestRaidHeatUsesPerSignalHalfLives(t *testing.T) {
 		t.Fatalf("heat at 15m = %d, want about 24", got)
 	}
 }
+
+// A stable session clears the reroll tally: a real player who reconnects after
+// several minutes of play must not be treated like a fast reconnect script.
+func TestRaidLedgerStableSessionResetsRerolls(t *testing.T) {
+	withRaidConfig(t)
+	resetRaidLedgerForTest()
+	t.Cleanup(resetRaidLedgerForTest)
+
+	client := &Client{ipid: "test-ipid-stable", hdid: "test-hdid-stable"}
+	base := time.Unix(1_700_000_600, 0).UTC()
+
+	if got := raidLedgerNoteJoin(client, base); got != 0 {
+		t.Fatalf("initial join rerolls = %d, want 0", got)
+	}
+	raidLedgerNoteDisconnect(client, base.Add(time.Second))
+	if got := raidLedgerNoteJoin(client, base.Add(2*time.Second)); got != 1 {
+		t.Fatalf("quick reconnect rerolls = %d, want 1", got)
+	}
+
+	// This session lasts almost seven minutes, well past the 300s reset.
+	raidLedgerNoteDisconnect(client, base.Add(400*time.Second))
+	if got := raidLedgerNoteJoin(client, base.Add(401*time.Second)); got != 0 {
+		t.Fatalf("rerolls after a stable session = %d, want 0", got)
+	}
+}

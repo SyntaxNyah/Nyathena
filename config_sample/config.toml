@@ -581,8 +581,14 @@ raid_guard_heat_half_life = 300
 raid_guard_reroll_window = 600
 
 # Rerolls inside that window before the repeat action fires.
-# Default: 3
-raid_guard_reroll_limit = 3
+# Default: 4
+raid_guard_reroll_limit = 4
+
+# A completed session at least this many seconds long clears the reroll tally.
+# A real player who reconnects after several minutes of stable play starts clean;
+# a fast reconnect loop never reaches this. 0 disables the reset.
+# Default: 300
+raid_guard_reroll_max_session = 300
 
 # Seconds in which three CCs closer together than raid_guard_char_churn_ms
 # make one rapid-character-change flag.

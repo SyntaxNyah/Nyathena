@@ -147,6 +147,8 @@ the old per-player packet burst.
 The repeat ledger is the cross-reconnect piece the old score lacked:
 
 - handshake rerolls are completed joins after the previous connection is gone;
+  a completed session of `raid_guard_reroll_max_session` seconds clears the tally,
+  so a player who reconnects after stable play starts clean;
 - a post-join `askchaa` counts double;
 - rapid `CC` clusters become churn flags;
 - brand-new identities are banned for `raid_guard_ban_duration`, established
