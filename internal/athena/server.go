@@ -91,7 +91,7 @@ var (
 	players        playercount.PlayerCount
 	enableDiscord  bool
 	clients        *ClientList = &ClientList{list: make(map[*Client]struct{}), uidIndex: make(map[int]*Client), ipidCounts: make(map[string]int), hdidCounts: make(map[string]int)}
-	updatePlayers              = make(chan int)      // Updates the advertiser's player count.
+	updatePlayers              = make(chan int, 1)   // Updates the advertiser's player count; buffered + non-blocking sends so a dead master server can never stall a join.
 	advertDone                 = make(chan struct{}) // Signals the advertiser to stop.
 	FatalError                 = make(chan error)    // Signals that the server should stop after a fatal error.
 	RestartRequest             = make(chan struct{}) // Signals that the server should restart.
@@ -1362,6 +1362,20 @@ func getClientByUid(uid int) (*Client, error) {
 // getClientsByIpid returns all clients with the given ipid.
 func getClientsByIpid(ipid string) []*Client {
 	return clients.GetByIPID(ipid)
+}
+
+// requestPlayerCountAdvertise publishes a player-count update without ever
+// blocking a packet handler. The advertiser can be stuck posting to a slow or
+// dead master server; dropping one update is harmless because the next
+// join/leave or the periodic ticker sends the current count.
+func requestPlayerCountAdvertise() {
+	if config == nil || !config.Advertise {
+		return
+	}
+	select {
+	case updatePlayers <- players.GetPlayerCount():
+	default:
+	}
 }
 
 // sendAreaServerMessage sends a server OOC message to all clients in an area.

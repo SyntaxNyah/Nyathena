@@ -1378,9 +1378,7 @@ func (client *Client) clientCleanup() {
 		}
 		clearVoiceRateStateForUID(client.Uid())
 		players.RemovePlayer()
-		if config.Advertise {
-			updatePlayers <- players.GetPlayerCount()
-		}
+		requestPlayerCountAdvertise()
 		client.Area().RemoveChar(client.CharID())
 		if !client.Hidden() {
 			client.Area().RemoveVisiblePlayer()

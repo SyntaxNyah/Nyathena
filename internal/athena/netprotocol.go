@@ -281,9 +281,7 @@ func pktReqDone(client *Client, _ *aolib.Packet) {
 	client.SetConnectedAt(time.Now())
 	client.lastPingNano.Store(time.Now().UnixNano()) // seed so the ping timeout window starts from join time
 	players.AddPlayer()
-	if config.Advertise {
-		updatePlayers <- players.GetPlayerCount()
-	}
+	requestPlayerCountAdvertise()
 	client.JoinArea(areas[0])
 	client.Send(&aolib.DONE{})
 	// Send BN after DONE so WebAO's viewport is fully initialized before the
