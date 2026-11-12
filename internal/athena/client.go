@@ -1524,8 +1524,7 @@ func (client *Client) CurrentCharacter() string {
 	if id < 0 || id >= len(chars) {
 		// -1 is the normal spectator state. An out-of-range id can also be
 		// observed briefly while a test or an append-only characters.txt reload
-		// clears the roster; reading it must never panic the caller (the PU
-		// coalescer re-reads this value from a background flusher).
+		// clears the roster; reading it must never panic the caller.
 		return "Spectator"
 	}
 	return chars[id]
@@ -2166,7 +2165,7 @@ func (client *Client) ChangeArea(a *area.Area) bool {
 		// mirrors pktReqDone's ordering and matches Akashi's behaviour.
 		client.Send(&aolib.DONE{})
 	} else {
-		requestCharsCheck(a)
+		broadcastToAreaOnce(a, &aolib.CharsCheck{Taken: charAvailabilities(a.Taken())})
 	}
 	// BN always last — after any DONE — so desk-overlay images never load
 	// against an unrendered viewport on WebAO (same fix as initial join).
@@ -2373,11 +2372,10 @@ func (client *Client) ChangeCharacter(id int) {
 		// player's display name (e.g. "Adachi") persists across character
 		// changes.
 		client.Send(&aolib.PV{PlayerID: 0, CharID: id})
-		a := client.Area()
-		requestCharsCheck(a)
+		broadcastToAreaOnce(client.Area(), &aolib.CharsCheck{Taken: charAvailabilities(client.Area().Taken())})
 		if client.Uid() != -1 {
-			requestPlayerData(client, aolib.PlayerDataTypeCharName, client.CurrentCharacter())
-			requestPlayerData(client, aolib.PlayerDataTypeShowname, decode(client.Showname()))
+			broadcastToAll(&aolib.PU{ID: client.Uid(), Type: aolib.PlayerDataTypeCharName, Data: client.CurrentCharacter()})
+			broadcastToAll(&aolib.PU{ID: client.Uid(), Type: aolib.PlayerDataTypeShowname, Data: decode(client.Showname())})
 		}
 	}
 }
@@ -2682,7 +2680,7 @@ func (client *Client) forceChangeArea(a *area.Area) {
 		// must initialize the viewport before desk-overlay images load.
 		client.Send(&aolib.DONE{})
 	} else {
-		requestCharsCheck(a)
+		broadcastToAreaOnce(a, &aolib.CharsCheck{Taken: charAvailabilities(a.Taken())})
 	}
 	// BN always after any DONE so desk overlays load correctly on WebAO.
 	client.Send(&aolib.BN{Background: a.Background()})

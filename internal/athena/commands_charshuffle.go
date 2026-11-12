@@ -113,12 +113,11 @@ func cmdCharShuffle(client *Client, _ []string, _ string) {
 		p.c.Send(&aolib.PV{PlayerID: 0, CharID: newID})
 		p.c.SendServerMessage("A moderator has shuffled characters in this area.")
 	}
-	// Single coalesced CharsCheck per area is much cheaper than per-client.
-	requestCharsCheck(targetArea)
-	// Push PU updates so other players see the new char names too. Coalesced:
-	// a shuffle can touch many players at once.
+	// Single CharsCheck broadcast at the end is much cheaper than per-client.
+	broadcastToAreaOnce(targetArea, &aolib.CharsCheck{Taken: charAvailabilities(targetArea.Taken())})
+	// Push PU updates so other players see the new char names too.
 	for _, p := range participants {
-		requestPlayerData(p.c, aolib.PlayerDataTypeCharName, p.c.CurrentCharacter())
+		broadcastToAll(&aolib.PU{ID: p.c.Uid(), Type: aolib.PlayerDataTypeCharName, Data: p.c.CurrentCharacter()})
 	}
 
 	client.SendServerMessage(fmt.Sprintf("Shuffled characters of %d players in the area.", len(participants)))
@@ -175,9 +174,9 @@ func cmdUnCharShuffle(client *Client, _ []string, _ string) {
 		p.c.SetShuffledOrigCharID(-2)
 		p.c.SendServerMessage("A moderator has restored characters in this area.")
 	}
-	requestCharsCheck(targetArea)
+	broadcastToAreaOnce(targetArea, &aolib.CharsCheck{Taken: charAvailabilities(targetArea.Taken())})
 	for _, p := range participants {
-		requestPlayerData(p.c, aolib.PlayerDataTypeCharName, p.c.CurrentCharacter())
+		broadcastToAll(&aolib.PU{ID: p.c.Uid(), Type: aolib.PlayerDataTypeCharName, Data: p.c.CurrentCharacter()})
 	}
 
 	client.SendServerMessage(fmt.Sprintf("Restored characters of %d players in the area.", len(participants)))
