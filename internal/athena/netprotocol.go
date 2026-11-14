@@ -1240,6 +1240,9 @@ func pktIC(client *Client, p *aolib.Packet) {
 			broadcastToAreaFromOnce(client.Ipid(), senderBypassesIgnore(client.Perms()), client.Area(), ms)
 		}
 	}
+	if !silenced && !restricted && !hasPunishmentType(punishments, PunishmentLifo) {
+		guessWhoOnIC(client, msgText)
+	}
 	silenced = silenced || restricted
 	// SFX curse MC fallback: for external http(s) URLs the sfx_name field alone
 	// is not enough because standard AO2 desktop clients look for a local file
