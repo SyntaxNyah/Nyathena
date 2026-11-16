@@ -60,6 +60,8 @@ func postServers(msUrls []string, advert Advertisement) {
 	}
 }
 
+var httpClient = &http.Client{Timeout: 10 * time.Second}
+
 // postServer sends an advertisement to the master server.
 func postServer(msUrl string, advert Advertisement) {
 	data, err := json.Marshal(advert)
@@ -68,7 +70,7 @@ func postServer(msUrl string, advert Advertisement) {
 		return
 	}
 
-	resp, err := http.Post(msUrl, "application/json", bytes.NewBuffer(data))
+	resp, err := httpClient.Post(msUrl, "application/json", bytes.NewBuffer(data))
 	if err != nil {
 		logger.LogErrorf("Failed to post advertisement to %s: %v", msUrl, err)
 		return

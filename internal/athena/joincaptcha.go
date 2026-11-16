@@ -8,10 +8,10 @@ import (
 	"sync/atomic"
 	"time"
 
+	aolib "github.com/AO-Underground/aolib/go/v2"
 	"github.com/MangosArentLiterature/Athena/internal/area"
 	"github.com/MangosArentLiterature/Athena/internal/db"
 	"github.com/MangosArentLiterature/Athena/internal/logger"
-	aolib "github.com/AO-Underground/aolib/go/v2"
 	"github.com/MangosArentLiterature/Athena/internal/permissions"
 )
 
@@ -227,7 +227,7 @@ func joinCaptchaPlaytimeExempt(ipid string) bool {
 	if minPlaytime <= 0 {
 		return false // 0 disables the exemption -- everyone unverified is asked
 	}
-	playtime, err := db.GetPlaytime(ipid)
+	playtime, err := cachedPlaytime(ipid)
 	if err != nil {
 		logger.LogErrorf("join captcha: failed to read playtime for IPID %v, challenging them anyway: %v", ipid, err)
 		return false
@@ -253,7 +253,11 @@ func (client *Client) pendingChallenge() joinChallenge {
 // the challenge is resolved, so it cannot outlive the connection.
 func (client *Client) joinCaptchaTimeoutWatch() {
 	timeout := 180
-	if config != nil && config.JoinCaptchaTimeout > 0 {
+	if client.guardChallenge.Load() {
+		// A guard-issued challenge always has a deadline, even when the
+		// operator disabled join_captcha_timeout for the ordinary join gate.
+		timeout = raidGuardChallengeTimeout()
+	} else if config != nil && config.JoinCaptchaTimeout > 0 {
 		timeout = config.JoinCaptchaTimeout
 	} else if config != nil && config.JoinCaptchaTimeout <= 0 {
 		return // 0 disables the timeout; the gate simply stays up.
@@ -285,6 +289,11 @@ func (client *Client) joinCaptchaBlocked(surface string) bool {
 	}
 	strikes := client.captchaStrikes.Add(1)
 	limit := joinCaptchaStrikeLimit()
+	if client.guardChallenge.Load() {
+		// The guard already has behavioural evidence; two blocked messages are
+		// enough to conclude the connection is not trying to answer.
+		limit = raidGuardChallengeStrikes()
+	}
 
 	if strikes >= limit {
 		client.failJoinCaptcha("used all attempts")
@@ -330,6 +339,20 @@ func (client *Client) failJoinCaptcha(why string) {
 	if !client.awaitingCaptcha.Load() {
 		return
 	}
+	if client.guardChallenge.Load() {
+		// A guard challenge is not a shadow gate. It was issued because the
+		// connection already looked automated, and leaving it muted is exactly
+		// the zombie this path used to create: the socket stays open, keeps
+		// consuming RAM and a multiclient slot, and keeps sending messages into
+		// a restricted channel. Close it instead.
+		client.guardChallenge.Store(false)
+		client.awaitingCaptcha.Store(false)
+		logger.LogInfof("Client (IPID:%v UID:%v) kicked by the raid-guard challenge (%v)", client.Ipid(), client.Uid(), why)
+		alertJoinCaptchaStaff(client, "was kicked by the raid-guard challenge", why)
+		client.SendSync(&aolib.KK{Reason: "Disconnected by the raid guard: the verification question was not completed. Reconnect and answer it with /verify <answer>."})
+		client.markClosed()
+		return
+	}
 	if joinCaptchaAction() == joinCaptchaActionKick {
 		client.awaitingCaptcha.Store(false)
 		logger.LogInfof("Client (IPID:%v UID:%v) kicked by the join captcha (%v)", client.Ipid(), client.Uid(), why)
@@ -351,6 +374,52 @@ func (client *Client) failJoinCaptcha(why string) {
 		logger.WriteAudit(fmt.Sprintf("%v | CAPTCHA_MUTE | IPID:%v | UID:%v | %v",
 			time.Now().UTC().Format("15:04:05"), client.Ipid(), client.Uid(), why))
 		alertJoinCaptchaStaff(client, "was muted", why)
+		go client.joinCaptchaMuteWatch()
+	}
+}
+
+// guardChallengeActivity counts a non-chat action (character pick, handshake
+// replay, modcall) against a guard-issued challenge. A bot can avoid the IC/OOC
+// gate by never speaking; this makes continued script activity terminate the
+// connection just like a blocked message would. Ordinary join-captcha clients
+// are unaffected (guardChallenge is false).
+func (client *Client) guardChallengeActivity() bool {
+	if client == nil || !client.guardChallenge.Load() || !client.awaitingCaptcha.Load() {
+		return false
+	}
+	if client.captchaStrikes.Add(1) >= raidGuardChallengeStrikes() {
+		client.failJoinCaptcha("continued activity after the challenge")
+		return true
+	}
+	return false
+}
+
+// joinCaptchaMuteWatch bounds how long a shadow-muted connection may stay
+// alive. The mute action is intentionally subtle -- the sender sees their own
+// messages echo back -- but it used to have no end at all, so a bot that kept
+// sending CH/IC held RAM and a multiclient slot forever. A real player who
+// solves the question is released before this fires; one who does not is
+// disconnected and can reconnect and answer.
+func (client *Client) joinCaptchaMuteWatch() {
+	timeout := 300
+	if config != nil && config.JoinCaptchaMuteTimeout > 0 {
+		timeout = config.JoinCaptchaMuteTimeout
+	} else if config != nil && config.JoinCaptchaMuteTimeout <= 0 {
+		return
+	}
+	timer := time.NewTimer(time.Duration(timeout) * time.Second)
+	defer timer.Stop()
+	select {
+	case <-client.done:
+		return
+	case <-timer.C:
+		if client.closed.Load() || !client.captchaRestricted.Load() {
+			return
+		}
+		logger.LogInfof("Client (IPID:%v UID:%v) closed after %v muted by the join captcha",
+			client.Ipid(), client.Uid(), time.Duration(timeout)*time.Second)
+		client.SendSync(&aolib.KK{Reason: "Disconnected: the verification question was not completed. Reconnect and answer it with /verify <answer>."})
+		client.markClosed()
 	}
 }
 
@@ -359,6 +428,7 @@ func (client *Client) failJoinCaptcha(why string) {
 // /verify answer and a moderator's manual release.
 func (client *Client) releaseJoinCaptcha(kind string, notify bool) {
 	client.awaitingCaptcha.Store(false)
+	client.guardChallenge.Store(false)
 	if client.captchaRestricted.CompareAndSwap(true, false) {
 		activeCaptchaRestricted.Add(-1)
 	}
@@ -465,7 +535,7 @@ func deliverRestricted(sender *Client, a *area.Area, p aolib.Outgoing) {
 
 // cmdVerify handles /verify <answer>: the player's reply to the join captcha.
 func cmdVerify(client *Client, args []string, _ string) {
-	if !joinCaptchaEnabled() {
+	if !joinCaptchaEnabled() && !client.guardChallenge.Load() {
 		client.SendServerMessage("Verification is not enabled on this server — you can chat freely.")
 		return
 	}
@@ -537,7 +607,21 @@ func cmdJoinCaptcha(client *Client, args []string, usage string) {
 // joinCaptchaStatus lists connections the captcha is currently acting on.
 func joinCaptchaStatus(client *Client) {
 	if !joinCaptchaEnabled() {
-		client.SendServerMessage("The join captcha is disabled (join_captcha = false).")
+		// The global join gate is off, but the raid guard can still issue its
+		// own challenges. Staff need to see those, otherwise a challenged
+		// player looks stuck with no visible reason.
+		var pending []string
+		clients.ForEach(func(c *Client) {
+			if c.guardChallenge.Load() {
+				pending = append(pending, fmt.Sprintf("  UID %v (%v, IPID %v) — %v strike(s), raid-guard challenge [%v]",
+					c.Uid(), c.CurrentCharacter(), c.Ipid(), c.captchaStrikes.Load(), c.pendingChallenge().Kind))
+			}
+		})
+		if len(pending) == 0 {
+			client.SendServerMessage("The join captcha is disabled (join_captcha = false).")
+			return
+		}
+		client.SendServerMessage("The join captcha is disabled, but the raid guard is challenging:\n" + strings.Join(pending, "\n"))
 		return
 	}
 	var pending, restricted []string

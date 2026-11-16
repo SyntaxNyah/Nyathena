@@ -17,9 +17,9 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>. */
 package athena
 
 import (
+	aolib "github.com/AO-Underground/aolib/go/v2"
 	"github.com/MangosArentLiterature/Athena/internal/area"
 	"github.com/MangosArentLiterature/Athena/internal/logger"
-	aolib "github.com/AO-Underground/aolib/go/v2"
 	"github.com/MangosArentLiterature/Athena/internal/packetutil"
 )
 
@@ -104,20 +104,27 @@ func (pb *prebuiltPacket) forClient(client *Client) []byte {
 		return pb.jsonb
 	}
 	if pb.fanta == nil {
-		esc := escapeOutgoing(pb.p.Header(), pb.p.Args())
-		n := len(pb.p.Header()) + 2
-		for _, c := range esc {
-			n += 1 + len(c)
-		}
-		buf := make([]byte, 0, n)
-		buf = append(buf, pb.p.Header()...)
-		for _, c := range esc {
-			buf = append(buf, '#')
-			buf = append(buf, c...)
-		}
-		pb.fanta = append(buf, '#', '%')
+		pb.fanta = encodeFanta(pb.p)
 	}
 	return pb.fanta
+}
+
+// encodeFanta serializes one outgoing packet in FantaCode form. Shared by the
+// per-broadcast prebuilt path and the handshake-list cache so the two cannot
+// drift on escaping or framing.
+func encodeFanta(p aolib.Outgoing) []byte {
+	esc := escapeOutgoing(p.Header(), p.Args())
+	n := len(p.Header()) + 2
+	for _, c := range esc {
+		n += 1 + len(c)
+	}
+	buf := make([]byte, 0, n)
+	buf = append(buf, p.Header()...)
+	for _, c := range esc {
+		buf = append(buf, '#')
+		buf = append(buf, c...)
+	}
+	return append(buf, '#', '%')
 }
 
 // broadcastToAreaOnce is broadcastToArea for a packet whose payload is
@@ -128,6 +135,75 @@ func broadcastToAreaOnce(a *area.Area, p aolib.Outgoing) {
 	pb := newPrebuilt(p)
 	clients.ForEach(func(client *Client) {
 		if client.Area() == a {
+			client.sendPrebuilt(pb.forClient(client))
+		}
+	})
+}
+
+// broadcastToAllOnce is broadcastToAll with one serialization per wire format
+// instead of one per recipient. ARUP player-count/CM/status/lock updates and the
+// PR/PU join burst all carry identical bytes to every client, so this removes
+// the per-recipient Args()/escape/encode work that dominated the join fan-out.
+func broadcastToAllOnce(p aolib.Outgoing) {
+	if !puAllowed(p) {
+		return
+	}
+	// halloweenHauntOutgoing mutates CT/MS/PU fields. It must run exactly once
+	// before the shared buffer is built; the old per-recipient Send path ran it
+	// once per client, which also meant a randomized transform could differ
+	// between recipients.
+	halloweenHauntOutgoing(p)
+	pb := newPrebuilt(p)
+	clients.ForEach(func(client *Client) {
+		if client.Uid() != -1 {
+			client.sendPrebuilt(pb.forClient(client))
+		}
+	})
+}
+
+// broadcastToAllBatch fans several packets to every joined client with one
+// client-list sweep and one serialization per packet per wire format. FantaCode
+// recipients get the frames concatenated into one queue entry; JSON recipients
+// get one frame per packet because a WebAO client parses one JSON value per
+// WebSocket message.
+func broadcastToAllBatch(packets []aolib.Outgoing) {
+	pbs := make([]*prebuiltPacket, 0, len(packets))
+	for _, p := range packets {
+		if !puAllowed(p) {
+			continue
+		}
+		halloweenHauntOutgoing(p)
+		pbs = append(pbs, newPrebuilt(p))
+	}
+	if len(pbs) == 0 {
+		return
+	}
+	clients.ForEach(func(client *Client) {
+		if client.Uid() == -1 {
+			return
+		}
+		if !client.jsonMode.Load() {
+			var batch []byte
+			for _, pb := range pbs {
+				batch = append(batch, pb.forClient(client)...)
+			}
+			client.sendPrebuilt(batch)
+			return
+		}
+		for _, pb := range pbs {
+			client.sendPrebuilt(pb.forClient(client))
+		}
+	})
+}
+
+// broadcastToAreaFromOnce is broadcastToAreaFrom with one serialization per
+// wire format. The ignore list and moderator bypass are per recipient, but the
+// packet bytes are not.
+func broadcastToAreaFromOnce(senderIPID string, senderIsMod bool, a *area.Area, p aolib.Outgoing) {
+	halloweenHauntOutgoing(p)
+	pb := newPrebuilt(p)
+	clients.ForEach(func(client *Client) {
+		if client.Area() == a && (senderIsMod || !client.IgnoresIPID(senderIPID)) {
 			client.sendPrebuilt(pb.forClient(client))
 		}
 	})

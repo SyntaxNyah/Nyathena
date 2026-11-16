@@ -149,9 +149,13 @@ func setCharacters(chars []string) {
 	charIndexPtr.Store(&idx)
 	umaCharIDsPtr.Store(&uma)
 	storeStrSlice(&charactersPtr, chars)
+	rebuildSCPacketCache(chars)
 }
 
-func setMusicList(m []string) { storeStrSlice(&musicPtr, m) }
+func setMusicList(m []string) {
+	storeStrSlice(&musicPtr, m)
+	invalidateSMJSONCache()
+}
 
 func setBackgrounds(bg []string) {
 	s := buildBgListStr(bg)
@@ -169,6 +173,7 @@ func setSMPacket(s string) {
 	smPacketPtr.Store(&s)
 	b := []byte(s)
 	smPacketBytes.Store(&b)
+	invalidateSMJSONCache()
 }
 
 // getSMPacketBytes returns the pre-built SM blob ready to enqueue. The slice is
@@ -292,6 +297,11 @@ func ReloadConfig() (string, error) {
 	}
 
 	newCDNs := settings.LoadCDNs()
+	newBotContent, err := loadBotContent()
+	if err != nil { return "", err }
+	if candidate, err := settings.GetConfig(); err == nil {
+		if _, err := parseBotOptions(candidate); err != nil { return "", err }
+	}
 
 	// 8ball.txt and the automod wordlist are optional; load failures leave the
 	// current value in place rather than aborting the reload.
@@ -380,6 +390,10 @@ func ReloadConfig() (string, error) {
 	if haveEight && !equalStrSlices(getEightBall(), newEight) {
 		setEightBall(newEight)
 		changes = append(changes, "8ball.txt")
+	}
+	if botChanges := botContentDifferences(newBotContent); len(botChanges) > 0 {
+		botContentPtr.Store(newBotContent)
+		changes = append(changes, botChanges...)
 	}
 
 	if haveBanned && !equalStrSlices(getBannedWords(), newBanned) {

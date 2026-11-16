@@ -25,11 +25,11 @@ import (
 	"sync"
 	"time"
 
+	aolib "github.com/AO-Underground/aolib/go/v2"
 	"github.com/MangosArentLiterature/Athena/internal/area"
 	"github.com/MangosArentLiterature/Athena/internal/db"
 	"github.com/MangosArentLiterature/Athena/internal/discord/bot"
 	"github.com/MangosArentLiterature/Athena/internal/logger"
-	aolib "github.com/AO-Underground/aolib/go/v2"
 	"github.com/MangosArentLiterature/Athena/internal/permissions"
 )
 
@@ -529,7 +529,11 @@ func (a *ServerAdapter) SetFirewall(on bool) error {
 
 // SetLockdown toggles server-wide new-IPID lockdown. Mirrors in-game /lockdown.
 func (a *ServerAdapter) SetLockdown(on bool) error {
-	serverLockdown.Store(on)
+	if on {
+		engageServerLockdown()
+	} else {
+		liftServerLockdown()
+	}
 	msg := "🔓 Server lockdown lifted by a Discord moderator."
 	if on {
 		msg = "🔒 Server lockdown enabled by a Discord moderator."

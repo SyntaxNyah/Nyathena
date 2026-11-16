@@ -59,6 +59,7 @@ type ServerConfig struct {
 	ReverseProxyHTTPPort                 int     `toml:"reverse_proxy_http_port"`
 	ReverseProxyHTTPSPort                int     `toml:"reverse_proxy_https_port"`
 	MCLimit                              int     `toml:"multiclient_limit"`
+	MulticlientIPLimit                   int     `toml:"multiclient_ip_limit"`
 	AssetURL                             string  `toml:"asset_url"`
 	WebhookURL                           string  `toml:"webhook_url"`
 	WebhookPingRoleID                    string  `toml:"webhook_ping_role_id"`
@@ -90,6 +91,7 @@ type ServerConfig struct {
 	RaidGuardScoreSilence                int     `toml:"raid_guard_score_silence"`
 	RaidGuardScoreKick                   int     `toml:"raid_guard_score_kick"`
 	RaidGuardScoreBan                    int     `toml:"raid_guard_score_ban"`
+	RaidGuardHeatHalfLife                int     `toml:"raid_guard_heat_half_life"`
 	RaidGuardObjectionMinMsgs            int     `toml:"raid_guard_objection_min_msgs"`
 	RaidGuardObjectionFraction           float64 `toml:"raid_guard_objection_fraction"`
 	RaidGuardFastCharPickMs              int     `toml:"raid_guard_fast_charpick_ms"`
@@ -112,9 +114,18 @@ type ServerConfig struct {
 	RaidGuardModcallMinAttempts          int     `toml:"raid_guard_modcall_min_attempts"`
 	RaidGuardModcallFanout               int     `toml:"raid_guard_modcall_fanout"`
 	RaidGuardModcallNuke                 bool    `toml:"raid_guard_modcall_nuke"`
+	RaidGuardRerollWindow                int     `toml:"raid_guard_reroll_window"`
+	RaidGuardRerollLimit                 int     `toml:"raid_guard_reroll_limit"`
+	RaidGuardRerollMaxSession            int     `toml:"raid_guard_reroll_max_session"`
+	RaidGuardCCWindow                    int     `toml:"raid_guard_cc_window"`
+	RaidGuardCCFlagWindow                int     `toml:"raid_guard_cc_flag_window"`
+	RaidGuardCCFlagLimit                 int     `toml:"raid_guard_cc_flag_limit"`
+	RaidGuardChallengeStrikes            int     `toml:"raid_guard_challenge_strikes"`
+	RaidGuardChallengeTimeout            int     `toml:"raid_guard_challenge_timeout"`
 	ModcallCooldown                      int     `toml:"modcall_cooldown"`
 	ConnRateLimit                        int     `toml:"connection_rate_limit"`
 	ConnRateLimitWindow                  int     `toml:"connection_rate_limit_window"`
+	AdmissionNormalScale                 int     `toml:"admission_normal_scale"`
 	ConnFloodAutoban                     bool    `toml:"conn_flood_autoban"`
 	ConnFloodAutobanThreshold            int     `toml:"conn_flood_autoban_threshold"`
 	PacketFloodAutoban                   bool    `toml:"packet_flood_autoban"`
@@ -125,8 +136,11 @@ type ServerConfig struct {
 	PingRateLimit                        int     `toml:"ping_rate_limit"`
 	PingRateLimitWindow                  int     `toml:"ping_rate_limit_window"`
 	NewIPIDOOCCooldown                   int     `toml:"new_ipid_ooc_cooldown"`
+	NewIPIDOOCCooldownNormal             int     `toml:"new_ipid_ooc_cooldown_normal"`
 	NewIPIDICCooldown                    int     `toml:"new_ipid_ic_cooldown"`
+	NewIPIDICCooldownNormal              int     `toml:"new_ipid_ic_cooldown_normal"`
 	NewIPIDModcallCooldown               int     `toml:"new_ipid_modcall_cooldown"`
+	NewIPIDModcallCooldownNormal         int     `toml:"new_ipid_modcall_cooldown_normal"`
 	GlobalNewIPRateLimit                 int     `toml:"global_new_ip_rate_limit"`
 	GlobalNewIPRateLimitWindow           int     `toml:"global_new_ip_rate_limit_window"`
 	IPRetentionDays                      int     `toml:"ip_retention_days"`
@@ -171,6 +185,7 @@ type ServerConfig struct {
 	JoinCaptcha            bool     `toml:"join_captcha"`
 	JoinCaptchaStrikes     int      `toml:"join_captcha_strikes"`
 	JoinCaptchaTimeout     int      `toml:"join_captcha_timeout"`
+	JoinCaptchaMuteTimeout int      `toml:"join_captcha_mute_timeout"`
 	JoinCaptchaKinds       []string `toml:"join_captcha_kinds"`
 	JoinCaptchaRemember    bool     `toml:"join_captcha_remember"`
 	JoinCaptchaMinPlaytime int      `toml:"join_captcha_min_playtime"`
@@ -198,6 +213,12 @@ type ServerConfig struct {
 	VoteActions         []string `toml:"vote_actions"`
 	VoteMuteDuration    int      `toml:"vote_mute_duration"`
 	TypingRacePhrases   []string `toml:"typing_race_phrases"`
+	DailyQuote          bool     `toml:"dailyquote"`
+	Icebreaker          bool     `toml:"icebreaker"`
+	GuessWho            bool     `toml:"guesswho"`
+	BotTextColor        string   `toml:"bot_text_color"`
+	BotIniCharacter     string   `toml:"bot_ini_character"`
+	BotEmote            string   `toml:"bot_emote"`
 	EnableNewspaper     bool     `toml:"enable_newspaper"`
 	NewspaperInterval   string   `toml:"newspaper_interval"`
 	NewspaperSections   []string `toml:"newspaper_sections"`
@@ -244,6 +265,7 @@ type ServerConfig struct {
 	// 0 disables the purge (lockdown still only blocks new IPIDs, as before).
 	// Mods can change this at runtime with /setlockdownplaytime.
 	LockdownMinPlaytime int `toml:"lockdown_min_playtime"`
+	LockdownTTL         int `toml:"lockdown_ttl"`
 
 	// SecretSeed is a server-private key used to derive lockdown whitelist
 	// passkeys (HMAC-SHA256 of an IPID, keyed by this value) -- a per-IPID
@@ -331,6 +353,9 @@ func DefaultConfig() *Config {
 			Desc:                                 "",
 			MaxPlayers:                           100,
 			MaxMsg:                               256,
+			BotTextColor:                        "yellow",
+			BotIniCharacter:                     "hans christian andersen (fgo)",
+			BotEmote:                            "adult/normal",
 			BanLen:                               "3d",
 			EnableWS:                             false,
 			WSPort:                               27017,
@@ -342,6 +367,8 @@ func DefaultConfig() *Config {
 			ReverseProxyHTTPPort:                 80,
 			ReverseProxyHTTPSPort:                443,
 			MCLimit:                              16,
+			MulticlientIPLimit:                   0,
+			LockdownTTL:                          300,
 			MaxDice:                              100,
 			MaxSide:                              100,
 			MaxStatement:                         10,
@@ -368,6 +395,7 @@ func DefaultConfig() *Config {
 			RaidGuardScoreSilence:                80,
 			RaidGuardScoreKick:                   100,
 			RaidGuardScoreBan:                    160,
+			RaidGuardHeatHalfLife:                300,
 			RaidGuardObjectionMinMsgs:            3,
 			RaidGuardObjectionFraction:           0.8,
 			RaidGuardFastCharPickMs:              250,
@@ -390,8 +418,17 @@ func DefaultConfig() *Config {
 			RaidGuardModcallMinAttempts:          5,
 			RaidGuardModcallFanout:               3,
 			RaidGuardModcallNuke:                 true,
+			RaidGuardRerollWindow:                600,
+			RaidGuardRerollLimit:                 4,
+			RaidGuardRerollMaxSession:            300,
+			RaidGuardCCWindow:                    60,
+			RaidGuardCCFlagWindow:                1800,
+			RaidGuardCCFlagLimit:                 3,
+			RaidGuardChallengeStrikes:            2,
+			RaidGuardChallengeTimeout:            60,
 			ModcallCooldown:                      0,
 			ConnRateLimit:                        10,
+			AdmissionNormalScale:                 100,
 			ConnRateLimitWindow:                  10,
 			ConnFloodAutoban:                     true,
 			ConnFloodAutobanThreshold:            6,
@@ -431,6 +468,7 @@ func DefaultConfig() *Config {
 			JoinCaptcha:                          false,
 			JoinCaptchaStrikes:                   3,
 			JoinCaptchaTimeout:                   180,
+			JoinCaptchaMuteTimeout:               300,
 			JoinCaptchaKinds:                     nil,
 			JoinCaptchaRemember:                  true,
 			JoinCaptchaMinPlaytime:               300,

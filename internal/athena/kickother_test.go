@@ -8,6 +8,21 @@ import (
 	"time"
 )
 
+// newTestClients gives each test a clean client list and restores the original
+// list during cleanup.
+func newTestClients(t *testing.T) {
+	t.Helper()
+
+	original := clients
+	t.Cleanup(func() { clients = original })
+
+	clients = &ClientList{
+		list:       make(map[*Client]struct{}),
+		uidIndex:   make(map[int]*Client),
+		ipidCounts: make(map[string]int),
+	}
+}
+
 type testAddr string
 
 func (a testAddr) Network() string { return "test" }
@@ -52,7 +67,11 @@ func (c *testConn) Closed() bool {
 func TestKickOtherUsesHDIDAndSkipsCaller(t *testing.T) {
 	origClients := clients
 	t.Cleanup(func() { clients = origClients })
-	clients = &ClientList{list: make(map[*Client]struct{}), uidIndex: make(map[int]*Client), ipidCounts: make(map[string]int)}
+	clients = &ClientList{
+		list:       make(map[*Client]struct{}),
+		uidIndex:   make(map[int]*Client),
+		ipidCounts: make(map[string]int),
+	}
 
 	callerConn := &testConn{}
 	sameHDIDConn := &testConn{}
