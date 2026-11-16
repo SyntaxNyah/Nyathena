@@ -296,8 +296,12 @@ func sendAntiPunishShieldPopup(target, issuer *Client, pTypes []PunishmentType, 
 // action completes the sentence "shh! <mod> tried to ...", so punishment calls
 // pass "punish you with 'dog'" while /move and /forcename pass their own verb.
 func sendAntiPunishShieldOutcome(target, issuer *Client, action string, backfired bool) {
-	if target == nil || issuer == nil {
+	if target == nil {
 		return
+	}
+	issuerName := "a Discord moderator"
+	if issuer != nil {
+		issuerName = oocDisplayName(issuer)
 	}
 	outcome := "It didn't stick"
 	if backfired {
@@ -305,7 +309,7 @@ func sendAntiPunishShieldOutcome(target, issuer *Client, action string, backfire
 	}
 	target.SendPopup(fmt.Sprintf(
 		"🤫 shh! %v tried to %v. %v — ur punishment protected. Act normal.",
-		oocDisplayName(issuer), action, outcome))
+		issuerName, action, outcome))
 }
 
 // applyAntiPunishBackfire puts the punishment on the moderator who tried to

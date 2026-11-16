@@ -526,3 +526,34 @@ func TestAntiPunishShieldSpoofBan(t *testing.T) {
 		t.Errorf("shielded target was not told the ban was blocked; got %q", got)
 	}
 }
+
+// TestDiscordKickRespectsAntiPunishShield pins the Discord bridge: a shielded
+// player is not disconnected, the bot still gets a success (nil error), and the
+// target gets the sneaky popup; an unshielded player is still kicked.
+func TestDiscordKickRespectsAntiPunishShield(t *testing.T) {
+	t.Run("shielded", func(t *testing.T) {
+		w := newShieldTestWorld(t)
+		w.target.SetAntiPunishShield(antiPunishShieldBackfire)
+
+		if err := (&ServerAdapter{}).KickPlayer(2, "discord kick"); err != nil {
+			t.Fatalf("KickPlayer returned an error instead of a fake success: %v", err)
+		}
+		if w.targetConn.isClosed() {
+			t.Fatal("shielded target was kicked over Discord")
+		}
+		if got := w.targetConn.String(); !strings.Contains(got, "a Discord moderator") {
+			t.Errorf("shielded target did not get the Discord shield popup; got %q", got)
+		}
+	})
+
+	t.Run("unshielded", func(t *testing.T) {
+		w := newShieldTestWorld(t)
+
+		if err := (&ServerAdapter{}).KickPlayer(2, "discord kick"); err != nil {
+			t.Fatalf("KickPlayer: %v", err)
+		}
+		if !w.targetConn.isClosed() {
+			t.Fatal("unshielded target was not kicked over Discord")
+		}
+	})
+}

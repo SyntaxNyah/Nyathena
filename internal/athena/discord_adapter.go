@@ -70,6 +70,17 @@ func findClientByArg(arg string) *Client {
 	return found
 }
 
+// discordShieldSpoof silently spoofs a Discord moderation action against a
+// shielded player. It sends the sneaky popup and returns true; the caller must
+// then return nil so the bot reports success without applying anything.
+func discordShieldSpoof(c *Client, action string) bool {
+	if c == nil || c.AntiPunishShieldMode() == antiPunishShieldOff {
+		return false
+	}
+	sendAntiPunishShieldOutcome(c, nil, action, false)
+	return true
+}
+
 // GetPlayers returns information about all connected players.
 func (a *ServerAdapter) GetPlayers() []bot.PlayerInfo {
 	var result []bot.PlayerInfo
@@ -168,6 +179,9 @@ func (a *ServerAdapter) MutePlayer(uid int, duration time.Duration, reason strin
 	if err != nil {
 		return fmt.Errorf("player not found: UID %d", uid)
 	}
+	if discordShieldSpoof(c, "mute you") {
+		return nil
+	}
 	c.SetMuted(ICOOCMuted)
 	var expires int64
 	if duration > 0 {
@@ -205,6 +219,11 @@ func (a *ServerAdapter) KickPlayer(uid int, reason string) error {
 	if err != nil {
 		return fmt.Errorf("player not found: UID %d", uid)
 	}
+	// A shielded player is never disconnected over the Discord bridge. The
+	// bot still gets a nil error, so it reports the kick as successful.
+	if discordShieldSpoof(c, "kick you") {
+		return nil
+	}
 	c.SendServerMessage(fmt.Sprintf("You have been kicked. Reason: %s", reason))
 	c.conn.Close()
 	return nil
@@ -212,6 +231,12 @@ func (a *ServerAdapter) KickPlayer(uid int, reason string) error {
 
 // BanPlayer bans a player by IPID.
 func (a *ServerAdapter) BanPlayer(ipid string, duration time.Duration, reason string, moderator string) error {
+	// A shielded player protects their whole IPID from a Discord ban. The bot
+	// still gets a nil error, so it reports the ban as successful.
+	if shielded := antiPunishShieldedClientOnIPID(ipid); shielded != nil {
+		discordShieldSpoof(shielded, "ban you")
+		return nil
+	}
 	var durUnix int64
 	if duration <= 0 {
 		durUnix = -1 // Permanent
@@ -236,6 +261,9 @@ func (a *ServerAdapter) GagPlayer(uid int) error {
 	c, err := getClientByUid(uid)
 	if err != nil {
 		return fmt.Errorf("player not found: UID %d", uid)
+	}
+	if discordShieldSpoof(c, "gag you") {
+		return nil
 	}
 	c.SetMuted(ICMuted)
 	c.SetUnmuteTime(time.Time{})
@@ -267,6 +295,9 @@ func (a *ServerAdapter) WarnPlayer(uid int, reason string, moderator string) err
 	c, err := getClientByUid(uid)
 	if err != nil {
 		return fmt.Errorf("player not found: UID %d", uid)
+	}
+	if discordShieldSpoof(c, "warn you") {
+		return nil
 	}
 	warningsMu.Lock()
 	warnings[c.Ipid()] = append(warnings[c.Ipid()], bot.WarnRecord{
@@ -323,6 +354,9 @@ func (a *ServerAdapter) ApplyPunishment(uid int, punishmentName string, duration
 	pType := punishmentNameToType(punishmentName)
 	if pType == PunishmentNone {
 		return fmt.Errorf("unknown punishment: %s", punishmentName)
+	}
+	if discordShieldSpoof(c, "punish you with '"+punishmentName+"'") {
+		return nil
 	}
 	if punishmentsGloballyDisabled.Load() {
 		return fmt.Errorf("punishments are globally disabled server-wide right now (console override)")
@@ -444,6 +478,9 @@ func (a *ServerAdapter) ForceMove(uid int, areaName string) error {
 	if err != nil {
 		return fmt.Errorf("player not found: UID %d", uid)
 	}
+	if discordShieldSpoof(c, "move you") {
+		return nil
+	}
 	for _, ar := range areas {
 		if strings.EqualFold(ar.Name(), areaName) {
 			if !c.ChangeArea(ar) {
@@ -477,6 +514,9 @@ func (a *ServerAdapter) ClearArea(areaName string) error {
 	}
 	clients.ForEach(func(c *Client) {
 		if c.Uid() != -1 && c.Area() == target {
+			if discordShieldSpoof(c, "move you out of the area") {
+				return
+			}
 			c.ChangeArea(lobby)
 			c.SendServerMessage(fmt.Sprintf("You were moved out of %s by a moderator.", areaName))
 		}
