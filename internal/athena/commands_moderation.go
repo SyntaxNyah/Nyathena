@@ -1318,9 +1318,31 @@ func cmdForceName(client *Client, args []string, _ string) {
 	}
 	// Store as AO2-encoded so it can be placed directly into the IC packet's
 	// MSToClient.Showname field without an extra encode step on every message.
-	target.SetForcedShowname(encode(name))
-	// PU and in-server messages use the decoded (display) form.
-	broadcastToAll(&aolib.PU{ID: target.Uid(), Type: aolib.PlayerDataTypeShowname, Data: name})
+	applyForcedName := func(c *Client) {
+		c.SetForcedShowname(encode(name))
+		// PU and in-server messages use the decoded (display) form.
+		broadcastToAll(&aolib.PU{ID: c.Uid(), Type: aolib.PlayerDataTypeShowname, Data: name})
+	}
+
+	// A shielded target is never renamed. Spoof mode reports the usual success
+	// so the moderator keeps believing it landed; backfire mode renames the
+	// moderator instead.
+	switch gateAntiPunishShieldAction(client, target, "force a new showname on you") {
+	case antiPunishActionSpoofed:
+		client.SendServerMessage(fmt.Sprintf("Forced UID %v's showname to \"%s\".", uid, name))
+		addToBuffer(client, "CMD", fmt.Sprintf("forced showname of UID %v to \"%s\"", uid, name), true)
+		return
+	case antiPunishActionBackfired:
+		applyForcedName(client)
+		client.SendServerMessage(fmt.Sprintf(
+			"🛡 %v's anti-punishment shield bounced the forcename — your showname is now \"%s\".",
+			oocDisplayName(target), name))
+		addToBuffer(client, "CMD", fmt.Sprintf(
+			"forcename of UID %v backfired; forced UID %v's showname to \"%s\"", uid, client.Uid(), name), true)
+		return
+	}
+
+	applyForcedName(target)
 	target.SendServerMessage(fmt.Sprintf("A moderator has forced your showname to \"%s\".", name))
 	client.SendServerMessage(fmt.Sprintf("Forced UID %v's showname to \"%s\".", uid, name))
 	addToBuffer(client, "CMD", fmt.Sprintf("forced showname of UID %v to \"%s\"", uid, name), true)

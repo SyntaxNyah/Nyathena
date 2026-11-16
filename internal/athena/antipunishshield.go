@@ -221,6 +221,43 @@ func applyAntiPunishShieldIfActive(issuer, target *Client, pTypes []PunishmentTy
 	return true
 }
 
+// antiPunishShieldAction is the outcome of the shield gate for commands that
+// are not PunishmentTypes: /move and /forcename. Unlike a punishment, those
+// commands have no message transform to fake, so the gate only reports what
+// happened and lets the command perform the redirect itself.
+type antiPunishShieldAction int
+
+const (
+	antiPunishActionAllowed antiPunishShieldAction = iota
+	antiPunishActionSpoofed
+	antiPunishActionBackfired
+)
+
+// gateAntiPunishShieldAction is the non-punishment counterpart of
+// applyAntiPunishShieldIfActive. It returns antiPunishActionAllowed when the
+// action may proceed normally, antiPunishActionSpoofed when the target is
+// protected and the issuer must be given the usual success reply, and
+// antiPunishActionBackfired when the command must instead land on the issuer.
+//
+// A self-directed action is never bounced: /move without -u and a moderator
+// renaming themselves remain ordinary, voluntary actions. Every blocked
+// attempt still sends the shielded player the sneaky popup.
+func gateAntiPunishShieldAction(issuer, target *Client, action string) antiPunishShieldAction {
+	if issuer == nil || target == nil || issuer == target {
+		return antiPunishActionAllowed
+	}
+	switch target.AntiPunishShieldMode() {
+	case antiPunishShieldSpoof:
+		sendAntiPunishShieldOutcome(target, issuer, action, false)
+		return antiPunishActionSpoofed
+	case antiPunishShieldBackfire:
+		sendAntiPunishShieldOutcome(target, issuer, action, true)
+		return antiPunishActionBackfired
+	default:
+		return antiPunishActionAllowed
+	}
+}
+
 // sendAntiPunishShieldPopup is the sneaky part: the shielded player is told a
 // moderator just tried to punish them, what it was, and whether it backfired.
 // The moderator sees the spoof and thinks it worked, so the target acting
@@ -233,13 +270,23 @@ func sendAntiPunishShieldPopup(target, issuer *Client, pTypes []PunishmentType, 
 	for i, pType := range pTypes {
 		names[i] = "'" + pType.String() + "'"
 	}
+	sendAntiPunishShieldOutcome(target, issuer, "punish you with "+strings.Join(names, ", "), backfired)
+}
+
+// sendAntiPunishShieldOutcome is the shared popup for every shield bounce.
+// action completes the sentence "shh! <mod> tried to ...", so punishment calls
+// pass "punish you with 'dog'" while /move and /forcename pass their own verb.
+func sendAntiPunishShieldOutcome(target, issuer *Client, action string, backfired bool) {
+	if target == nil || issuer == nil {
+		return
+	}
 	outcome := "It didn't stick"
 	if backfired {
 		outcome = "It backfired on them instead"
 	}
 	target.SendPopup(fmt.Sprintf(
-		"🤫 shh! %v tried to punish you with %v. %v — ur punishment protected. Act normal.",
-		oocDisplayName(issuer), strings.Join(names, ", "), outcome))
+		"🤫 shh! %v tried to %v. %v — ur punishment protected. Act normal.",
+		oocDisplayName(issuer), action, outcome))
 }
 
 // applyAntiPunishBackfire puts the punishment on the moderator who tried to

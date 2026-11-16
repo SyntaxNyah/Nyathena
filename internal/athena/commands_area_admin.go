@@ -828,12 +828,48 @@ func cmdMove(client *Client, args []string, usage string) {
 		var report string
 		var skipped int
 		var skippedReport string
+		// Anti-punishment shield bounces. A shielded target is never moved:
+		// backfire sends the issuer to the requested area instead, while spoof
+		// mode counts the move as a fake success so the moderator's summary
+		// looks unchanged (the same convention punishment commands use).
+		var bounced []string
+		bounceHandled := false
+		var bounceResult string
 		for _, c := range toMove {
 			// A dog moving itself through /move still can't abandon its
 			// master. Moving a dog by another UID is moderator-forced and
 			// deliberately allowed below.
 			if c == client && c.leashBlocksAreaChange(wantedArea) {
 				continue
+			}
+			// Only moving a shielded player to a different area triggers the
+			// shield; a no-op move to their current area is left alone.
+			if c != client && c.Area() != wantedArea {
+				switch gateAntiPunishShieldAction(client, c, "move you") {
+				case antiPunishActionSpoofed:
+					count++
+					report += fmt.Sprintf("%v, ", c.Uid())
+					continue
+				case antiPunishActionBackfired:
+					bounced = append(bounced, oocDisplayName(c))
+					// The first bounce moves the issuer once. Later shielded
+					// targets in the same command are still protected, but the
+					// issuer is already where the bounce would put them.
+					if !bounceHandled {
+						bounceHandled = true
+						switch {
+						case client.Area() == wantedArea:
+							bounceResult = fmt.Sprintf("you were already in %v", wantedArea.Name())
+						case client.leashBlocksAreaChange(wantedArea):
+							bounceResult = "your leash stopped you from being moved"
+						case client.ChangeArea(wantedArea):
+							bounceResult = fmt.Sprintf("you were moved to %v instead", wantedArea.Name())
+						default:
+							bounceResult = fmt.Sprintf("you could not be moved to %v", wantedArea.Name())
+						}
+					}
+					continue
+				}
 			}
 			// Never drag a player out of a punishment-free (safe) area into an
 			// area where punishment effects can still be applied — that would
@@ -856,6 +892,9 @@ func cmdMove(client *Client, args []string, usage string) {
 		summary := fmt.Sprintf("Moved %v users.", count)
 		if skipped > 0 {
 			summary += fmt.Sprintf(" %d client(s) could not be moved out of a punishment-free area: %v.", skipped, strings.TrimSuffix(skippedReport, ", "))
+		}
+		if len(bounced) > 0 {
+			summary += fmt.Sprintf(" 🛡 %v's anti-punishment shield bounced the move — %v.", strings.Join(bounced, ", "), bounceResult)
 		}
 		client.SendServerMessage(summary)
 		addToBuffer(client, "CMD", fmt.Sprintf("Moved %v to %v.", report, wantedArea.Name()), false)

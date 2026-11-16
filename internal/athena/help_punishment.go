@@ -105,7 +105,7 @@ var punishmentHelpGroups = []punishmentSubcategory{
 	},
 	{
 		emoji: "🛡", title: "Anti-punishment shield",
-		desc: "Admin-only, until server restart. The shielded player is immune to punishment effects; the moderator who applied one sees their messages spoofed as if it worked. 'backfire' also applies the punishment to that moderator and reverses a one-on-one /leash onto them. /kick, /ban and /mute still work.",
+		desc: "Admin-only, until server restart. The shielded player is immune to punishment effects; the moderator who applied one sees their messages spoofed as if it worked. 'backfire' also applies the punishment to that moderator, reverses a one-on-one /leash onto them, sends a forced /move back at them, and applies a /forcename to them instead. /kick, /ban and /mute still work.",
 		cmds: []string{"antipunishshield"},
 	},
 	{

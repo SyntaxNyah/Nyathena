@@ -15,7 +15,7 @@ import (
 type shieldTestWorld struct {
 	mod, target, other             *Client
 	modConn, targetConn, otherConn *captureConn
-	area                           *area.Area
+	area, otherArea                *area.Area
 }
 
 // resetAntiPunishShieldStore clears the process-wide restart store so one test
@@ -43,14 +43,15 @@ func newShieldTestWorld(t *testing.T) *shieldTestWorld {
 	t.Cleanup(func() { SetPunishmentsGloballyDisabled(origDisabled) })
 
 	a := makeLeashTestArea("Courtroom")
-	t.Cleanup(setupTestAreas([]*area.Area{a}))
+	b := makeLeashTestArea("Lobby")
+	t.Cleanup(setupTestAreas([]*area.Area{a, b}))
 
 	modConn := &captureConn{}
 	targetConn := &captureConn{}
 	otherConn := &captureConn{}
 	mod := &Client{
 		conn: modConn, uid: 1, ipid: "ip-shield-mod", hdid: "hdid-shield-mod",
-		char: -1, area: a, perms: permissions.PermissionField["MUTE"], mod_name: "Mod",
+		char: -1, area: a, perms: permissions.PermissionField["MUTE"] | permissions.PermissionField["MOVE_USERS"], mod_name: "Mod",
 		pair: ClientPairInfo{wanted_id: -1}, forcePairUID: -1,
 	}
 	target := &Client{
@@ -69,7 +70,7 @@ func newShieldTestWorld(t *testing.T) *shieldTestWorld {
 	}
 	return &shieldTestWorld{
 		mod: mod, target: target, other: other,
-		modConn: modConn, targetConn: targetConn, otherConn: otherConn, area: a,
+		modConn: modConn, targetConn: targetConn, otherConn: otherConn, area: a, otherArea: b,
 	}
 }
 
@@ -240,5 +241,142 @@ func TestAntiPunishShieldOOCSpoof(t *testing.T) {
 	}
 	if got := w.modConn.String(); !strings.Contains(got, "CT#") || !shieldContainsAny(got, dogSounds) {
 		t.Errorf("issuer did not see a dog-spoofed OOC line; got %q", got)
+	}
+}
+
+// TestAntiPunishShieldBackfireMove pins the /move backfire: a moderator who
+// tries to drag a shielded player into another area makes the trip themselves,
+// while the shielded player stays put.
+func TestAntiPunishShieldBackfireMove(t *testing.T) {
+	w := newShieldTestWorld(t)
+	w.target.SetAntiPunishShield(antiPunishShieldBackfire)
+
+	cmdMove(w.mod, []string{"-u", "2", "1"}, "usage")
+
+	if w.target.Area() != w.area {
+		t.Fatalf("shielded target should not have moved; got %v", w.target.Area().Name())
+	}
+	if w.mod.Area() != w.otherArea {
+		t.Fatalf("issuer should have been moved instead; got %v", w.mod.Area().Name())
+	}
+	if got := w.modConn.String(); !strings.Contains(got, "bounced the move") {
+		t.Errorf("issuer was not told the move bounced; got %q", got)
+	}
+	if got := w.targetConn.String(); !strings.Contains(got, "backfired on them instead") {
+		t.Errorf("shielded target was not told it backfired; got %q", got)
+	}
+	if got := w.targetConn.String(); !strings.Contains(got, "move you") {
+		t.Errorf("shielded target popup did not name the action; got %q", got)
+	}
+}
+
+// TestAntiPunishShieldSpoofMove pins spoof-mode /move: the target is protected,
+// the issuer is not redirected, and the summary still counts the fake success.
+func TestAntiPunishShieldSpoofMove(t *testing.T) {
+	w := newShieldTestWorld(t)
+	w.target.SetAntiPunishShield(antiPunishShieldSpoof)
+
+	cmdMove(w.mod, []string{"-u", "2", "1"}, "usage")
+
+	if w.target.Area() != w.area {
+		t.Fatalf("shielded target should not have moved; got %v", w.target.Area().Name())
+	}
+	if w.mod.Area() != w.area {
+		t.Fatalf("spoof mode should not move the issuer; got %v", w.mod.Area().Name())
+	}
+	if got := w.modConn.String(); !strings.Contains(got, "Moved 1 users.") {
+		t.Errorf("issuer did not get the fake success summary; got %q", got)
+	}
+	if got := w.modConn.String(); strings.Contains(got, "bounced") {
+		t.Errorf("issuer was told about a spoof-mode bounce; got %q", got)
+	}
+	if got := w.targetConn.String(); !strings.Contains(got, "It didn't stick") {
+		t.Errorf("shielded target was not told the move was blocked; got %q", got)
+	}
+}
+
+// TestAntiPunishShieldMoveSelfAllowed verifies the shield never traps its owner:
+// a shielded player moving themselves is a voluntary action, not a punishment.
+func TestAntiPunishShieldMoveSelfAllowed(t *testing.T) {
+	w := newShieldTestWorld(t)
+	w.target.SetAntiPunishShield(antiPunishShieldBackfire)
+
+	cmdMove(w.target, []string{"1"}, "usage")
+
+	if w.target.Area() != w.otherArea {
+		t.Fatalf("shielded player should be able to move themselves; got %v", w.target.Area().Name())
+	}
+}
+
+// TestAntiPunishShieldBackfireMoveRespectsLeash verifies the bounce cannot be
+// used as a leash escape hatch: a dog moderator stays with its master.
+func TestAntiPunishShieldBackfireMoveRespectsLeash(t *testing.T) {
+	w := newShieldTestWorld(t)
+	w.target.SetAntiPunishShield(antiPunishShieldBackfire)
+
+	// Make the moderator a dog of "other" (both need a selected character).
+	w.mod.SetCharID(2)
+	cmdLeash(w.other, []string{"3", "1"}, "usage")
+	if w.mod.Leash() == nil || !w.mod.Leash().IsDog(w.mod) {
+		t.Fatal("setup: moderator is not leashed")
+	}
+
+	cmdMove(w.mod, []string{"-u", "2", "1"}, "usage")
+
+	if w.target.Area() != w.area {
+		t.Fatalf("shielded target should not have moved; got %v", w.target.Area().Name())
+	}
+	if w.mod.Area() != w.area {
+		t.Fatalf("leashed moderator should not be bounced out of its master's area; got %v", w.mod.Area().Name())
+	}
+	if got := w.modConn.String(); !strings.Contains(got, "your leash stopped you") {
+		t.Errorf("issuer was not told the leash blocked the bounce; got %q", got)
+	}
+}
+
+// TestAntiPunishShieldBackfireForceName pins the /forcename backfire: the
+// shielded player keeps its name and the moderator is renamed instead.
+func TestAntiPunishShieldBackfireForceName(t *testing.T) {
+	w := newShieldTestWorld(t)
+	w.target.SetAntiPunishShield(antiPunishShieldBackfire)
+	const name = "Bounced Name"
+
+	cmdForceName(w.mod, []string{"2", name}, "usage")
+
+	if got := w.target.ForcedShowname(); got != "" {
+		t.Errorf("shielded target was renamed: %q", got)
+	}
+	if got := w.mod.ForcedShowname(); got != encode(name) {
+		t.Errorf("moderator forced showname = %q, want %q", got, encode(name))
+	}
+	if got := w.modConn.String(); !strings.Contains(got, "bounced the forcename") {
+		t.Errorf("issuer was not told the forcename bounced; got %q", got)
+	}
+	if got := w.targetConn.String(); !strings.Contains(got, "backfired on them instead") {
+		t.Errorf("shielded target was not told it backfired; got %q", got)
+	}
+}
+
+// TestAntiPunishShieldSpoofForceName pins spoof-mode /forcename: neither player
+// is renamed, the moderator sees the usual success reply, and the target is
+// quietly warned.
+func TestAntiPunishShieldSpoofForceName(t *testing.T) {
+	w := newShieldTestWorld(t)
+	w.target.SetAntiPunishShield(antiPunishShieldSpoof)
+	const name = "Spoofed Name"
+
+	cmdForceName(w.mod, []string{"2", name}, "usage")
+
+	if got := w.target.ForcedShowname(); got != "" {
+		t.Errorf("shielded target was renamed: %q", got)
+	}
+	if got := w.mod.ForcedShowname(); got != "" {
+		t.Errorf("spoof mode renamed the moderator: %q", got)
+	}
+	if got := w.modConn.String(); !strings.Contains(got, "Forced UID 2's showname") {
+		t.Errorf("issuer did not get the fake success reply; got %q", got)
+	}
+	if got := w.targetConn.String(); !strings.Contains(got, "It didn't stick") {
+		t.Errorf("shielded target was not told the rename was blocked; got %q", got)
 	}
 }
