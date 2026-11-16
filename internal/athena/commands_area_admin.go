@@ -828,13 +828,11 @@ func cmdMove(client *Client, args []string, usage string) {
 		var report string
 		var skipped int
 		var skippedReport string
-		// Anti-punishment shield bounces. A shielded target is never moved:
-		// backfire sends the issuer to the requested area instead, while spoof
-		// mode counts the move as a fake success so the moderator's summary
-		// looks unchanged (the same convention punishment commands use).
-		var bounced []string
-		bounceHandled := false
-		var bounceResult string
+		// Anti-punishment shield bounces. A shielded target is never moved.
+		// Both modes report the move as a normal success so the moderator is
+		// not told the shield exists; in backfire mode the issuer takes the
+		// trip instead, silently.
+		bounceMoved := false
 		for _, c := range toMove {
 			// A dog moving itself through /move still can't abandon its
 			// master. Moving a dog by another UID is moderator-forced and
@@ -851,23 +849,18 @@ func cmdMove(client *Client, args []string, usage string) {
 					report += fmt.Sprintf("%v, ", c.Uid())
 					continue
 				case antiPunishActionBackfired:
-					bounced = append(bounced, oocDisplayName(c))
-					// The first bounce moves the issuer once. Later shielded
-					// targets in the same command are still protected, but the
-					// issuer is already where the bounce would put them.
-					if !bounceHandled {
-						bounceHandled = true
-						switch {
-						case client.Area() == wantedArea:
-							bounceResult = fmt.Sprintf("you were already in %v", wantedArea.Name())
-						case client.leashBlocksAreaChange(wantedArea):
-							bounceResult = "your leash stopped you from being moved"
-						case client.ChangeArea(wantedArea):
-							bounceResult = fmt.Sprintf("you were moved to %v instead", wantedArea.Name())
-						default:
-							bounceResult = fmt.Sprintf("you could not be moved to %v", wantedArea.Name())
+					// Move the issuer once, without a backfire message. Later
+					// shielded targets in the same command are still protected;
+					// the fake count below keeps the summary identical to a
+					// normal successful /move.
+					if !bounceMoved {
+						bounceMoved = true
+						if client.Area() != wantedArea && !client.leashBlocksAreaChange(wantedArea) {
+							client.ChangeArea(wantedArea)
 						}
 					}
+					count++
+					report += fmt.Sprintf("%v, ", c.Uid())
 					continue
 				}
 			}
@@ -892,9 +885,6 @@ func cmdMove(client *Client, args []string, usage string) {
 		summary := fmt.Sprintf("Moved %v users.", count)
 		if skipped > 0 {
 			summary += fmt.Sprintf(" %d client(s) could not be moved out of a punishment-free area: %v.", skipped, strings.TrimSuffix(skippedReport, ", "))
-		}
-		if len(bounced) > 0 {
-			summary += fmt.Sprintf(" 🛡 %v's anti-punishment shield bounced the move — %v.", strings.Join(bounced, ", "), bounceResult)
 		}
 		client.SendServerMessage(summary)
 		addToBuffer(client, "CMD", fmt.Sprintf("Moved %v to %v.", report, wantedArea.Name()), false)

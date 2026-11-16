@@ -9,7 +9,9 @@ import (
 	"time"
 
 	"github.com/MangosArentLiterature/Athena/internal/area"
+	"github.com/MangosArentLiterature/Athena/internal/db"
 	"github.com/MangosArentLiterature/Athena/internal/permissions"
+	"github.com/MangosArentLiterature/Athena/internal/settings"
 )
 
 type shieldTestWorld struct {
@@ -41,6 +43,12 @@ func newShieldTestWorld(t *testing.T) *shieldTestWorld {
 	origDisabled := punishmentsGloballyDisabled.Load()
 	SetPunishmentsGloballyDisabled(false)
 	t.Cleanup(func() { SetPunishmentsGloballyDisabled(origDisabled) })
+
+	// /ban reads the server-configured default duration even when the test
+	// passes -d, so the fixture needs a non-nil config.
+	origConfig := config
+	config = &settings.Config{ServerConfig: settings.ServerConfig{BanLen: "3d"}}
+	t.Cleanup(func() { config = origConfig })
 
 	a := makeLeashTestArea("Courtroom")
 	b := makeLeashTestArea("Lobby")
@@ -81,6 +89,13 @@ func shieldContainsAny(s string, subs []string) bool {
 		}
 	}
 	return false
+}
+
+// isClosed reports whether the server has closed this test connection.
+func (c *captureConn) isClosed() bool {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.closed
 }
 
 func TestAntiPunishShieldRegistered(t *testing.T) {
@@ -259,8 +274,11 @@ func TestAntiPunishShieldBackfireMove(t *testing.T) {
 	if w.mod.Area() != w.otherArea {
 		t.Fatalf("issuer should have been moved instead; got %v", w.mod.Area().Name())
 	}
-	if got := w.modConn.String(); !strings.Contains(got, "bounced the move") {
-		t.Errorf("issuer was not told the move bounced; got %q", got)
+	if got := w.modConn.String(); strings.Contains(got, "bounced") {
+		t.Errorf("issuer was told the move bounced; got %q", got)
+	}
+	if got := w.modConn.String(); !strings.Contains(got, "Moved 1 users.") {
+		t.Errorf("issuer did not get the normal success summary; got %q", got)
 	}
 	if got := w.targetConn.String(); !strings.Contains(got, "backfired on them instead") {
 		t.Errorf("shielded target was not told it backfired; got %q", got)
@@ -329,8 +347,11 @@ func TestAntiPunishShieldBackfireMoveRespectsLeash(t *testing.T) {
 	if w.mod.Area() != w.area {
 		t.Fatalf("leashed moderator should not be bounced out of its master's area; got %v", w.mod.Area().Name())
 	}
-	if got := w.modConn.String(); !strings.Contains(got, "your leash stopped you") {
-		t.Errorf("issuer was not told the leash blocked the bounce; got %q", got)
+	if got := w.modConn.String(); strings.Contains(got, "anti-punishment shield") {
+		t.Errorf("issuer was told about the shield; got %q", got)
+	}
+	if got := w.modConn.String(); !strings.Contains(got, "Moved 1 users.") {
+		t.Errorf("issuer did not get the normal success summary; got %q", got)
 	}
 }
 
@@ -349,8 +370,11 @@ func TestAntiPunishShieldBackfireForceName(t *testing.T) {
 	if got := w.mod.ForcedShowname(); got != encode(name) {
 		t.Errorf("moderator forced showname = %q, want %q", got, encode(name))
 	}
-	if got := w.modConn.String(); !strings.Contains(got, "bounced the forcename") {
-		t.Errorf("issuer was not told the forcename bounced; got %q", got)
+	if got := w.modConn.String(); strings.Contains(got, "bounced") {
+		t.Errorf("issuer was told the forcename bounced; got %q", got)
+	}
+	if got := w.modConn.String(); !strings.Contains(got, "Forced UID 2's showname") {
+		t.Errorf("issuer did not get the normal success reply; got %q", got)
 	}
 	if got := w.targetConn.String(); !strings.Contains(got, "backfired on them instead") {
 		t.Errorf("shielded target was not told it backfired; got %q", got)
@@ -378,5 +402,127 @@ func TestAntiPunishShieldSpoofForceName(t *testing.T) {
 	}
 	if got := w.targetConn.String(); !strings.Contains(got, "It didn't stick") {
 		t.Errorf("shielded target was not told the rename was blocked; got %q", got)
+	}
+}
+
+// TestAntiPunishShieldBackfireKick pins the /kick backfire: the shielded
+// player stays connected and the issuing moderator is disconnected instead.
+func TestAntiPunishShieldBackfireKick(t *testing.T) {
+	w := newShieldTestWorld(t)
+	w.target.SetAntiPunishShield(antiPunishShieldBackfire)
+
+	cmdKick(w.mod, []string{"-u", "2", "bounced"}, "usage")
+
+	if w.targetConn.isClosed() {
+		t.Fatal("shielded target was disconnected")
+	}
+	if !w.modConn.isClosed() {
+		t.Fatal("issuer was not disconnected by the backfire")
+	}
+	if got := w.targetConn.String(); !strings.Contains(got, "backfired on them instead") {
+		t.Errorf("shielded target was not told it backfired; got %q", got)
+	}
+	if got := w.targetConn.String(); strings.Contains(got, "bounced") {
+		t.Errorf("shielded target received the kick reason; got %q", got)
+	}
+	if got := w.modConn.String(); !strings.Contains(got, "bounced") {
+		t.Errorf("issuer did not receive the kick packet; got %q", got)
+	}
+	if got := w.modConn.String(); strings.Contains(got, "anti-punishment shield") {
+		t.Errorf("issuer was told about the shield; got %q", got)
+	}
+}
+
+// TestAntiPunishShieldSpoofKick pins spoof-mode /kick: the target stays
+// connected, the issuer is not kicked, and the summary still says success.
+func TestAntiPunishShieldSpoofKick(t *testing.T) {
+	w := newShieldTestWorld(t)
+	w.target.SetAntiPunishShield(antiPunishShieldSpoof)
+
+	cmdKick(w.mod, []string{"-u", "2", "bounced"}, "usage")
+
+	if w.targetConn.isClosed() {
+		t.Fatal("shielded target was disconnected")
+	}
+	if w.modConn.isClosed() {
+		t.Fatal("spoof mode disconnected the issuer")
+	}
+	if got := w.modConn.String(); !strings.Contains(got, "Kicked 1 clients.") {
+		t.Errorf("issuer did not get the fake success summary; got %q", got)
+	}
+	if got := w.modConn.String(); strings.Contains(got, "anti-punishment shield") {
+		t.Errorf("issuer was told about the shield; got %q", got)
+	}
+	if got := w.targetConn.String(); !strings.Contains(got, "It didn't stick") {
+		t.Errorf("shielded target was not told the kick was blocked; got %q", got)
+	}
+}
+
+// TestAntiPunishShieldBackfireBan pins the /ban backfire: the shielded player's
+// IPID stays unbanned and the issuing moderator's IPID is banned instead.
+func TestAntiPunishShieldBackfireBan(t *testing.T) {
+	w := newShieldTestWorld(t)
+	w.target.SetAntiPunishShield(antiPunishShieldBackfire)
+
+	cmdBan(w.mod, []string{"-u", "2", "-d", "1h", "bounced"}, "usage")
+
+	targetBanned, _, err := db.IsBanned(db.IPID, w.target.Ipid())
+	if err != nil {
+		t.Fatalf("IsBanned(target): %v", err)
+	}
+	if targetBanned {
+		t.Fatal("shielded target was banned")
+	}
+	issuerBanned, _, err := db.IsBanned(db.IPID, w.mod.Ipid())
+	if err != nil {
+		t.Fatalf("IsBanned(issuer): %v", err)
+	}
+	if !issuerBanned {
+		t.Fatal("issuer was not banned by the backfire")
+	}
+	if !w.modConn.isClosed() {
+		t.Fatal("issuer was not disconnected by the ban backfire")
+	}
+	if w.targetConn.isClosed() {
+		t.Fatal("shielded target was disconnected")
+	}
+	if got := w.targetConn.String(); !strings.Contains(got, "backfired on them instead") {
+		t.Errorf("shielded target was not told it backfired; got %q", got)
+	}
+	if got := w.modConn.String(); strings.Contains(got, "anti-punishment shield") {
+		t.Errorf("issuer was told about the shield; got %q", got)
+	}
+}
+
+// TestAntiPunishShieldSpoofBan pins spoof-mode /ban: neither IPID is banned
+// and the issuer gets the normal success summary.
+func TestAntiPunishShieldSpoofBan(t *testing.T) {
+	w := newShieldTestWorld(t)
+	w.target.SetAntiPunishShield(antiPunishShieldSpoof)
+
+	cmdBan(w.mod, []string{"-u", "2", "-d", "1h", "bounced"}, "usage")
+
+	targetBanned, _, err := db.IsBanned(db.IPID, w.target.Ipid())
+	if err != nil {
+		t.Fatalf("IsBanned(target): %v", err)
+	}
+	if targetBanned {
+		t.Fatal("shielded target was banned")
+	}
+	issuerBanned, _, err := db.IsBanned(db.IPID, w.mod.Ipid())
+	if err != nil {
+		t.Fatalf("IsBanned(issuer): %v", err)
+	}
+	if issuerBanned {
+		t.Fatal("spoof mode banned the issuer")
+	}
+	if got := w.modConn.String(); !strings.Contains(got, "Banned 1 IPID(s).") {
+		t.Errorf("issuer did not get the fake success summary; got %q", got)
+	}
+	if got := w.modConn.String(); strings.Contains(got, "anti-punishment shield") {
+		t.Errorf("issuer was told about the shield; got %q", got)
+	}
+	if got := w.targetConn.String(); !strings.Contains(got, "It didn't stick") {
+		t.Errorf("shielded target was not told the ban was blocked; got %q", got)
 	}
 }

@@ -258,6 +258,25 @@ func gateAntiPunishShieldAction(issuer, target *Client, action string) antiPunis
 	}
 }
 
+// antiPunishShieldedClientOnIPID returns an online client on ipid that carries
+// an anti-punishment shield, preferring a backfire shield when an IPID has
+// several clients. /ban works per IPID rather than per connection, so it uses
+// this to protect every player on a shielded IPID.
+func antiPunishShieldedClientOnIPID(ipid string) *Client {
+	var spoofed *Client
+	for _, c := range getClientsByIpid(ipid) {
+		switch c.AntiPunishShieldMode() {
+		case antiPunishShieldBackfire:
+			return c
+		case antiPunishShieldSpoof:
+			if spoofed == nil {
+				spoofed = c
+			}
+		}
+	}
+	return spoofed
+}
+
 // sendAntiPunishShieldPopup is the sneaky part: the shielded player is told a
 // moderator just tried to punish them, what it was, and whether it backfired.
 // The moderator sees the spoof and thinks it worked, so the target acting

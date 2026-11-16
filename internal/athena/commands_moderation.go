@@ -124,47 +124,41 @@ func cmdBan(client *Client, args []string, usage string) {
 
 	// Ban every resolved IPID outright: record the ban (plus each online
 	// client's HDID so it holds across an IP change) and disconnect every
-	// client on that IPID.
+	// client on that IPID. A shielded player protects their whole IPID; in
+	// backfire mode the issuer's IPID is banned instead, silently.
+	issuerBanned := false
 	for _, ipid := range *ipids {
-		onlineClients := getClientsByIpid(ipid)
-		if len(onlineClients) == 0 {
-			// Offline ban – no HDID available.
-			id, err := db.AddBan(ipid, "", banTime, until, reason, client.StoredModName())
-			if err != nil {
-				continue
-			}
-			forgetIP(ipid)
-			if err := webhook.PostBan("N/A", "N/A", "N/A", ipid, -1, id, *duration, reason, client.DisplayModName()); err != nil {
-				logger.LogErrorf("while posting ban webhook: %v", err)
-			}
-		} else {
-			// Online ban – record each unique HDID so the ban holds if the user
-			// reconnects from a different IP address.
-			banIDByHdid := make(map[string]int)
-			for _, c := range onlineClients {
-				if _, done := banIDByHdid[c.Hdid()]; done {
-					continue
+		if shielded := antiPunishShieldedClientOnIPID(ipid); shielded != nil {
+			switch gateAntiPunishShieldAction(client, shielded, "ban you") {
+			case antiPunishActionSpoofed:
+				if reportBuilder.Len() > 0 {
+					reportBuilder.WriteString(", ")
 				}
-				id, err := db.AddBan(c.Ipid(), c.Hdid(), banTime, until, reason, client.StoredModName())
-				if err == nil {
-					banIDByHdid[c.Hdid()] = id
-				}
-			}
-			if len(banIDByHdid) == 0 {
+				reportBuilder.WriteString(ipid)
+				count++
 				continue
-			}
-			forgetIP(ipid)
-			for _, c := range onlineClients {
-				if id, ok := banIDByHdid[c.Hdid()]; ok {
-					c.SendSync(&aolib.KB{Reason: fmt.Sprintf("%v\nUntil: %v\nID: %v", reason, untilS, id)})
-					if err := webhook.PostBan(c.CurrentCharacter(), c.Showname(), c.OOCName(), ipid, c.Uid(), id, *duration, reason, client.DisplayModName()); err != nil {
-						logger.LogErrorf("while posting ban webhook: %v", err)
+			case antiPunishActionBackfired:
+				// A multiclient sharing the issuer's IPID must not take the
+				// shielded player down with the backfire.
+				if !issuerBanned && client.Ipid() != ipid {
+					issuerBanned = true
+					if banIPID(client, client.Ipid(), banTime, until, untilS, reason, *duration) {
+						seenIPIDs[client.Ipid()] = struct{}{}
 					}
-				} else {
-					c.SendSync(&aolib.KB{Reason: fmt.Sprintf("%v\nUntil: %v", reason, untilS)})
 				}
-				c.conn.Close()
+				if reportBuilder.Len() > 0 {
+					reportBuilder.WriteString(", ")
+				}
+				reportBuilder.WriteString(ipid)
+				count++
+				continue
 			}
+		}
+		if issuerBanned && ipid == client.Ipid() {
+			continue
+		}
+		if !banIPID(client, ipid, banTime, until, untilS, reason, *duration) {
+			continue
 		}
 		if _, seen := seenIPIDs[ipid]; !seen {
 			seenIPIDs[ipid] = struct{}{}
@@ -180,6 +174,55 @@ func cmdBan(client *Client, args []string, usage string) {
 	requestPlayerArup()
 	addToBuffer(client, "CMD", fmt.Sprintf("Banned %v from server for %v: %v.", report, *duration, reason), true)
 	alertBannedAccountLinks(seenIPIDs)
+}
+
+// banIPID records a ban for ipid and disconnects every online client on it.
+// It returns true when at least one ban row was written. The caller owns the
+// report/count bookkeeping so the surrounding command can keep its summary
+// stable even when an anti-punishment shield redirects the ban.
+func banIPID(issuer *Client, ipid string, banTime, until int64, untilS, reason, duration string) bool {
+	onlineClients := getClientsByIpid(ipid)
+	if len(onlineClients) == 0 {
+		// Offline ban – no HDID available.
+		id, err := db.AddBan(ipid, "", banTime, until, reason, issuer.StoredModName())
+		if err != nil {
+			return false
+		}
+		forgetIP(ipid)
+		if err := webhook.PostBan("N/A", "N/A", "N/A", ipid, -1, id, duration, reason, issuer.DisplayModName()); err != nil {
+			logger.LogErrorf("while posting ban webhook: %v", err)
+		}
+		return true
+	}
+
+	// Online ban – record each unique HDID so the ban holds if the user
+	// reconnects from a different IP address.
+	banIDByHdid := make(map[string]int)
+	for _, c := range onlineClients {
+		if _, done := banIDByHdid[c.Hdid()]; done {
+			continue
+		}
+		id, err := db.AddBan(c.Ipid(), c.Hdid(), banTime, until, reason, issuer.StoredModName())
+		if err == nil {
+			banIDByHdid[c.Hdid()] = id
+		}
+	}
+	if len(banIDByHdid) == 0 {
+		return false
+	}
+	forgetIP(ipid)
+	for _, c := range onlineClients {
+		if id, ok := banIDByHdid[c.Hdid()]; ok {
+			c.SendSync(&aolib.KB{Reason: fmt.Sprintf("%v\nUntil: %v\nID: %v", reason, untilS, id)})
+			if err := webhook.PostBan(c.CurrentCharacter(), c.Showname(), c.OOCName(), ipid, c.Uid(), id, duration, reason, issuer.DisplayModName()); err != nil {
+				logger.LogErrorf("while posting ban webhook: %v", err)
+			}
+		} else {
+			c.SendSync(&aolib.KB{Reason: fmt.Sprintf("%v\nUntil: %v", reason, untilS)})
+		}
+		c.conn.Close()
+	}
+	return true
 }
 
 // alertBannedAccountLinks looks up whether any freshly-banned IPID is linked
@@ -404,17 +447,50 @@ func cmdKick(client *Client, args []string, usage string) {
 	var count int
 	var reportBuilder strings.Builder
 	reason := strings.Join(flags.Args(), " ")
+	kickClient := func(c *Client) {
+		c.SendSync(&aolib.KK{Reason: reason})
+		c.conn.Close()
+		if err := webhook.PostKick(c.CurrentCharacter(), c.Showname(), c.OOCName(), c.Ipid(), reason, client.DisplayModName(), c.Uid()); err != nil {
+			logger.LogErrorf("while posting kick webhook: %v", err)
+		}
+	}
+	issuerKicked := false
 	for _, c := range toKick {
+		if c != client {
+			switch gateAntiPunishShieldAction(client, c, "kick you") {
+			case antiPunishActionSpoofed:
+				// The target is protected; report a normal kick so the
+				// moderator is not told the shield exists.
+				if reportBuilder.Len() > 0 {
+					reportBuilder.WriteString(", ")
+				}
+				reportBuilder.WriteString(c.Ipid())
+				count++
+				continue
+			case antiPunishActionBackfired:
+				// Kick the issuer once, silently. The shielded target is still
+				// reported as kicked so the summary reads as normal.
+				if !issuerKicked {
+					issuerKicked = true
+					kickClient(client)
+				}
+				if reportBuilder.Len() > 0 {
+					reportBuilder.WriteString(", ")
+				}
+				reportBuilder.WriteString(c.Ipid())
+				count++
+				continue
+			}
+		}
+		if issuerKicked && c == client {
+			continue
+		}
 		if reportBuilder.Len() > 0 {
 			reportBuilder.WriteString(", ")
 		}
 		reportBuilder.WriteString(c.Ipid())
-		c.SendSync(&aolib.KK{Reason: reason})
-		c.conn.Close()
+		kickClient(c)
 		count++
-		if err := webhook.PostKick(c.CurrentCharacter(), c.Showname(), c.OOCName(), c.Ipid(), reason, client.DisplayModName(), c.Uid()); err != nil {
-			logger.LogErrorf("while posting kick webhook: %v", err)
-		}
 	}
 	report := reportBuilder.String()
 	client.SendServerMessage(fmt.Sprintf("Kicked %v clients.", count))
@@ -1324,21 +1400,17 @@ func cmdForceName(client *Client, args []string, _ string) {
 		broadcastToAll(&aolib.PU{ID: c.Uid(), Type: aolib.PlayerDataTypeShowname, Data: name})
 	}
 
-	// A shielded target is never renamed. Spoof mode reports the usual success
+	// A shielded target is never renamed. Both modes report the usual success
 	// so the moderator keeps believing it landed; backfire mode renames the
-	// moderator instead.
-	switch gateAntiPunishShieldAction(client, target, "force a new showname on you") {
-	case antiPunishActionSpoofed:
+	// moderator instead, silently.
+	outcome := gateAntiPunishShieldAction(client, target, "force a new showname on you")
+	switch outcome {
+	case antiPunishActionSpoofed, antiPunishActionBackfired:
+		if outcome == antiPunishActionBackfired {
+			applyForcedName(client)
+		}
 		client.SendServerMessage(fmt.Sprintf("Forced UID %v's showname to \"%s\".", uid, name))
 		addToBuffer(client, "CMD", fmt.Sprintf("forced showname of UID %v to \"%s\"", uid, name), true)
-		return
-	case antiPunishActionBackfired:
-		applyForcedName(client)
-		client.SendServerMessage(fmt.Sprintf(
-			"🛡 %v's anti-punishment shield bounced the forcename — your showname is now \"%s\".",
-			oocDisplayName(target), name))
-		addToBuffer(client, "CMD", fmt.Sprintf(
-			"forcename of UID %v backfired; forced UID %v's showname to \"%s\"", uid, client.Uid(), name), true)
 		return
 	}
 
