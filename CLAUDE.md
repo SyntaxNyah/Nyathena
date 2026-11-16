@@ -237,7 +237,7 @@ The leash follows the same backfire rule. A backfire-shielded player cannot be l
 
 `/kick` and `/ban` are covered too. A shielded player cannot be disconnected or banned: in backfire mode the issuing moderator is kicked or banned instead, silently — they only see the normal `Kicked N clients.` / `Banned N IPID(s).` summary, never a backfire announcement. Spoof mode blocks both and reports the same fake success. `/ban` checks every client on the target IPID, so one shielded player protects that whole IPID; the issuer's own IPID is banned instead (unless the two share an IPID, where the backfire is skipped so the shield owner cannot be caught by it). `/mute` remains ordinary moderation.
 
-`/kickarea` (and its `/areakick` alias) is covered as a forced move: a shielded player stays in the area and, in backfire mode, the issuer is moved to the lobby instead. Ordinary moderators and shadow mods are no longer exempt from area kicks; only administrators are.
+`/kickarea` (and its `/areakick` alias) is deliberately **not** covered by the shield — area kicks still eject a shielded player. Ordinary moderators and shadow mods are no longer exempt from area kicks; only administrators are.
 
 The Discord bridge follows the same rule for every player-targeting moderation/punishment action: `/kick`, `/ban`, `/mute`, `/gag`, `/warn`, `/punish`, `/move`, and `/cleararea` do nothing to a shielded player while the bot still reports success, and the player gets the sneaky popup naming a Discord moderator. `/cleararea` moves everyone else and leaves the shielded player in the area. `/unmute`, `/ungag`, `/unpunish`, `/unban`, communication commands, and server-wide actions are not punishment effects and remain functional.
 

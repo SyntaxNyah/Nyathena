@@ -597,7 +597,6 @@ func cmdAreaKick(client *Client, args []string, _ string) {
 
 	var count int
 	var report string
-	bounceMoved := false
 	for _, c := range toKick {
 		// Administrators stay exempt from area kicks, but ordinary moderators
 		// and shadow mods holding BYPASS_LOCK are fair game.
@@ -606,25 +605,6 @@ func cmdAreaKick(client *Client, args []string, _ string) {
 		}
 		if c == client {
 			client.SendServerMessage("You can't kick yourself from the area.")
-			continue
-		}
-		// A forced area change is the same class of effect as /move, so a
-		// shielded player is never ejected. Backfire moves the issuer to the
-		// lobby instead, silently.
-		switch gateAntiPunishShieldAction(client, c, "kick you from the area") {
-		case antiPunishActionSpoofed:
-			count++
-			report += fmt.Sprintf("%v, ", c.Uid())
-			continue
-		case antiPunishActionBackfired:
-			if !bounceMoved {
-				bounceMoved = true
-				if client.Area() != areas[0] && !client.leashBlocksAreaChange(areas[0]) {
-					client.ChangeArea(areas[0])
-				}
-			}
-			count++
-			report += fmt.Sprintf("%v, ", c.Uid())
 			continue
 		}
 		// Remove from the area's invite list before moving them. /lock adds
