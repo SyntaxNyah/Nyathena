@@ -107,7 +107,7 @@ For moderator-only commands, see [`MOD_COMMANDS.md`](MOD_COMMANDS.md). For casin
 | `/lock -s` | Set the area spectatable |
 | `/spectate [invite\|uninvite <uids>]` | Toggle spectate mode — everyone may enter and watch, only CMs and invited players may speak IC. Listed in `/help` for every player so anyone can look up what it does. |
 | `/invite <uids>` / `/uninvite <uids>` | Grant or revoke entry in a locked area, and IC speaking rights in spectate mode |
-| `/kickarea <uids>` | Eject players from the area (they also drop off the invite list, so they cannot walk back in) |
+| `/kickarea <uids>` | Eject players from the area — moderators included; only administrators are exempt. They also drop off the invite list, so they cannot walk back in. |
 | `/forcepos <uids\|all> <position>` | Stage a scene: push players in your area into a courtroom position |
 | `/status <idle\|lfp\|casing\|recess\|rp\|gaming>` | Set the area status shown on the area list (`lfp` is short for `looking-for-players`) |
 | `/evimode <any\|cms\|mods>` | Set who may edit evidence |
