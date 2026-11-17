@@ -215,7 +215,6 @@ type ServerConfig struct {
 	TypingRacePhrases   []string `toml:"typing_race_phrases"`
 	DailyQuote          bool     `toml:"dailyquote"`
 	Icebreaker          bool     `toml:"icebreaker"`
-	GuessWho            bool     `toml:"guesswho"`
 	BotTextColor        string   `toml:"bot_text_color"`
 	BotIniCharacter     string   `toml:"bot_ini_character"`
 	BotEmote            string   `toml:"bot_emote"`

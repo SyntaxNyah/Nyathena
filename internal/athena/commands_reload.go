@@ -29,7 +29,7 @@ import "fmt"
 //   - backgrounds.txt
 //   - parrot.txt
 //   - 8ball.txt          (optional; missing file leaves current value intact)
-//   - quote.txt, icebreakers.txt, guesswho.txt (local bot content)
+//   - quote.txt, icebreakers.txt (local bot content)
 //   - banned_words.txt   (only when automod is enabled)
 //   - config.toml        (motd, description, raid guard and bot settings)
 //

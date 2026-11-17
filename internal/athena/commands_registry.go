@@ -109,14 +109,6 @@ func initCommands() {
 			reqPerms: permissions.PermissionField["NONE"],
 			category: "general",
 		},
-		"guesswho": {
-			handler:  cmdGuessWho,
-			minArgs:  0,
-			usage:    "Usage: /guesswho",
-			desc:     "Guess the character in a 60-second IC round.",
-			reqPerms: permissions.PermissionField["NONE"],
-			category: "general",
-		},
 		"8ball": {
 			handler:  cmd8Ball,
 			minArgs:  1,
@@ -1566,7 +1558,7 @@ func initCommands() {
 			handler:  cmdReload,
 			minArgs:  0,
 			usage:    "Usage: /reload",
-			desc:     "Hot-reloads supported data lists, including quote.txt, icebreakers.txt, guesswho.txt, and safe config.toml settings.",
+			desc:     "Hot-reloads supported data lists, including quote.txt, icebreakers.txt, and safe config.toml settings.",
 			reqPerms: permissions.PermissionField["ADMIN"],
 			category: "moderation",
 		},

@@ -14,7 +14,6 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
-	"unicode"
 	"unicode/utf8"
 
 	aolib "github.com/AO-Underground/aolib/go/v2"
@@ -31,21 +30,13 @@ const (
 	botPace        = 1300 * time.Millisecond
 )
 
-type guessWhoCharacter struct {
-	Sprite  string
-	Emote   string
-	Answer  string
-	Aliases []string
-}
 type botContent struct {
 	Quotes      map[string]string
 	Icebreakers []string
-	Characters  []guessWhoCharacter
 }
 type botOptions struct {
 	DailyQuote   bool
 	Icebreaker   bool
-	GuessWho     bool
 	Color        aolib.TextColor
 	IniCharacter string
 	Emote        string
@@ -91,7 +82,7 @@ func parseBotOptions(c *settings.Config) (botOptions, error) {
 	if strings.ContainsAny(ini, "#\r\n") || strings.ContainsAny(emote, "#\r\n") {
 		return botOptions{}, errors.New("bot character/emote names cannot contain packet delimiters")
 	}
-	return botOptions{DailyQuote: c.DailyQuote, Icebreaker: c.Icebreaker, GuessWho: c.GuessWho,
+	return botOptions{DailyQuote: c.DailyQuote, Icebreaker: c.Icebreaker,
 		Color: aolib.TextColor(color), IniCharacter: ini, Emote: emote}, nil
 }
 
@@ -105,9 +96,6 @@ func publishBotOptions(c *settings.Config) (int, error) {
 		return 0, nil
 	}
 	botOptionsPtr.Store(&next)
-	if old != nil && old.GuessWho && !next.GuessWho {
-		cancelAllGuessWho()
-	}
 	return 1, nil
 }
 
@@ -181,32 +169,6 @@ func parseQuestionLines(lines []string) ([]string, error) {
 	}
 	return append([]string(nil), lines...), nil
 }
-func parseCharacterLines(lines []string) ([]guessWhoCharacter, error) {
-	var out []guessWhoCharacter
-	for i, line := range lines {
-		parts := strings.Split(line, "|")
-		if len(parts) < 3 {
-			return nil, fmt.Errorf("guesswho.txt: line %d should be sprite|animation|answer|aliases...", i+1)
-		}
-		for j := range parts {
-			parts[j] = strings.TrimSpace(parts[j])
-		}
-		if parts[0] == "" || parts[1] == "" || parts[2] == "" || strings.ContainsAny(parts[0], "/\\\r\n") {
-			return nil, fmt.Errorf("guesswho.txt: invalid sprite or answer on line %d", i+1)
-		}
-		if utf8.RuneCountInString(parts[0]) > 120 || utf8.RuneCountInString(parts[1]) > 120 || utf8.RuneCountInString(parts[2]) > 120 {
-			return nil, fmt.Errorf("guesswho.txt: oversized entry on line %d", i+1)
-		}
-		aliases := append([]string{parts[2]}, parts[3:]...)
-		for _, name := range aliases {
-			if normalizeCharacterGuess(name) == "" {
-				return nil, fmt.Errorf("guesswho.txt: blank alias on line %d", i+1)
-			}
-		}
-		out = append(out, guessWhoCharacter{Sprite: parts[0], Emote: parts[1], Answer: parts[2], Aliases: aliases})
-	}
-	return out, nil
-}
 func loadBotContent() (*botContent, error) {
 	qlines, err := readBotLines("quote.txt")
 	if err != nil {
@@ -224,15 +186,7 @@ func loadBotContent() (*botContent, error) {
 	if err != nil {
 		return nil, err
 	}
-	glines, err := readBotLines("guesswho.txt")
-	if err != nil {
-		return nil, err
-	}
-	chars, err := parseCharacterLines(glines)
-	if err != nil {
-		return nil, err
-	}
-	return &botContent{Quotes: quotes, Icebreakers: questions, Characters: chars}, nil
+	return &botContent{Quotes: quotes, Icebreakers: questions}, nil
 }
 func initBotContent() {
 	data, err := loadBotContent()
@@ -251,9 +205,6 @@ func botContentDifferences(next *botContent) []string {
 	if !equalStrSlices(old.Icebreakers, next.Icebreakers) {
 		changed = append(changed, "icebreakers.txt")
 	}
-	if !equalGuessCharacters(old.Characters, next.Characters) {
-		changed = append(changed, "guesswho.txt")
-	}
 	return changed
 }
 func equalQuoteMaps(a, b map[string]string) bool {
@@ -262,17 +213,6 @@ func equalQuoteMaps(a, b map[string]string) bool {
 	}
 	for k, v := range a {
 		if b[k] != v {
-			return false
-		}
-	}
-	return true
-}
-func equalGuessCharacters(a, b []guessWhoCharacter) bool {
-	if len(a) != len(b) {
-		return false
-	}
-	for i := range a {
-		if a[i].Sprite != b[i].Sprite || a[i].Emote != b[i].Emote || a[i].Answer != b[i].Answer || !equalStrSlices(a[i].Aliases, b[i].Aliases) {
 			return false
 		}
 	}
@@ -390,81 +330,6 @@ func (l *botLimiter) release(room *area.Area, success bool) {
 	}
 }
 
-func normalizeCharacterGuess(s string) string {
-	s = strings.ToLower(strings.TrimSpace(s))
-	for _, p := range []string{"i think it is ", "i think it's ", "is it ", "i guess ", "it's ", "it is ", "guess ", "guess: "} {
-		if strings.HasPrefix(s, p) {
-			s = strings.TrimPrefix(s, p)
-			break
-		}
-	}
-	var b strings.Builder
-	for _, r := range s {
-		if unicode.IsLetter(r) || unicode.IsDigit(r) {
-			b.WriteRune(r)
-		}
-	}
-	return b.String()
-}
-func withinCharacterEditDistance(a, b string, limit int) bool {
-	x, y := []rune(a), []rune(b)
-	if len(x) > len(y)+limit || len(y) > len(x)+limit {
-		return false
-	}
-	prev := make([]int, len(y)+1)
-	curr := make([]int, len(y)+1)
-	for j := range prev {
-		prev[j] = j
-	}
-	for i, c := range x {
-		curr[0] = i + 1
-		minCost := curr[0]
-		for j, d := range y {
-			cost := 0
-			if c != d {
-				cost = 1
-			}
-			insert, remove, change := curr[j]+1, prev[j+1]+1, prev[j]+cost
-			curr[j+1] = insert
-			if remove < curr[j+1] {
-				curr[j+1] = remove
-			}
-			if change < curr[j+1] {
-				curr[j+1] = change
-			}
-			if curr[j+1] < minCost {
-				minCost = curr[j+1]
-			}
-		}
-		if minCost > limit {
-			return false
-		}
-		prev, curr = curr, prev
-	}
-	return prev[len(y)] <= limit
-}
-func isCharacterAnswer(entry guessWhoCharacter, guess string) bool {
-	normalized := normalizeCharacterGuess(guess)
-	if normalized == "" {
-		return false
-	}
-	for _, name := range entry.Aliases {
-		candidate := normalizeCharacterGuess(name)
-		if normalized == candidate {
-			return true
-		}
-		limit := 0
-		if len([]rune(candidate)) >= 9 {
-			limit = 2
-		} else if len([]rune(candidate)) >= 5 {
-			limit = 1
-		}
-		if limit > 0 && withinCharacterEditDistance(normalized, candidate, limit) {
-			return true
-		}
-	}
-	return false
-}
 func botRandomIcebreaker(list []string) string {
 	if len(list) == 0 {
 		return ""

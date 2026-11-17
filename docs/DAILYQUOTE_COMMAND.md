@@ -6,4 +6,4 @@ Each non-comment line of `quote.txt` has the format `MM-DD | quotation — autho
 
 The `dailyquote = true` switch remains under `[Server]` in `config.toml`. A five-minute cooldown applies per room, shared with `/icebreaker`, with three simultaneous sessions maximum across both commands combined. `/reload` updates both the quotes and the safe bot settings without restarting the server.
 
-See [BOT_LOCAL_COMMANDS.md](BOT_LOCAL_COMMANDS.md) for the shared bot appearance settings, `/icebreaker`, `/guesswho`, and deployment instructions.
+See [BOT_LOCAL_COMMANDS.md](BOT_LOCAL_COMMANDS.md) for the shared bot appearance settings, `/icebreaker`, and deployment instructions.
