@@ -1576,11 +1576,10 @@ func cmdTung(client *Client, args []string, usage string) {
 		return
 	}
 	// Resolve the char_id that corresponds to tungForcedCharacterName so that
-	// observers' IC packets have a matching char_name/char_id pair. WebAO
-	// validates these fields and renders the character invisible when they
-	// disagree. getCharacterID returns -1 when the character is not in the
-	// server list; -1 is safe because the char_id validation is skipped for
-	// forced iniswaps in the IC handler.
+	// observers' IC packets have a matching char_name/char_id pair when the
+	// folder is listed. getCharacterID returns -1 when the character is not in
+	// the server list; in that case the IC emitter substitutes each speaker's
+	// real slot ID so WebAO can load the unlisted folder into that slot.
 	tungID := getCharacterID(tungForcedCharacterName)
 	tungIDStr := strconv.Itoa(tungID)
 	targetArea := client.Area()
@@ -1658,9 +1657,10 @@ func cmdUntung(client *Client, args []string, _ string) {
 // cmdAreaIniswap forces everyone in the caller's current area to iniswap as a
 // moderator-specified character, or removes that forced iniswap when called
 // with "off". Names listed in characters.txt use their canonical spelling and
-// real slot ID; any other name is treated as a client-side character folder and
-// shown through the forced-iniswap path with char ID -1 (the same mechanism
-// /tung uses for unlisted assets).
+// real slot ID; any other name is treated as a client-side character folder.
+// The forced-iniswap path stores char ID -1 internally, but the IC emitter
+// keeps each speaker's real slot ID and overrides only the folder name, because
+// WebAO only runs its iniswap loader for a valid char_id.
 // Usage:
 //
 //	/areainiswap <character name>
@@ -2347,6 +2347,12 @@ func cmdCharCurse(client *Client, args []string, usage string) {
 	if charID < 0 && strings.EqualFold(charName, "off") {
 		if forcedName, _ := target.ForcedIniswapInfo(); forcedName != "" {
 			target.SetForcedIniswapChar("", "")
+			// Snap the target's own client back to its real slot. WebAO caches
+			// the forced folder in that slot after the first iniswap message,
+			// so a PU alone would not reload the original character data.
+			if id := target.CharID(); id >= 0 {
+				target.Send(&aolib.PV{PlayerID: 0, CharID: id})
+			}
 			clients.ForEach(func(c *Client) {
 				if c.Uid() == -1 {
 					return

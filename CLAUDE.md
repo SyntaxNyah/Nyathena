@@ -401,7 +401,7 @@ A pending pair request never blocks speech: while waiting for the partner to acc
 ### Character Curse
 One-time forced character swap (requires KICK). Target may freely change afterwards.
 
-A name that is not in `characters.txt` cannot occupy a real slot. `/charcurse <uid> <folder>` treats it as an iniswap-only folder and applies a forced iniswap with char ID `-1` (the same mechanism `/tung` uses), broadcasting the folder name via PU; `/charcurse <uid> off` clears it. `/charstuck <uid> [folder]` also accepts a folder — it applies the forced iniswap and locks the target's real slot. `/areainiswap <folder>` accepts any unlisted folder too. The server cannot verify that a client has the folder, so the name must match the client's `base/characters` directory exactly.
+A name that is not in `characters.txt` cannot occupy a real slot. `/charcurse <uid> <folder>` treats it as an iniswap-only folder and applies a forced iniswap (stored internally with char ID `-1`, the same mechanism `/tung` uses), broadcasting the folder name via PU; `/charcurse <uid> off` clears it. On the wire the IC emitter keeps each speaker's real slot ID and replaces only the character name, because WebAO only runs its iniswap loader for a valid `char_id` — sending `-1` makes it render nothing. `/charstuck <uid> [folder]` also accepts a folder — it applies the forced iniswap and locks the target's real slot. `/areainiswap <folder>` accepts any unlisted folder too. The server cannot verify that a client has the folder, so the name must match the client's `base/characters` directory exactly.
 ```
 /charcurse <uid> <charname|off>
 ```

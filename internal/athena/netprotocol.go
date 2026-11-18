@@ -511,14 +511,21 @@ func pktIC(client *Client, p *aolib.Packet) {
 	}
 
 	// If a moderator has forced an iniswap character for this client, override
-	// the outgoing IC character name and ID. Both values are pre-computed at
-	// command invocation so this hot path performs only a single mutex
-	// acquisition and two string assignments — no map lookup or int conversion.
+	// the outgoing IC character name. The character ID is pre-computed at
+	// command invocation, but a forced iniswap to an unlisted folder has no
+	// server-side slot (it is stored as "-1"). WebAO's MS handler only runs
+	// its iniswap loader when char_id is a valid slot (0 <= char_id < list
+	// length), so keep the client's real slot in that case and let the
+	// differing character name trigger the client-side iniswap path.
 	if charName, charIDStr := client.ForcedIniswapInfo(); charName != "" {
 		hasForcedIniswap = true
 		ownCharName = charName
 		ms.Character = charName
-		ms.CharID = charIDStr
+		if charIDStr == "-1" {
+			ms.CharID = client.CharIDStr()
+		} else {
+			ms.CharID = charIDStr
+		}
 	}
 
 	if pos := client.Pos(); pos != "" {
