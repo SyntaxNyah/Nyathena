@@ -566,9 +566,40 @@ func cmdFish(client *Client, args []string, usage string) {
 	cmdPunishment(client, args, usage, PunishmentFish)
 }
 
-// cmdAlien replaces every word of the target's IC messages with alien noises.
+// alienCharacterName is the client-side character folder /alien forces its
+// targets to display as. Like the /tung character, it does not need to be in
+// characters.txt: the forced-iniswap path keeps each speaker's real slot ID and
+// overrides only the folder name, and the IC handler sends one PV to sync the
+// local emote panel.
+const alienCharacterName = "marcianito"
+
+// alienFirstEmote is marcianito's first emotion name (char.ini:
+// `1 = alien1#-#alien1#0#`). The target's old emote panel contains names that
+// do not exist in the marcianito folder, so the first forced message uses this
+// known-good emotion; the PV sync then rebuilds the panel for later messages.
+const alienFirstEmote = "alien1"
+
+// cmdAlien replaces every word of the target's IC messages with alien noises
+// and forces each punished player to display as the marcianito character — the
+// same area-wide forced-iniswap mechanism /tung uses. Clear the appearance with
+// /areainiswap off (whole area) or /charcurse <uid> off (single target).
 func cmdAlien(client *Client, args []string, usage string) {
-	cmdPunishment(client, args, usage, PunishmentAlien)
+	punished := cmdPunishment(client, args, usage, PunishmentAlien)
+	if len(punished) == 0 {
+		return
+	}
+	for _, c := range punished {
+		c.SetForcedIniswapChar(alienCharacterName, "-1")
+		clients.ForEach(func(observer *Client) {
+			if observer.Uid() == -1 {
+				return
+			}
+			observer.Send(&aolib.PU{ID: c.Uid(), Type: aolib.PlayerDataTypeCharName, Data: alienCharacterName})
+		})
+		c.SendServerMessage(fmt.Sprintf("A moderator has forced you to appear as %s.", alienCharacterName))
+	}
+	client.SendServerMessage(fmt.Sprintf("Forced %d client(s) to appear as %s. Clear with /areainiswap off or /charcurse <uid> off.", len(punished), alienCharacterName))
+	addToBuffer(client, "CMD", fmt.Sprintf("Forced %d client(s) to appear as %s.", len(punished), alienCharacterName), false)
 }
 
 func cmdZoo(client *Client, args []string, usage string) {

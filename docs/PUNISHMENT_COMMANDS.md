@@ -280,8 +280,15 @@ Replace text with animal sounds. All require `MUTE` and support `global` and `-h
 
 Every word becomes a space-alien noise: `zeep zeep`, `zorp`, `bleem bleem`,
 `glorp glorp`, `keeoo keeoo`, `*radio static*`. Like the animal filters it is
-text-only word-for-word replacement, requires `MUTE`, and supports `-d`, `-r`,
-`-h`, comma-separated UIDs, `global`, `/stack`, and `/unpunish -t alien`.
+word-for-word replacement, requires `MUTE`, and supports `-d`, `-r`, `-h`,
+comma-separated UIDs, `global`, `/stack`, and `/unpunish -t alien`.
+
+It also forces each punished player to appear as `marcianito`, using the same
+forced-iniswap path as `/tung` (the folder does not need to be in
+`characters.txt`). Clear the appearance with `/areainiswap off` for the area or
+`/charcurse <uid> off` for one player. The first message uses marcianito's
+`alien1` emotion while the emote panel syncs; later messages use the target's
+selected alien emotion.
 
 ### Uma characters — `/horse`
 

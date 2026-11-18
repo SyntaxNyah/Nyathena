@@ -503,6 +503,7 @@ func pktIC(client *Client, p *aolib.Packet) {
 	ownOffset := ms.Offset
 	hasForcedIniswap := false
 	forcedIniswapUnlisted := false
+	forcedIniswapName := ""
 
 	// If a moderator has forced a showname for this client, override whatever
 	// name the client sent in the aolib.
@@ -520,6 +521,7 @@ func pktIC(client *Client, p *aolib.Packet) {
 	// differing character name trigger the client-side iniswap path.
 	if charName, charIDStr := client.ForcedIniswapInfo(); charName != "" {
 		hasForcedIniswap = true
+		forcedIniswapName = charName
 		ownCharName = charName
 		ms.Character = charName
 		if charIDStr == "-1" {
@@ -528,6 +530,15 @@ func pktIC(client *Client, p *aolib.Packet) {
 		} else {
 			ms.CharID = charIDStr
 		}
+	}
+
+	// First marcianito message: the target's emote panel still holds their old
+	// character's emote names, none of which exist in the marcianito folder. Use
+	// marcianito's known first emotion for this one message; the PV sync after
+	// delivery rebuilds the panel so later messages use the player's selection.
+	if forcedIniswapUnlisted && strings.EqualFold(forcedIniswapName, alienCharacterName) &&
+		!client.ForcedIniswapPanelSynced() {
+		ms.Emote = alienFirstEmote
 	}
 
 	if pos := client.Pos(); pos != "" {

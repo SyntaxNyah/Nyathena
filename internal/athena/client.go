@@ -2514,6 +2514,14 @@ func (client *Client) MarkForcedIniswapPanelSynced() bool {
 	return false
 }
 
+// ForcedIniswapPanelSynced reports whether the client's local emote panel has
+// already been resynced for the current forced iniswap.
+func (client *Client) ForcedIniswapPanelSynced() bool {
+	client.mu.Lock()
+	defer client.mu.Unlock()
+	return client.forcedIniswapPanelSynced
+}
+
 // EffectiveShowname returns the moderator-forced showname if one is set,
 // otherwise the client's own showname. Both fields are read under a single
 // mutex acquisition to avoid two separate lock/unlock cycles in callers.

@@ -28,7 +28,7 @@ This is the main thing Nyathena exists for. All punishment commands support `-d 
 
 **Animal Filters (12):** `/monkey`, `/snake`, `/dog`, `/cat`, `/bird`, `/cow`, `/frog`, `/duck`, `/horse`, `/lion`, `/zoo`, `/bunny`
 
-**Alien Filter:** `/alien` — every word becomes a space-alien noise (`zeep zeep`, `zorp`, `bleem bleem`, `*radio static*`)
+**Alien Filter:** `/alien` — every word becomes a space-alien noise (`zeep zeep`, `zorp`, `bleem bleem`, `*radio static*`) and the target appears as `marcianito` (tung-style forced appearance)
 
 **Visibility / Cosmetic (8):** `/emoji`, `/invisible`, `/shrink`, `/grow`, `/wide`, `/areainiswap`, `/hidedisplay` (push the target's own sprite off-screen — funny on pairs), `/forcedisplay` (pin the target's character onto every IC sprite in the area — nobody else's character shows)
 

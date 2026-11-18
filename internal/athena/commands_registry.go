@@ -1052,7 +1052,7 @@ func initCommands() {
 			handler:  cmdAlien,
 			minArgs:  1,
 			usage:    "Usage: /alien [-d duration] [-r reason] [-h] global | <uid1>,<uid2>...",
-			desc:     "Replaces messages with alien noises (zeep zeep, zorp, bleem bleem).",
+			desc:     "Replaces messages with alien noises (zeep zeep, zorp, bleem bleem) and forces the target to appear as marcianito.",
 			reqPerms: permissions.PermissionField["MUTE"],
 			category: "punishment",
 		},
