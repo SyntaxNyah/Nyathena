@@ -2347,12 +2347,9 @@ func cmdCharCurse(client *Client, args []string, usage string) {
 	if charID < 0 && strings.EqualFold(charName, "off") {
 		if forcedName, _ := target.ForcedIniswapInfo(); forcedName != "" {
 			target.SetForcedIniswapChar("", "")
-			// Snap the target's own client back to its real slot. WebAO caches
-			// the forced folder in that slot after the first iniswap message,
-			// so a PU alone would not reload the original character data.
-			if id := target.CharID(); id >= 0 {
-				target.Send(&aolib.PV{PlayerID: 0, CharID: id})
-			}
+			// No PV here: WebAO caches the forced folder in the target's slot,
+			// so a PV would reload that folder, not the original character.
+			// The next IC message carries the real char name and restores it.
 			clients.ForEach(func(c *Client) {
 				if c.Uid() == -1 {
 					return
