@@ -1601,6 +1601,8 @@ func ApplyPunishmentToText(text string, pType PunishmentType) string {
 		return applyFish(text)
 	case PunishmentGold:
 		return goldPaywallLine()
+	case PunishmentAlien:
+		return applyAlien(text)
 	default:
 		return text
 	}
@@ -2671,6 +2673,7 @@ var areaRandomPunishments = []PunishmentType{
 	PunishmentFish,
 	PunishmentZoo,
 	PunishmentBunny,
+	PunishmentAlien,
 	PunishmentTsundere,
 	PunishmentYandere,
 	PunishmentKuudere,

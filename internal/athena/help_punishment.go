@@ -74,6 +74,11 @@ var punishmentHelpGroups = []punishmentSubcategory{
 			"horse", "lion", "trex", "fish", "zoo", "bunny"},
 	},
 	{
+		emoji: "👽", title: "Alien filter",
+		desc: "Replaces every word with alien noises. Supports 'global'.",
+		cmds: []string{"alien"},
+	},
+	{
 		emoji: "🔗", title: "Pairing / claims",
 		desc: "Force a pair with a one-way claim. The dog follows its master between areas, through punishment-safe rooms too, and cannot /unpair itself.",
 		cmds: []string{"leash"},

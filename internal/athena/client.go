@@ -316,6 +316,9 @@ const (
 	// rotating through the branded variants. Appended last so existing
 	// persisted SUBTYPE values keep their meaning.
 	PunishmentGold
+	// Alien filter (see punishments_alien.go). Appended last so existing
+	// persisted SUBTYPE values keep their meaning.
+	PunishmentAlien // zeep zeep — alien noises
 )
 
 // IssuerTier records the permission tier of the moderator who applied a
@@ -3647,6 +3650,8 @@ func (p PunishmentType) String() string {
 		return "texteffect"
 	case PunishmentGold:
 		return "gold"
+	case PunishmentAlien:
+		return "alien"
 	default:
 		return "none"
 	}

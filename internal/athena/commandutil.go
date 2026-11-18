@@ -19,6 +19,7 @@ package athena
 import (
 	"strconv"
 	"strings"
+	"unicode"
 )
 
 type cmdParamList struct {
@@ -83,6 +84,38 @@ func getCharacterID(charName string) int {
 		}
 	}
 	return -1
+}
+
+// maxCharacterFolderLength caps the length of an unlisted character folder
+// name accepted by moderator commands. Character folders are short; the cap
+// keeps a malformed command from stuffing an oversized string into every IC
+// packet that mentions the target.
+const maxCharacterFolderLength = 64
+
+// resolveCharacterName resolves a moderator-supplied character name against
+// characters.txt. A listed name comes back with its canonical spelling and real
+// slot ID. A name that is not listed is treated as a client-side character
+// folder — an iniswap-only character that exists in the asset database but not
+// in characters.txt — and comes back with ID -1, because the server has no slot
+// for it. The bool is false for an empty name or one containing characters that
+// would corrupt the '#'-delimited AO wire format.
+func resolveCharacterName(raw string) (name string, charID int, ok bool) {
+	name = strings.TrimSpace(raw)
+	if name == "" {
+		return "", -1, false
+	}
+	if id := getCharacterID(name); id >= 0 {
+		return getCharacters()[id], id, true
+	}
+	if len(name) > maxCharacterFolderLength {
+		return "", -1, false
+	}
+	for _, r := range name {
+		if unicode.IsControl(r) || r == '|' || r == '#' || r == '%' {
+			return "", -1, false
+		}
+	}
+	return name, -1, true
 }
 
 // clientDisplayName returns the client's effective showname, falling back to

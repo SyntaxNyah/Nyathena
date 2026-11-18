@@ -566,6 +566,11 @@ func cmdFish(client *Client, args []string, usage string) {
 	cmdPunishment(client, args, usage, PunishmentFish)
 }
 
+// cmdAlien replaces every word of the target's IC messages with alien noises.
+func cmdAlien(client *Client, args []string, usage string) {
+	cmdPunishment(client, args, usage, PunishmentAlien)
+}
+
 func cmdZoo(client *Client, args []string, usage string) {
 	cmdPunishment(client, args, usage, PunishmentZoo)
 }
@@ -1229,6 +1234,8 @@ func parsePunishmentType(s string) PunishmentType {
 		return PunishmentMedieval
 	case "cheese":
 		return PunishmentCheese
+	case "alien":
+		return PunishmentAlien
 	case "teleport":
 		return PunishmentTeleport
 	case "shakecurse":

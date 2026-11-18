@@ -251,6 +251,9 @@ Wired into `cmdPunishmentMode`, `/stack`, `/lovebomb`, `/randompunishall`, `/tra
 
 Both use the same `applyAnimalSounds` word-for-word substitution the older filters use (so a long message stays long), require `MUTE`, and are in the `/zoo`, roulette and punishment-area pools alongside the rest. Transforms live in `internal/athena/punishments_trex_fish.go`.
 
+#### Alien Filter — `/alien`
+Every word becomes an alien noise: `zeep zeep`, `zorp`, `bleem bleem`, `glorp glorp`, `*radio static*`. Uses the same `applyAnimalSounds` word-for-word substitution, requires `MUTE`, supports `-d`/`-r`/`-h`/comma UID lists/`global`/`/stack`/`/unpunish -t`, and is in the zoo, roulette and punishment-area pools. The transform lives in `internal/athena/punishments_alien.go` and the pool deliberately contains no "Mina".
+
 #### Uma Characters — `/horse`
 On a server whose `characters.txt` carries uma characters, `/horse` applies the animal filter above **plus a one-shot swap** onto a random free uma character (a real `Client.ChangeCharacter`, so the area's taken-slot table, `/players` and every client agree). The target may change away afterwards, like `/charcurse`.
 
@@ -397,8 +400,10 @@ A pending pair request never blocks speech: while waiting for the partner to acc
 
 ### Character Curse
 One-time forced character swap (requires KICK). Target may freely change afterwards.
+
+A name that is not in `characters.txt` cannot occupy a real slot. `/charcurse <uid> <folder>` treats it as an iniswap-only folder and applies a forced iniswap with char ID `-1` (the same mechanism `/tung` uses), broadcasting the folder name via PU; `/charcurse <uid> off` clears it. `/charstuck <uid> [folder]` also accepts a folder — it applies the forced iniswap and locks the target's real slot. `/areainiswap <folder>` accepts any unlisted folder too. The server cannot verify that a client has the folder, so the name must match the client's `base/characters` directory exactly.
 ```
-/charcurse <uid> <charname>
+/charcurse <uid> <charname|off>
 ```
 
 ### Character Steal (`/charsteal`)

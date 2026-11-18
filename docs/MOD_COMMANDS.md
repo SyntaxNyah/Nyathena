@@ -167,8 +167,8 @@ A name a moderator set in a room that had no CM at all is kept until the room em
 
 | Command | Permission | Description |
 |---------|-----------|-------------|
-| `/charstuck [-d duration] <uid>` | MUTE | Lock to current character |
-| `/charcurse <uid> <charname>` | KICK | Force a one-time character swap (target may change afterward) |
+| `/charstuck [-d duration] [-r reason] <uid> [charname]` | MUTE | Lock to current character, or change to `<charname>` first then lock. An unlisted `<charname>` is displayed as an iniswap-only folder |
+| `/charcurse <uid> <charname|off>` | KICK | Force a one-time character swap (target may change afterward). An unlisted folder name is displayed as an iniswap-only appearance; `off` clears it |
 | `/forcepair <uid1> <uid2>` | KICK | Force two players into a UID-tracked pair |
 | `/forceunpair <uid>` | KICK | Break a forced pair or leash |
 | `/leash [-d duration] [-r reason] [-h] <master uid> <dog uid> [dog uid ...]` | KICK | Claim up to 6 players as your dogs: force-pairs the pack, applies `/dog` to every dog, drags them between areas (including punishment-safe rooms), and renders the full pack together on multi-pair/JSON clients. Re-issue the command with the same master to add more dogs. Neither end can `/unpair`; full `/unpunish` or `/forceunpair` removes it. Unpunishing one dog detaches only that dog. Previous partners get a `Your partner has been leashed` popup |
@@ -210,7 +210,8 @@ Two things deliberately remain:
 | Persona / personality | `/clown /jester /joker /tourettes /translator` |
 | Dere archetypes (26) | `/tsundere /yandere /kuudere /dandere /deredere /himedere /kamidere /undere /bakadere /mayadere /smugdere /deretsun /bokodere /thugdere /teasedere /dorodere /hinedere /hajidere /rindere /utsudere /darudere /butsudere /sdere /mdere /tsuyodere /omnidere` |
 | Animal filters (14) | `/monkey /snake /dog /cat /bird /cow /frog /duck /horse /lion /trex /fish /zoo /bunny` — `/trex` roars RAAASRFH, `/fish` blubs, and `/horse` also swaps the target onto a random uma character |
-| Visibility / cosmetic | `/emoji /invisible /shrink /grow /wide /areainiswap /hidedisplay /forcedisplay` (and `/unshrink /ungrow /unwide`) |
+| Alien filter | `/alien` — every word becomes a space-alien noise (`zeep zeep`, `zorp`, `bleem bleem`, `*radio static*`) |
+| Visibility / cosmetic | `/emoji /invisible /shrink /grow /wide /areainiswap /hidedisplay /forcedisplay` (and `/unshrink /ungrow /unwide`). `/areainiswap` accepts unlisted folder names as iniswap-only characters |
 | Protocol / viewport (6) | `/teleport /shakecurse /randomflip /forcecolor /nopreanim /forcepreanim` |
 | Timing | `/slowpoke /fastspammer /lifo` |
 | Audio | `/sfxcurse <uid> <sfx-url>` and `/unsfx` |

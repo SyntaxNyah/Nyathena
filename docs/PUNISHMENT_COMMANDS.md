@@ -276,6 +276,13 @@ Replace text with animal sounds. All require `MUTE` and support `global` and `-h
 | `/bunny` | \*thump\*, \*binky!\*, \*flops\* |
 | `/zoo` | Random animal sound per message (draws from all of the above) |
 
+### Alien filter — `/alien`
+
+Every word becomes a space-alien noise: `zeep zeep`, `zorp`, `bleem bleem`,
+`glorp glorp`, `keeoo keeoo`, `*radio static*`. Like the animal filters it is
+text-only word-for-word replacement, requires `MUTE`, and supports `-d`, `-r`,
+`-h`, comma-separated UIDs, `global`, `/stack`, and `/unpunish -t alien`.
+
 ### Uma characters — `/horse`
 
 On a server whose `characters.txt` carries uma characters, `/horse` also
@@ -322,7 +329,7 @@ lands in every one of those cases.
 | `/shrink [offset]` | Locks vertical sprite offset negative (default -25) |
 | `/grow [offset]` | Locks vertical sprite offset positive (default +25) |
 | `/wide [offset]` | Locks horizontal sprite offset (default +50) |
-| `/areainiswap <char>` | Forces everyone in area to display as a chosen character (KICK perm) |
+| `/areainiswap <char>` | Forces everyone in area to display as a chosen character (KICK perm). `<char>` may be an unlisted folder name — it is shown as an iniswap-only appearance |
 | `/hidedisplay <uid>` | Pushes the target's own sprite off-screen via a fixed self-offset; their text still shows. Funny on pairs (only the partner renders) |
 | `/forcedisplay <uid>` | Pins the target's character onto every IC sprite in the area (moderators exempt). While active, no other character can show in the viewport — the whole room renders as that one character |
 

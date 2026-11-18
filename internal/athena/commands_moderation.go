@@ -1656,8 +1656,11 @@ func cmdUntung(client *Client, args []string, _ string) {
 }
 
 // cmdAreaIniswap forces everyone in the caller's current area to iniswap as a
-// moderator-specified character from the server character list, or removes that
-// forced iniswap when called with "off".
+// moderator-specified character, or removes that forced iniswap when called
+// with "off". Names listed in characters.txt use their canonical spelling and
+// real slot ID; any other name is treated as a client-side character folder and
+// shown through the forced-iniswap path with char ID -1 (the same mechanism
+// /tung uses for unlisted assets).
 // Usage:
 //
 //	/areainiswap <character name>
@@ -1706,13 +1709,11 @@ func cmdAreaIniswap(client *Client, args []string, usage string) {
 		return
 	}
 
-	charName := strings.TrimSpace(strings.Join(args, " "))
-	charID := getCharacterID(charName)
-	if charID < 0 {
-		client.SendServerMessage(fmt.Sprintf("Character %q was not found in the character list.", charName))
+	charName, charID, ok := resolveCharacterName(strings.Join(args, " "))
+	if !ok {
+		client.SendServerMessage("Character name is empty or contains invalid characters.")
 		return
 	}
-	charName = getCharacters()[charID]
 	charIDStr := strconv.Itoa(charID)
 
 	// Phase 1: apply forced iniswap state, collect affected UIDs, send PV to each target.
@@ -1724,7 +1725,11 @@ func cmdAreaIniswap(client *Client, args []string, usage string) {
 		}
 		c.SetForcedIniswapChar(charName, charIDStr)
 		uids = append(uids, c.Uid())
-		c.Send(&aolib.PV{PlayerID: 0, CharID: charID})
+		// An unlisted folder has no server-side slot, so there is no PV to
+		// send; clients render it from the forced character name instead.
+		if charID >= 0 {
+			c.Send(&aolib.PV{PlayerID: 0, CharID: charID})
+		}
 	})
 	// Phase 2: broadcast all PU updates in a single pass.
 	if len(uids) > 0 {
@@ -1738,7 +1743,11 @@ func cmdAreaIniswap(client *Client, args []string, usage string) {
 		})
 	}
 	affected := len(uids)
-	client.SendServerMessage(fmt.Sprintf("Applied area iniswap as %q to %d client(s).", charName, affected))
+	suffix := ""
+	if charID < 0 {
+		suffix = " (unlisted folder — iniswap only)"
+	}
+	client.SendServerMessage(fmt.Sprintf("Applied area iniswap as %q%s to %d client(s).", charName, suffix, affected))
 	addToBuffer(client, "CMD", fmt.Sprintf("Applied area iniswap as %q to %d clients in area %v.", charName, affected, targetArea.Name()), true)
 }
 
@@ -2213,6 +2222,43 @@ func cmdCharStuck(client *Client, args []string, usage string) {
 
 	charID := target.CharID()
 	charName := getCharacters()[charID]
+	forcedFolder := false
+
+	// Optional character argument: put the target on that character before
+	// locking them there. A name that is not in characters.txt is treated as
+	// an iniswap-only folder and shown through the forced-iniswap path.
+	if requested := strings.TrimSpace(strings.Join(flags.Args()[1:], " ")); requested != "" {
+		resolvedName, resolvedID, ok := resolveCharacterName(requested)
+		if !ok {
+			client.SendServerMessage("Character name is empty or contains invalid characters.")
+			return
+		}
+		if resolvedID >= 0 {
+			if target.Area().IsTaken(resolvedID) && target.CharID() != resolvedID {
+				client.SendServerMessage(fmt.Sprintf("Character %q is already taken in that area.", resolvedName))
+				return
+			}
+			target.SetForcedIniswapChar("", "")
+			target.ChangeCharacter(resolvedID)
+			charID = target.CharID()
+			charName = getCharacters()[charID]
+		} else {
+			charID = target.CharID()
+			charName = resolvedName
+			forcedFolder = true
+			target.SetForcedIniswapChar(resolvedName, "-1")
+			clients.ForEach(func(c *Client) {
+				if c.Uid() == -1 {
+					return
+				}
+				c.Send(&aolib.PU{ID: target.Uid(), Type: aolib.PlayerDataTypeCharName, Data: resolvedName})
+			})
+		}
+	} else if forcedName, _ := target.ForcedIniswapInfo(); forcedName != "" {
+		// Locking the current appearance should name the sprite the room
+		// actually sees, not the underlying (hidden) slot.
+		charName = forcedName
+	}
 
 	target.SetCharStuck(charID, stuckUntil)
 
@@ -2230,6 +2276,9 @@ func cmdCharStuck(client *Client, args []string, usage string) {
 	target.SendServerMessage(msg)
 
 	client.SendServerMessage(fmt.Sprintf("Stuck [%v] %v on character %v.", uid, target.OOCName(), charName))
+	if forcedFolder {
+		client.SendServerMessage(fmt.Sprintf("Note: %q is not in characters.txt — this is an iniswap-only appearance. Use /charcurse %d off to restore their sprite after /uncharstuck.", charName, uid))
+	}
 
 	logMsg := fmt.Sprintf("Stuck [%v] %v on character %v", uid, target.OOCName(), charName)
 	if *reason != "" {
@@ -2286,10 +2335,48 @@ func cmdCharCurse(client *Client, args []string, usage string) {
 		return
 	}
 
-	charName := strings.Join(args[1:], " ")
-	charID := getCharacterID(charName)
-	if charID == -1 {
-		client.SendServerMessage(fmt.Sprintf("Character \"%s\" not found.", charName))
+	charName, charID, ok := resolveCharacterName(strings.Join(args[1:], " "))
+	if !ok {
+		client.SendServerMessage("Character name is empty or contains invalid characters.")
+		return
+	}
+
+	// "/charcurse <uid> off" clears an iniswap-only forced appearance. A real
+	// character named "off" still resolves above and falls through to the
+	// normal ChangeCharacter path.
+	if charID < 0 && strings.EqualFold(charName, "off") {
+		if forcedName, _ := target.ForcedIniswapInfo(); forcedName != "" {
+			target.SetForcedIniswapChar("", "")
+			clients.ForEach(func(c *Client) {
+				if c.Uid() == -1 {
+					return
+				}
+				c.Send(&aolib.PU{ID: target.Uid(), Type: aolib.PlayerDataTypeCharName, Data: target.CurrentCharacter()})
+			})
+			target.SendServerMessage("Your forced character appearance has been removed.")
+			client.SendServerMessage(fmt.Sprintf("Cleared forced iniswap on UID %d.", uid))
+			addToBuffer(client, "CMD", fmt.Sprintf("Cleared char-curse forced iniswap on UID %d.", uid), false)
+			return
+		}
+		client.SendServerMessage(fmt.Sprintf("UID %d has no forced iniswap to clear.", uid))
+		return
+	}
+
+	// A folder that is not in characters.txt cannot occupy a real character
+	// slot. Show it as a forced iniswap instead — the same mechanism /tung
+	// uses for assets that only exist in the client's character folder.
+	if charID < 0 {
+		target.SetForcedIniswapChar(charName, "-1")
+		clients.ForEach(func(c *Client) {
+			if c.Uid() == -1 {
+				return
+			}
+			c.Send(&aolib.PU{ID: target.Uid(), Type: aolib.PlayerDataTypeCharName, Data: charName})
+		})
+		target.SendServerMessage(fmt.Sprintf("A moderator has forced you to appear as %s. You cannot change characters until the effect is cleared.", charName))
+		client.SendServerMessage(fmt.Sprintf("Forced UID %d to display as %s (unlisted folder; iniswap only). Clear with /charcurse %d off.", uid, charName, uid))
+		addToBuffer(client, "CMD", fmt.Sprintf("Char-cursed UID %d to iniswap-only folder %s.", uid, charName), false)
+		alertPunishmentIssued(client, fmt.Sprintf("charcurse (%s)", charName), strconv.Itoa(uid), 1, 0, "", false)
 		return
 	}
 
@@ -2298,6 +2385,7 @@ func cmdCharCurse(client *Client, args []string, usage string) {
 		return
 	}
 
+	target.SetForcedIniswapChar("", "")
 	target.ChangeCharacter(charID)
 	target.SendServerMessage(fmt.Sprintf("A moderator has forced you to play as %s. You may change characters freely.", charName))
 	client.SendServerMessage(fmt.Sprintf("Forced UID %d to character %s.", uid, charName))

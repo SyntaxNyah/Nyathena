@@ -107,6 +107,7 @@ var rrPunishmentPool = []PunishmentType{
 	PunishmentFish,
 	PunishmentZoo,
 	PunishmentBunny,
+	PunishmentAlien,
 	PunishmentTsundere,
 	PunishmentYandere,
 	PunishmentKuudere,

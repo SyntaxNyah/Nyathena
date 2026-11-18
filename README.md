@@ -28,6 +28,8 @@ This is the main thing Nyathena exists for. All punishment commands support `-d 
 
 **Animal Filters (12):** `/monkey`, `/snake`, `/dog`, `/cat`, `/bird`, `/cow`, `/frog`, `/duck`, `/horse`, `/lion`, `/zoo`, `/bunny`
 
+**Alien Filter:** `/alien` — every word becomes a space-alien noise (`zeep zeep`, `zorp`, `bleem bleem`, `*radio static*`)
+
 **Visibility / Cosmetic (8):** `/emoji`, `/invisible`, `/shrink`, `/grow`, `/wide`, `/areainiswap`, `/hidedisplay` (push the target's own sprite off-screen — funny on pairs), `/forcedisplay` (pin the target's character onto every IC sprite in the area — nobody else's character shows)
 
 **Protocol / Viewport (6):** `/teleport` (sprite pops to random screen positions), `/shakecurse` (forced screenshake), `/randomflip` (coin-flipped sprite facing), `/forcecolor` (locked text colour — all-red rage or full rainbow), `/nopreanim`, `/forcepreanim`
@@ -228,7 +230,9 @@ A console-only way to author new slash commands **at runtime** — no restart, n
 - **Shadow Mod Visibility** — shadow mods are invisible in `/gas`/`/players` to non-admins
 - **`/charshuffle` / `/uncharshuffle`** — Sattolo-permutes everyone's character sprite; originals remembered
 - **`/reversename` / `/unreversename`** — flips showname rune order; stacks cleanly with `/forcename`
-- **`/charcurse <uid> <charname>`** — one-time forced character swap
+- **`/charcurse <uid> <charname|off>`** — one-time forced character swap; an unlisted folder name (not in `characters.txt`) is shown as an iniswap-only appearance, and `off` clears it
+- **`/charstuck <uid> [charname]`** — locks the current character, or changes to `<charname>` first; unlisted folder names work as an iniswap-only appearance
+- **`/areainiswap <charname>`** — forces the whole area to display as a character, including iniswap-only folders not listed in `characters.txt`
 - **`/rps`** — PvP rock-paper-scissors with hidden simultaneous commitment
 - **`/randomsong`** tiered cooldown (user / DJ / mod)
 - **`/randomchar`** DJ and mod cooldown bypass

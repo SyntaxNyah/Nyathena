@@ -405,11 +405,19 @@ func pktChangeChar(client *Client, p *aolib.Packet) {
 		return
 	}
 	if stuckID := client.charStuckID(); stuckID >= 0 && newid != stuckID {
-		client.SendServerMessage(fmt.Sprintf("You are character stuck as %v and cannot change characters.", getCharacters()[stuckID]))
+		stuckName := getCharacters()[stuckID]
+		if forcedName, _ := client.ForcedIniswapInfo(); forcedName != "" {
+			stuckName = forcedName
+		}
+		client.SendServerMessage(fmt.Sprintf("You are character stuck as %v and cannot change characters.", stuckName))
 		return
 	}
 	if client.IsTunged() {
-		client.SendServerMessage("You have been tunged and cannot change characters until the effect is removed.")
+		forcedName, _ := client.ForcedIniswapInfo()
+		if forcedName == "" {
+			forcedName = "another character"
+		}
+		client.SendServerMessage(fmt.Sprintf("You are being forced to appear as %v and cannot change characters until the effect is removed.", forcedName))
 		return
 	}
 	client.ChangeCharacter(newid)
