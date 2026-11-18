@@ -210,7 +210,7 @@ Two things deliberately remain:
 | Persona / personality | `/clown /jester /joker /tourettes /translator` |
 | Dere archetypes (26) | `/tsundere /yandere /kuudere /dandere /deredere /himedere /kamidere /undere /bakadere /mayadere /smugdere /deretsun /bokodere /thugdere /teasedere /dorodere /hinedere /hajidere /rindere /utsudere /darudere /butsudere /sdere /mdere /tsuyodere /omnidere` |
 | Animal filters (14) | `/monkey /snake /dog /cat /bird /cow /frog /duck /horse /lion /trex /fish /zoo /bunny` — `/trex` roars RAAASRFH, `/fish` blubs, and `/horse` also swaps the target onto a random uma character |
-| Alien filter | `/alien` — every word becomes a space-alien noise (`zeep zeep`, `zorp`, `bleem bleem`, `*radio static*`) and everyone in the area is forced to the `marcianito` character ID from `characters.txt` (like `/tung global`); `/alien off` clears it |
+| Alien filter | `/alien` — every word becomes a space-alien noise (`zeep zeep`, `zorp`, `bleem bleem`, `*radio static*`) and the chosen targets (`-u <uids>`, a bare list, or `global`) are forced to the `marcianito` character ID from `characters.txt`; `/alien off` clears the appearance |
 | Visibility / cosmetic | `/emoji /invisible /shrink /grow /wide /areainiswap /hidedisplay /forcedisplay` (and `/unshrink /ungrow /unwide`). `/areainiswap` accepts unlisted folder names as iniswap-only characters |
 | Protocol / viewport (6) | `/teleport /shakecurse /randomflip /forcecolor /nopreanim /forcepreanim` |
 | Timing | `/slowpoke /fastspammer /lifo` |

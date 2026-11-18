@@ -283,11 +283,11 @@ Every word becomes a space-alien noise: `zeep zeep`, `zorp`, `bleem bleem`,
 word-for-word replacement, requires `MUTE`, and supports `-d`, `-r`, `-h`,
 comma-separated UIDs, `global`, `/stack`, and `/unpunish -t alien`.
 
-It also literally mirrors `/tung global`: every client in your area is forced to
-the `marcianito` character ID from `characters.txt`, with a PV so the client
-loads that character and its emote panel. The speech punishment follows the UID
-list (or `global`), while the character appearance is area-wide. `/alien off`
-restores everyone's real character.
+It also forces the same targets to the `marcianito` character ID from
+`characters.txt`, with a PV so the client loads that character and its emote
+panel. Use `-u <uid1>,<uid2>...` (or a bare UID list) to target individuals;
+`global` applies to every non-moderator in your area. `/alien off` restores
+everyone's real character.
 
 ### Uma characters — `/horse`
 

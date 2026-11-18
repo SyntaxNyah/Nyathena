@@ -1051,8 +1051,8 @@ func initCommands() {
 		"alien": {
 			handler:  cmdAlien,
 			minArgs:  1,
-			usage:    "Usage: /alien [-d duration] [-r reason] [-h] global | <uid1>,<uid2>... | off\nThe speech punishment follows the UID list; the marcianito appearance is applied to everyone in your area.",
-			desc:     "Replaces messages with alien noises and forces everyone in the area to appear as marcianito (like /tung global). Use off to clear the appearance.",
+			usage:    "Usage: /alien [-d duration] [-r reason] [-h] -u <uid1>,<uid2>... | <uid1>,<uid2>... | global | off\nThe speech punishment and marcianito appearance apply to the same targets; global applies to every non-moderator in your area.",
+			desc:     "Replaces messages with alien noises and forces the same targets to appear as marcianito. Supports -u <uids>, comma lists, and global; off clears the appearance.",
 			reqPerms: permissions.PermissionField["MUTE"],
 			category: "punishment",
 		},

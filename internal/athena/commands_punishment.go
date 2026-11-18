@@ -596,48 +596,63 @@ func cmdAlien(client *Client, args []string, usage string) {
 		return
 	}
 
-	// Apply the alien-noise text punishment first, then the area-wide
-	// marcianito appearance exactly like /tung global.
-	cmdPunishment(client, args, usage, PunishmentAlien)
-	applyAlienAppearance(client)
+	// Accept the moderation-command-style "-u <uids>" form as an alias for the
+	// bare UID list the shared punishment applicator expects, then apply the
+	// alien speech to those targets. The marcianito appearance follows the same
+	// punished set, so individual -u targeting does not affect the whole area.
+	args = normalizeAlienArgs(args)
+	punished := cmdPunishment(client, args, usage, PunishmentAlien)
+	applyAlienAppearance(client, punished)
+}
+
+// normalizeAlienArgs rewrites "-u <uids>" (or "--u <uids>") to the bare UID
+// list the shared punishment applicator parses. Flags before the -u token stay
+// in place, so /alien -d 5m -u 2 works exactly like /alien -d 5m 2.
+func normalizeAlienArgs(args []string) []string {
+	out := make([]string, 0, len(args))
+	for i := 0; i < len(args); i++ {
+		if (args[i] == "-u" || args[i] == "--u") && i+1 < len(args) {
+			out = append(out, args[i+1])
+			i++
+			continue
+		}
+		out = append(out, args[i])
+	}
+	return out
 }
 
 // applyAlienAppearance is cmdTung's global enable path with the character name
 // swapped for marcianito. The ID comes from characters.txt, so every observer
 // has that slot in its character list and the normal sprite/emote path works.
-func applyAlienAppearance(client *Client) {
+func applyAlienAppearance(client *Client, targets []*Client) {
+	if len(targets) == 0 {
+		return
+	}
 	charID := getCharacterID(alienCharacterName)
 	if charID < 0 {
 		client.SendServerMessage(fmt.Sprintf("%q is not in characters.txt — add it and /reload before using /alien's character appearance.", alienCharacterName))
 		return
 	}
 	charIDStr := strconv.Itoa(charID)
-	targetArea := client.Area()
-	capacity := targetArea.PlayerCount()
-	uids := make([]int, 0, capacity)
-	clients.ForEach(func(c *Client) {
-		if c.Uid() == -1 || c.Area() != targetArea {
-			return
-		}
+	uids := make([]int, 0, len(targets))
+	for _, c := range targets {
 		c.SetForcedIniswapChar(alienCharacterName, charIDStr)
 		uids = append(uids, c.Uid())
 		// A valid char ID lets the client load marcianito's char.ini and build
 		// its emote panel immediately, exactly like a real /tung with a listed
 		// character.
 		c.Send(&aolib.PV{PlayerID: 0, CharID: charID})
-	})
-	if len(uids) > 0 {
-		clients.ForEach(func(c *Client) {
-			if c.Uid() == -1 {
-				return
-			}
-			for _, uid := range uids {
-				c.Send(&aolib.PU{ID: uid, Type: aolib.PlayerDataTypeCharName, Data: alienCharacterName})
-			}
-		})
 	}
-	client.SendServerMessage(fmt.Sprintf("Applied marcianito appearance to %d client(s) in this area.", len(uids)))
-	addToBuffer(client, "CMD", fmt.Sprintf("Applied marcianito appearance to %d clients in area %v.", len(uids), targetArea.Name()), true)
+	clients.ForEach(func(observer *Client) {
+		if observer.Uid() == -1 {
+			return
+		}
+		for _, uid := range uids {
+			observer.Send(&aolib.PU{ID: uid, Type: aolib.PlayerDataTypeCharName, Data: alienCharacterName})
+		}
+	})
+	client.SendServerMessage(fmt.Sprintf("Applied marcianito appearance to %d client(s).", len(uids)))
+	addToBuffer(client, "CMD", fmt.Sprintf("Applied marcianito appearance to %d client(s).", len(uids)), true)
 }
 
 // clearAlienAppearance is cmdTung's global disable path: restore every client's
