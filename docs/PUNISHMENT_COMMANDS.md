@@ -283,12 +283,11 @@ Every word becomes a space-alien noise: `zeep zeep`, `zorp`, `bleem bleem`,
 word-for-word replacement, requires `MUTE`, and supports `-d`, `-r`, `-h`,
 comma-separated UIDs, `global`, `/stack`, and `/unpunish -t alien`.
 
-It also forces each punished player to appear as `marcianito`, using the same
-forced-iniswap path as `/tung` (the folder does not need to be in
-`characters.txt`). Clear the appearance with `/areainiswap off` for the area or
-`/charcurse <uid> off` for one player. The first message uses marcianito's
-`alien1` emotion while the emote panel syncs; later messages use the target's
-selected alien emotion.
+It also literally mirrors `/tung global`: every client in your area is forced to
+the `marcianito` character ID from `characters.txt`, with a PV so the client
+loads that character and its emote panel. The speech punishment follows the UID
+list (or `global`), while the character appearance is area-wide. `/alien off`
+restores everyone's real character.
 
 ### Uma characters — `/horse`
 
