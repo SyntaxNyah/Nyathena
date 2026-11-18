@@ -402,77 +402,78 @@ type Client struct {
 	// handed off via ordinary happens-before (the packet loop that calls
 	// issueJoinPopup is the same goroutine for TCP, and for WS the write
 	// happens before HandleClient's goroutine is created).
-	isNewHDID             bool
-	hdid                  string
-	hdidCounted           atomic.Bool
-	uid                   int
-	area                  *area.Area
-	char                  int
-	charIDStr             string // cached strconv.Itoa(char); updated on every SetCharID call
-	ipid                  string
-	oocName               string
-	lastmsg               string
-	lastTextColor         string
-	perms                 uint64
-	isModerator           atomic.Bool
-	permissionsKnown      atomic.Bool
-	authenticated         bool
-	mod_name              string
-	pos                   string
-	case_prefs            [5]bool
-	muted                 MuteState
-	muteuntil             time.Time
-	areaMuteOrigin        *area.Area // Area whose /area mute produced the client's current ICOOCMuted state; nil if the mute (if any) isn't area-scoped
-	showname              string
-	narrator              bool
-	jailedUntil           time.Time
-	lastRpsTime           time.Time
-	punishments           []PunishmentState
-	msgTimestamps         []time.Time    // Tracks message timestamps for rate limiting
-	oocMsgTimestamps      []time.Time    // Tracks OOC message timestamps for OOC rate limiting
-	rawPktCount           int            // Packet count in the current raw-rate-limit window
-	rawPktWindowStart     time.Time      // Start time of the current raw-rate-limit window
-	lastModcallTime       time.Time      // Tracks last modcall time for cooldown
-	lastBarDrinkTime      time.Time      // Tracks last /bar buy time for cooldown
-	lastRandomCharTime    time.Time      // Tracks last /randomchar time for cooldown
-	lastRandomBgTime      time.Time      // Tracks last /randombg time for cooldown
-	lastDJBgTime          time.Time      // Tracks last /bg time for DJ rate limit (1 min)
-	lastRoomInviteTime    time.Time      // Tracks last /room invite time for cooldown
-	lastRandomSongTime    time.Time      // Tracks last /randomsong time for cooldown
-	lastTranslateTime     time.Time      // Tracks last /translate time for cooldown
-	forcePairUID          int            // UID of the client this client is force-paired with (-1 if none)
-	forcedShowname        string         // Showname forced by a moderator ("" if none)
-	nameReversed          bool           // gates /reversename so it cannot double-apply
-	preReverseShowname    string         // forcedShowname before /reversename; restored by /unreversename
-	shuffledOrigCharID    int            // Original char ID before /charshuffle (-2 = not shuffled)
-	forcedIniswapChar     string         // Character name forced for iniswap-style IC output ("" = none)
-	forcedIniswapIDStr    string         // Pre-computed strconv.Itoa(charID) matching forcedIniswapChar ("" = none)
-	connectedAt           time.Time      // Time the client joined the server (uid assigned); zero if not yet joined
-	acceptedAt            time.Time      // Raw TCP/WS accept time, set in NewClient -- covers the whole handshake window, unlike connectedAt (only set once RD assigns a UID). See raidguard_wire.go.
-	charPickedAt          time.Time      // Time of this connection's FIRST character pick (CC); zero until then. See raidguard_wire.go.
-	jailAreaID            int            // Area index where this client is jailed; -1 = no specific jail area
-	emergencyBypassArea   *area.Area     // Locked area the client most recently tried to enter as a mod; nil = no pending bypass
-	emergencyBypassAt     time.Time      // Time of the first locked-area attempt; used with emergencyBypassArea to confirm an emergency override
-	pendingRoomInviteFrom int            // UID of the player who sent the latest /room invite (-1 = none)
-	pendingRoomInviteArea *area.Area     // the area the inviter was in when they invited; nil = no pending invite
-	pendingRoomInviteAt   time.Time      // when the latest /room invite was issued (for expiry)
-	hidden                bool           // Whether the client is hidden from the player list and area counts
-	charStuckUntil        time.Time      // Time when the character-stuck restriction expires; zero = not stuck
-	charStuckCharID       int            // Character ID the client is locked to; -1 = not stuck
-	dancing               bool           // Whether the client has dance mode active (flips sprite every message)
-	danceFlipped          bool           // Current flip state for dance mode; toggles each IC message
-	gambleHide            bool           // Whether the client has opted out of seeing gambling broadcast messages
-	deathrollHide         bool           // Whether the client has opted out of Deathroll broadcasts they are not participating in
-	eventAlertsHide       bool           // Whether the client has opted out of global world-event alerts
-	pendingRegUser        string         // Username from a pending /register that is awaiting captcha confirmation
-	pendingRegPass        []byte         // bcrypt hash from a pending /register that is awaiting captcha confirmation
-	pendingRegCaptcha     string         // Expected captcha token for the pending registration
-	sessionChipsAwarded   int64          // Chips already awarded mid-session (hourly ticker); subtracted at disconnect to avoid double-counting
-	ignoredIPIDs          sync.Map       // Set of IPIDs permanently ignored by this client. Key: IPID string, Value: struct{}. Lock-free reads.
-	lastPingNano          atomic.Int64   // Unix nanosecond timestamp of the last CH packet; 0 until seeded on join.
-	masoPunishment        PunishmentType // Active self-applied maso punishment type; PunishmentNone if inactive.
-	lookingForPair        bool           // Whether the client is flagged as Looking For Pair (/lfp); shown by /pairlist.
-	lovePotionUntil       time.Time      // While in the future, the next area speaker receives a pair request from this client. Zero = not armed.
+	isNewHDID                bool
+	hdid                     string
+	hdidCounted              atomic.Bool
+	uid                      int
+	area                     *area.Area
+	char                     int
+	charIDStr                string // cached strconv.Itoa(char); updated on every SetCharID call
+	ipid                     string
+	oocName                  string
+	lastmsg                  string
+	lastTextColor            string
+	perms                    uint64
+	isModerator              atomic.Bool
+	permissionsKnown         atomic.Bool
+	authenticated            bool
+	mod_name                 string
+	pos                      string
+	case_prefs               [5]bool
+	muted                    MuteState
+	muteuntil                time.Time
+	areaMuteOrigin           *area.Area // Area whose /area mute produced the client's current ICOOCMuted state; nil if the mute (if any) isn't area-scoped
+	showname                 string
+	narrator                 bool
+	jailedUntil              time.Time
+	lastRpsTime              time.Time
+	punishments              []PunishmentState
+	msgTimestamps            []time.Time    // Tracks message timestamps for rate limiting
+	oocMsgTimestamps         []time.Time    // Tracks OOC message timestamps for OOC rate limiting
+	rawPktCount              int            // Packet count in the current raw-rate-limit window
+	rawPktWindowStart        time.Time      // Start time of the current raw-rate-limit window
+	lastModcallTime          time.Time      // Tracks last modcall time for cooldown
+	lastBarDrinkTime         time.Time      // Tracks last /bar buy time for cooldown
+	lastRandomCharTime       time.Time      // Tracks last /randomchar time for cooldown
+	lastRandomBgTime         time.Time      // Tracks last /randombg time for cooldown
+	lastDJBgTime             time.Time      // Tracks last /bg time for DJ rate limit (1 min)
+	lastRoomInviteTime       time.Time      // Tracks last /room invite time for cooldown
+	lastRandomSongTime       time.Time      // Tracks last /randomsong time for cooldown
+	lastTranslateTime        time.Time      // Tracks last /translate time for cooldown
+	forcePairUID             int            // UID of the client this client is force-paired with (-1 if none)
+	forcedShowname           string         // Showname forced by a moderator ("" if none)
+	nameReversed             bool           // gates /reversename so it cannot double-apply
+	preReverseShowname       string         // forcedShowname before /reversename; restored by /unreversename
+	shuffledOrigCharID       int            // Original char ID before /charshuffle (-2 = not shuffled)
+	forcedIniswapChar        string         // Character name forced for iniswap-style IC output ("" = none)
+	forcedIniswapIDStr       string         // Pre-computed strconv.Itoa(charID) matching forcedIniswapChar ("" = none)
+	forcedIniswapPanelSynced bool           // Whether the emote panel has been resynced for the current forced iniswap
+	connectedAt              time.Time      // Time the client joined the server (uid assigned); zero if not yet joined
+	acceptedAt               time.Time      // Raw TCP/WS accept time, set in NewClient -- covers the whole handshake window, unlike connectedAt (only set once RD assigns a UID). See raidguard_wire.go.
+	charPickedAt             time.Time      // Time of this connection's FIRST character pick (CC); zero until then. See raidguard_wire.go.
+	jailAreaID               int            // Area index where this client is jailed; -1 = no specific jail area
+	emergencyBypassArea      *area.Area     // Locked area the client most recently tried to enter as a mod; nil = no pending bypass
+	emergencyBypassAt        time.Time      // Time of the first locked-area attempt; used with emergencyBypassArea to confirm an emergency override
+	pendingRoomInviteFrom    int            // UID of the player who sent the latest /room invite (-1 = none)
+	pendingRoomInviteArea    *area.Area     // the area the inviter was in when they invited; nil = no pending invite
+	pendingRoomInviteAt      time.Time      // when the latest /room invite was issued (for expiry)
+	hidden                   bool           // Whether the client is hidden from the player list and area counts
+	charStuckUntil           time.Time      // Time when the character-stuck restriction expires; zero = not stuck
+	charStuckCharID          int            // Character ID the client is locked to; -1 = not stuck
+	dancing                  bool           // Whether the client has dance mode active (flips sprite every message)
+	danceFlipped             bool           // Current flip state for dance mode; toggles each IC message
+	gambleHide               bool           // Whether the client has opted out of seeing gambling broadcast messages
+	deathrollHide            bool           // Whether the client has opted out of Deathroll broadcasts they are not participating in
+	eventAlertsHide          bool           // Whether the client has opted out of global world-event alerts
+	pendingRegUser           string         // Username from a pending /register that is awaiting captcha confirmation
+	pendingRegPass           []byte         // bcrypt hash from a pending /register that is awaiting captcha confirmation
+	pendingRegCaptcha        string         // Expected captcha token for the pending registration
+	sessionChipsAwarded      int64          // Chips already awarded mid-session (hourly ticker); subtracted at disconnect to avoid double-counting
+	ignoredIPIDs             sync.Map       // Set of IPIDs permanently ignored by this client. Key: IPID string, Value: struct{}. Lock-free reads.
+	lastPingNano             atomic.Int64   // Unix nanosecond timestamp of the last CH packet; 0 until seeded on join.
+	masoPunishment           PunishmentType // Active self-applied maso punishment type; PunishmentNone if inactive.
+	lookingForPair           bool           // Whether the client is flagged as Looking For Pair (/lfp); shown by /pairlist.
+	lovePotionUntil          time.Time      // While in the future, the next area speaker receives a pair request from this client. Zero = not armed.
 
 	// Self-service idle auto-disconnect (/dc, /dctime). Opt-in and isolated to
 	// the client that sets it: the watcher goroutine only ever closes THIS
@@ -2493,7 +2494,24 @@ func (client *Client) IsTunged() bool {
 func (client *Client) SetForcedIniswapChar(charName, charIDStr string) {
 	client.mu.Lock()
 	client.forcedIniswapChar, client.forcedIniswapIDStr = charName, charIDStr
+	client.forcedIniswapPanelSynced = false
 	client.mu.Unlock()
+}
+
+// MarkForcedIniswapPanelSynced reports whether the client's local emote panel
+// has already been resynced for the current forced iniswap, and marks it as
+// synced. WebAO's iniedit button loads the folder and then calls its PV handler
+// to rebuild the emote panel; the server emulates that with one PV after the
+// first forced-iniswap IC message, so subsequent messages use the forced
+// folder's real emote names instead of the old character's (which 404).
+func (client *Client) MarkForcedIniswapPanelSynced() bool {
+	client.mu.Lock()
+	defer client.mu.Unlock()
+	if client.forcedIniswapPanelSynced {
+		return true
+	}
+	client.forcedIniswapPanelSynced = true
+	return false
 }
 
 // EffectiveShowname returns the moderator-forced showname if one is set,

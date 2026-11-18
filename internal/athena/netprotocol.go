@@ -502,6 +502,7 @@ func pktIC(client *Client, p *aolib.Packet) {
 	ownFlip := ms.Flip
 	ownOffset := ms.Offset
 	hasForcedIniswap := false
+	forcedIniswapUnlisted := false
 
 	// If a moderator has forced a showname for this client, override whatever
 	// name the client sent in the aolib.
@@ -523,6 +524,7 @@ func pktIC(client *Client, p *aolib.Packet) {
 		ms.Character = charName
 		if charIDStr == "-1" {
 			ms.CharID = client.CharIDStr()
+			forcedIniswapUnlisted = true
 		} else {
 			ms.CharID = charIDStr
 		}
@@ -1254,6 +1256,18 @@ func pktIC(client *Client, p *aolib.Packet) {
 		if !broadcastSpoofedIC(client, ms) {
 			broadcastToAreaFromOnce(client.Ipid(), senderBypassesIgnore(client.Perms()), client.Area(), ms)
 		}
+	}
+	// WebAO iniedit sync. The MS above made the speaker's client load the
+	// forced folder's char.ini into its valid slot, but WebAO's MS path does
+	// not rebuild the emote panel. Its iniedit button follows the info load
+	// with a PV, which calls changeChar() and rebuilds the panel. Emulate that
+	// once per forced iniswap: the panel then offers the forced folder's real
+	// emotions instead of the old character's emote names, which 404 against
+	// the forced folder's assets. LIFO and restricted messages have not
+	// reached the speaker yet, so they keep the flag unset for a later one.
+	if forcedIniswapUnlisted && !restricted && !hasPunishmentType(punishments, PunishmentLifo) &&
+		client.CharID() >= 0 && !client.MarkForcedIniswapPanelSynced() {
+		client.Send(&aolib.PV{PlayerID: 0, CharID: client.CharID()})
 	}
 	silenced = silenced || restricted
 	// SFX curse MC fallback: for external http(s) URLs the sfx_name field alone
