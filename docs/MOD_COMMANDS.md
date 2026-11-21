@@ -169,10 +169,12 @@ A name a moderator set in a room that had no CM at all is kept until the room em
 |---------|-----------|-------------|
 | `/charstuck [-d duration] [-r reason] <uid> [charname]` | MUTE | Lock to current character, or change to `<charname>` first then lock. An unlisted `<charname>` is displayed as an iniswap-only folder |
 | `/charcurse <uid> <charname|off>` | KICK | Force a one-time character swap (target may change afterward). An unlisted folder name is displayed as an iniswap-only appearance; `off` clears it |
+| `/charsteal <uid>` | MUTE | Take the target's character and force them onto a random free character. Blocked by `/antipunishshield`; a backfire shield moves the caller to a random character instead |
+| `/charprotect <on\|off>` | MUTE | Keep your current character when entering an area where someone else holds it; the other player is bumped to a random free character. Area changes only — `/charsteal` is covered by `/antipunishshield` |
 | `/forcepair <uid1> <uid2>` | KICK | Force two players into a UID-tracked pair |
 | `/forceunpair <uid>` | KICK | Break a forced pair or leash |
 | `/leash [-d duration] [-r reason] [-h] <master uid> <dog uid> [dog uid ...]` | KICK | Claim up to 6 players as your dogs: force-pairs the pack, applies `/dog` to every dog, drags them between areas (including punishment-safe rooms), and renders the full pack together on multi-pair/JSON clients. Re-issue the command with the same master to add more dogs. Neither end can `/unpair`; full `/unpunish` or `/forceunpair` removes it. Unpunishing one dog detaches only that dog. Previous partners get a `Your partner has been leashed` popup |
-| `/antipunishshield <uid> [backfire]` | ADMIN | Make a player immune to punishment effects until restart. The issuing moderator sees their messages spoofed as if the punishment worked; `backfire` also applies it to the moderator. `/kick`, `/ban`, and `/mute` are unaffected |
+| `/antipunishshield <uid> [backfire]` | ADMIN | Make a player immune to punishment effects until restart. The issuing moderator sees their messages spoofed as if the punishment worked; `backfire` also applies it to the moderator, redirects forced movement/shownames, and random-characters a `/charsteal` thief. `/kick`/`/ban` backfire onto the moderator; `/mute` is unaffected |
 | `/setrole <uid> <role>` | ADMIN | Set a player's role (permission tier) |
 | `/clearpos <uid>` | MOVE_USERS | Clear forced position |
 | `/showname <uid> <name>` | MUTE | Force a showname |

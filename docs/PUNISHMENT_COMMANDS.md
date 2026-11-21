@@ -550,6 +550,8 @@ These manipulate frame *flow* only (no Opus decode), so they're CGO-free.
 
 Every attempt also sends the shielded player a sneaky popup naming the moderator and punishment, e.g. `🤫 shh! Mod tried to punish you with 'dog'. It didn't stick — ur punishment protected. Act normal.` In backfire mode the popup says it backfired on the moderator instead. The backfire itself is silent: the moderator only sees the normal success summary, never a backfire announcement. They see the spoof and think it worked, so the target acting normal is the joke.
 
+Character steals are covered too: a `/charsteal <uid>` against a shielded player is blocked. Spoof mode reports the usual success to the issuer; backfire mode moves the issuing moderator to a random free character instead. The shielded player keeps their character either way and still gets the sneaky popup.
+
 Full `/unpunish` clears the target's spoof records as well as any real punishments; the shield itself remains until restart. Every punishment insert is guarded centrally, so direct/mechanical effects cannot bypass it; `/stack`, `/lovebomb`, `/randompunishall`, `/translator`, `/sfxcurse`, `/shrink`, `/grow`, `/wide`, `/forcecolor`, `/icwarp`, and `/contagious` call the same gate. `/jail` and the torment (lag) branch are covered too.
 
 ---

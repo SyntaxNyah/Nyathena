@@ -33,8 +33,9 @@ package athena
 //
 // The shield is an in-memory registry keyed by the player's HDID (and IPID as a
 // fallback), so it survives reconnects but not a server restart, exactly as
-// requested. It does not touch /kick, /ban, or /mute: those are real moderation,
-// not punishment-system effects.
+// requested. Punishment effects are its core; direct moderation actions are
+// gated through gateAntiPunishShieldAction (/move -u, /forcename, /kick, /ban,
+// /charsteal). In-game /mute remains ordinary moderation.
 
 import (
 	"fmt"
@@ -222,9 +223,10 @@ func applyAntiPunishShieldIfActive(issuer, target *Client, pTypes []PunishmentTy
 }
 
 // antiPunishShieldAction is the outcome of the shield gate for commands that
-// are not PunishmentTypes: /move and /forcename. Unlike a punishment, those
-// commands have no message transform to fake, so the gate only reports what
-// happened and lets the command perform the redirect itself.
+// are not PunishmentTypes: /move -u, /forcename, /kick, /ban, and /charsteal.
+// Unlike a punishment, those commands have no message transform to fake, so the
+// gate only reports what happened and lets the command perform the redirect
+// itself.
 type antiPunishShieldAction int
 
 const (

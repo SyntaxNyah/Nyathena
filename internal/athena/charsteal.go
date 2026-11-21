@@ -30,6 +30,9 @@ import (
 // The target is moved off their character first so the slot is free before
 // the moderator claims it: Area.SwitchChar refuses to hand out a slot that's
 // still marked taken, so claiming out of order would silently no-op.
+//
+// A target carrying /antipunishshield is never stolen from: spoof mode fakes
+// the usual success summary, and backfire mode random-characters the issuer.
 func cmdCharSteal(client *Client, args []string, _ string) {
 	uid, err := strconv.Atoi(args[0])
 	if err != nil {
@@ -56,6 +59,26 @@ func cmdCharSteal(client *Client, args []string, _ string) {
 	}
 	stolenName := getCharacters()[stolenID]
 
+	// A shielded target cannot be stolen from. Both modes report the normal
+	// success summary so the issuer is never told the shield exists; backfire
+	// mode moves the issuer to a random free character instead. This is the
+	// same gate /move -u, /forcename, /kick and /ban use.
+	reportSuccess := func() {
+		client.SendServerMessage(fmt.Sprintf("Stole UID %d's character (%v) and forced them to a random character.", uid, stolenName))
+		addToBuffer(client, "CMD", fmt.Sprintf("Stole UID %d's character (%v) and forced them to a random character.", uid, stolenName), true)
+	}
+	switch gateAntiPunishShieldAction(client, target, "steal your character") {
+	case antiPunishActionSpoofed:
+		reportSuccess()
+		return
+	case antiPunishActionBackfired:
+		if newid := getRandomFreeChar(client); newid != -1 {
+			client.ChangeCharacter(newid)
+		}
+		reportSuccess()
+		return
+	}
+
 	newid := getRandomFreeChar(target)
 	if newid == -1 {
 		client.SendServerMessage("No free character is available to move the target to; steal aborted.")
@@ -65,6 +88,5 @@ func cmdCharSteal(client *Client, args []string, _ string) {
 	client.ChangeCharacter(stolenID)
 
 	target.SendServerMessage(fmt.Sprintf("A moderator stole your character (%v) and forced you to a random character.", stolenName))
-	client.SendServerMessage(fmt.Sprintf("Stole UID %d's character (%v) and forced them to a random character.", uid, stolenName))
-	addToBuffer(client, "CMD", fmt.Sprintf("Stole UID %d's character (%v) and forced them to a random character.", uid, stolenName), true)
+	reportSuccess()
 }

@@ -17,6 +17,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>. */
 package athena
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/MangosArentLiterature/Athena/internal/area"
@@ -138,5 +139,87 @@ func TestCharStealRejectsUnknownUID(t *testing.T) {
 
 	if caller.CharID() != 0 {
 		t.Errorf("expected caller's character to be unchanged for an unknown UID, got %d", caller.CharID())
+	}
+}
+
+// setCharStealShieldChars gives newShieldTestWorld's 10-slot area a matching
+// character list so the backfire's random ChangeCharacter can resolve a name.
+func setCharStealShieldChars(t *testing.T) {
+	t.Helper()
+	orig := getCharacters()
+	t.Cleanup(func() { setCharacters(orig) })
+	setCharacters([]string{
+		"Phoenix Wright", "Miles Edgeworth", "Maya Fey", "Franziska von Karma",
+		"Dick Gumshoe", "The Judge", "Larry Butz", "Winston Payne",
+		"Mia Fey", "Godot",
+	})
+}
+
+// newCharStealShieldWorld builds newShieldTestWorld and marks its target/other
+// characters as taken so /charsteal's area slot bookkeeping is realistic.
+func newCharStealShieldWorld(t *testing.T) *shieldTestWorld {
+	t.Helper()
+	setCharStealShieldChars(t)
+	w := newShieldTestWorld(t)
+	w.area.AddChar(w.target.CharID())
+	w.area.AddChar(w.other.CharID())
+	return w
+}
+
+// TestAntiPunishShieldSpoofCharSteal pins spoof mode: the shielded target keeps
+// their character, the issuer is not redirected, and both sides see the usual
+// spoof theatre (fake success for the issuer, sneaky popup for the target).
+func TestAntiPunishShieldSpoofCharSteal(t *testing.T) {
+	w := newCharStealShieldWorld(t)
+	w.target.SetAntiPunishShield(antiPunishShieldSpoof)
+
+	cmdCharSteal(w.mod, []string{"2"}, "usage")
+
+	if got := w.target.CharID(); got != 0 {
+		t.Fatalf("shielded target lost their character: got %d, want 0", got)
+	}
+	if got := w.mod.CharID(); got != -1 {
+		t.Errorf("spoof mode moved the issuer: char = %d, want spectator (-1)", got)
+	}
+	if !w.area.IsTaken(0) {
+		t.Error("shielded target's character slot was freed")
+	}
+	if got := w.modConn.String(); !strings.Contains(got, "Stole UID 2's character") {
+		t.Errorf("issuer did not get the normal success summary; got %q", got)
+	}
+	if got := w.targetConn.String(); !strings.Contains(got, "It didn't stick") {
+		t.Errorf("target did not get the shield popup; got %q", got)
+	}
+	if got := w.targetConn.String(); strings.Contains(got, "stole your character") {
+		t.Errorf("target got the real steal message; got %q", got)
+	}
+}
+
+// TestAntiPunishShieldBackfireCharSteal pins backfire mode: the shielded target
+// keeps their character and the issuing moderator is moved to a random free
+// character instead. The issuer only sees the normal success summary.
+func TestAntiPunishShieldBackfireCharSteal(t *testing.T) {
+	w := newCharStealShieldWorld(t)
+	w.target.SetAntiPunishShield(antiPunishShieldBackfire)
+
+	cmdCharSteal(w.mod, []string{"2"}, "usage")
+
+	if got := w.target.CharID(); got != 0 {
+		t.Fatalf("shielded target lost their character: got %d, want 0", got)
+	}
+	if got := w.mod.CharID(); got == -1 || got == 0 {
+		t.Fatalf("backfire did not random-character the issuer: char = %d", got)
+	}
+	if !w.area.IsTaken(0) {
+		t.Error("shielded target's character slot was freed")
+	}
+	if got := w.modConn.String(); !strings.Contains(got, "Stole UID 2's character") {
+		t.Errorf("issuer did not get the normal success summary; got %q", got)
+	}
+	if got := w.modConn.String(); strings.Contains(got, "bounced") || strings.Contains(strings.ToLower(got), "backfire") {
+		t.Errorf("issuer was told about the shield; got %q", got)
+	}
+	if got := w.targetConn.String(); !strings.Contains(got, "backfired on them instead") {
+		t.Errorf("target was not told it backfired; got %q", got)
 	}
 }
