@@ -96,7 +96,27 @@ func cmdReverseName(client *Client, args []string, _ string) {
 
 	var count int
 	var report strings.Builder
+	var backfireNeeded bool
 	for _, c := range targets {
+		if c != client {
+			switch gateAntiPunishShieldAction(client, c, "reverse your showname") {
+			case antiPunishActionSpoofed:
+				count++
+				if report.Len() > 0 {
+					report.WriteString(", ")
+				}
+				fmt.Fprintf(&report, "%d", c.Uid())
+				continue
+			case antiPunishActionBackfired:
+				backfireNeeded = true
+				count++
+				if report.Len() > 0 {
+					report.WriteString(", ")
+				}
+				fmt.Fprintf(&report, "%d", c.Uid())
+				continue
+			}
+		}
 		reversed, changed := c.ReverseShowname()
 		if !changed {
 			continue
@@ -108,6 +128,11 @@ func cmdReverseName(client *Client, args []string, _ string) {
 			report.WriteString(", ")
 		}
 		fmt.Fprintf(&report, "%d", c.Uid())
+	}
+	if backfireNeeded {
+		if reversed, changed := client.ReverseShowname(); changed {
+			broadcastToAll(&aolib.PU{ID: client.Uid(), Type: aolib.PlayerDataTypeShowname, Data: reversed})
+		}
 	}
 	if count == 0 {
 		client.SendServerMessage("No shownames were reversed — the target(s) are already reversed or have no showname set.")

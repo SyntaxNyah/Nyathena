@@ -199,15 +199,35 @@ func cmdCharSelect(client *Client, args []string, _ string) {
 		toChange := getUidList(strings.Split(args[0], ","))
 		var count int
 		var report string
+		var backfireNeeded, issuerDone bool
 		for _, c := range toChange {
 			if c.Area() != client.Area() || c.CharID() == -1 {
 				continue
+			}
+			if c == client {
+				issuerDone = true
+			} else {
+				switch gateAntiPunishShieldAction(client, c, "send you back to character select") {
+				case antiPunishActionSpoofed:
+					count++
+					report += fmt.Sprintf("%v, ", c.Uid())
+					continue
+				case antiPunishActionBackfired:
+					backfireNeeded = true
+					count++
+					report += fmt.Sprintf("%v, ", c.Uid())
+					continue
+				}
 			}
 			c.ChangeCharacter(-1)
 			c.Send(&aolib.DONE{})
 			c.SendServerMessage("You were moved back to character select.")
 			count++
 			report += fmt.Sprintf("%v, ", c.Uid())
+		}
+		if backfireNeeded && !issuerDone && client.CharID() != -1 {
+			client.ChangeCharacter(-1)
+			client.Send(&aolib.DONE{})
 		}
 		report = strings.TrimSuffix(report, ", ")
 		client.SendServerMessage(fmt.Sprintf("Moved %v users to character select.", count))
@@ -286,6 +306,15 @@ func cmdRandomBg(client *Client, _ []string, _ string) {
 // Handles /forcerandomchar [uid]
 
 func cmdForceRandomChar(client *Client, args []string, _ string) {
+	randomChar := func(c *Client) bool {
+		newid := getRandomFreeChar(c)
+		if newid == -1 {
+			return false
+		}
+		c.ChangeCharacter(newid)
+		return true
+	}
+
 	// If a UID argument is provided, target only that specific player.
 	if len(args) >= 1 {
 		uid, err := strconv.Atoi(args[0])
@@ -298,39 +327,66 @@ func cmdForceRandomChar(client *Client, args []string, _ string) {
 			client.SendServerMessage(fmt.Sprintf("Client with UID %v does not exist.", uid))
 			return
 		}
-		newid := getRandomFreeChar(target)
-		if newid == -1 {
+		reportSuccess := func() {
+			client.SendServerMessage(fmt.Sprintf("Forced UID %v to a random character.", uid))
+			addToBuffer(client, "CMD", fmt.Sprintf("Force random char on UID %v.", uid), false)
+		}
+		switch gateAntiPunishShieldAction(client, target, "force a random character on you") {
+		case antiPunishActionSpoofed:
+			reportSuccess()
+			return
+		case antiPunishActionBackfired:
+			randomChar(client)
+			reportSuccess()
+			return
+		}
+		if !randomChar(target) {
 			client.SendServerMessage("No free characters available for that player.")
 			return
 		}
-		target.ChangeCharacter(newid)
 		target.SendServerMessage("An admin forced you to a random character.")
-		client.SendServerMessage(fmt.Sprintf("Forced UID %v to a random character.", uid))
-		addToBuffer(client, "CMD", fmt.Sprintf("Force random char on UID %v.", uid), false)
+		reportSuccess()
 		return
 	}
 
-	// No UID provided — target all players in the current area.
+	// No UID provided — target all other players in the current area, then the
+	// caller. The caller is always allowed to random-char themself; a shielded
+	// target is skipped, counted for the fake summary, and in backfire mode the
+	// caller's own random-char is the redirected consequence.
 	var count int
 	var reportBuilder strings.Builder
+	batch := &antiPunishShieldBatch{issuer: client}
 	clients.ForEach(func(c *Client) {
-		if c.Area() != client.Area() {
+		if c.Area() != client.Area() || c == client {
 			return
 		}
-		newid := getRandomFreeChar(c)
-		if newid == -1 {
+		if batch.blocked(c, "force a random character on you", nil) {
+			count++
+			if reportBuilder.Len() > 0 {
+				reportBuilder.WriteString(", ")
+			}
+			reportBuilder.WriteString(fmt.Sprintf("%v", c.Uid()))
 			return
 		}
-		c.ChangeCharacter(newid)
-		if c != client {
-			c.SendServerMessage("An admin forced all players in the area to a random character.")
+		if !randomChar(c) {
+			return
 		}
+		c.SendServerMessage("An admin forced all players in the area to a random character.")
+		count++
 		if reportBuilder.Len() > 0 {
 			reportBuilder.WriteString(", ")
 		}
 		reportBuilder.WriteString(fmt.Sprintf("%v", c.Uid()))
-		count++
 	})
+	// Self is allowed even when shielded, and in backfire mode this is where
+	// the redirected consequence lands.
+	if randomChar(client) {
+		count++
+		if reportBuilder.Len() > 0 {
+			reportBuilder.WriteString(", ")
+		}
+		reportBuilder.WriteString(fmt.Sprintf("%v", client.Uid()))
+	}
 	if count > 0 {
 		client.SendServerMessage(fmt.Sprintf("Forced %v player(s) in the area to a random character.", count))
 		addToBuffer(client, "CMD", fmt.Sprintf("Force random char on %v user(s) (%v) in area.", count, reportBuilder.String()), false)
@@ -377,14 +433,31 @@ func cmdForcePos(client *Client, args []string, _ string) {
 
 	var count int
 	var report string
+	var backfireNeeded bool
 	for _, c := range targets {
 		if c.Area() != a {
 			continue
+		}
+		if c != client {
+			switch gateAntiPunishShieldAction(client, c, "force your position") {
+			case antiPunishActionSpoofed:
+				count++
+				report += fmt.Sprintf("%v, ", c.Uid())
+				continue
+			case antiPunishActionBackfired:
+				backfireNeeded = true
+				count++
+				report += fmt.Sprintf("%v, ", c.Uid())
+				continue
+			}
 		}
 		c.SetPos(pos)
 		c.SendServerMessage(fmt.Sprintf("A CM forced your position to: %v", pos))
 		count++
 		report += fmt.Sprintf("%v, ", c.Uid())
+	}
+	if backfireNeeded {
+		client.SetPos(pos)
 	}
 	report = strings.TrimSuffix(report, ", ")
 

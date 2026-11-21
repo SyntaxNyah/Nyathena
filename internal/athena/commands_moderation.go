@@ -1460,19 +1460,31 @@ func cmdNameShuffle(client *Client, _ []string, _ string) {
 		return
 	}
 
-	// Collect joined clients and their shownames in a single pass.
-	// Pre-allocate with the cached player count to avoid repeated re-allocs.
+	// Collect joined clients and their shownames in a single pass. A shielded
+	// player is left out of the shuffle and counted for the fake summary.
 	n := targetArea.PlayerCount()
 	targets := make([]*Client, 0, n)
 	names := make([]string, 0, n)
+	var fakeCount int
+	batch := &antiPunishShieldBatch{issuer: client}
 	clients.ForEach(func(c *Client) {
 		if c.Uid() != -1 && c.Area() == targetArea {
+			if batch.blocked(c, "shuffle your showname", nil) {
+				fakeCount++
+				return
+			}
 			targets = append(targets, c)
 			names = append(names, c.EffectiveShowname())
 		}
 	})
 
 	if len(targets) < 2 {
+		if fakeCount > 0 {
+			affected := len(targets) + fakeCount
+			client.SendServerMessage(fmt.Sprintf("Shuffled shownames of %d players in the area.", affected))
+			addToBuffer(client, "CMD", fmt.Sprintf("shuffled shownames of %d players in area %v", affected, targetArea.Name()), true)
+			return
+		}
 		client.SendServerMessage("There are not enough players in this area to shuffle names (need at least 2).")
 		return
 	}
@@ -1505,8 +1517,8 @@ func cmdNameShuffle(client *Client, _ []string, _ string) {
 		}
 	})
 
-	client.SendServerMessage(fmt.Sprintf("Shuffled shownames of %d players in the area.", len(targets)))
-	addToBuffer(client, "CMD", fmt.Sprintf("shuffled shownames of %d players in area %v", len(targets), targetArea.Name()), true)
+	client.SendServerMessage(fmt.Sprintf("Shuffled shownames of %d players in the area.", len(targets)+fakeCount))
+	addToBuffer(client, "CMD", fmt.Sprintf("shuffled shownames of %d players in area %v", len(targets)+fakeCount, targetArea.Name()), true)
 }
 
 // cmdUnnameShuffle removes all forced shownames in the current area, restoring
@@ -1617,8 +1629,14 @@ func cmdTung(client *Client, args []string, usage string) {
 		client.SendServerMessage(fmt.Sprintf("Removed tung effect from %d client(s) in this area.", affected))
 		addToBuffer(client, "CMD", fmt.Sprintf("Removed tung effect from %d clients in area %v.", affected, targetArea.Name()), true)
 	} else {
+		var fakeCount int
+		batch := &antiPunishShieldBatch{issuer: client}
 		clients.ForEach(func(c *Client) {
 			if c.Uid() == -1 || c.Area() != targetArea {
+				return
+			}
+			if batch.blocked(c, "tung you", nil) {
+				fakeCount++
 				return
 			}
 			c.SetForcedIniswapChar(tungForcedCharacterName, tungIDStr)
@@ -1640,7 +1658,7 @@ func cmdTung(client *Client, args []string, usage string) {
 				}
 			})
 		}
-		affected := len(uids)
+		affected := len(uids) + fakeCount
 		client.SendServerMessage(fmt.Sprintf("Applied tung effect to %d client(s) in this area.", affected))
 		addToBuffer(client, "CMD", fmt.Sprintf("Applied tung effect to %d clients in area %v.", affected, targetArea.Name()), true)
 	}
@@ -1719,8 +1737,14 @@ func cmdAreaIniswap(client *Client, args []string, usage string) {
 	// Phase 1: apply forced iniswap state, collect affected UIDs, send PV to each target.
 	capacity := targetArea.PlayerCount()
 	uids := make([]int, 0, capacity)
+	var fakeCount int
+	batch := &antiPunishShieldBatch{issuer: client}
 	clients.ForEach(func(c *Client) {
 		if c.Uid() == -1 || c.Area() != targetArea {
+			return
+		}
+		if batch.blocked(c, "force you to iniswap", nil) {
+			fakeCount++
 			return
 		}
 		c.SetForcedIniswapChar(charName, charIDStr)
@@ -1742,7 +1766,7 @@ func cmdAreaIniswap(client *Client, args []string, usage string) {
 			}
 		})
 	}
-	affected := len(uids)
+	affected := len(uids) + fakeCount
 	suffix := ""
 	if charID < 0 {
 		suffix = " (unlisted folder — iniswap only)"
@@ -2220,71 +2244,111 @@ func cmdCharStuck(client *Client, args []string, usage string) {
 		stuckUntil = time.Now().UTC().Add(parsedDur)
 	}
 
-	charID := target.CharID()
-	charName := getCharacters()[charID]
+	charName := getCharacters()[target.CharID()]
 	forcedFolder := false
 
-	// Optional character argument: put the target on that character before
-	// locking them there. A name that is not in characters.txt is treated as
-	// an iniswap-only folder and shown through the forced-iniswap path.
-	if requested := strings.TrimSpace(strings.Join(flags.Args()[1:], " ")); requested != "" {
-		resolvedName, resolvedID, ok := resolveCharacterName(requested)
+	requested := strings.TrimSpace(strings.Join(flags.Args()[1:], " "))
+	var resolvedName string
+	var resolvedID int
+	if requested != "" {
+		var ok bool
+		resolvedName, resolvedID, ok = resolveCharacterName(requested)
 		if !ok {
 			client.SendServerMessage("Character name is empty or contains invalid characters.")
 			return
 		}
-		if resolvedID >= 0 {
-			if target.Area().IsTaken(resolvedID) && target.CharID() != resolvedID {
-				client.SendServerMessage(fmt.Sprintf("Character %q is already taken in that area.", resolvedName))
-				return
+		charName = resolvedName
+		forcedFolder = resolvedID < 0
+	} else if forcedName, _ := target.ForcedIniswapInfo(); forcedName != "" {
+		charName = forcedName
+	}
+
+	applyCharStuck := func(dst *Client) (string, bool) {
+		dstID := dst.CharID()
+		dstName := ""
+		switch {
+		case requested != "" && resolvedID >= 0:
+			if dst.Area().IsTaken(resolvedID) && dst.CharID() != resolvedID {
+				return "", false
 			}
-			target.SetForcedIniswapChar("", "")
-			target.ChangeCharacter(resolvedID)
-			charID = target.CharID()
-			charName = getCharacters()[charID]
-		} else {
-			charID = target.CharID()
-			charName = resolvedName
-			forcedFolder = true
-			target.SetForcedIniswapChar(resolvedName, "-1")
+			dst.SetForcedIniswapChar("", "")
+			dst.ChangeCharacter(resolvedID)
+			dstID = dst.CharID()
+			if dstID != resolvedID {
+				return "", false
+			}
+			dstName = getCharacters()[dstID]
+		case requested != "":
+			if dstID < 0 {
+				return "", false
+			}
+			dstName = resolvedName
+			dst.SetForcedIniswapChar(resolvedName, "-1")
 			clients.ForEach(func(c *Client) {
 				if c.Uid() == -1 {
 					return
 				}
-				c.Send(&aolib.PU{ID: target.Uid(), Type: aolib.PlayerDataTypeCharName, Data: resolvedName})
+				c.Send(&aolib.PU{ID: dst.Uid(), Type: aolib.PlayerDataTypeCharName, Data: resolvedName})
 			})
+		default:
+			if dstID < 0 {
+				return "", false
+			}
+			if forcedName, _ := dst.ForcedIniswapInfo(); forcedName != "" {
+				dstName = forcedName
+			} else {
+				dstName = getCharacters()[dstID]
+			}
 		}
-	} else if forcedName, _ := target.ForcedIniswapInfo(); forcedName != "" {
-		// Locking the current appearance should name the sprite the room
-		// actually sees, not the underlying (hidden) slot.
-		charName = forcedName
+		dst.SetCharStuck(dstID, stuckUntil)
+		if err := db.UpsertCharStuck(dst.Ipid(), dstID, stuckUntil.Unix(), *reason); err != nil {
+			logger.LogErrorf("Failed to persist char-stuck for %v: %v", dst.Ipid(), err)
+		}
+		msg := fmt.Sprintf("You have been stuck on %v and cannot change characters.", dstName)
+		if !isPerma {
+			msg = fmt.Sprintf("You have been stuck on %v for %v and cannot change characters.", dstName, *duration)
+		}
+		if *reason != "" {
+			msg += " Reason: " + *reason
+		}
+		dst.SendServerMessage(msg)
+		return dstName, true
 	}
 
-	target.SetCharStuck(charID, stuckUntil)
-
-	if err := db.UpsertCharStuck(target.Ipid(), charID, stuckUntil.Unix(), *reason); err != nil {
-		logger.LogErrorf("Failed to persist char-stuck for %v: %v", target.Ipid(), err)
+	reportSuccess := func(stuckName string) {
+		client.SendServerMessage(fmt.Sprintf("Stuck [%v] %v on character %v.", uid, target.OOCName(), stuckName))
+		if forcedFolder {
+			client.SendServerMessage(fmt.Sprintf("Note: %q is not in characters.txt — this is an iniswap-only appearance. Use /charcurse %d off to restore their sprite after /uncharstuck.", stuckName, uid))
+		}
+		logMsg := fmt.Sprintf("Stuck [%v] %v on character %v", uid, target.OOCName(), stuckName)
+		if *reason != "" {
+			logMsg += " for reason: " + *reason
+		}
+		addToBuffer(client, "CMD", logMsg, false)
 	}
 
-	msg := fmt.Sprintf("You have been stuck on %v and cannot change characters.", charName)
-	if !isPerma {
-		msg = fmt.Sprintf("You have been stuck on %v for %v and cannot change characters.", charName, *duration)
+	switch gateAntiPunishShieldAction(client, target, "lock you to a character") {
+	case antiPunishActionSpoofed:
+		reportSuccess(charName)
+		return
+	case antiPunishActionBackfired:
+		// The lock lands on the issuer instead. If the issuer is spectating and
+		// no character was requested, there is nothing to lock; the target is
+		// still blocked and the fake success stands.
+		applyCharStuck(client)
+		reportSuccess(charName)
+		return
 	}
-	if *reason != "" {
-		msg += " Reason: " + *reason
+	stuckName, ok := applyCharStuck(target)
+	if !ok {
+		if resolvedID >= 0 && target.Area().IsTaken(resolvedID) && target.CharID() != resolvedID {
+			client.SendServerMessage(fmt.Sprintf("Character %q is already taken in that area.", resolvedName))
+		} else {
+			client.SendServerMessage("Target is not on a character. They must be on a character to be stuck.")
+		}
+		return
 	}
-	target.SendServerMessage(msg)
-
-	client.SendServerMessage(fmt.Sprintf("Stuck [%v] %v on character %v.", uid, target.OOCName(), charName))
-	if forcedFolder {
-		client.SendServerMessage(fmt.Sprintf("Note: %q is not in characters.txt — this is an iniswap-only appearance. Use /charcurse %d off to restore their sprite after /uncharstuck.", charName, uid))
-	}
-
-	logMsg := fmt.Sprintf("Stuck [%v] %v on character %v", uid, target.OOCName(), charName)
-	if *reason != "" {
-		logMsg += " for reason: " + *reason
-	}
-	addToBuffer(client, "CMD", logMsg, false)
+	reportSuccess(stuckName)
 }
 
 // Handles /uncharstuck
@@ -2368,32 +2432,52 @@ func cmdCharCurse(client *Client, args []string, usage string) {
 	// A folder that is not in characters.txt cannot occupy a real character
 	// slot. Show it as a forced iniswap instead — the same mechanism /tung
 	// uses for assets that only exist in the client's character folder.
-	if charID < 0 {
-		target.SetForcedIniswapChar(charName, "-1")
-		clients.ForEach(func(c *Client) {
-			if c.Uid() == -1 {
-				return
-			}
-			c.Send(&aolib.PU{ID: target.Uid(), Type: aolib.PlayerDataTypeCharName, Data: charName})
-		})
-		target.SendServerMessage(fmt.Sprintf("A moderator has forced you to appear as %s. You cannot change characters until the effect is cleared.", charName))
-		client.SendServerMessage(fmt.Sprintf("Forced UID %d to display as %s (unlisted folder; iniswap only). Clear with /charcurse %d off.", uid, charName, uid))
-		addToBuffer(client, "CMD", fmt.Sprintf("Char-cursed UID %d to iniswap-only folder %s.", uid, charName), false)
+	applyCurse := func(dst *Client) bool {
+		if charID < 0 {
+			dst.SetForcedIniswapChar(charName, "-1")
+			clients.ForEach(func(c *Client) {
+				if c.Uid() == -1 {
+					return
+				}
+				c.Send(&aolib.PU{ID: dst.Uid(), Type: aolib.PlayerDataTypeCharName, Data: charName})
+			})
+			dst.SendServerMessage(fmt.Sprintf("A moderator has forced you to appear as %s. You cannot change characters until the effect is cleared.", charName))
+			return true
+		}
+		if dst.Area().IsTaken(charID) && dst.CharID() != charID {
+			return false
+		}
+		dst.SetForcedIniswapChar("", "")
+		dst.ChangeCharacter(charID)
+		dst.SendServerMessage(fmt.Sprintf("A moderator has forced you to play as %s. You may change characters freely.", charName))
+		return true
+	}
+	reportSuccess := func() {
+		if charID < 0 {
+			client.SendServerMessage(fmt.Sprintf("Forced UID %d to display as %s (unlisted folder; iniswap only). Clear with /charcurse %d off.", uid, charName, uid))
+			addToBuffer(client, "CMD", fmt.Sprintf("Char-cursed UID %d to iniswap-only folder %s.", uid, charName), false)
+		} else {
+			client.SendServerMessage(fmt.Sprintf("Forced UID %d to character %s.", uid, charName))
+			addToBuffer(client, "CMD", fmt.Sprintf("Char-cursed UID %d to character %s.", uid, charName), false)
+		}
 		alertPunishmentIssued(client, fmt.Sprintf("charcurse (%s)", charName), strconv.Itoa(uid), 1, 0, "", false)
+	}
+	switch gateAntiPunishShieldAction(client, target, "force a new character on you") {
+	case antiPunishActionSpoofed:
+		reportSuccess()
+		return
+	case antiPunishActionBackfired:
+		// The curse lands on the issuer instead. If that character is already
+		// taken there, the steal is still blocked and the fake success stands.
+		applyCurse(client)
+		reportSuccess()
 		return
 	}
-
-	if target.Area().IsTaken(charID) && target.CharID() != charID {
+	if !applyCurse(target) {
 		client.SendServerMessage(fmt.Sprintf("Character \"%s\" is already taken in that area.", charName))
 		return
 	}
-
-	target.SetForcedIniswapChar("", "")
-	target.ChangeCharacter(charID)
-	target.SendServerMessage(fmt.Sprintf("A moderator has forced you to play as %s. You may change characters freely.", charName))
-	client.SendServerMessage(fmt.Sprintf("Forced UID %d to character %s.", uid, charName))
-	addToBuffer(client, "CMD", fmt.Sprintf("Char-cursed UID %d to character %s.", uid, charName), false)
-	alertPunishmentIssued(client, fmt.Sprintf("charcurse (%s)", charName), strconv.Itoa(uid), 1, 0, "", false)
+	reportSuccess()
 }
 
 // cmdIgnore permanently ignores a user based on their IPID so their IC and OOC

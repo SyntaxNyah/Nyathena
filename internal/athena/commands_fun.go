@@ -167,21 +167,74 @@ func cmdForcePair(client *Client, args []string, _ string) {
 		return
 	}
 
-	// A moderator force-pair overrides any leash either target was in. Clear
-	// both claims (and their pair state) before installing the new pair so no
-	// stale master/dog pointer survives and drags the old dog around later.
-	dissolveLeashForForce(target1, target2)
-	dissolveLeashForForce(target2, target1)
+	// applyPair installs the same pair links the command has always used. The
+	// backfire path notifies only the non-shielded target, since the issuer is
+	// meant to see nothing beyond the normal success summary.
+	applyPair := func(a, b *Client, notifyA, notifyB bool, by string) bool {
+		if a == nil || b == nil || a == b || a.CharID() < 0 || b.CharID() < 0 {
+			return false
+		}
+		dissolveLeashForForce(a, b)
+		dissolveLeashForForce(b, a)
+		a.SetPairWantedID(b.CharID())
+		b.SetPairWantedID(a.CharID())
+		a.SetForcePairUID(b.Uid())
+		b.SetForcePairUID(a.Uid())
+		notify := func(dst, partner *Client) {
+			msg := fmt.Sprintf("You have been force-paired with %v.", partner.OOCName())
+			if by != "" {
+				msg = fmt.Sprintf("You have been force-paired with %v by %v.", partner.OOCName(), by)
+			}
+			dst.SendServerMessage(msg)
+		}
+		if notifyA {
+			notify(a, b)
+		}
+		if notifyB {
+			notify(b, a)
+		}
+		return true
+	}
+	reportSuccess := func() {
+		client.SendServerMessage(fmt.Sprintf("Force-paired %v and %v.", target1.OOCName(), target2.OOCName()))
+		addToBuffer(client, "CMD", fmt.Sprintf("Force-paired UID %v and UID %v.", uid1, uid2), false)
+	}
 
-	target1.SetPairWantedID(target2.CharID())
-	target2.SetPairWantedID(target1.CharID())
-	target1.SetForcePairUID(target2.Uid())
-	target2.SetForcePairUID(target1.Uid())
-
-	target1.SendServerMessage(fmt.Sprintf("You have been force-paired with %v by %v.", target2.OOCName(), client.OOCName()))
-	target2.SendServerMessage(fmt.Sprintf("You have been force-paired with %v by %v.", target1.OOCName(), client.OOCName()))
-	client.SendServerMessage(fmt.Sprintf("Force-paired %v and %v.", target1.OOCName(), target2.OOCName()))
-	addToBuffer(client, "CMD", fmt.Sprintf("Force-paired UID %v and UID %v.", uid1, uid2), false)
+	var shielded []*Client
+	var backfired bool
+	for _, c := range []*Client{target1, target2} {
+		switch gateAntiPunishShieldAction(client, c, "force-pair you") {
+		case antiPunishActionSpoofed:
+			shielded = append(shielded, c)
+		case antiPunishActionBackfired:
+			shielded = append(shielded, c)
+			backfired = true
+		}
+	}
+	if len(shielded) > 0 {
+		// A two-person action only has a meaningful redirect when the issuer is
+		// not one of the targets and the other target is not shielded: pair the
+		// issuer with that other target instead. If both targets are shielded
+		// (or the issuer is the other target), the action is simply blocked.
+		if backfired && client != target1 && client != target2 {
+			var other *Client
+			if shielded[0] == target1 && target2.AntiPunishShieldMode() == antiPunishShieldOff {
+				other = target2
+			} else if shielded[0] == target2 && target1.AntiPunishShieldMode() == antiPunishShieldOff {
+				other = target1
+			}
+			if other != nil {
+				applyPair(client, other, false, true, "")
+			}
+		}
+		reportSuccess()
+		return
+	}
+	if !applyPair(target1, target2, true, true, client.OOCName()) {
+		client.SendServerMessage("Failed to force-pair: both players must be on a character.")
+		return
+	}
+	reportSuccess()
 }
 
 // Handles /unpair

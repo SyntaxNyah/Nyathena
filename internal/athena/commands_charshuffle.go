@@ -54,6 +54,8 @@ func cmdCharShuffle(client *Client, _ []string, _ string) {
 		origCID int
 	}
 	var participants []entry
+	var fakeCount int
+	batch := &antiPunishShieldBatch{issuer: client}
 	clients.ForEach(func(c *Client) {
 		if c.Uid() == -1 || c.Area() != targetArea {
 			return
@@ -62,9 +64,19 @@ func cmdCharShuffle(client *Client, _ []string, _ string) {
 		if c.CharID() < 0 {
 			return
 		}
+		if batch.blocked(c, "shuffle your character", nil) {
+			fakeCount++
+			return
+		}
 		participants = append(participants, entry{c: c, origCID: c.CharID()})
 	})
 	if len(participants) < 2 {
+		if fakeCount > 0 {
+			affected := len(participants) + fakeCount
+			client.SendServerMessage(fmt.Sprintf("Shuffled characters of %d players in the area.", affected))
+			addToBuffer(client, "CMD", fmt.Sprintf("Shuffled characters of %d players in area %v", affected, targetArea.Name()), true)
+			return
+		}
 		client.SendServerMessage("There are not enough players with selected characters to shuffle (need at least 2).")
 		return
 	}
@@ -121,8 +133,8 @@ func cmdCharShuffle(client *Client, _ []string, _ string) {
 		requestPlayerData(p.c, aolib.PlayerDataTypeCharName, p.c.CurrentCharacter())
 	}
 
-	client.SendServerMessage(fmt.Sprintf("Shuffled characters of %d players in the area.", len(participants)))
-	addToBuffer(client, "CMD", fmt.Sprintf("Shuffled characters of %d players in area %v", len(participants), targetArea.Name()), true)
+	client.SendServerMessage(fmt.Sprintf("Shuffled characters of %d players in the area.", len(participants)+fakeCount))
+	addToBuffer(client, "CMD", fmt.Sprintf("Shuffled characters of %d players in area %v", len(participants)+fakeCount, targetArea.Name()), true)
 }
 
 // cmdUnCharShuffle restores every participant's pre-shuffle character.

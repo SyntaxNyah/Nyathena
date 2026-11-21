@@ -552,6 +552,8 @@ Every attempt also sends the shielded player a sneaky popup naming the moderator
 
 Character steals are covered too: a `/charsteal <uid>` against a shielded player is blocked. Spoof mode reports the usual success to the issuer; backfire mode moves the issuing moderator to a random free character instead. The shielded player keeps their character either way and still gets the sneaky popup.
 
+The other character/appearance controls use the same gate: `/charcurse`, `/charstuck`, `/curserandomchar`, `/forcerandomchar`, `/charselect`, `/forcepos`, `/tung`, `/areainiswap`, `/reversename`, `/charshuffle`, and `/nameshuffle`. Spoof mode leaves the shielded player untouched. Backfire mode redirects the effect to the issuer; for area-wide commands the issuer is included while shielded players are skipped. `/forcepair` is covered too; `/leash` already reverses a one-on-one claim in backfire mode. `/mute` and `/kickarea` remain exempt.
+
 Full `/unpunish` clears the target's spoof records as well as any real punishments; the shield itself remains until restart. Every punishment insert is guarded centrally, so direct/mechanical effects cannot bypass it; `/stack`, `/lovebomb`, `/randompunishall`, `/translator`, `/sfxcurse`, `/shrink`, `/grow`, `/wide`, `/forcecolor`, `/icwarp`, and `/contagious` call the same gate. `/jail` and the torment (lag) branch are covered too.
 
 ---

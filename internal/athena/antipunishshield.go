@@ -260,6 +260,35 @@ func gateAntiPunishShieldAction(issuer, target *Client, action string) antiPunis
 	}
 }
 
+// antiPunishShieldBatch deduplicates the backfire redirect across a command
+// that touches several targets. Every shielded target is still blocked by the
+// gate's spoof/backfire popup; the first one runs onBackfire so the issuer is
+// redirected only once, matching /move and /kick's multi-target behaviour.
+type antiPunishShieldBatch struct {
+	issuer    *Client
+	backfired bool
+}
+
+// blocked reports whether target must be skipped by a multi-target command.
+func (b *antiPunishShieldBatch) blocked(target *Client, action string, onBackfire func()) bool {
+	if b == nil || b.issuer == nil || target == nil || target == b.issuer {
+		return false
+	}
+	switch gateAntiPunishShieldAction(b.issuer, target, action) {
+	case antiPunishActionSpoofed:
+		return true
+	case antiPunishActionBackfired:
+		if !b.backfired {
+			b.backfired = true
+			if onBackfire != nil {
+				onBackfire()
+			}
+		}
+		return true
+	}
+	return false
+}
+
 // antiPunishShieldedClientOnIPID returns an online client on ipid that carries
 // an anti-punishment shield, preferring a backfire shield when an IPID has
 // several clients. /ban works per IPID rather than per connection, so it uses

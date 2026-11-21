@@ -155,9 +155,10 @@ func setCharStealShieldChars(t *testing.T) {
 	})
 }
 
-// newCharStealShieldWorld builds newShieldTestWorld and marks its target/other
-// characters as taken so /charsteal's area slot bookkeeping is realistic.
-func newCharStealShieldWorld(t *testing.T) *shieldTestWorld {
+// newShieldGatedWorld builds newShieldTestWorld, gives its 10-slot area a
+// matching character list, and marks the target/other characters as taken so
+// command handlers that manipulate area slots behave realistically.
+func newShieldGatedWorld(t *testing.T) *shieldTestWorld {
 	t.Helper()
 	setCharStealShieldChars(t)
 	w := newShieldTestWorld(t)
@@ -170,7 +171,7 @@ func newCharStealShieldWorld(t *testing.T) *shieldTestWorld {
 // their character, the issuer is not redirected, and both sides see the usual
 // spoof theatre (fake success for the issuer, sneaky popup for the target).
 func TestAntiPunishShieldSpoofCharSteal(t *testing.T) {
-	w := newCharStealShieldWorld(t)
+	w := newShieldGatedWorld(t)
 	w.target.SetAntiPunishShield(antiPunishShieldSpoof)
 
 	cmdCharSteal(w.mod, []string{"2"}, "usage")
@@ -199,7 +200,7 @@ func TestAntiPunishShieldSpoofCharSteal(t *testing.T) {
 // keeps their character and the issuing moderator is moved to a random free
 // character instead. The issuer only sees the normal success summary.
 func TestAntiPunishShieldBackfireCharSteal(t *testing.T) {
-	w := newCharStealShieldWorld(t)
+	w := newShieldGatedWorld(t)
 	w.target.SetAntiPunishShield(antiPunishShieldBackfire)
 
 	cmdCharSteal(w.mod, []string{"2"}, "usage")

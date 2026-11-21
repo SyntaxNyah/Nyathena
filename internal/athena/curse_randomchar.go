@@ -117,6 +117,28 @@ func cmdCurseRandomChar(client *Client, args []string, _ string) {
 		return
 	}
 
+	reportSuccess := func() {
+		client.SendServerMessage(fmt.Sprintf("Cursed UID %d (IPID %v) with random character changes.", uid, target.Ipid()))
+		addToBuffer(client, "CMD", fmt.Sprintf("Cursed UID %d (IPID %v) with random-char.", uid, target.Ipid()), true)
+	}
+	applyCurse := func(dst *Client) {
+		if err := db.AddRandomCharCurse(dst.Ipid(), client.ModName(), time.Now().UTC().Unix()); err != nil {
+			logger.LogErrorf("Failed to persist anti-punishment backfire random-char curse for %v: %v", dst.Ipid(), err)
+			return
+		}
+		dst.armCurseRandomChar()
+	}
+	switch gateAntiPunishShieldAction(client, target, "curse you with random character changes") {
+	case antiPunishActionSpoofed:
+		reportSuccess()
+		return
+	case antiPunishActionBackfired:
+		// The random-char curse lands on the issuer instead.
+		applyCurse(client)
+		reportSuccess()
+		return
+	}
+
 	if err := db.AddRandomCharCurse(target.Ipid(), client.ModName(), time.Now().UTC().Unix()); err != nil {
 		client.SendServerMessage(fmt.Sprintf("Failed to persist curse: %v", err))
 		return
@@ -124,8 +146,7 @@ func cmdCurseRandomChar(client *Client, args []string, _ string) {
 	target.armCurseRandomChar()
 
 	target.SendServerMessage("You have been cursed: your character will now randomly change every 1-5 seconds. This persists even if you reconnect — only an admin can remove it, with /uncurserandomchar.")
-	client.SendServerMessage(fmt.Sprintf("Cursed UID %d (IPID %v) with random character changes.", uid, target.Ipid()))
-	addToBuffer(client, "CMD", fmt.Sprintf("Cursed UID %d (IPID %v) with random-char.", uid, target.Ipid()), true)
+	reportSuccess()
 }
 
 // cmdUnCurseRandomChar handles /uncurserandomchar <uid>. ADMIN only.
