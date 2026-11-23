@@ -57,15 +57,18 @@ Full removal (`/unpunish <uid>` and `/unpunish all`) **also breaks any `/leash` 
 /unpunish all                    # Wipe the entire area clean
 ```
 
-### Self-Removal Protection
+### Admin-Issuer Protection
 
-A regular moderator **cannot** `/unpunish` a punishment that an admin or shadow mod placed on them. All three forms are gated:
+A caller below `ADMIN` **cannot** `/unpunish` a punishment that an admin placed — on themselves or on anybody else. All forms are gated:
 
-- `/unpunish <own-uid>` — refused if any punishment was issued by shadow/admin.
-- `/unpunish -t <type> <own-uid>` — refused for that specific effect.
-- `/unpunish all` — silently skips the caller's protected punishments.
+- `/unpunish <uid>` — refused if any of the target's punishments was issued by an admin.
+- `/unpunish -t <type> <uid>` — refused for that specific effect when an admin issued it.
+- `/unpunish <ipid>` — refused for live or offline targets; persisted rows are checked too.
+- `/unpunish all` — skips any client carrying an admin-issued punishment and reports how many were kept.
 
-Admins and shadow mods bypass the gate. The issuer tier persists across restarts via `PUNISHMENTS.ISSUER_TIER` (DB migration 18).
+Admins bypass the gate. Mod and shadow mod sit at the same tier for this purpose, so either can remove what the other issued. The issuer tier persists across restarts via `PUNISHMENTS.ISSUER_TIER` (DB migration 18).
+
+The same gate covers `/forcename`: a forced showname an admin set cannot be removed or overwritten by anyone below `ADMIN`, including through `/nameshuffle`/`/unnameshuffle`. `/unpunish` does not touch forced shownames.
 
 ### Per-Effect Removal Commands
 

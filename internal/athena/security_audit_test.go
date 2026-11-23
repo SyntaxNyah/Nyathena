@@ -26,6 +26,7 @@ import (
 	"time"
 
 	"github.com/MangosArentLiterature/Athena/internal/area"
+	"github.com/MangosArentLiterature/Athena/internal/db"
 	"github.com/MangosArentLiterature/Athena/internal/permissions"
 	"github.com/MangosArentLiterature/Athena/internal/settings"
 )
@@ -358,4 +359,122 @@ func TestUnpunishSelfRemovalShadowVsAdmin(t *testing.T) {
 			t.Error("an admin-issued punishment was not reported as protected")
 		}
 	})
+}
+
+// ── admin-issued effects cannot be undone by a lower tier ───────────────────
+
+// TestForcedNameAdminIssuerProtection pins the /forcename rule: a forced
+// showname an admin set cannot be removed or overwritten by a moderator. A
+// mod-issued name remains removable by a mod, and an admin can always clear it.
+func TestForcedNameAdminIssuerProtection(t *testing.T) {
+	newTestClients(t)
+	room := area.NewArea(area.AreaData{Name: "Courtroom"}, 5, 10, area.EviAny)
+
+	newClient := func(uid int, ipid string, perms uint64) *Client {
+		c := &Client{
+			char: -1, conn: &captureConn{}, area: room, uid: uid, ipid: ipid, perms: perms,
+			pair: ClientPairInfo{wanted_id: -1}, forcePairUID: -1,
+		}
+		clients.AddClient(c)
+		clients.RegisterUID(c)
+		return c
+	}
+
+	admin := newClient(1, "ip-forcename-admin", permissions.PermissionField["ADMIN"])
+	mod := newClient(2, "ip-forcename-mod", permissions.PermissionField["MUTE"])
+	target := newClient(3, "ip-forcename-target", 0)
+
+	cmdForceName(admin, []string{"3", "poopoo", "head"}, "usage")
+	if got, want := target.ForcedShowname(), encode("poopoo head"); got != want {
+		t.Fatalf("admin /forcename stored %q, want %q", got, want)
+	}
+	if got := target.ForcedShownameTier(); got != IssuerAdmin {
+		t.Fatalf("forced showname tier = %d, want IssuerAdmin", got)
+	}
+
+	// A moderator cannot remove or overwrite the admin's name.
+	cmdUnforceName(mod, []string{"3"}, "usage")
+	if got, want := target.ForcedShowname(), encode("poopoo head"); got != want {
+		t.Fatalf("mod /unforcename changed the admin name to %q, want %q", got, want)
+	}
+	cmdForceName(mod, []string{"3", "replacement"}, "usage")
+	if got, want := target.ForcedShowname(), encode("poopoo head"); got != want {
+		t.Fatalf("mod /forcename overwrote the admin name with %q, want %q", got, want)
+	}
+
+	// An admin can clear it.
+	cmdUnforceName(admin, []string{"3"}, "usage")
+	if got := target.ForcedShowname(); got != "" {
+		t.Fatalf("admin /unforcename left forced showname %q, want empty", got)
+	}
+
+	// Mod-issued names stay at the mod tier and remain mod-removable.
+	cmdForceName(mod, []string{"3", "modname"}, "usage")
+	if got := target.ForcedShownameTier(); got != IssuerMod {
+		t.Fatalf("mod forced showname tier = %d, want IssuerMod", got)
+	}
+	cmdUnforceName(mod, []string{"3"}, "usage")
+	if got := target.ForcedShowname(); got != "" {
+		t.Fatalf("mod /unforcename left forced showname %q, want empty", got)
+	}
+}
+
+// TestUnpunishAdminIssuerProtection pins the /unpunish rule: a moderator
+// cannot clear an admin-issued punishment from another player, whether by UID,
+// IPID, or /unpunish all. The admin can, and mod-issued punishments still clear.
+func TestUnpunishAdminIssuerProtection(t *testing.T) {
+	defer setupShadowDisconnectTestDB(t)()
+	newTestClients(t)
+	room := area.NewArea(area.AreaData{Name: "Courtroom"}, 5, 10, area.EviAny)
+
+	newClient := func(uid int, ipid string, perms uint64) *Client {
+		c := &Client{
+			char: -1, conn: &captureConn{}, area: room, uid: uid, ipid: ipid, perms: perms,
+			pair: ClientPairInfo{wanted_id: -1}, forcePairUID: -1,
+		}
+		clients.AddClient(c)
+		clients.RegisterUID(c)
+		return c
+	}
+
+	admin := newClient(1, "ip-unpunish-admin", permissions.PermissionField["ADMIN"])
+	mod := newClient(2, "ip-unpunish-mod", permissions.PermissionField["MUTE"])
+	target := newClient(3, "ip-unpunish-target", 0)
+	other := newClient(4, "ip-unpunish-other", 0)
+
+	addAdminPunishment := func() {
+		target.AddPunishmentBy(PunishmentTsundere, time.Hour, "admin", IssuerAdmin)
+		if err := db.UpsertTextPunishmentBy(target.Ipid(), int(PunishmentTsundere), time.Now().Add(time.Hour).Unix(), "admin", int(IssuerAdmin)); err != nil {
+			t.Fatalf("persist admin punishment: %v", err)
+		}
+	}
+
+	// Targeted UID form.
+	addAdminPunishment()
+	cmdUnpunish(mod, []string{"3"}, "usage")
+	if !target.HasPunishment(PunishmentTsundere) {
+		t.Fatal("mod /unpunish <uid> removed an admin-issued punishment")
+	}
+
+	// /unpunish all form: the protected target is skipped, the mod-issued one clears.
+	other.AddPunishmentBy(PunishmentUppercase, time.Hour, "mod", IssuerMod)
+	cmdUnpunish(mod, []string{"all"}, "usage")
+	if !target.HasPunishment(PunishmentTsundere) {
+		t.Fatal("mod /unpunish all removed an admin-issued punishment")
+	}
+	if other.HasPunishment(PunishmentUppercase) {
+		t.Fatal("mod /unpunish all failed to remove a mod-issued punishment")
+	}
+
+	// Raw IPID form cannot bypass the UID gate.
+	cmdUnpunish(mod, []string{target.Ipid()}, "usage")
+	if !target.HasPunishment(PunishmentTsundere) {
+		t.Fatal("mod /unpunish <ipid> removed an admin-issued punishment")
+	}
+
+	// An admin can clear it.
+	cmdUnpunish(admin, []string{"3"}, "usage")
+	if target.HasPunishment(PunishmentTsundere) {
+		t.Fatal("admin /unpunish <uid> failed to remove an admin-issued punishment")
+	}
 }

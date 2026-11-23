@@ -1365,6 +1365,13 @@ func cmdUnjail(client *Client, args []string, _ string) {
 	addToBuffer(client, "CMD", fmt.Sprintf("Released %v from jail.", report), false)
 }
 
+// adminForcedNameProtected reports whether caller is below ADMIN and target
+// carries a forced showname that an admin issued. Mod and shadow mod sit at
+// the same tier for this gate; only ADMIN bypasses it.
+func adminForcedNameProtected(caller, target *Client) bool {
+	return issuerTierFor(caller) < IssuerAdmin && target.ForcedShownameTier() >= IssuerAdmin
+}
+
 // cmdForceName forces a client to use a specific showname in IC messages.
 func cmdForceName(client *Client, args []string, _ string) {
 	uid, err := strconv.Atoi(args[0])
@@ -1375,6 +1382,13 @@ func cmdForceName(client *Client, args []string, _ string) {
 	target, err := getClientByUid(uid)
 	if err != nil {
 		client.SendServerMessage("Invalid UID.")
+		return
+	}
+	// A forced name an admin set is protected: a lower-tier moderator cannot
+	// overwrite it, which would otherwise be an easy way to shed the admin's
+	// effect without ever calling /unforcename. Admins can always override.
+	if adminForcedNameProtected(client, target) {
+		client.SendServerMessage(fmt.Sprintf("UID %v's forced showname was set by an admin and cannot be changed by a moderator.", uid))
 		return
 	}
 	// Command args are already decoded (plain text); validate the visible length.
@@ -1392,10 +1406,11 @@ func cmdForceName(client *Client, args []string, _ string) {
 		logger.LogInfof("forcename: refused showname for UID %v from %v — matched %s", uid, client.Ipid(), m.Entry.String())
 		return
 	}
+	tier := issuerTierFor(client)
 	// Store as AO2-encoded so it can be placed directly into the IC packet's
 	// MSToClient.Showname field without an extra encode step on every message.
 	applyForcedName := func(c *Client) {
-		c.SetForcedShowname(encode(name))
+		c.SetForcedShownameBy(encode(name), tier)
 		// PU and in-server messages use the decoded (display) form.
 		broadcastToAll(&aolib.PU{ID: c.Uid(), Type: aolib.PlayerDataTypeShowname, Data: name})
 	}
@@ -1436,6 +1451,10 @@ func cmdUnforceName(client *Client, args []string, _ string) {
 		client.SendServerMessage(fmt.Sprintf("UID %v does not have a forced showname.", uid))
 		return
 	}
+	if adminForcedNameProtected(client, target) {
+		client.SendServerMessage(fmt.Sprintf("UID %v's forced showname was set by an admin and cannot be removed by a moderator.", uid))
+		return
+	}
 	target.SetForcedShowname("")
 	target.SendServerMessage("Your forced showname has been removed by a moderator.")
 	client.SendServerMessage(fmt.Sprintf("Removed forced showname from UID %v.", uid))
@@ -1450,6 +1469,7 @@ func cmdNameShuffle(client *Client, _ []string, _ string) {
 		return
 	}
 	targetArea := client.Area()
+	callerTier := issuerTierFor(client)
 
 	// Fast path: skip the full client-list scan when the area clearly lacks
 	// enough participants. PlayerCount() is an O(1) cached counter that only
@@ -1462,15 +1482,23 @@ func cmdNameShuffle(client *Client, _ []string, _ string) {
 
 	// Collect joined clients and their shownames in a single pass. A shielded
 	// player is left out of the shuffle and counted for the fake summary.
+	// A caller below ADMIN also leaves admin-issued forced shownames alone:
+	// both the player and their name are skipped, so the protected name cannot
+	// be displaced onto somebody else.
 	n := targetArea.PlayerCount()
 	targets := make([]*Client, 0, n)
 	names := make([]string, 0, n)
 	var fakeCount int
+	protected := 0
 	batch := &antiPunishShieldBatch{issuer: client}
 	clients.ForEach(func(c *Client) {
 		if c.Uid() != -1 && c.Area() == targetArea {
 			if batch.blocked(c, "shuffle your showname", nil) {
 				fakeCount++
+				return
+			}
+			if callerTier < IssuerAdmin && c.ForcedShownameTier() >= IssuerAdmin {
+				protected++
 				return
 			}
 			targets = append(targets, c)
@@ -1485,7 +1513,11 @@ func cmdNameShuffle(client *Client, _ []string, _ string) {
 			addToBuffer(client, "CMD", fmt.Sprintf("shuffled shownames of %d players in area %v", affected, targetArea.Name()), true)
 			return
 		}
-		client.SendServerMessage("There are not enough players in this area to shuffle names (need at least 2).")
+		msg := "There are not enough players in this area to shuffle names (need at least 2)."
+		if protected > 0 {
+			msg = fmt.Sprintf("There are not enough players in this area to shuffle names after keeping %d admin-issued forced showname(s) (need at least 2).", protected)
+		}
+		client.SendServerMessage(msg)
 		return
 	}
 
@@ -1502,7 +1534,7 @@ func cmdNameShuffle(client *Client, _ []string, _ string) {
 	uids := make([]int, len(targets))
 	decodedNames := make([]string, len(targets))
 	for i, c := range targets {
-		c.SetForcedShowname(names[i])
+		c.SetForcedShownameBy(names[i], callerTier)
 		uids[i] = c.Uid()
 		decodedNames[i] = decode(names[i])
 		c.SendServerMessage("A moderator has shuffled the shownames in this area.")
@@ -1517,7 +1549,11 @@ func cmdNameShuffle(client *Client, _ []string, _ string) {
 		}
 	})
 
-	client.SendServerMessage(fmt.Sprintf("Shuffled shownames of %d players in the area.", len(targets)+fakeCount))
+	summary := fmt.Sprintf("Shuffled shownames of %d players in the area.", len(targets)+fakeCount)
+	if protected > 0 {
+		summary += fmt.Sprintf(" %d admin-issued forced showname(s) were left untouched.", protected)
+	}
+	client.SendServerMessage(summary)
 	addToBuffer(client, "CMD", fmt.Sprintf("shuffled shownames of %d players in area %v", len(targets)+fakeCount, targetArea.Name()), true)
 }
 
@@ -1525,19 +1561,31 @@ func cmdNameShuffle(client *Client, _ []string, _ string) {
 // each player's own showname and broadcasting a PU update to all clients.
 func cmdUnnameShuffle(client *Client, _ []string, _ string) {
 	targetArea := client.Area()
+	callerTier := issuerTierFor(client)
 
 	// Pre-allocate with the cached player count to avoid repeated re-allocs.
 	// PlayerCount() is O(1); the slice may end up shorter if not all players
 	// have a forced showname, but this avoids any mid-loop heap growth.
 	resetTargets := make([]*Client, 0, targetArea.PlayerCount())
+	protected := 0
 	clients.ForEach(func(c *Client) {
 		if c.Uid() != -1 && c.Area() == targetArea && c.ForcedShowname() != "" {
+			// A caller below ADMIN cannot clear a forced name an admin set.
+			// This closes the /unnameshuffle shortcut around /unforcename.
+			if callerTier < IssuerAdmin && c.ForcedShownameTier() >= IssuerAdmin {
+				protected++
+				return
+			}
 			resetTargets = append(resetTargets, c)
 		}
 	})
 
 	if len(resetTargets) == 0 {
-		client.SendServerMessage("No players in this area have a forced showname.")
+		if protected > 0 {
+			client.SendServerMessage("The remaining forced shownames in this area were set by an admin and cannot be removed by a moderator.")
+		} else {
+			client.SendServerMessage("No players in this area have a forced showname.")
+		}
 		return
 	}
 
@@ -1560,7 +1608,11 @@ func cmdUnnameShuffle(client *Client, _ []string, _ string) {
 		}
 	})
 
-	client.SendServerMessage(fmt.Sprintf("Restored shownames of %d players in the area.", len(resetTargets)))
+	summary := fmt.Sprintf("Restored shownames of %d players in the area.", len(resetTargets))
+	if protected > 0 {
+		summary += fmt.Sprintf(" %d admin-issued forced showname(s) were kept.", protected)
+	}
+	client.SendServerMessage(summary)
 	addToBuffer(client, "CMD", fmt.Sprintf("restored shownames of %d players in area %v", len(resetTargets), targetArea.Name()), true)
 }
 

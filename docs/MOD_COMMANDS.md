@@ -255,9 +255,20 @@ The target's IC packet's SFX field is overwritten with the URL on every line unt
 - `/unpunish -t lag <uid>` — removes only lag.
 - `/unpunish all` — wipes all punishments from every player in your current area.
 
-### `/unpunish` Self-Removal Protection
+### `/unpunish` Admin-Issuer Protection
 
-The DB records the issuing tier of every punishment in `PUNISHMENTS.ISSUER_TIER`. A regular moderator **cannot** lift a punishment that an admin or shadow mod placed on them — `/unpunish self`, `/unpunish -t <type> self`, and the self-target slice of `/unpunish all` are all gated. Admins and shadow mods bypass the gate.
+The DB records the issuing tier of every punishment in `PUNISHMENTS.ISSUER_TIER`. A caller below `ADMIN` **cannot** lift a punishment that an admin placed — on themselves or on anybody else. Every form is gated:
+
+- `/unpunish <uid>` — refused if the target carries any admin-issued punishment.
+- `/unpunish -t <type> <uid>` — refused for that specific effect when an admin issued it.
+- `/unpunish <ipid>` — refused for live or offline targets; persisted rows are checked too.
+- `/unpunish all` — skips any client carrying an admin-issued punishment and reports how many were kept.
+
+Admins bypass the gate. Mod and shadow mod sit at the same tier, so either can remove what the other issued.
+
+### `/forcename` Admin-Issuer Protection
+
+`/forcename` records the issuer's tier with the forced showname. A caller below `ADMIN` cannot `/unforcename` an admin-set name, overwrite it with another `/forcename`, or clear it with `/nameshuffle`/`/unnameshuffle`; those area-wide commands skip admin-issued forced names for lower tiers. An admin can always remove or replace it.
 
 ---
 

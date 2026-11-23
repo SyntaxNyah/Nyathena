@@ -442,6 +442,7 @@ type Client struct {
 	lastTranslateTime        time.Time      // Tracks last /translate time for cooldown
 	forcePairUID             int            // UID of the client this client is force-paired with (-1 if none)
 	forcedShowname           string         // Showname forced by a moderator ("" if none)
+	forcedShownameTier       IssuerTier     // tier of the moderator who set forcedShowname (IssuerSystem if none)
 	nameReversed             bool           // gates /reversename so it cannot double-apply
 	preReverseShowname       string         // forcedShowname before /reversename; restored by /unreversename
 	shuffledOrigCharID       int            // Original char ID before /charshuffle (-2 = not shuffled)
@@ -2457,11 +2458,34 @@ func (client *Client) ForcedShowname() string {
 	return client.forcedShowname
 }
 
-// SetForcedShowname sets the moderator-forced showname for the client.
-func (client *Client) SetForcedShowname(s string) {
+// ForcedShownameTier returns the permission tier of the moderator who set the
+// current forced showname, or IssuerSystem when none is set. Used by
+// /forcename, /unforcename and the name-shuffle commands so a moderator cannot
+// undo an admin-issued forced name.
+func (client *Client) ForcedShownameTier() IssuerTier {
 	client.mu.Lock()
+	defer client.mu.Unlock()
+	return client.forcedShownameTier
+}
+
+// SetForcedShowname sets the moderator-forced showname for the client and
+// resets the recorded issuer tier. Use SetForcedShownameBy to record the
+// issuer's tier so an admin's forced name can be protected.
+func (client *Client) SetForcedShowname(s string) {
+	client.SetForcedShownameBy(s, IssuerSystem)
+}
+
+// SetForcedShownameBy sets the moderator-forced showname and records which
+// permission tier issued it. Clearing the name always resets the tier to
+// IssuerSystem, so a later /forcename cannot inherit stale admin protection.
+func (client *Client) SetForcedShownameBy(s string, tier IssuerTier) {
+	client.mu.Lock()
+	defer client.mu.Unlock()
 	client.forcedShowname = s
-	client.mu.Unlock()
+	if s == "" {
+		tier = IssuerSystem
+	}
+	client.forcedShownameTier = tier
 }
 
 // ForcedIniswapInfo returns the moderator-forced iniswap character name and its
